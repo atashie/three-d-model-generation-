@@ -438,7 +438,15 @@ Answered by the project owner on 2026-11-09.
   - The core uses mostly permissive dependencies. Three bundled native libraries are LGPL-2.1, all used unmodified through pip: OpenCASCADE (with an exception), GEOS inside Shapely, and FFmpeg inside OpenCV.
   - GPL and non-commercial tools are fine for personal use as optional extras or subprocess tools. No GPL code is copied into the repo, so open-sourcing later changes nothing.
   - **Region: United States.** Hunyuan3D's community licence, which excludes the EU, UK, and South Korea, is therefore usable.
-- **Q3. Cloud use for complex 3D: open.** The owner wants to walk through each option before any decision. No backend is chosen until then. The options are:
+- **Q3. Cloud use for complex 3D: being walked through, option by option.** Answers so far (2026-11-09):
+  - Local generation is preferred. Hosted models are fine to try.
+  - Uploading photos to hosted models is acceptable for now. **Revisit:** photo privacy and each host's data terms, including training use.
+  - A single-color figurine is a useful first 3D result.
+  - The owner wants a measured local test before deciding; see `research/experiments/2026-11-g3-local-vs-hosted/PROTOCOL.md`.
+  - A 64 GB machine with no discrete GPU is available for trials.
+  - The owner expects most work to be simple objects, so the 16 GB M5 may be enough.
+
+  No backend is chosen yet. The options are:
   1. running models locally on the M5;
   2. hosted open models;
   3. commercial APIs.

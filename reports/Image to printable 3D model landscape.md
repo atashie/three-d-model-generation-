@@ -362,3 +362,4 @@ On a 16 GB M5, the hardware ceiling binds only at 3D generation, and it binds le
   - **Rigging:** the rigging-to-joints bridge is marked as an unvalidated proposal.
   - **Licences:** bundled weight licences added for TRELLIS.2 and Pixal3D.
   - **Gaps added:** missing research on food safety, image rights, and photo privacy.
+- **2026-11-09, v2.1.** The local candidate hy3dmlx, Hunyuan3D 2.1 shape on MLX, has lost its code. Its GitHub repository returns HTTP 404 and it is not on PyPI; only its weights remain on Hugging Face. The body's 16 GB recommendation that names it is therefore out of date. AssetFurnace (Bingeljell/image-to-3dlab, Apache-2.0, active) bundles a separate Hunyuan3D-MLX backend. See `research/experiments/2026-11-g3-local-vs-hosted/PROTOCOL.md`.
