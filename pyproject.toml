@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "atashie" }]
-# 3.13 is the only version where bpy and orca123d both install (research/verification/2026-11-08-stack-smoke).
+# 3.13 is the only version with wheels for both bpy and orca123d (research/verification/2026-11-08-stack-smoke).
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "numpy",
@@ -53,6 +53,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tdmg"]
+
+# Ship the registries inside the wheel so an installed package finds them (tdmg/_data/...).
+[tool.hatch.build.targets.wheel.force-include]
+"rules" = "tdmg/_data/rules"
+"profiles" = "tdmg/_data/profiles"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

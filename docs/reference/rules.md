@@ -4,51 +4,58 @@
 
 Every number the pipeline uses. *Provenance / validation* shows the strongest evidence for each rule (see docs/PLAN.md section 7). Sources and exact quotes are in the YAML files.
 
+## `rules/acceptance.yaml`
+
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `acceptance.dimension.tolerance` | A printed part passes the Phase 1 dimensional check if each named dimension is within this of its design value. | 0.2 |  | mm | hypothesis | primary / untested | all | measured as absolute deviation, by caliper |
+
 ## `rules/articulation-flat.yaml`
 
-| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |
-|---|---|---|---|---|---|---|---|
-| `joint.pin_in_loop.clearance_radial` | Radial gap between axle and hole in a flat print-in-place hinge. | 0.55 |  | mm | empirical | primary / source-tested | A1 |
-| `joint.pin_in_loop.clearance_vertical` | Vertical gap between the top of the axle and the shackle in a flat print-in-place hinge. | 0.5 |  | mm | empirical | primary / source-tested | A1 |
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `joint.pin_in_loop.clearance_radial` | Radial gap between axle and hole in a flat print-in-place hinge. | 0.55 |  | mm | empirical | primary / source-tested | A1 | measured as radial; absolute: does not scale with the model |
+| `joint.pin_in_loop.clearance_vertical` | Vertical gap between the top of the axle and the shackle in a flat print-in-place hinge. | 0.5 |  | mm | empirical | primary / source-tested | A1 | measured as vertical; absolute: does not scale with the model |
 
 ## `rules/fdm.yaml`
 
-| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |
-|---|---|---|---|---|---|---|---|
-| `fdm.wall.min_thickness` | Minimum wall thickness, two perimeters with a 0.4 mm nozzle. | 0.9 | 0.45–1.6 | mm | empirical | primary / untested | all |
-| `fdm.wall.absolute_floor` | Walls thinner than one perimeter cannot print at all. | 0.45 |  | mm | empirical | primary / untested | all |
-| `fdm.overhang.max_angle` | Steepest unsupported overhang, measured from vertical. | 45 | 45–60 | deg | empirical | primary / untested | all |
-| `fdm.bridge.max_length` | Longest unsupported horizontal bridge. | 5 | 5–30 | mm | empirical | primary / untested | all |
-| `fdm.hole.min_diameter` | Smallest hole diameter to design; holes print undersized. | 2 | 1.5–2 | mm | empirical | primary / untested | all |
-| `fdm.text.emboss_min_height` | Minimum height of raised (embossed) text or detail. | 0.5 |  | mm | empirical | primary / untested | all |
-| `fdm.text.min_char_height` | Minimum character height for legible text. | 3.5 |  | mm | empirical | primary / untested | all |
-| `fdm.clearance.moving_parts_min` | Starting gap between surfaces that must move freely (axis not specified by the source). | 0.3 |  | mm | empirical | primary / untested | all |
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `fdm.wall.min_thickness` | Minimum wall thickness, two perimeters with a 0.4 mm nozzle. | 0.9 | 0.45–1.6 | mm | empirical | primary / untested | all | nozzle_diameter_mm = 0.4 |
+| `fdm.wall.single_perimeter` | One perimeter is about 0.45 mm with a 0.4 mm nozzle; Prusa marks thinner walls as not printable. | 0.45 |  | mm | empirical | primary / untested | all | nozzle_diameter_mm = 0.4; Widths are approximate and depend on slicer extrusion settings. Variable-width perimeter generators may widen or drop thin walls, so a thinner wall is not reproduced faithfully rather than impossible. |
+| `fdm.overhang.max_angle` | Steepest unsupported overhang, measured from vertical. | 45 | 45–60 | deg | empirical | primary / untested | all | measured as angle from vertical |
+| `fdm.bridge.max_length` | Longest unsupported horizontal bridge. | 5 | 5–30 | mm | empirical | primary / untested | all |  |
+| `fdm.hole.min_diameter` | Smallest hole diameter to design; holes print undersized. | 2 | 1.5–2 | mm | empirical | primary / untested | all | hole_depth_min_mm = 2; hole_depth_max_mm = 6; Depth-dependent: the source allows 1.5 mm for depth 1.5-4.5 mm and 2.0 mm for depth 2-6 mm. Outside those depths the source gives no value, so a check must return UNKNOWN. |
+| `fdm.text.emboss_min_height` | Minimum height of raised (embossed) text or detail. | 0.5 |  | mm | empirical | primary / untested | all |  |
+| `fdm.text.min_char_height` | Minimum character height for legible text. | 3.5 |  | mm | empirical | primary / untested | all |  |
+| `fdm.clearance.moving_parts_min` | Starting gap between surfaces that must move freely (axis not specified by the source). | 0.3 |  | mm | empirical | primary / untested | all | absolute: does not scale with the model; Joint-specific rules (joint.*) take precedence where they exist. |
 
 ## `rules/format.yaml`
 
-| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |
-|---|---|---|---|---|---|---|---|
-| `format.3mf.edge_manifold` | Every triangle edge is shared with exactly one other triangle (no holes, no non-manifold edges). | yes |  | bool | normative | primary / untested | all |
-| `format.3mf.consistent_orientation` | Adjacent triangles have the same face-normal orientation, and all normals point outward. | yes |  | bool | normative | primary / untested | all |
-| `format.3mf.self_intersection_is_warning` | Self-intersections are a warning, not a format violation; consumers must accept them. | yes |  | bool | normative | primary / untested | all |
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `format.3mf.edge_manifold` | Every triangle edge is shared with exactly one other triangle (no holes, no non-manifold edges). | yes |  | bool | normative | primary / untested | all | object_type = model or solidsupport; An edge rule only. Two solids touching at a single vertex pass it (and pass lib3mf's IsManifoldAndOriented); see gate.topology.vertex_manifold. |
+| `format.3mf.consistent_orientation` | Adjacent triangles have the same face-normal orientation, and all normals point outward. | yes |  | bool | normative | primary / untested | all | object_type = model or solidsupport |
+| `format.3mf.self_intersection_is_warning` | Self-intersections are a warning, not a format violation; consumers must accept them. | yes |  | bool | normative | primary / untested | all |  |
+| `gate.topology.vertex_manifold` | Require every vertex to be manifold (no two surfaces pinched together at a single point). | yes |  | bool | hypothesis | primary / untested | all | Not required by 3MF. Checked locally 2026-11-09 - two cubes sharing one vertex pass trimesh is_watertight and lib3mf IsManifoldAndOriented, so this needs its own check (for example Open3D is_vertex_manifold). |
 
 ## `rules/geometry-flat.yaml`
 
-| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |
-|---|---|---|---|---|---|---|---|
-| `flat.island.min_square_side` | Drop traced islands whose area is below (this many nozzle widths)^2. | 2 |  | x_nozzle | hypothesis | unverified / untested | G1 |
-| `flat.sliver.opening_width` | Shrink then regrow each shape by half this width to delete slivers no nozzle can print. | 0.4 | 0.4–0.5 | mm | hypothesis | unverified / untested | G1 |
-| `template.cookie_cutter.wall` | Cutter blade wall thickness. | 0.8 |  | mm | empirical | primary / untested | G1 |
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `flat.island.min_square_side` | Drop traced islands whose area is below (this many nozzle widths)^2. | 2 |  | x_nozzle | hypothesis | unverified / untested | G1 | Minimum area = (value * nozzle_diameter)^2, so 0.64 mm^2 for a 0.4 mm nozzle. |
+| `flat.sliver.opening_width` | Shrink then regrow each shape by half this width to delete slivers no nozzle can print. | 0.4 | 0.4–0.5 | mm | hypothesis | unverified / untested | G1 |  |
+| `template.cookie_cutter.wall` | Cutter blade wall thickness used as the default by open cookie-cutter generators. | 0.8 |  | mm | hypothesis | primary / untested | G1 | A software default, not a printing result. fdm.wall.min_thickness (0.9 mm) takes precedence, so recipes use the larger of the two. Geometry only: no food-contact safety claim (docs/PLAN.md section 9b). |
 
 ## `rules/geometry-relief.yaml`
 
-| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |
-|---|---|---|---|---|---|---|---|
-| `relief.lithophane.min_thickness` | Thinnest point of a lithophane, as a multiple of nozzle diameter. | 1.5 |  | x_nozzle | empirical | primary / untested | G2 |
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `relief.lithophane.min_thickness` | Thinnest point of a lithophane, as a multiple of nozzle diameter. | 1.5 |  | x_nozzle | empirical | primary / untested | G2 |  |
 
 ## `rules/tools.yaml`
 
-| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |
-|---|---|---|---|---|---|---|---|
-| `slicer.orca.max_triangles_per_plate` | OrcaSlicer refuses a plate with more triangles than this, unless the limit is changed. | 1,000,000 |  | triangles | tool_limit | primary / untested | all |
-| `vectorize.opencv.contour_offset_px` | cv2.findContours traces foreground pixel centres, so outer edges sit this far inside and hole edges this far outside the pixel-cell outline. | 0.5 |  | px | tool_limit | primary / source-tested | all |
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `slicer.orca.max_triangles_per_plate` | OrcaSlicer refuses a plate with more triangles than this, unless the limit is changed. | 1,000,000 |  | triangles | tool_limit | primary / untested | all | Configurable with --mtcpp. Decimate below this before slicing. |
+| `vectorize.opencv.contour_offset_px` | cv2.findContours traces foreground pixel centres, so outer edges sit this far inside and hole edges this far outside the pixel-cell outline. | 0.5 |  | px | tool_limit | primary / measured | all | Observed bias, not a correction. A +0.5 px buffer fixes area approximately but the boundary can still be 0.5 px off (Hausdorff), so dimensions must be validated against a chosen reference outline. |

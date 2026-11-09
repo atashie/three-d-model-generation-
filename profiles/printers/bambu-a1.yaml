@@ -1,36 +1,38 @@
-# Bambu Lab A1. Facts read 2026-11-09. Bambu's pages block scripted fetches (HTTP 403),
-# so these come from search-result snippets of the official pages, not a direct fetch.
+# Bambu Lab A1. Facts read 2026-11-09 from Bambu's official A1 Combo quick-start guide (PDF,
+# fetched directly) and Bambu's web pages (seen only as search snippets; the site returns 403 to scripts).
 id: bambu-a1
 name: Bambu Lab A1
 build_volume_mm: [256, 256, 256]
 nozzle_diameter_mm: 0.4
 nozzle_options_mm: [0.2, 0.4, 0.6, 0.8]
-nozzle_material: stainless steel (hardened nozzle needed for carbon- or glass-filled filament)
+nozzle_material: stainless steel
 multi_material:
   unit: AMS lite
   slots: 4
   max_filaments: 4
   confirmed: false
+  # The guide: avoid feeding flexible materials (TPU, TPE), absorbent PVA, and fibre-reinforced
+  # materials (PA-CF/GF, PET-CF/GF, PLA-CF/GF) through the AMS lite.
+  cannot_feed: [TPU, TPE, PVA, PA-CF, PA-GF, PET-CF, PET-GF, PLA-CF, PLA-GF]
+  spool_width_mm: [40, 68]
+  spool_inner_diameter_mm: [53, 58]
+# "Ideal" materials for the printer itself. TPU and PVA are ideal for the printer but must
+# come from an external spool, not the AMS lite (see cannot_feed).
 materials_recommended: [PLA, PETG, TPU, PVA]
-materials_not_recommended: [ABS, ASA, PC, PA]
+materials_not_recommended: [ABS, ASA, PC, PA, PET, carbon/glass fibre reinforced polymer]
 sources:
-  - url: https://bambulab.com/en/a1/tech-specs
-    access: search snippet (site returns 403 to scripts)
+  - url: https://cdn1.bambulab.com/documentation/quick-start-f507128172bdf/Quick%20start%20guide%20-%20A1%20combo-EN.pdf
+    access: fetched PDF (32 pages); text extracted from pages 25 and 30
     accessed: "2026-11-09"
     facts:
-      - build volume 256 x 256 x 256 mm
-      - 0.4 mm stainless steel nozzle included; 0.2, 0.6, 0.8 mm options
-      - ideal for PLA, PETG, TPU, PVA; ABS, ASA, PC, PA not recommended
-  - url: https://us.store.bambulab.com/products/ams-lite
-    access: search snippet
+      - "p30: build volume 256*256*256 mm3; nozzle 0.4 mm included, 0.2/0.6/0.8 mm optional; stainless steel nozzle"
+      - "p30: ideal PLA, PETG, TPU, PVA; not recommended ABS, ASA, PC, PA, PET, carbon/glass fiber reinforced polymer"
+      - "p25: avoid using AMS lite for TPU, TPE, absorbent PVA, and fiber-reinforced materials; spools 40-68 mm wide, 53-58 mm bore"
+  - url: https://forum.bambulab.com/t/a1-series-firmware-v01-06-10-33-now-in-public-beta/201055
+    access: cited by an independent review (Codex, 2026-11-09); not fetched by us
     accessed: "2026-11-09"
     facts:
-      - AMS lite is designed for the A1 series; one AMS lite per printer, so at most 4 colors
-  - url: https://forum.bambulab.com/t/ams2-ams-ams-ht-with-a1/205987
-    access: search snippet (forum, secondary)
-    accessed: "2026-11-09"
-    facts:
-      - AMS 2 Pro and AMS HT connect to an A1 only through a separate A1 AMS hub, not mixed with AMS lite
+      - AMS 2 Pro and AMS HT connect to an A1 only through a separate A1 AMS hub, and cannot be mixed with an AMS lite
 assumptions:
   - "The owner said 'A1 with AMS'. Assumed AMS lite (4 slots). Confirm before relying on more than 4 filaments."
 calibration: {}   # filled in from calibration prints; each entry bound to nozzle, material, slicer build and profile hash

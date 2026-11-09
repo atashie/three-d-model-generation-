@@ -9,14 +9,14 @@
 | Calibration print | A small test print that measures what your printer actually does, such as the smallest gap that stays free |
 | Clearance | A deliberate gap between surfaces that must move or fit. Measured as radial, vertical, or first-layer gap |
 | Elephant foot | The first layer spreading wider than designed because it is pressed onto the bed |
-| Extrusion width / perimeter | The width of one line of plastic, about the nozzle diameter. Walls are whole numbers of perimeters |
+| Extrusion width / perimeter | The width of one line of plastic, about the nozzle diameter. Walls print most reliably as whole numbers of perimeters |
 | FDM | Fused deposition modelling: melting filament and laying it down layer by layer |
 | Flexi | A print-in-place articulated model whose segments move after printing |
 | G-code | The printer's instructions, made by the slicer |
 | Gate | This project's set of checks that decides PRINTABLE or NOT CERTIFIED |
 | Genus | The number of through-holes in a closed surface. A ring has genus 1 |
 | Infill | The sparse internal structure inside a solid print |
-| Manifold | Every edge belongs to exactly two triangles, so the surface is locally like a sheet |
+| Manifold | Edge-manifold: every edge belongs to exactly two triangles. Vertex-manifold: no two surfaces meet at a single pinched point. A surface that is both is locally like a sheet |
 | Mesh | A surface made of triangles |
 | Normal | The direction a triangle faces. Printable meshes have all normals pointing outward |
 | Overhang | A surface leaning outward over empty space |

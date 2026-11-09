@@ -213,7 +213,7 @@ v1 used one evidence tier. Review showed that one field mixes up three separate 
 |---|---|---|
 | `kind` | `normative` (a format or spec requirement) · `tool_limit` (a documented or measured limit of a specific tool) · `empirical` (a physical printing rule) · `hypothesis` (our own engineering inference) | What sort of claim is this? |
 | `provenance` | `primary` · `secondary` · `unverified` | Where does the claim come from? Source code proves what a program *does*, not that a physical rule *works* |
-| `validation` | `untested` · `source-tested` (the source printed it) · `peer-reviewed` · `calibrated` (printed on our printer) | Has anyone shown that it works? |
+| `validation` | `untested` · `measured` (software behaviour measured, no print) · `source-tested` (the source printed it) · `peer-reviewed` · `calibrated` (printed on our printer) | Has anyone shown that it works? |
 
 **Rules on calibration and disagreement:**
 - Calibration applies only to `empirical` rules. Each calibration is bound to a printer, nozzle, material, slicer build, profile hash, and joint family. It is invalidated when any of those change.
@@ -294,7 +294,7 @@ The 2026-11-08 smoke test and the Codex review found defects that are now requir
 - **Resolved but not installed:** `bpy` 5.2.3.
 - **Not installable on 3.13:** the CGAL bindings, which stop at 3.12.
 
-3.13 is the only version with both `bpy` and orca123d. 3.14 lacks point-cloud-utils.
+3.13 is the only version with wheels for both `bpy` and orca123d. 3.14 has no wheel for `bpy` or point-cloud-utils.
 
 **Core dependencies:** numpy, scipy, trimesh, networkx, lxml, manifold3d, lib3mf, shapely, opencv-python-headless, build123d (with cadquery-ocp), vtracer, pillow, pydantic, typer, pyyaml.
 
@@ -419,7 +419,7 @@ Answered by the project owner on 2026-11-09.
   - **Slicers:** the A1 is a Bambu printer, so outputs must open correctly in Bambu Studio. OrcaSlicer, which reads the same project format, remains the headless checker.
 - **Q2. Use: personal, happy to open-source; "whichever option is simpler".** Decision:
   - The repo is MIT-licensed.
-  - The core uses permissive dependencies, plus OpenCASCADE as an unmodified pip dependency.
+  - The core uses mostly permissive dependencies. Three bundled native libraries are LGPL-2.1, all used unmodified through pip: OpenCASCADE (with an exception), GEOS inside Shapely, and FFmpeg inside OpenCV.
   - GPL and non-commercial tools are fine for personal use as optional extras or subprocess tools. No GPL code is copied into the repo, so open-sourcing later changes nothing.
   - *Still open:* whether the owner is in the EU, UK, or South Korea. Hunyuan3D's licence excludes those regions.
 - **Q3. Cloud use for complex 3D: open.** The owner wants to walk through each option before any decision. No backend is chosen until then. The options are:

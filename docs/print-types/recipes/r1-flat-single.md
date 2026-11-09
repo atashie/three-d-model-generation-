@@ -17,11 +17,11 @@ These are the steps added on top of the attribute pages:
 - **Base plate:** optional, under the traced shape.
 - **Keychain loop:** the hole is at least `fdm.hole.min_diameter`, and the ring around it is at least `fdm.wall.min_thickness`.
 - **Text:** characters at least `fdm.text.min_char_height` tall and raised at least `fdm.text.emboss_min_height`.
-- **Cookie cutter:** a blade wall of `template.cookie_cutter.wall`. Geometry only: the project makes **no food-safety claim**.
+- **Cookie cutter:** open generators default to a blade wall of `template.cookie_cutter.wall`, but `fdm.wall.min_thickness` takes precedence, so the recipe uses the larger value. Geometry only: the project makes **no food-safety claim**.
 
 ## Parameters
 
-`fdm.hole.min_diameter`, `fdm.wall.min_thickness`, `fdm.text.min_char_height`, `fdm.text.emboss_min_height`, `template.cookie_cutter.wall`, plus those of the attribute pages.
+`fdm.hole.min_diameter`, `fdm.wall.min_thickness`, `fdm.text.min_char_height`, `fdm.text.emboss_min_height`, `template.cookie_cutter.wall`, `acceptance.dimension.tolerance`, plus those of the attribute pages. The hole rule is depth-dependent; outside the depths its source covers, the check returns UNKNOWN.
 
 ## Failure modes
 
@@ -37,7 +37,7 @@ F1, F2, F3 (walls, features, holes), F4 (body count), F5, F6. The recipe's code 
 
 ## Calibration needed
 
-- **First run:** print one output and measure three named dimensions with calipers. They should be within ±0.2 mm.
+- **First run:** print one output and measure three named dimensions with calipers. Each must be within `acceptance.dimension.tolerance` of its design value.
 - **Same session:** print the clearance ladder. R1 doesn't need it, but it unlocks later recipes.
 
 ## Evidence
@@ -48,4 +48,4 @@ F1, F2, F3 (walls, features, holes), F4 (body count), F5, F6. The recipe's code 
 ## Open gaps
 
 - No R1 output has been printed yet.
-- The ±0.2 mm acceptance band is the roadmap's own target, not a published tolerance.
+- The acceptance tolerance is the roadmap's own target, a hypothesis until prints confirm it.

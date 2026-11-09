@@ -24,10 +24,10 @@ A shape made by tracing an outline from an image and extruding it straight up: k
 
 | Rule | Role |
 |---|---|
-| `vectorize.opencv.contour_offset_px` | Correct the half-pixel shift of traced outlines |
+| `vectorize.opencv.contour_offset_px` | The measured half-pixel shift of traced outlines |
 | `flat.sliver.opening_width` | Shrink and regrow to delete slivers narrower than the nozzle |
 | `flat.island.min_square_side` | Drop islands too small to print |
-| `fdm.wall.min_thickness`, `fdm.wall.absolute_floor` | Thinnest printable strokes and walls |
+| `fdm.wall.min_thickness`, `fdm.wall.single_perimeter` | Thinnest printable strokes and walls |
 | `fdm.hole.min_diameter` | Smallest hole, for example a keychain loop |
 | `fdm.text.min_char_height`, `fdm.text.emboss_min_height` | Legible text |
 
@@ -36,7 +36,7 @@ A shape made by tracing an outline from an image and extruding it straight up: k
 | Symptom | Cause | Check | Mitigation |
 |---|---|---|---|
 | Print is mirrored top to bottom | Image Y axis points down; model Y points up | Asymmetric test glyph | Explicit Y flip in S3 |
-| Shapes slightly thin, holes slightly big | OpenCV traces pixel centres | Pixel-cell comparison fixture | Correct by `vectorize.opencv.contour_offset_px`, or trace pixel edges |
+| Shapes slightly thin, holes slightly big | OpenCV traces pixel centres (bias of `vectorize.opencv.contour_offset_px`) | Compare against a chosen reference outline: dimensions, holes, gaps, topology | Not yet decided. A +0.5 px buffer fixes area only; boundaries can stay 0.5 px off. Choose a reference outline and a tracing method by measurement first |
 | Crash or a missing piece after cleanup | Repair returned several polygons, or a mix of polygons and lines | Diagonal-touch fixture | Handle every polygon part; report collapsed slivers |
 | Hair-thin strands, or specks that vanish | Features narrower than the nozzle | F3 minimum feature | Opening by `flat.sliver.opening_width`; island filter |
 | Wrong size | Units guessed from DPI (potrace assumes 72, OpenSCAD 96) | F2 target dimensions | Scale to one authoritative width in millimetres |
@@ -61,4 +61,5 @@ None specific to flat geometry. The Phase 1 dimensional check, three caliper mea
 
 - Which tracer gives the most accurate boundary on real images has not been measured.
 - The sliver and island rules are engineering hypotheses, not published rules.
+- How to correct the half-pixel bias is not decided; see the failure-modes table.
 - Nothing has been printed yet.

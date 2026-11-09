@@ -22,6 +22,6 @@
     - ref: research/verification/2026-11-08-stack-smoke/README.md
       locator: "traced holes come out too large."
       provenance: primary
-      validation: source-tested
-      claim: Measured locally; a 3x3-pixel hole (9 cells) traces as area 14.
-  notes: A +0.5 px buffer corrects area approximately, not boundary position (Hausdorff 0.5 px remains).
+      validation: measured
+      claim: Measured locally in software (no print); a 3x3-pixel hole (9 cells) traces as area 14.
+  notes: Observed bias, not a correction. A +0.5 px buffer fixes area approximately but the boundary can still be 0.5 px off (Hausdorff), so dimensions must be validated against a chosen reference outline.

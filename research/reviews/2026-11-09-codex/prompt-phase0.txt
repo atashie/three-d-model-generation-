@@ -1,0 +1,16 @@
+You are an independent reviewer for the repository in the current directory (three-d-model-generation): a project that turns a user image into an FDM-printable STL/3MF with a deterministic, code-first pipeline. The owner is a data scientist new to 3D printing who prints on a Bambu Lab A1. He has said: do not rely on unfounded priors; pull in well-vetted research and code; double-check every suggested implementation. Find what is wrong, unsupported, missing, or risky. Do not praise. You are in a read-only sandbox: do NOT modify files.
+
+SCOPE: only what commit 1648411 ("Phase 0") added or changed. See `git show --stat 1648411`. That is: pyproject.toml, uv.lock (skim only), CLAUDE.md, README.md, LICENSE, .github/workflows/ci.yml, src/tdmg/*.py, scripts/*.py, rules/*.yaml, profiles/printers/bambu-a1.yaml, tests/*.py, docs/guide/*.md, docs/print-types/**/*.md, docs/reference/*.md, and the section-13 and section-7 edits in docs/PLAN.md. Treat docs/PLAN.md, reports/ and research_notes/ as background; do not review them in full.
+
+Check in particular:
+(1) Every rule in rules/*.yaml: does the cited locator text in the cited note actually support the rule's value, unit, kind, provenance and validation labels, conditions and range? Flag any value that the evidence does not support, any upgraded tier, and any rule whose kind is wrong. Open the cited source_url where that settles a doubt.
+(2) Bambu A1 profile facts (build volume, nozzles, materials, AMS lite vs AMS 2 Pro/HT via hub). Check against Bambu primary sources with web search where reachable.
+(3) Code correctness and robustness: rules.py validators, paths.py (REPO_ROOT via parents[2] — does it break for non-editable installs?), gen_docs.py, dependency_licences.py, cli.py, recipes.py.
+(4) Whether the tests actually enforce what the docs and CLAUDE.md claim they enforce (e.g., could a wrong locator, a stale generated doc, a missing template heading, a broken link, or an unknown rule ID slip through?). Name concrete gaps.
+(5) Whether the newcomer docs (docs/guide/*.md, docs/print-types/**) contain technical errors or overstatements about meshes, 3MF, STL, slicers, FDM, or the A1.
+(6) Dependency register accuracy (docs/reference/dependencies.md): versions vs uv.lock, declared licences, verification states claimed.
+(7) CI workflow: will it run as written on macos-15 and ubuntu-latest; anything that will fail or be flaky.
+
+CONTEXT BUDGET: never read whole research notes (60-115 KB each); use rg -n and sed -n ranges. Keep web fetches targeted. Write your final answer as soon as the scope is covered.
+
+Output format (your final message): a Markdown list of findings ranked most severe first: severity (critical / major / minor / nit), file:line, the exact claim or code at issue, evidence (URL checked, command run and output, or quoted line), and a specific fix. Then "Things I checked and found correct" (one line each) and "Could not verify".

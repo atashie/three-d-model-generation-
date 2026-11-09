@@ -49,3 +49,29 @@ Each finding was reproduced or checked against its source before anything change
 - **Applied:** all verified findings, in one checked pass of 41 exact replacements. The report's revision history lists them. v1 stays in git at commit `6165e41`.
 - **Plan changes** that followed are listed in `docs/PLAN.md` section 12.
 - **Not yet applied:** the seven source notes keep their original wording, including the claims the report corrects. Examples are the notes' Python 3.12 recommendation and the Notebookcheck citation tagged `[P]`. The notes are a record of what each researcher found; the report and its revision history are the corrected synthesis.
+
+## Phase 0 review (commit `1648411`)
+
+Prompt `prompt-phase0.txt`, output `phase0.md`. Line numbers refer to commit `1648411`.
+
+**Reproduced or checked before fixing:**
+- **Packaging.** A wheel installed outside the checkout found no rules. We built and installed one and confirmed the fix: it now finds all 21 rules from its packaged copies. CI repeats this test.
+- **A1 profile.** Bambu's A1 Combo quick-start PDF, fetched directly, says to avoid feeding TPU, TPE, PVA and fibre-filled materials through the AMS lite (page 25). Its spec table lists PET and fibre-reinforced polymers as not recommended (page 30).
+- **Pinched vertices.** Two cubes sharing one vertex pass both trimesh `is_watertight` and lib3mf `IsManifoldAndOriented`, reproduced locally. A new rule, `gate.topology.vertex_manifold`, requires a separate check.
+- **Bundled native libraries.** Shapely bundles GEOS and OpenCV bundles FFmpeg, both LGPL-2.1, per the wheels' own licence files.
+- **bpy has no Python 3.14 wheel.** Checked at macOS 12 and 15 targets. This settles a point the review could not verify: 3.13 is the only version with wheels for both `bpy` and orca123d.
+
+**Applied:**
+- Rule fixes:
+  - the depth conditions on the hole rule;
+  - softer wall-floor wording, with the rule renamed `fdm.wall.single_perimeter`;
+  - the cookie-cutter wall reclassified as a hypothesis, with the general wall rule taking precedence;
+  - the half-pixel bias described, not presented as a correction;
+  - a new `measured` validation level for software-only measurements;
+  - the ±0.2 mm acceptance target registered as a rule.
+- Stricter schemas, with rejection tests.
+- Generated tables now show each rule's conditions and notes.
+- Docs checks: they now parse headings outside comments and code blocks, enforce heading order, check anchors, and flag rule-ID typos in any registry namespace. Each check has a negative test.
+- Docs: wording aligned on the LLM policy and the STL policy, and the manifold explanation corrected.
+
+**Not changed:** reference-style Markdown links are still not checked. They are not used in this repo, and the limit is documented in `tests/doclint.py`.

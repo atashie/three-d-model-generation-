@@ -32,12 +32,23 @@ def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def _qualifiers(r: Rule) -> str:
+    parts = [f"{k} = {_fmt(v)}" for k, v in r.conditions.items()]
+    if r.measured_as:
+        parts.append(f"measured as {r.measured_as}")
+    if r.scales_with_model is False:
+        parts.append("absolute: does not scale with the model")
+    if r.notes:
+        parts.append(r.notes)
+    return _cell("; ".join(parts))
+
+
 def _rule_row(r: Rule) -> str:
     rng = f"{_fmt(r.range[0])}–{_fmt(r.range[1])}" if r.range else ""
     applies = "all" if r.applies_to == "all" else ", ".join(
         v for vals in r.applies_to.values() for v in vals)
     return (f"| `{r.id}` | {_cell(r.summary)} | {_fmt(r.default)} | {rng} | {r.unit} | {r.kind} | "
-            f"{r.best_provenance} / {r.best_validation} | {applies} |")
+            f"{r.best_provenance} / {r.best_validation} | {applies} | {_qualifiers(r)} |")
 
 
 def render_rules() -> str:
@@ -46,8 +57,9 @@ def render_rules() -> str:
            "each rule (see docs/PLAN.md section 7). Sources and exact quotes are in the YAML files.\n"]
     for stem, rules in rule_files().items():
         out.append(f"\n## `rules/{stem}.yaml`\n\n")
-        out.append("| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to |\n")
-        out.append("|---|---|---|---|---|---|---|---|\n")
+        out.append("| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to "
+                   "| Conditions and notes |\n")
+        out.append("|---|---|---|---|---|---|---|---|---|\n")
         out.extend(_rule_row(r) + "\n" for r in rules)
     return "".join(out)
 

@@ -12,7 +12,8 @@ The whole print uses one filament. It can still contain several bodies, such as 
 ## Pipeline specifics
 
 - S6 does nothing.
-- S7 writes STL when there is exactly one body, otherwise 3MF. In a 3MF, bodies that must keep their relative positions go into one components object, so a slicer cannot move them apart.
+- S7 always writes 3MF. When there is exactly one body, it can also write an STL on request.
+- In a 3MF, bodies that must keep their relative positions go into one components object, so a slicer cannot move them apart.
 
 ## Parameters
 
@@ -22,7 +23,7 @@ No rules are specific to single color.
 
 | Symptom | Cause | Check | Mitigation |
 |---|---|---|---|
-| Separate bodies fused, or one body vanishes | Overlapping bodies merged on import. Cura merges overlapping volumes by default | F4 body count | Keep bodies disjoint; write 3MF, not STL, for several bodies |
+| Separate bodies fused, or one body vanishes | Overlapping bodies merged on import. Cura merges overlapping volumes by default | F4 body count | Keep bodies disjoint; several bodies always go in a 3MF |
 | Parts rearranged by the slicer | Bodies written as separate build items | Read-back check of the 3MF | One components object per assembly |
 
 ## Required checks

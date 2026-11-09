@@ -4,6 +4,8 @@
   summary: Every triangle edge is shared with exactly one other triangle (no holes, no non-manifold edges).
   unit: bool
   default: true
+  conditions: {object_type: model or solidsupport}
+  notes: An edge rule only. Two solids touching at a single vertex pass it (and pass lib3mf's IsManifoldAndOriented); see gate.topology.vertex_manifold.
   evidence:
     - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
       locator: "Every triangle edge in the mesh shares common vertex endpoints with the edge of exactly 1 other triangle"
@@ -17,6 +19,7 @@
   summary: Adjacent triangles have the same face-normal orientation, and all normals point outward.
   unit: bool
   default: true
+  conditions: {object_type: model or solidsupport}
   evidence:
     - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
       locator: "Every pair of adjacent triangles within the mesh MUST have the same orientation of the face normal"
@@ -37,3 +40,22 @@
       validation: untested
       claim: Producers SHOULD NOT emit self-intersections; consumers MUST accept them.
       source_url: "https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md"
+
+# Project policy, stricter than the 3MF spec.
+- id: gate.topology.vertex_manifold
+  kind: hypothesis
+  summary: Require every vertex to be manifold (no two surfaces pinched together at a single point).
+  unit: bool
+  default: true
+  notes: Not required by 3MF. Checked locally 2026-11-09 - two cubes sharing one vertex pass trimesh is_watertight and lib3mf IsManifoldAndOriented, so this needs its own check (for example Open3D is_vertex_manifold).
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
+      locator: 'Vertex-manifold ("A vertex is manifold if its star is edge-manifold and edge-connected")'
+      provenance: primary
+      validation: untested
+      claim: Definition from Open3D's TriangleMesh header.
+    - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
+      locator: "edge-manifold → vertex-manifold → closed"
+      provenance: unverified
+      validation: untested
+      claim: The research team's proposed gate order includes a vertex-manifold check.

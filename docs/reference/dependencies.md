@@ -1,6 +1,6 @@
 # Dependencies and licences
 
-Versions are from `uv.lock`. The **declared licence** comes from each package's own metadata, printed by `scripts/dependency_licences.py` on 2026-11-09. A package's metadata does not list the licences of native libraries or model weights it bundles, so the **notes** column adds those by hand.
+Versions are from `uv.lock`. The core is mostly permissive, but three bundled native libraries are LGPL-2.1: OpenCASCADE (with an exception), GEOS and FFmpeg. All are used unmodified through pip packages, which is the usual way to meet LGPL; bundling them into a distributed app would add obligations. The **declared licence** comes from each package's own metadata, printed by `scripts/dependency_licences.py` on 2026-11-09. A package's metadata does not list the licences of native libraries or model weights it bundles, so the **notes** column adds those by hand.
 
 **Verification states** (docs/PLAN.md section 9):
 - **resolved:** a wheel exists for this platform;
@@ -19,8 +19,8 @@ Versions are from `uv.lock`. The **declared licence** comes from each package's 
 | lxml | 6.1.3 | BSD-3-Clause | needed by trimesh to load 3MF | tested | |
 | manifold3d | 3.5.4 | Apache-2.0 | robust booleans, manifold checks | tested | Rejects non-manifold input; stores float32 |
 | lib3mf | 2.5.0 | BSD | 3MF writing and spec-level checks | tested | Writes random UUIDs unless set |
-| shapely | 2.2.0 | BSD-3-Clause | 2D polygon cleanup | tested | `make_valid` can return several polygons |
-| opencv-python-headless | 5.0.0.93 | Apache-2.0 | contour tracing | tested | |
+| shapely | 2.2.0 | BSD-3-Clause | 2D polygon cleanup | tested | **Bundles GEOS under LGPL-2.1** (wheel's `LICENSE_GEOS`). `make_valid` can return several polygons |
+| opencv-python-headless | 5.0.0.93 | Apache-2.0 | contour tracing | tested | **Bundles FFmpeg under LGPL-2.1**, plus other libraries on macOS (wheel's `LICENSE-3RD-PARTY.txt`) |
 | build123d | 0.13.0 | Apache-2.0 | parametric CAD | tested | |
 | cadquery-ocp-novtk | 8.0.1.1.0 | Apache-2.0 (wrapper) | OpenCASCADE kernel for build123d | tested | **The kernel itself is LGPL-2.1 with a special exception.** Used as an unmodified pip dependency |
 | vtracer | 0.6.15 | MIT | raster-to-vector tracing | imported | |

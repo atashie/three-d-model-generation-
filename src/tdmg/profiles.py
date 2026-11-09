@@ -6,10 +6,11 @@ test prints; each one is bound to the conditions it was measured under.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from tdmg.paths import PROFILES_DIR
 
@@ -28,6 +29,10 @@ class MultiMaterial(BaseModel):
     slots: int = Field(ge=1)
     max_filaments: int = Field(ge=1)
     confirmed: bool = Field(description="False until the owner confirms which unit is attached")
+    cannot_feed: list[str] = Field(default_factory=list,
+                                   description="Materials this unit must not feed; print them from an external spool")
+    spool_width_mm: tuple[float, float] | None = None
+    spool_inner_diameter_mm: tuple[float, float] | None = None
 
 
 class PrinterProfile(BaseModel):
@@ -44,6 +49,16 @@ class PrinterProfile(BaseModel):
     sources: list[ProfileSource] = Field(min_length=1)
     assumptions: list[str] = Field(default_factory=list)
     calibration: dict[str, dict] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check(self) -> PrinterProfile:
+        if not all(math.isfinite(v) and v > 0 for v in self.build_volume_mm):
+            raise ValueError(f"{self.id}: build volume must be positive and finite")
+        if self.nozzle_diameter_mm not in self.nozzle_options_mm:
+            raise ValueError(f"{self.id}: nozzle {self.nozzle_diameter_mm} is not in nozzle_options_mm")
+        if self.multi_material and self.multi_material.max_filaments > self.multi_material.slots:
+            raise ValueError(f"{self.id}: more filaments than slots")
+        return self
 
 
 def load_printer(profile_id: str, profiles_dir: Path = PROFILES_DIR) -> PrinterProfile:

@@ -1,0 +1,18 @@
+# Project acceptance targets. These are our own targets, so kind is hypothesis until prints confirm them.
+- id: acceptance.dimension.tolerance
+  kind: hypothesis
+  summary: A printed part passes the Phase 1 dimensional check if each named dimension is within this of its design value.
+  unit: mm
+  default: 0.2
+  measured_as: absolute deviation, by caliper
+  evidence:
+    - ref: docs/PLAN.md
+      locator: "three named dimensions within ±0.2 mm by caliper"
+      provenance: unverified
+      validation: untested
+      claim: The roadmap's own Phase 1 exit target.
+    - ref: "research_notes/Image to printable 3D model landscape/fdm_design_rules_and_ai_ecosystem.md"
+      locator: "An Original Prusa will be accurate to at least 0.2 mm"
+      provenance: primary
+      validation: untested
+      claim: Prusa's accuracy statement for its own printers. Context only; it is not a figure for the A1.

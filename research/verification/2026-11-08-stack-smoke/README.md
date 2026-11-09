@@ -19,7 +19,7 @@ Method: `uv pip compile --python-platform aarch64-apple-darwin --only-binary :al
 | onnxruntime (rembg needs it) | ok | ok | see note |
 | orca123d 0.1.2 (Bambu/Orca 3MF writer) | **no** | ok | ok |
 | point-cloud-utils 0.34.0 | ok | ok | **no** |
-| bpy (Blender as a module) | **no** | 5.2.3 | not tested |
+| bpy (Blender as a module) | **no** | 5.2.3 | **no** (checked 2026-11-09 at macOS 12 and 15 targets) |
 
 **Caution about this method:** `--python-platform aarch64-apple-darwin` resolves against an old macOS by default. With the default, onnxruntime showed "no wheel" on 3.14. With `MACOSX_DEPLOYMENT_TARGET=14.0`, onnxruntime 1.31.1 resolves on 3.14. Its wheels are tagged `macosx_14_0`. The target machine runs macOS 26, so the newer wheels apply. point-cloud-utils still has no 3.14 wheel at targets 12, 14, or 15.
 

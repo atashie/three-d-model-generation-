@@ -28,8 +28,10 @@
       claim: Research team's engineering inference (morphological opening at nozzle width).
 
 - id: template.cookie_cutter.wall
-  kind: empirical
-  summary: Cutter blade wall thickness.
+  kind: hypothesis
+  summary: Cutter blade wall thickness used as the default by open cookie-cutter generators.
+  notes: "A software default, not a printing result. fdm.wall.min_thickness (0.9 mm) takes precedence, so recipes use the larger of the two. Geometry only: no food-contact safety claim (docs/PLAN.md section 9b)."
+
   unit: mm
   default: 0.8
   applies_to: {geometry: [G1]}
@@ -38,11 +40,10 @@
       locator: "cutter wall ≈0.8 mm"
       provenance: primary
       validation: untested
-      claim: Default exposed by open cookie-cutter generators (e.g. CZDanol/cookieCutterStlGenerator).
+      claim: Default exposed by open cookie-cutter generators (e.g. CZDanol/cookieCutterStlGenerator); evidence of the default, not of print performance.
       source_url: "https://github.com/CZDanol/cookieCutterStlGenerator"
     - ref: "research_notes/Image to printable 3D model landscape/image_to_flat_and_relief_pathways.md"
       locator: "wall thickness should be an integer multiple of extrusion width (0.8 or 1.2 mm for a 0.4 mm nozzle)"
       provenance: unverified
       validation: untested
       claim: Research team's inference so slicers produce solid walls.
-  notes: Geometry only. No food-contact safety claim is made (docs/PLAN.md section 9b).
