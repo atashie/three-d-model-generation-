@@ -1,0 +1,13 @@
+numpy
+scipy
+trimesh
+manifold3d
+lib3mf
+shapely
+opencv-python-headless
+build123d
+vtracer
+pydantic
+typer
+pyyaml
+thingi10k
