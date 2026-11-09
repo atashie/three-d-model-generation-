@@ -16,14 +16,36 @@ Method: `uv pip compile --python-platform aarch64-apple-darwin --only-binary :al
 | libigl 2.6.3 | ok | ok | ok |
 | open3d 0.20.0 | ok | ok | ok |
 | rembg 2.0.87 | ok | ok | ok |
-| onnxruntime 1.23.2 (rembg needs it) | ok | ok | **no** |
+| onnxruntime (rembg needs it) | ok | ok | see note |
 | orca123d 0.1.2 (Bambu/Orca 3MF writer) | **no** | ok | ok |
 | point-cloud-utils 0.34.0 | ok | ok | **no** |
 | bpy (Blender as a module) | **no** | 5.2.3 | not tested |
 
-**Conclusion:** Python 3.13 is the only version where every candidate resolves. earthtojake/text-to-cad requires 3.14. If we use it, it must run in its own environment.
+**Caution about this method:** `--python-platform aarch64-apple-darwin` resolves against an old macOS by default. With the default, onnxruntime showed "no wheel" on 3.14. With `MACOSX_DEPLOYMENT_TARGET=14.0`, onnxruntime 1.31.1 resolves on 3.14. Its wheels are tagged `macosx_14_0`. The target machine runs macOS 26, so the newer wheels apply. point-cloud-utils still has no 3.14 wheel at targets 12, 14, or 15.
 
-Note: the mesh-validation research note says pymeshfix and libigl wheels stop at cp312. The resolver disagrees. Check this with a real install before depending on either.
+**Conclusion:** Python 3.13 is the only version where every candidate installs. earthtojake/text-to-cad requires 3.14. If we use it, it must run in its own environment.
+
+### 1b. Real install and import on Python 3.13 (`opt_import_smoke.py`)
+
+This replaces the resolver-only result for the optional packages. Every package below installed with `--only-binary :all:` and imported, except cgal.
+
+| Package | Installed wheel tag | Functional check |
+|---|---|---|
+| pymeshfix 0.18.1 | `cp312-abi3-macosx_11_0_arm64` | Default `clean_from_arrays` on two separate cubes kept **1** component. It silently deleted the other cube |
+| libigl 2.6.3 | `cp312-abi3-macosx_11_0_arm64` | Imports |
+| pymeshlab 2025.7.post1 | `cp313-cp313-macosx_11_0_arm64` | Two cubes: two-manifold true, 0 boundary edges |
+| open3d 0.20.0 | `cp313-cp313-macosx_11_0_arm64` | Two cubes: watertight true |
+| onnxruntime 1.31.1 | `cp313-cp313-macosx_14_0_arm64` | Providers: CoreML, Azure, CPU |
+| rembg 2.0.87 (`[cpu]` extra) | pure Python | Imports. Its models were not downloaded or run |
+| orca123d 0.1.2 | pure Python | Imports |
+| point-cloud-utils 0.34.0 | `cp313-cp313-macosx_11_0_arm64` | Imports |
+| pyobjc-framework-Vision | — | Imports |
+| meshlib 3.1.4.297 | — | Imports (non-commercial licence) |
+| cgal 6.0.1 (GPL-3) | **no cp313 wheel**; newest is cp312 | Not installable on 3.13. Use a separate 3.12 environment if ever needed |
+
+**Correction to the research:** the mesh-validation note and the landscape report say pymeshfix's arm64 wheels "stop at cp312" and recommend Python 3.12. That is wrong in practice. pymeshfix and libigl ship `abi3` wheels. An abi3 wheel tagged cp312 uses CPython's stable ABI, so it installs and runs on 3.12 and all later versions. We tested this on 3.13.
+
+pymeshfix's API also needs C-contiguous `float64` vertices and `int32` faces. It rejects trimesh's tracked arrays directly.
 
 ## 2. End-to-end flat chain (`flat_chain_smoke.py`)
 

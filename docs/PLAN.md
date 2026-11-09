@@ -222,7 +222,7 @@ Two smoke-test findings are already candidates for tests:
 
 ## 9. Environment and dependencies
 
-- **Python 3.13** with `uv`. This is the only version where every candidate wheel resolves on Apple Silicon (verified 2026-11-08).
+- **Python 3.13** with `uv`. Every candidate package installed from wheels and imported on the M5, except the GPL CGAL bindings, which stop at 3.12 (verified 2026-11-08). 3.13 is the only version with both `bpy` and orca123d. 3.14 lacks point-cloud-utils and has no tested `bpy`. The landscape report recommends 3.12; its erratum explains why that is superseded.
 - **Core dependencies** (all permissive licenses): numpy, scipy, trimesh, networkx, lxml, manifold3d, lib3mf, shapely, opencv-python-headless, build123d (with cadquery-ocp), vtracer, pillow, pydantic, typer, pyyaml.
 - **Optional extras:**
   - `perception`: rembg, onnxruntime, pyobjc-framework-Vision.
@@ -242,7 +242,7 @@ Two smoke-test findings are already candidates for tests:
 **Recommendation:** use it as inspiration and an optional interop target, not as a core dependency. See the landscape report for the full assessment.
 
 - **It solves a different problem.** An LLM agent writes build123d code for mechanical parts from text. Our runtime is image-driven and LLM-free.
-- **It conflicts with our stack.** It requires Python 3.14, and our core needs 3.13 for onnxruntime and bpy. It ships releases several times a day, so its API is not stable to build on.
+- **It conflicts with our stack.** It requires Python 3.14 or later. Our core is pinned to 3.13 for `bpy` and point-cloud-utils. It ships releases several times a day, so its API is not stable to build on.
 - **It is worth learning from.** It uses the same kernel stack we chose (build123d and OpenCASCADE). It has a printing DFM check, a catalogue of OpenCASCADE failure modes, and an STL non-manifold bug that was fixed (issue #433). The MIT license lets us adapt its code with attribution.
 
 ## 11. Roadmap
