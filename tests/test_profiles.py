@@ -5,9 +5,11 @@ def test_bambu_a1_profile():
     p = load_printer("bambu-a1")
     assert p.build_volume_mm == (256, 256, 256)
     assert p.nozzle_diameter_mm == 0.4
-    assert p.multi_material is not None and p.multi_material.max_filaments == 4
-    # Which AMS unit is attached is an assumption until the owner confirms it.
-    assert p.multi_material.confirmed is False and p.assumptions
+    mm = p.multi_material
+    assert mm is not None and mm.default_max_filaments == 4
+    # Files are AMS-agnostic: the profile records units as facts, and the default palette
+    # fits the smallest of them (AMS lite, 4 slots).
+    assert any(u.name == "AMS lite" and u.slots == 4 for u in mm.units)
 
 
 def test_every_profile_cites_sources():

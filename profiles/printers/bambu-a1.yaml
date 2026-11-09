@@ -6,16 +6,21 @@ build_volume_mm: [256, 256, 256]
 nozzle_diameter_mm: 0.4
 nozzle_options_mm: [0.2, 0.4, 0.6, 0.8]
 nozzle_material: stainless steel
+# Files are AMS-agnostic: they name colors, never units or slots (owner decision 2026-11-09).
 multi_material:
-  unit: AMS lite
-  slots: 4
-  max_filaments: 4
-  confirmed: false
-  # The guide: avoid feeding flexible materials (TPU, TPE), absorbent PVA, and fibre-reinforced
-  # materials (PA-CF/GF, PET-CF/GF, PLA-CF/GF) through the AMS lite.
-  cannot_feed: [TPU, TPE, PVA, PA-CF, PA-GF, PET-CF, PET-GF, PLA-CF, PLA-GF]
-  spool_width_mm: [40, 68]
-  spool_inner_diameter_mm: [53, 58]
+  default_max_filaments: 4   # the AMS lite's slot count, the smallest A1 multi-material setup
+  units:
+    - name: AMS lite
+      slots: 4
+      connection: direct; one per A1
+      # Guide p25: avoid flexible (TPU, TPE), absorbent PVA and fibre-reinforced materials.
+      cannot_feed: [TPU, TPE, PVA, PA-CF, PA-GF, PET-CF, PET-GF, PLA-CF, PLA-GF]
+      spool_width_mm: [40, 68]
+      spool_inner_diameter_mm: [53, 58]
+      source: Bambu A1 Combo quick-start guide, p25 (fetched PDF)
+    - name: AMS 2 Pro or AMS HT
+      connection: through the separate A1 AMS hub; cannot be mixed with an AMS lite
+      source: Bambu forum firmware announcement and search snippets (secondary); slots and feed limits not recorded
 # "Ideal" materials for the printer itself. TPU and PVA are ideal for the printer but must
 # come from an external spool, not the AMS lite (see cannot_feed).
 materials_recommended: [PLA, PETG, TPU, PVA]
@@ -34,5 +39,5 @@ sources:
     facts:
       - AMS 2 Pro and AMS HT connect to an A1 only through a separate A1 AMS hub, and cannot be mixed with an AMS lite
 assumptions:
-  - "The owner said 'A1 with AMS'. Assumed AMS lite (4 slots). Confirm before relying on more than 4 filaments."
+  - "Jobs default to at most 4 filaments, which every A1 multi-material setup supports. A job may raise this if the attached units have more slots."
 calibration: {}   # filled in from calibration prints; each entry bound to nozzle, material, slicer build and profile hash

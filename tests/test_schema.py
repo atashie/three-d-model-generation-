@@ -63,5 +63,12 @@ def test_bad_printer_profiles_are_rejected(change):
 
 
 def test_a1_ams_lite_restrictions_are_recorded():
-    mm = load_printer("bambu-a1").multi_material
-    assert {"TPU", "PVA"} <= set(mm.cannot_feed)
+    lite = next(u for u in load_printer("bambu-a1").multi_material.units if u.name == "AMS lite")
+    assert {"TPU", "PVA"} <= set(lite.cannot_feed)
+
+
+def test_default_palette_cannot_exceed_smallest_unit():
+    data = load_printer("bambu-a1").model_dump()
+    data["multi_material"]["default_max_filaments"] = 5
+    with pytest.raises(ValidationError):
+        PrinterProfile.model_validate(data)

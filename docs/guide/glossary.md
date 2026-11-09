@@ -3,7 +3,8 @@
 | Term | Meaning |
 |---|---|
 | 3MF | 3D Manufacturing Format. A zip of XML files with units, objects, colors and metadata. ISO/IEC 25422:2025. The project's main output |
-| AMS lite | Bambu's 4-slot automatic filament changer for the A1 series |
+| AMS, AMS lite | Bambu's automatic filament changers. The AMS lite has 4 slots and connects to the A1 directly; larger AMS units need a hub. This project's files never name a unit |
+| Portable file | A 3MF that uses only the standard format, so any slicer opens it, and names colors rather than slots |
 | Bed / build plate | The heated surface the print sits on. The A1's printable volume is 256 × 256 × 256 mm |
 | Bridge | A horizontal span printed in mid-air between two supports |
 | Calibration print | A small test print that measures what your printer actually does, such as the smallest gap that stays free |

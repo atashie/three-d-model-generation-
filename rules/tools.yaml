@@ -25,3 +25,43 @@
       validation: measured
       claim: Measured locally in software (no print); a 3x3-pixel hole (9 cells) traces as area 14.
   notes: Observed bias, not a correction. A +0.5 px buffer fixes area approximately but the boundary can still be 0.5 px off (Hausdorff), so dimensions must be validated against a chosen reference outline.
+
+# How slicers read color from a 3MF. Source reading, not runs: research/verification/2026-11-09-slicer-3mf-import.
+- id: slicer.prusaslicer.ignores_3mf_material_properties
+  kind: tool_limit
+  summary: PrusaSlicer 2.9.7 ignores the standard 3MF Materials extension (pid, p1-p3), so standard color tags do not reach it.
+  unit: bool
+  default: true
+  evidence:
+    - ref: research/verification/2026-11-09-slicer-3mf-import/README.md
+      locator: "we are ignoring the following attributes: p1 p2 p3 pid"
+      provenance: primary
+      validation: untested
+      claim: Comment in PrusaSlicer version_2.9.7 src/libslic3r/Format/3mf.cpp, triangle parser.
+      source_url: "https://raw.githubusercontent.com/prusa3d/PrusaSlicer/version_2.9.7/src/libslic3r/Format/3mf.cpp"
+
+- id: slicer.prusaslicer.reads_bambu_paint_color
+  kind: tool_limit
+  summary: PrusaSlicer 2.9.7 reads Bambu's per-triangle paint_color attribute when its own mmu_segmentation attribute is absent.
+  unit: bool
+  default: true
+  evidence:
+    - ref: research/verification/2026-11-09-slicer-3mf-import/README.md
+      locator: 'mm_segmentation_serialized = get_attribute_value_string(attributes, num_attributes, "paint_color");'
+      provenance: primary
+      validation: untested
+      claim: Fallback added for PrusaSlicer issue 12502.
+      source_url: "https://raw.githubusercontent.com/prusa3d/PrusaSlicer/version_2.9.7/src/libslic3r/Format/3mf.cpp"
+
+- id: slicer.orca.maps_colorgroup_to_extruders
+  kind: tool_limit
+  summary: OrcaSlicer 2.5.0 reads standard 3MF color groups and maps them to filaments (extruders) on import.
+  unit: bool
+  default: true
+  evidence:
+    - ref: research/verification/2026-11-09-slicer-3mf-import/README.md
+      locator: "std::map<int, int> color_group_id_to_extruder_id_map;"
+      provenance: primary
+      validation: untested
+      claim: From OrcaSlicer v2.5.0 src/libslic3r/Format/bbs_3mf.cpp. Bambu Studio shares this reader lineage but its source was not read.
+      source_url: "https://raw.githubusercontent.com/OrcaSlicer/OrcaSlicer/v2.5.0/src/libslic3r/Format/bbs_3mf.cpp"

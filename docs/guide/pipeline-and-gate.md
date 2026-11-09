@@ -13,7 +13,7 @@ The full design is in [the plan, section 4](../PLAN.md#4-pipeline-stages-and-the
 | S4 Entry gate and repair | Make the geometry valid before any boolean operation; repair from least to most destructive |
 | S5 Features | Add bases, loops, text, joints, connectors, cuts. After scaling, so clearances stay absolute |
 | S6 Color | Assign colors in the way the print type needs |
-| S7 Package | Write STL or 3MF, with stable IDs |
+| S7 Package | Write a portable 3MF (standard format, colors not slots), plus STL on request, with stable IDs |
 | S8 Final gate | Read the written file back and run every required check |
 | S9 Slicer check | Slice headless with a pinned slicer and profile; check the result |
 | S10 Manifest | Record verdicts, evidence, assumptions and file hashes |
@@ -29,6 +29,6 @@ Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value,
 | F3 Printability geometry | Thin walls, small features, overhangs, trapped supports, stability |
 | F4 Structure-specific | Joint clearances, body count, connector fit, color regions |
 | F5 Resources | Triangle count (`slicer.orca.max_triangles_per_plate`), file size |
-| F6 Sliced output | The slicer accepts the file and produces the expected objects and filaments |
+| F6 Sliced output | Two slicers with different 3MF readers, OrcaSlicer and PrusaSlicer, accept the file and produce the expected objects |
 
 If no slicer is installed, F6 is UNKNOWN, so nothing can be PRINTABLE.

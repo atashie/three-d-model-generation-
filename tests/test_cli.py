@@ -23,4 +23,4 @@ def test_rules_lists_every_rule():
 def test_recipes_and_printers():
     assert "R1" in runner.invoke(app, ["recipes"]).output
     out = runner.invoke(app, ["printers"]).output
-    assert "bambu-a1" in out and "unconfirmed" in out
+    assert "bambu-a1" in out and "up to 4 filaments" in out

@@ -42,7 +42,8 @@ def printers() -> None:
     for pid in printer_ids():
         p = load_printer(pid)
         mm = p.multi_material
-        mm_txt = f"{mm.unit} x{mm.max_filaments}{'' if mm.confirmed else ' (unconfirmed)'}" if mm else "none"
+        mm_txt = (f"up to {mm.default_max_filaments} filaments by default "
+                  f"({', '.join(u.name for u in mm.units)})") if mm else "none"
         bx, by, bz = p.build_volume_mm
         typer.echo(f"{p.id:12s} {p.name:18s} bed {bx:g}x{by:g}x{bz:g} mm  "
                    f"nozzle {p.nozzle_diameter_mm} mm  multi-material: {mm_txt}")

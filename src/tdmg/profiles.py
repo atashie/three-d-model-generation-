@@ -23,16 +23,28 @@ class ProfileSource(BaseModel):
     facts: list[str]
 
 
-class MultiMaterial(BaseModel):
+class FeederUnit(BaseModel):
+    """One multi-material unit the printer can use. Facts only; files never name a unit."""
     model_config = ConfigDict(extra="forbid")
-    unit: str
-    slots: int = Field(ge=1)
-    max_filaments: int = Field(ge=1)
-    confirmed: bool = Field(description="False until the owner confirms which unit is attached")
+    name: str
+    slots: int | None = Field(default=None, ge=1, description="None if not verified")
+    connection: str
     cannot_feed: list[str] = Field(default_factory=list,
-                                   description="Materials this unit must not feed; print them from an external spool")
+                                   description="Materials this unit must not feed; use an external spool")
     spool_width_mm: tuple[float, float] | None = None
     spool_inner_diameter_mm: tuple[float, float] | None = None
+    source: str
+
+
+class MultiMaterial(BaseModel):
+    """Multi-material capability, kept independent of which unit is attached.
+
+    Print files name colors (and optionally materials), never AMS units or slots.
+    `default_max_filaments` caps a job's palette unless the job raises it.
+    """
+    model_config = ConfigDict(extra="forbid")
+    default_max_filaments: int = Field(ge=1)
+    units: list[FeederUnit] = Field(min_length=1)
 
 
 class PrinterProfile(BaseModel):
@@ -56,8 +68,10 @@ class PrinterProfile(BaseModel):
             raise ValueError(f"{self.id}: build volume must be positive and finite")
         if self.nozzle_diameter_mm not in self.nozzle_options_mm:
             raise ValueError(f"{self.id}: nozzle {self.nozzle_diameter_mm} is not in nozzle_options_mm")
-        if self.multi_material and self.multi_material.max_filaments > self.multi_material.slots:
-            raise ValueError(f"{self.id}: more filaments than slots")
+        if self.multi_material:
+            known = [u.slots for u in self.multi_material.units if u.slots is not None]
+            if known and self.multi_material.default_max_filaments > min(known):
+                raise ValueError(f"{self.id}: default palette exceeds the smallest unit's slot count")
         return self
 
 
