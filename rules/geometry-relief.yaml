@@ -1,0 +1,14 @@
+# Rules for relief / heightfield (G2).
+- id: relief.lithophane.min_thickness
+  kind: empirical
+  summary: Thinnest point of a lithophane, as a multiple of nozzle diameter.
+  unit: x_nozzle
+  default: 1.5
+  applies_to: {geometry: [G2]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/image_to_flat_and_relief_pathways.md"
+      locator: "shouldn't be less than 1.5x your nozzle's diameter"
+      provenance: primary
+      validation: untested
+      claim: LithophaneMaker.com guidance (primary for that tool).
+      source_url: "https://www.lithophanemaker.com/Lithophanes.html"

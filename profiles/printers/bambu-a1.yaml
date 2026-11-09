@@ -1,0 +1,36 @@
+# Bambu Lab A1. Facts read 2026-11-09. Bambu's pages block scripted fetches (HTTP 403),
+# so these come from search-result snippets of the official pages, not a direct fetch.
+id: bambu-a1
+name: Bambu Lab A1
+build_volume_mm: [256, 256, 256]
+nozzle_diameter_mm: 0.4
+nozzle_options_mm: [0.2, 0.4, 0.6, 0.8]
+nozzle_material: stainless steel (hardened nozzle needed for carbon- or glass-filled filament)
+multi_material:
+  unit: AMS lite
+  slots: 4
+  max_filaments: 4
+  confirmed: false
+materials_recommended: [PLA, PETG, TPU, PVA]
+materials_not_recommended: [ABS, ASA, PC, PA]
+sources:
+  - url: https://bambulab.com/en/a1/tech-specs
+    access: search snippet (site returns 403 to scripts)
+    accessed: "2026-11-09"
+    facts:
+      - build volume 256 x 256 x 256 mm
+      - 0.4 mm stainless steel nozzle included; 0.2, 0.6, 0.8 mm options
+      - ideal for PLA, PETG, TPU, PVA; ABS, ASA, PC, PA not recommended
+  - url: https://us.store.bambulab.com/products/ams-lite
+    access: search snippet
+    accessed: "2026-11-09"
+    facts:
+      - AMS lite is designed for the A1 series; one AMS lite per printer, so at most 4 colors
+  - url: https://forum.bambulab.com/t/ams2-ams-ams-ht-with-a1/205987
+    access: search snippet (forum, secondary)
+    accessed: "2026-11-09"
+    facts:
+      - AMS 2 Pro and AMS HT connect to an A1 only through a separate A1 AMS hub, not mixed with AMS lite
+assumptions:
+  - "The owner said 'A1 with AMS'. Assumed AMS lite (4 slots). Confirm before relying on more than 4 filaments."
+calibration: {}   # filled in from calibration prints; each entry bound to nozzle, material, slicer build and profile hash

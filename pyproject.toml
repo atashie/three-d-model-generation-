@@ -1,0 +1,65 @@
+[project]
+name = "three-d-model-generation"
+version = "0.0.1"
+description = "Turn an image into an FDM-printable 3MF/STL with a deterministic, code-first pipeline."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "atashie" }]
+# 3.13 is the only version where bpy and orca123d both install (research/verification/2026-11-08-stack-smoke).
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "numpy",
+    "scipy",
+    "trimesh",
+    "networkx",          # trimesh needs it to load 3MF
+    "lxml",              # trimesh needs it to load 3MF
+    "manifold3d",
+    "lib3mf",
+    "shapely",
+    "opencv-python-headless",
+    "build123d",         # pulls cadquery-ocp (OpenCASCADE: LGPL-2.1 with exception)
+    "vtracer",
+    "pillow",
+    "pydantic>=2",
+    "typer",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+perception = [
+    "rembg[cpu]",
+    "onnxruntime",
+    "pyobjc-framework-Vision; sys_platform == 'darwin'",
+]
+analysis = [
+    "pymeshlab",         # GPL-3.0: optional, personal use
+]
+
+[project.scripts]
+tdmg = "tdmg.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "hypothesis",
+    "ruff",
+    "thingi10k",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tdmg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+# research/ holds frozen experiment records; they are kept as run, not maintained.
+extend-exclude = ["research"]

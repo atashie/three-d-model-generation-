@@ -1,0 +1,32 @@
+# Rules for flat print-in-place joints (A1). Clearances are absolute: they never scale with the model.
+- id: joint.pin_in_loop.clearance_radial
+  kind: empirical
+  summary: Radial gap between axle and hole in a flat print-in-place hinge.
+  unit: mm
+  default: 0.55
+  measured_as: radial
+  scales_with_model: false
+  applies_to: {articulation: [A1]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/articulated_flexi_print_design.md"
+      locator: "Ø axle 2.5 mm in Ø hole 3.6 mm (i.e. 1.1 mm total / 0.55 mm radial)"
+      provenance: primary
+      validation: source-tested
+      claim: DrLex Flexi Rex hinge drawing; a widely printed design.
+      source_url: "https://github.com/DrLex0/print3D-FlexiRex/blob/master/images/Hinge_dimensions.png"
+
+- id: joint.pin_in_loop.clearance_vertical
+  kind: empirical
+  summary: Vertical gap between the top of the axle and the shackle in a flat print-in-place hinge.
+  unit: mm
+  default: 0.5
+  measured_as: vertical
+  scales_with_model: false
+  applies_to: {articulation: [A1]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/articulated_flexi_print_design.md"
+      locator: '"Clearance: about 0.5mm" (vertical, between axle top and shackle)'
+      provenance: primary
+      validation: source-tested
+      claim: DrLex Flexi Rex hinge drawing.
+      source_url: "https://github.com/DrLex0/print3D-FlexiRex/blob/master/images/Hinge_dimensions.png"

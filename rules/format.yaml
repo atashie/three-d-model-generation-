@@ -1,0 +1,39 @@
+# Format requirements. kind: normative. Source: 3MF core specification, as recorded in the research notes.
+- id: format.3mf.edge_manifold
+  kind: normative
+  summary: Every triangle edge is shared with exactly one other triangle (no holes, no non-manifold edges).
+  unit: bool
+  default: true
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
+      locator: "Every triangle edge in the mesh shares common vertex endpoints with the edge of exactly 1 other triangle"
+      provenance: primary
+      validation: untested
+      claim: 3MF core spec MUST rule for meshes of objects with type model or solidsupport.
+      source_url: "https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md"
+
+- id: format.3mf.consistent_orientation
+  kind: normative
+  summary: Adjacent triangles have the same face-normal orientation, and all normals point outward.
+  unit: bool
+  default: true
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
+      locator: "Every pair of adjacent triangles within the mesh MUST have the same orientation of the face normal"
+      provenance: primary
+      validation: untested
+      claim: 3MF core spec MUST rule on consistent orientation.
+      source_url: "https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md"
+
+- id: format.3mf.self_intersection_is_warning
+  kind: normative
+  summary: Self-intersections are a warning, not a format violation; consumers must accept them.
+  unit: bool
+  default: true
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/mesh_validation_repair_formats_slicers.md"
+      locator: "consumers MUST accept self-intersecting meshes and overlapping objects"
+      provenance: primary
+      validation: untested
+      claim: Producers SHOULD NOT emit self-intersections; consumers MUST accept them.
+      source_url: "https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md"

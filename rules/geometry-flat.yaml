@@ -1,0 +1,48 @@
+# Rules for flat / 2.5D extrusion (G1).
+- id: flat.island.min_square_side
+  kind: hypothesis
+  summary: Drop traced islands whose area is below (this many nozzle widths)^2.
+  unit: x_nozzle
+  default: 2.0
+  applies_to: {geometry: [G1]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/image_to_flat_and_relief_pathways.md"
+      locator: "drop islands below a minimum area (e.g., < (2×nozzle)²)"
+      provenance: unverified
+      validation: untested
+      claim: Research team's engineering inference from nozzle geometry; no published source.
+  notes: Minimum area = (value * nozzle_diameter)^2, so 0.64 mm^2 for a 0.4 mm nozzle.
+
+- id: flat.sliver.opening_width
+  kind: hypothesis
+  summary: Shrink then regrow each shape by half this width to delete slivers no nozzle can print.
+  unit: mm
+  default: 0.4
+  range: [0.4, 0.5]
+  applies_to: {geometry: [G1]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/image_to_flat_and_relief_pathways.md"
+      locator: "Shapely `buffer(-w/2).buffer(+w/2)` with w ≈ 0.4–0.5 mm"
+      provenance: unverified
+      validation: untested
+      claim: Research team's engineering inference (morphological opening at nozzle width).
+
+- id: template.cookie_cutter.wall
+  kind: empirical
+  summary: Cutter blade wall thickness.
+  unit: mm
+  default: 0.8
+  applies_to: {geometry: [G1]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/image_to_flat_and_relief_pathways.md"
+      locator: "cutter wall ≈0.8 mm"
+      provenance: primary
+      validation: untested
+      claim: Default exposed by open cookie-cutter generators (e.g. CZDanol/cookieCutterStlGenerator).
+      source_url: "https://github.com/CZDanol/cookieCutterStlGenerator"
+    - ref: "research_notes/Image to printable 3D model landscape/image_to_flat_and_relief_pathways.md"
+      locator: "wall thickness should be an integer multiple of extrusion width (0.8 or 1.2 mm for a 0.4 mm nozzle)"
+      provenance: unverified
+      validation: untested
+      claim: Research team's inference so slicers produce solid walls.
+  notes: Geometry only. No food-contact safety claim is made (docs/PLAN.md section 9b).

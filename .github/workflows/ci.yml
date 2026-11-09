@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-15 is Apple Silicon (arm64), the same architecture as the target Mac.
+        os: [macos-15, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install (exactly as locked)
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Generated docs are current
+        run: uv run python scripts/gen_docs.py --check
+      - name: Tests
+        run: uv run pytest

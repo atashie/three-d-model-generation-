@@ -1,6 +1,6 @@
 # Repository and documentation plan
 
-**Status:** Draft v2, 2026-11-09. v1 (2026-11-08) was revised after an independent review by OpenAI Codex. Section 12 lists what changed and why. Open questions are in section 13. Where a question blocks a choice, the plan states a default and labels it **(default, pending Qn)**.
+**Status:** v2, 2026-11-09. v1 (2026-11-08) was revised after an independent review by OpenAI Codex; section 12 lists what changed and why. Section 13 records the owner's decisions and the questions still open. Labels such as **(pending Qn)** in earlier sections now resolve through section 13.
 
 **Inputs:**
 - The landscape report in `reports/`, including its erratum, and the seven research notes in `research_notes/`.
@@ -211,7 +211,7 @@ v1 used one evidence tier. Review showed that one field mixes up three separate 
 
 | Field | Values | Question it answers |
 |---|---|---|
-| `kind` | `normative` (a format or spec requirement) · `empirical` (a physical printing rule) · `hypothesis` (our own engineering inference) | What sort of claim is this? |
+| `kind` | `normative` (a format or spec requirement) · `tool_limit` (a documented or measured limit of a specific tool) · `empirical` (a physical printing rule) · `hypothesis` (our own engineering inference) | What sort of claim is this? |
 | `provenance` | `primary` · `secondary` · `unverified` | Where does the claim come from? Source code proves what a program *does*, not that a physical rule *works* |
 | `validation` | `untested` · `source-tested` (the source printed it) · `peer-reviewed` · `calibrated` (printed on our printer) | Has anyone shown that it works? |
 
@@ -228,7 +228,7 @@ v1 used one evidence tier. Review showed that one field mixes up three separate 
 ### Example: the Flexi Rex hinge is two rules, not one
 
 ```yaml
-- id: joint.pin_in_loop.clearance.radial
+- id: joint.pin_in_loop.clearance_radial
   kind: empirical
   summary: Radial gap between axle and hole in a flat print-in-place hinge.
   measured_as: radial            # radial | diametral | vertical | first_layer
@@ -244,7 +244,7 @@ v1 used one evidence tier. Review showed that one field mixes up three separate 
       claim: "DrLex Flexi Rex: axle Ø2.5 mm in hole Ø3.6 mm, so 0.55 mm radial"
   calibration: {test: calibration/pin_in_loop_ladder, bound_to: [printer, nozzle, material, slicer_build, profile_hash]}
 
-- id: joint.pin_in_loop.clearance.vertical
+- id: joint.pin_in_loop.clearance_vertical
   kind: empirical
   measured_as: vertical
   unit: mm
@@ -409,12 +409,24 @@ A second round reviewed the research report against primary sources and against 
 
 The report itself was corrected in the same pass; its revision history lists every change.
 
-## 13. Open questions
+## 13. Decisions and open questions
 
-These change concrete choices above. The defaults apply until answered.
+Answered by the project owner on 2026-11-09.
 
-- **Q1. Printer hardware.** Which printer, nozzle, and multi-material unit, if any? This sets the slicer, the project 3MF flavor, the bed size, and the maximum filaments per layer. *Default:* Bambu Lab with AMS, 0.4 mm nozzle, OrcaSlicer CLI as the checker.
-- **Q2. Licence and use.** Personal use, public open source, or selling prints or models? This decides whether GPL and non-commercial tools can be more than optional, and whether bundling OpenCASCADE (LGPL) matters. Also, are you in the EU, UK, or South Korea? Hunyuan3D's licence excludes those regions. *Default:* MIT repo; permissive core plus OpenCASCADE as an unmodified pip dependency; copyleft and non-commercial tools only as optional extras, subprocess tools, or test oracles.
-- **Q3. Cloud use for complex 3D (R4, R5, R7).** Local only, hosted open models (fal or Replicate, cents per run), or commercial APIs (Meshy or Tripo)? Are you comfortable uploading the source photos to a cloud service? *Default:* hosted open models first, a local shape-only option second, commercial APIs as optional adapters, and an explicit opt-in before any upload.
-- **Q4. First targets.** Which recipes matter most to you first? *Default:* R1 → R2 → R3 → R4, as in section 11.
-- **Q5. Interface.** Is a CLI plus a Python library enough at first, with a simple local web UI later? *Default:* yes.
+- **Q1. Printer: Bambu Lab A1 with AMS.** The first printer profile is `profiles/printers/bambu-a1.yaml`.
+  - **Specs:** 256 × 256 × 256 mm build volume. A 0.4 mm stainless steel nozzle ships with it; 0.2, 0.6, and 0.8 mm are options. Rated for PLA, PETG, TPU, and PVA; ABS and ASA are not recommended.
+  - **AMS unit:** the A1 takes one **AMS lite** (4 slots) directly. Full AMS units (AMS 2 Pro, AMS HT) connect only through a separate A1 hub and cannot be mixed with an AMS lite. *Assumed:* AMS lite, so at most 4 filaments. **Still to confirm** with the owner.
+  - **Slicers:** the A1 is a Bambu printer, so outputs must open correctly in Bambu Studio. OrcaSlicer, which reads the same project format, remains the headless checker.
+- **Q2. Use: personal, happy to open-source; "whichever option is simpler".** Decision:
+  - The repo is MIT-licensed.
+  - The core uses permissive dependencies, plus OpenCASCADE as an unmodified pip dependency.
+  - GPL and non-commercial tools are fine for personal use as optional extras or subprocess tools. No GPL code is copied into the repo, so open-sourcing later changes nothing.
+  - *Still open:* whether the owner is in the EU, UK, or South Korea. Hunyuan3D's licence excludes those regions.
+- **Q3. Cloud use for complex 3D: open.** The owner wants to walk through each option before any decision. No backend is chosen until then. The options are:
+  1. running models locally on the M5;
+  2. hosted open models;
+  3. commercial APIs.
+
+  Two variants also apply: a rented GPU, and Bambu MakerLab as a manual baseline. This only affects Phase 5 and later.
+- **Q4. Order: R1 → R2 → R3 → R4**, as in section 11. Confirmed.
+- **Q5. Interface: a CLI plus a Python library first**, with a simple local web UI later. Confirmed.
