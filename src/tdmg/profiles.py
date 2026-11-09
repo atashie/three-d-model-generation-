@@ -44,6 +44,7 @@ class MultiMaterial(BaseModel):
     """
     model_config = ConfigDict(extra="forbid")
     default_max_filaments: int = Field(ge=1)
+    default_basis: str = Field(description="The unit whose slot count justifies the default")
     units: list[FeederUnit] = Field(min_length=1)
 
 
@@ -69,9 +70,12 @@ class PrinterProfile(BaseModel):
         if self.nozzle_diameter_mm not in self.nozzle_options_mm:
             raise ValueError(f"{self.id}: nozzle {self.nozzle_diameter_mm} is not in nozzle_options_mm")
         if self.multi_material:
-            known = [u.slots for u in self.multi_material.units if u.slots is not None]
-            if known and self.multi_material.default_max_filaments > min(known):
-                raise ValueError(f"{self.id}: default palette exceeds the smallest unit's slot count")
+            mm = self.multi_material
+            basis = next((u for u in mm.units if u.name == mm.default_basis), None)
+            if basis is None or basis.slots is None:
+                raise ValueError(f"{self.id}: default_basis must name a unit with a verified slot count")
+            if mm.default_max_filaments > basis.slots:
+                raise ValueError(f"{self.id}: default palette exceeds {basis.name}'s {basis.slots} slots")
         return self
 
 

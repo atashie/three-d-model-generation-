@@ -67,7 +67,7 @@ def test_a1_ams_lite_restrictions_are_recorded():
     assert {"TPU", "PVA"} <= set(lite.cannot_feed)
 
 
-def test_default_palette_cannot_exceed_smallest_unit():
+def test_default_palette_cannot_exceed_its_basis_unit():
     data = load_printer("bambu-a1").model_dump()
     data["multi_material"]["default_max_filaments"] = 5
     with pytest.raises(ValidationError):

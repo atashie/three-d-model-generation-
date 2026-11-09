@@ -1,0 +1,12 @@
+You are an independent reviewer for the repository in the current directory (three-d-model-generation), which turns an image into an FDM-printable 3MF/STL with deterministic code. The owner requires print files to be agnostic to the slicer and to the AMS (Bambu multi-material) unit; he prints on a Bambu Lab A1 and uses Bambu Studio. Find what is wrong, unsupported, or risky. You are in a read-only sandbox: do NOT modify files.
+
+SCOPE: commit 2017be7 only (`git show 2017be7`). Above all, check the new verification record research/verification/2026-11-09-slicer-3mf-import/README.md against the actual slicer source:
+- PrusaSlicer tag version_2.9.7, src/libslic3r/Format/3mf.cpp: does it really ignore the 3MF Materials extension (pid, p1-p3, colorgroup, basematerials) everywhere, including for whole objects, and read Bambu's paint_color as a fallback?
+- OrcaSlicer tag v2.5.0, src/libslic3r/Format/bbs_3mf.cpp: does it map m:colorgroup to extruders, and for which files (all, or only some)? Is paint_color kept for files whose Application metadata is not BambuStudio or OrcaSlicer, or discarded later?
+- Bambu Studio master, src/libslic3r/Format/bbs_3mf.cpp: does it behave the same way as OrcaSlicer for both points? The record says its source was not read, so settle this if you can.
+- Cura's 3MF reader (Ultimaker/Cura plugins/3MFReader): any color or material handling?
+Then check that the plan (docs/PLAN.md section 2 principle 7, section 3 color table, section 9 paint paragraph, section 13), the three new rules in rules/tools.yaml, the printer profile change, and the guide pages state these facts without overstating them. Also check whether "standard 3MF core + Materials extension, one closed body per color" really is the most portable encoding, or whether something better exists (for example, separate objects with names, or per-object basematerials vs colorgroup).
+
+CONTEXT BUDGET: fetch raw source files and grep them; do not read whole research notes. Write your final answer as soon as the scope is covered.
+
+Output format (final message): Markdown findings ranked most severe first: severity, file:line, the claim at issue, evidence (URL and quoted source line), and a fix. Then "Things I checked and found correct" and "Could not verify".

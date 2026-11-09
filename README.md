@@ -6,7 +6,7 @@ The pipeline is deterministic code. Machine learning appears only where no rule 
 
 **Status:** Phase 0 (foundations). Nothing prints yet. See the [roadmap](docs/PLAN.md#11-roadmap).
 
-**Target printer:** Bambu Lab A1 ([profile](profiles/printers/bambu-a1.yaml)). Files are portable: they work with any AMS unit and any slicer, and are checked against Bambu Studio's lineage and PrusaSlicer.
+**Target printer:** Bambu Lab A1 ([profile](profiles/printers/bambu-a1.yaml)). Files are portable: standard 3MF, no dependence on the AMS unit or the slicer, checked in OrcaSlicer and PrusaSlicer, and confirmed by hand in Bambu Studio.
 
 ## Start here
 

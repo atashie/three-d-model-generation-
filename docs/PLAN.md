@@ -33,10 +33,14 @@ The program says **PRINTABLE** only when every check required for that kind of p
    - Slicer-specific features are added only when a recipe cannot work without them, as an extra file next to the portable one, never instead of it.
    - STL is a convenience export for single-body parts. STL has no units, so checking an STL requires a stated unit assumption.
 
-   **What portable means in practice** (from slicer source, `research/verification/2026-11-09-slicer-3mf-import/README.md`):
-   - Every slicer reads separate bodies correctly.
-   - OrcaSlicer, and Bambu Studio by shared lineage, also map the standard color tags to filaments automatically.
-   - PrusaSlicer ignores those tags, so its user assigns filaments by hand.
+   **What portable means in practice.** This comes from reading the slicer source, recorded in `research/verification/2026-11-09-slicer-3mf-import/README.md`. No import has been tested yet.
+   - **Shared ground:** closed, named mesh objects, which every slicer reads. Assemblies do not survive everywhere; PrusaSlicer breaks them into separate objects.
+   - **Standard color tags help only some slicers:**
+     - Bambu Studio's current code reads them, then runs files from other programs through its own color-matching step.
+     - OrcaSlicer uses only one color per top-level object.
+     - PrusaSlicer and Cura ignore them.
+   - **So colors never depend on the tags.** Every multicolor file ships with a palette manifest saying which object is which color. Object names carry the color too, and the user maps colors to filaments in any slicer.
+   - **The exact encoding is not chosen yet.** Separate top-level objects or one assembly is settled by import tests in Phase 3.
 
 ## 3. Print-type model: the nested subsystems
 
@@ -48,7 +52,7 @@ A print job is a combination of four attributes. Each attribute value has its ow
 |---|---|
 | **Geometry source** | **G1** Flat / 2.5D extrusion (mask → vector → extrude) · **G2** Relief / heightfield (grayscale or depth → height grid) · **G3** Full 3D (generative image-to-3D, then repair) |
 | **Articulation** | **A0** None · **A1** Flat print-in-place joints (in-plane pin-in-loop hinges) · **A2** 3D print-in-place joints (ball-and-socket, cone-pin) |
-| **Color encoding** | **C1** Single filament · **C2** One closed body per color, tagged with standard 3MF colors · **C3** Color regions that do not follow bodies. The portable route splits them into bodies (C2); vendor paint attributes are an optional extra · **C4** Filament changes by height, delivered as a portable swap schedule (heights and colors) next to the 3MF, because standard 3MF cannot hold layer changes |
+| **Color encoding** | **C1** Single filament · **C2** One closed, named body per color, with standard 3MF color tags as a convenience and a palette manifest as the guarantee · **C3** Color regions that do not follow bodies. The portable route splits them into bodies (C2); vendor paint attributes are an optional extra · **C4** Filament changes by height, delivered as a portable swap schedule (heights and colors) next to the 3MF, because standard 3MF cannot hold layer changes |
 | **Assembly / layout** | **L1** One print, one plate · **L2** Separately printed parts, assembled after printing. Standard 3MF has no plates, so each plate is its own portable 3MF |
 
 Your original categories map onto these attributes:
@@ -339,7 +343,7 @@ The dependency register records, for each entry, its licence and any obligations
 - **Existing writer:** a maintained Blender 3MF add-on already exports both Bambu/Orca `paint_color` and PrusaSlicer `mmu_segmentation`. It is GPL-2.0, has 49 stars, and was last updated in November 2026.
 - **Slicer import:** OrcaSlicer 2.5's source has a texture import dialog that matches texture colors to filaments and applies the result as paint. This is GUI code. A headless path is unverified.
 
-- **Portability:** paint is not part of standard 3MF. The portable route for C3 is to split color regions into closed bodies, which makes it C2. Bambu's `paint_color` is the only paint attribute read by more than one slicer family: OrcaSlicer reads it, and PrusaSlicer 2.9.7 reads it as a fallback (rules `slicer.prusaslicer.reads_bambu_paint_color`, `slicer.orca.maps_colorgroup_to_extruders`). So if a recipe ever needs paint, it is written as an extra file using that attribute. That file still needs testing for whether Bambu Studio keeps paint from files other programs wrote, and whether strict 3MF validators accept the attribute.
+- **Portability:** paint is not part of standard 3MF. The portable route for C3 is to split color regions into closed bodies, which makes it C2. Bambu's `paint_color` attribute is read by OrcaSlicer, Bambu Studio, and PrusaSlicer 2.9.7, which reads it as a fallback (rule `slicer.prusaslicer.reads_bambu_paint_color`). But it is an unqualified attribute, which the 3MF core schema does not allow, so a file using it is vendor-specific by definition. If a recipe ever needs paint, it is an extra file next to the portable one. Real imports still need testing.
 
 We evaluate the existing writer and the OrcaSlicer import as references and test oracles before writing our own encoder.
 
@@ -386,7 +390,7 @@ These are not geometry problems, so the gate cannot catch them. The research did
 | 0. Lean foundations | pyproject (3.13) + lock; CI on GitHub's macOS arm64 runner and Linux; CLAUDE.md; the Phase 0 docs from section 6; rules schema with about 15 seed rules; dependency register | CI green on both platforms; rules and doc lint pass |
 | 1. R1 vertical slice | Image → mask (plain-background threshold first; rembg optional) → trace → normalize → entry gate → loop and base → STL + 3MF → final gate (F1, F2, F3 wall and feature, F5) → Orca headless slice (F6) → manifest. First calibration generator: clearance ladders, radial and vertical | Six named fixture images give their expected verdicts: asymmetric glyph, hole inside a hole, thin stroke, diagonal touch, empty mask, photo with a plain background. Golden hashes stable on macOS CI. You print two outputs and the ladder; three named dimensions within ±0.2 mm by caliper; results logged in the printer profile |
 | 2. Gate hardening | Analytic negative fixtures; fixed Thingi10K sample (200 IDs); repair ladder with function-preservation checks | Each negative fixture flags exactly its defect; confusion table published with every disagreement explained |
-| 3. R2 flat multicolor | Palette snapped to the job's filament colors, at most the profile's default of 4; one closed body per color on a shared base, as one components object, tagged with standard 3MF colors | OrcaSlicer maps each body to its intended filament; PrusaSlicer shows the same bodies and dimensions; the owner confirms it in Bambu Studio; filaments per layer within the cap; one physical print |
+| 3. R2 flat multicolor | Palette snapped to the job's filament colors, up to the job's declared cap (default 4); one closed, named body per color on a shared base; standard color tags plus a palette manifest. An encoding bake-off with import fixtures picks between separate top-level objects and one assembly | In OrcaSlicer and PrusaSlicer, every body imports at its intended position and size and can be assigned its filament. The owner confirms the same in Bambu Studio. Filaments per layer within the cap. One physical print |
 | 4. R3 relief and lithophane | Heightfield with decimation; lithophane thickness rules; C4 layer schedule as a stretch goal | Named fixtures within triangle budget; one printed lithophane checked against its thickness map at five measured points |
 | 5. R4 figurine, single color | Hosted G3 backend adapter; local shape-only option; scale, orient, base, decimate | Ten named images, each with a recorded verdict and repair metrics; at least one physical print |
 | 6. R5 assembled parts | Plane cuts that avoid joints; connectors with calibrated fits; plate assignment | Parts assemble by hand without sanding; connector fit logged |
@@ -427,7 +431,7 @@ Answered by the project owner on 2026-11-09.
 
 - **Q1. Printer: Bambu Lab A1 with AMS.** The first printer profile is `profiles/printers/bambu-a1.yaml`.
   - **Specs:** 256 × 256 × 256 mm build volume. A 0.4 mm stainless steel nozzle ships with it; 0.2, 0.6, and 0.8 mm are options. Rated for PLA, PETG, TPU, and PVA; ABS and ASA are not recommended.
-  - **AMS: files are AMS-agnostic** (owner decision). Files name colors, never units or slots. The A1 takes one AMS lite (4 slots) directly, or AMS 2 Pro / AMS HT units through a separate hub. So jobs default to at most 4 filaments, which every setup supports. A job can raise the cap.
+  - **AMS: files are AMS-agnostic** (owner decision). Files name colors, never units or slots. The A1 takes one AMS lite (4 slots) directly, or AMS 2 Pro / AMS HT units through a separate hub. Jobs default to at most 4 filaments, the AMS lite's slot count. Not every setup has 4 slots: Bambu's manual implies an AMS HT has fewer. So a job declares its real cap, and the report warns if the palette exceeds it.
   - **Slicers: files are slicer-agnostic** (owner decision). The owner uses Bambu's standard slicer, Bambu Studio, so files must work there. OrcaSlicer and PrusaSlicer are the automated checkers; see section 9.
 - **Q2. Use: personal, happy to open-source; "whichever option is simpler".** Decision:
   - The repo is MIT-licensed.

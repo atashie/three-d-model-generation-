@@ -8,7 +8,10 @@ nozzle_options_mm: [0.2, 0.4, 0.6, 0.8]
 nozzle_material: stainless steel
 # Files are AMS-agnostic: they name colors, never units or slots (owner decision 2026-11-09).
 multi_material:
-  default_max_filaments: 4   # the AMS lite's slot count, the smallest A1 multi-material setup
+  # Files never name a unit. The default palette is the AMS lite's slot count; a job must
+  # declare its real cap, because hub-connected units can have fewer slots (see AMS HT).
+  default_max_filaments: 4
+  default_basis: AMS lite
   units:
     - name: AMS lite
       slots: 4
@@ -18,9 +21,12 @@ multi_material:
       spool_width_mm: [40, 68]
       spool_inner_diameter_mm: [53, 58]
       source: Bambu A1 Combo quick-start guide, p25 (fetched PDF)
-    - name: AMS 2 Pro or AMS HT
+    - name: AMS 2 Pro
       connection: through the separate A1 AMS hub; cannot be mixed with an AMS lite
-      source: Bambu forum firmware announcement and search snippets (secondary); slots and feed limits not recorded
+      source: Bambu forum firmware announcement (cited by review); slots and feed limits not verified
+    - name: AMS HT
+      connection: through the separate A1 AMS hub; cannot be mixed with an AMS lite
+      source: "Bambu H2D manual p76: 4 AMS 2 Pro + 8 AMS HT = 24 slots, so an AMS HT has fewer slots than an AMS 2 Pro (1 if the Pro has 4; inference). Not verified directly"
 # "Ideal" materials for the printer itself. TPU and PVA are ideal for the printer but must
 # come from an external spool, not the AMS lite (see cannot_feed).
 materials_recommended: [PLA, PETG, TPU, PVA]
@@ -39,5 +45,5 @@ sources:
     facts:
       - AMS 2 Pro and AMS HT connect to an A1 only through a separate A1 AMS hub, and cannot be mixed with an AMS lite
 assumptions:
-  - "Jobs default to at most 4 filaments, which every A1 multi-material setup supports. A job may raise this if the attached units have more slots."
+  - "Jobs default to at most 4 filaments, the AMS lite's slot count. Not every setup has 4 slots (hub-connected AMS HT units have fewer), so a job declares its real cap."
 calibration: {}   # filled in from calibration prints; each entry bound to nozzle, material, slicer build and profile hash

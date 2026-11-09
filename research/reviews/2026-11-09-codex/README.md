@@ -75,3 +75,22 @@ Prompt `prompt-phase0.txt`, output `phase0.md`. Line numbers refer to commit `16
 - Docs: wording aligned on the LLM policy and the STL policy, and the manifold explanation corrected.
 
 **Not changed:** reference-style Markdown links are still not checked. They are not used in this repo, and the limit is documented in `tests/doclint.py`.
+
+## Portability review (commit `2017be7`)
+
+Prompt `prompt-portability.txt`, output `portability.md`. Line numbers refer to commit `2017be7`.
+
+**Checked in source before fixing:**
+- **OrcaSlicer 2.5.0** keeps one color per color group (`m_group_id_to_color[m_current_color_group] = color;`). It assigns a filament only from a top-level object's `pid`.
+- **Bambu Studio master** reads indexed color groups and `basematerials`. For files from other programs it shows "The 3mf is not from Bambu Lab, load geometry data and color data only." It then converts the colors through its color-import flow and erases preset `extruder` settings. The first version of the record had wrongly assumed Bambu behaves like OrcaSlicer.
+- **PrusaSlicer 2.9.7** expands component assemblies into separate object instances.
+- **Cura** has no `colorgroup`, `basematerials` or `displaycolor` handling. It reads its own `extruder_nr` and a paint texture.
+- **AMS HT.** Bambu's H2D manual (p76) says "up to 4 AMS 2 Pro units and 8 AMS HT units ... a total of 24 filament slots". That shows an AMS HT has fewer slots than an AMS 2 Pro. The exact count of 1 depends on the AMS 2 Pro having 4, which the manual did not state in the passages searched. Either way, "every setup has 4 slots" is wrong.
+
+**Applied:**
+- The verification record was rewritten with source quotes for all four slicers.
+- The OrcaSlicer rule was narrowed, and two rules were added: `slicer.bambu.converts_foreign_standard_colors` and `slicer.prusaslicer.expands_component_assemblies`.
+- The profile names the AMS lite as the basis of the default palette of 4. The validator requires that basis unit to have a verified slot count.
+- The plan and guide now treat color tags as a convenience and add a palette manifest. The encoding choice is left to a Phase 3 import bake-off, and the `paint_color` attribute is marked vendor-specific.
+
+**Not changed:** whether `paint_color` is the *only* paint encoding shared across slicer families. The review noted that the record did not establish exclusivity, so the plan no longer claims it.
