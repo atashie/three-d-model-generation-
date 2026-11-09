@@ -105,7 +105,7 @@ Each check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, 
 |---|---|
 | F1 Format and topology | Finite coordinates. No degenerate or duplicate faces. Every edge shared by exactly two faces. No pinched vertices. Closed. Consistent outward orientation. Positive volume (the 3MF core MUST rules). Self-intersection: a warning that triggers a rebuild |
 | F2 Scale and fit | Units explicit. Target dimensions met. Fits the build volume, per plate. Coordinates within float32-safe bounds; lib3mf and manifold3d store float32 |
-| F3 Printability geometry | Wall thickness: one fixed method, 5th percentile at face centroids. Minimum feature size. Overhang area and an estimate of support need. Supports trapped inside joints or cavities. Bed contact and stability (center of mass over the footprint). Thin necks along Z |
+| F3 Printability geometry | Wall thickness: one fixed method per threshold. FAIL on any localized region thinner than the minimum, and report where it is and how much of the surface was sampled. A low percentile is reported as a summary only, because a thin connector can be under 5% of the samples. Minimum feature size. Overhang area and an estimate of support need. Supports trapped inside joints or cavities. Bed contact and stability (center of mass over the footprint). Thin necks along Z |
 | F4 Structure-specific | Joint clearances, measured separately as radial, vertical, and first layer. Body count as expected. Connector fit. Minimum color-region size. Filaments per layer under the printer's cap |
 | F5 Resources | Triangle count under budget (OrcaSlicer refuses plates over 1,000,000 by default). File size |
 | F6 Sliced output | Exit status decoded correctly (on macOS and Linux a parent process sees only the low 8 bits, so Orca's −50 arrives as 206). G-code not empty. Expected objects and filaments present. Statistics parsed |
@@ -217,6 +217,12 @@ v1 used one evidence tier. Review showed that one field mixes up three separate 
 
 **Rules on calibration and disagreement:**
 - Calibration applies only to `empirical` rules. Each calibration is bound to a printer, nozzle, material, slicer build, profile hash, and joint family. It is invalidated when any of those change.
+- Calibration keeps different effects apart:
+  - overall dimensional scaling, which comes from material shrinkage and depends on part size;
+  - hole and gap compensation;
+  - first-layer spread (elephant foot).
+
+  Published shrinkage ranges conflict, so they stay as uncertain evidence, not as universal compensation constants.
 - When sources disagree, the rule stores each value with its conditions: axis, fit type, process. Disagreeing values often describe different measurements, so we never average them.
 
 ### Example: the Flexi Rex hinge is two rules, not one
@@ -317,7 +323,33 @@ The dependency register records, for each entry, its licence and any obligations
 
 **Separate environments:** text-to-cad (Python 3.14 or later), the CGAL bindings (3.12), and local MLX/MPS image-to-3D ports run in their own environments as subprocesses.
 
-**Paint encoding (C3).** A maintained Blender 3MF add-on already exports both Bambu/Orca `paint_color` and PrusaSlicer `mmu_segmentation`. It is GPL-2.0, has 49 stars, and was last updated in November 2026. OrcaSlicer 2.5 may also convert textured models to paint on import; the research fact-check is confirming this. We evaluate both as references and test oracles before writing our own encoder. A permissive standalone encoder is needed only if Q2 requires it.
+**Slicer wrapper to evaluate:** `estampo` 0.4.5 (formerly `fabprint`, PyPI, August 2026). It describes itself as a build system for reproducible 3D prints that wraps OrcaSlicer and CuraEngine. It is in early development. We assess its maturity and macOS behavior before choosing between it and our own thin subprocess layer.
+
+**Paint encoding (C3):**
+- **Existing writer:** a maintained Blender 3MF add-on already exports both Bambu/Orca `paint_color` and PrusaSlicer `mmu_segmentation`. It is GPL-2.0, has 49 stars, and was last updated in November 2026.
+- **Slicer import:** OrcaSlicer 2.5's source has a texture import dialog that matches texture colors to filaments and applies the result as paint. This is GUI code. A headless path is unverified.
+
+We evaluate both as references and test oracles before writing our own encoder. A permissive standalone encoder is needed only if Q2 requires it.
+
+## 9b. Safety, rights, and privacy
+
+These are not geometry problems, so the gate cannot catch them. The research did not cover them well, and the review flagged them as missing.
+
+- **Food contact.** Cookie cutters and other food-contact prints raise questions that geometry checks cannot answer:
+  - the filament and its additives;
+  - the printer's contact surfaces;
+  - layer lines that trap bacteria;
+  - cleaning and reuse.
+
+  Until this is researched, cookie-cutter outputs are labeled as geometric prototypes, with no food-safety claim.
+- **Rights in the input image.** Three separate questions apply:
+  - permission to upload or process the image;
+  - rights in what it depicts, such as artwork or characters;
+  - the provider's terms for the output.
+
+  An output licence does not settle input rights. The job spec records the image's source and the user's stated permitted use, and the manifest carries both.
+- **Photo privacy with cloud backends.** Before any upload, the tool shows the provider and asks for explicit consent. Each hosted backend's docs page records its input retention, use for training, visibility, deletion, and subprocessors. A local-only path is always available, even if it is slower or limited to shape-only output.
+- **Licences of whole configurations.** A model repo's top-level licence does not cover everything it loads. For example, TRELLIS.2 code is MIT, but a hosted TRELLIS.2 deployment on Replicate states that users must also follow the DINOv3 licence and BRIA's RMBG-2.0 licence. BRIA's RMBG weights need a paid agreement for commercial use. Pixal3D's Mac build also bundles an encoder under the DINOv3 licence. The dependency register lists code, primary weights, auxiliary weights, and datasets separately for each backend configuration.
 
 ## 10. Position on earthtojake/text-to-cad
 
@@ -368,6 +400,14 @@ An independent read-only review by OpenAI Codex covered the code, this plan, and
 - **Verification states separated.**
 - **Exit tests made measurable.**
 - **Documentation started lean.**
+
+A second round reviewed the research report against primary sources and against its own notes. It led to these plan changes:
+- **Thickness rule.** No percentile-based pass/fail.
+- **Slicer tools.** estampo listed as a wrapper to evaluate; OrcaSlicer's texture-to-paint import confirmed in source.
+- **New section 9b** on safety, image rights, photo privacy, and licences of whole configurations.
+- **Calibration** keeps shrinkage scaling separate from gap compensation.
+
+The report itself was corrected in the same pass; its revision history lists every change.
 
 ## 13. Open questions
 

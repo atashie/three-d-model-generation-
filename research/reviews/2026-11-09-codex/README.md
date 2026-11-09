@@ -11,8 +11,8 @@
 | Code and verification scripts | `prompt-code.txt` | `code-and-verification.md` | Complete. The session was resumed once after a network drop, to write its final answer |
 | Plan v1 | `prompt-plan.txt` | `plan-v1.md` | Complete. Resumed once after a network drop |
 | Research report: first attempt | `research-interim-notes.md` | — | Failed. Its context filled, and compaction failed during the network outage. Its interim notes were given to the two follow-up runs as hypotheses |
-| Research report: fact-check against primary sources | `prompt-research-factcheck.txt` | pending | Running |
-| Research report: fidelity to the notes, and missing topics | `prompt-research-fidelity.txt` | pending | Running |
+| Research report: fact-check against primary sources | `prompt-research-factcheck.txt` | `research-factcheck.md` | Complete |
+| Research report: fidelity to the notes, and missing topics | `prompt-research-fidelity.txt` | `research-fidelity.md` | Complete |
 
 ## How the findings were handled
 
@@ -32,3 +32,20 @@ Each finding was reproduced or checked against its source before anything change
   - The heightfield and voxel-memory arithmetic.
   - Layer color changes working for any geometry.
 - **Narrowed:** the review said OrcaSlicer's JSON output is unavailable on macOS. In the v2.5.0 source, only the `result.json` warnings file is written under a Linux-only guard. The G-code statistics export, which is also JSON, sits outside any platform guard. Plan v2 states both facts. Neither has been run on the M5 yet.
+
+**Research report (fact-check and fidelity):**
+- **Checked against source code, PyPI, the notes, or a local run before correcting:**
+  - OrcaSlicer 2.5's texture import dialog, in `Plater.cpp`.
+  - Orca's exit codes as a calling process sees them: 206, 205, and 197, reproduced locally.
+  - −50 means `CLI_NO_SUITABLE_OBJECTS`.
+  - estampo, formerly fabprint, on PyPI.
+  - CAD-Recode taking point clouds, from the text-to-CAD note.
+  - BOSL2's separate hinge mechanisms, from `hinges.scad`.
+  - trimesh's `uuid4()` calls in its 3MF writer.
+  - Step1X-3D's watertight TSDF statement, at line 56 of its README.
+  - The "In almost all cases" qualifier in the multicolor note.
+  - The TRELLIS.2 and Pixal3D bundled-weight licences, from the generative-models note.
+  - OrcaSlicer's AGPL-3.0 licence, from the GitHub API.
+- **Applied:** all verified findings, in one checked pass of 41 exact replacements. The report's revision history lists them. v1 stays in git at commit `6165e41`.
+- **Plan changes** that followed are listed in `docs/PLAN.md` section 12.
+- **Not yet applied:** the seven source notes keep their original wording, including the claims the report corrects. Examples are the notes' Python 3.12 recommendation and the Notebookcheck citation tagged `[P]`. The notes are a record of what each researcher found; the report and its revision history are the corrected synthesis.
