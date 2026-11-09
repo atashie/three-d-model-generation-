@@ -11,3 +11,5 @@ pydantic
 typer
 pyyaml
 thingi10k
+networkx
+lxml

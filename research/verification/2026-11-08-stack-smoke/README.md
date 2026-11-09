@@ -43,9 +43,9 @@ This replaces the resolver-only result for the optional packages. Every package 
 | meshlib 3.1.4.297 | — | Imports (non-commercial licence) |
 | cgal 6.0.1 (GPL-3) | **no cp313 wheel**; newest is cp312 | Not installable on 3.13. Use a separate 3.12 environment if ever needed |
 
-**Correction to the research:** the mesh-validation note and the landscape report say pymeshfix's arm64 wheels "stop at cp312" and recommend Python 3.12. That is wrong in practice. pymeshfix and libigl ship `abi3` wheels. An abi3 wheel tagged cp312 uses CPython's stable ABI, so it installs and runs on 3.12 and all later versions. We tested this on 3.13.
+**Correction to the research:** the mesh-validation note and the landscape report say pymeshfix's arm64 wheels "stop at cp312" and recommend Python 3.12. That is wrong in practice. pymeshfix and libigl ship `abi3` wheels. An abi3 wheel tagged cp312 uses CPython's stable ABI, so it is ABI-compatible with later CPython versions. The package's own `Requires-Python` still applies: pymeshfix 0.18.1 declares `>=3.10,<3.15`. ABI compatibility also does not guarantee identical behavior. We tested 3.13 only.
 
-pymeshfix's API also needs C-contiguous `float64` vertices and `int32` faces. It rejects trimesh's tracked arrays directly.
+pymeshfix's API needs C-contiguous `float64` vertices and `int32` faces. The first call failed because of dtype and memory layout, not because the inputs were trimesh tracked arrays. Converted tracked arrays work.
 
 ## 2. End-to-end flat chain (`flat_chain_smoke.py`)
 
@@ -60,33 +60,49 @@ Chain: synthetic image, then OpenCV contours, then Shapely polygons, then trimes
 | Genus of ring (expected 1) | trimesh Euler number 0, manifold3d genus 1 |
 | lib3mf read-back `IsManifoldAndOriented` on both objects | true, true |
 | build123d tag volume vs analytic | 2341.1 vs 2341.1 mm³ |
-| STL bytes identical across two processes | yes |
+| STL bytes identical across two processes | yes, on this machine with these exact package versions. trimesh chose its triangulation engine implicitly (manifold here); pass `engine=` explicitly. Cross-platform equality is unverified |
 | 3MF bytes identical across two processes | **no** (see 4) |
+| Two-color 3MF keeps base and ring together | **not guaranteed**. Each body is a separate build item, and the 3MF core spec lets consumers rearrange separate build items. Use one components object with one build item (see 5) |
 
-Dependency finding: `trimesh.load()` on a 3MF needs `networkx` and `lxml`. trimesh does not install them by default. Put both in the core dependency list.
+Dependency finding: `trimesh.load()` on a 3MF needs `networkx` and `lxml`. trimesh does not install them by default. Both are now in `core-requirements.in` and the lock file.
 
 ## 3. Half-pixel contour bias (`half_pixel_check.py`)
 
-`cv2.findContours` traces the *centers* of boundary pixels. So the traced outline sits half a pixel inside the true edge, and holes come out half a pixel too small.
+`cv2.findContours` traces the *centers* of the foreground pixels on each boundary. So the outer outline sits half a pixel inside the true edge. A hole outline also runs through foreground pixel centers, which puts it half a pixel *outside* the true hole edge: **traced holes come out too large.** Example: a 3×3-pixel hole (9 cells) traces as a polygon of area 14. (Corrected 2026-11-09 after independent review; the first version of this note had the hole direction backwards.) Both effects shrink the foreground, so one outward `buffer(+0.5 px)` moves both boundaries in the right direction.
 
 | Case | Raw contour area error | After `buffer(+0.5 px)` |
 |---|---|---|
 | High-res ring (R = 150 px) | −1.00% | +0.17% |
 | Low-res ring (R = 15 px) | −10.07% | +1.95% |
 
-**Why it matters:** At 0.5 mm per pixel, the bias is 0.25 mm per side. That is the same size as a print-in-place clearance, so the error alone can fuse or free a joint. Correct the bias explicitly, or use a tracer that follows pixel edges, such as potrace or vtracer. Then test the result against pixel-count ground truth.
+**Why it matters:** At 0.5 mm per pixel, the bias is 0.25 mm per side. That is the same size as a print-in-place clearance, so the error alone can fuse or free a joint.
 
-The mitred buffer overshoots a little on staircase edges. Compare it with an edge-following tracer before choosing a fix.
+**What this test does and does not show:** pixel count is ground truth for *area* under a square-cell reading of the image. It is not ground truth for boundary position or gap width. On the 7×7 square with a 3×3 hole, the buffered polygon has area 41 against 40 pixel cells, but its boundary is still up to **0.5 px** from the pixel-cell outline (Hausdorff distance). So `buffer(+0.5)` is an area approximation, not a dimensional correction. Before choosing a fix, define the reference geometry (pixel-cell outline or a smoothed curve). Then measure outer and hole dimensions, boundary deviation, topology, and minimum gaps separately. Compare against tracers that follow pixel edges, such as vtracer and potrace, with their settings fixed.
 
 ## 4. Deterministic 3MF (`det3mf.py`)
 
-lib3mf writes random Production-extension UUIDs on every object, build, and build item. Zip entry timestamps are already fixed at 1980-01-01. To get byte-identical 3MF files, set the UUIDs yourself with `SetUUID` and `SetBuildUUID`, using `uuid5` values derived from stable names or content. This was checked: two runs gave the same SHA-256.
+lib3mf writes random Production-extension UUIDs on every object, build, build item, and component. Zip entry timestamps are repeatable, but lib3mf writes the fields as `(1980, 0, 0, 0, 0, 0)`, with month and day zero. That is not a valid calendar date, so normalize the timestamps ourselves if any tool rejects them. To get byte-identical 3MF files, set the UUIDs yourself with `SetUUID` and `SetBuildUUID`. This was checked: two runs gave the same SHA-256.
+
+**Caveat on the recipe:** `det3mf.py` derives UUIDs from names alone, so changing the cube's size kept the same UUIDs. Reusing a name for two instances would give them the same UUID. Production code needs an identity scheme: a project namespace, a content or model identity, and a unique path for each instance. Component references need UUIDs too.
+
+## 5. Independent review (Codex, 2026-11-09)
+
+An independent read-only review by OpenAI Codex reproduced the published tables and checks, and found these defects in the prototype scripts. We reproduced the first two ourselves. The third follows directly from the code: `cv2.findContours` returns `None` for the hierarchy when it finds no contours. They must be fixed when the scripts become tests in Phase 1.
+
+| Defect | Evidence | Fix |
+|---|---|---|
+| `make_valid(...).buffer(0)` can return a MultiPolygon or GeometryCollection; the script assumes one Polygon | Two diagonally touching 3×3 blocks give a MultiPolygon, and extrusion then fails. Also, the area filter runs on the combined shape, so two 4 mm² parts pass a 5 mm² threshold together | Extract the polygon parts recursively, filter each part, extrude each part, and report collapsed slivers |
+| Image Y axis points down; model Y points up | An L-shaped mask came out mirrored top to bottom. The circular fixture hides this | Define one image-to-model transform (origin, pixel centers vs edges, scale, Y flip) and test it with an asymmetric glyph |
+| Empty or fully filtered masks crash | `hier` is `None` for an all-zero mask; `polys[0]` fails when everything is filtered | Return a clear "no printable foreground" result |
+| float32 vertices lose geometry far from the origin | A 0.2 mm box at X = 10,000,000 became empty in manifold3d with status `NoError`. lib3mf also stores float32 | Recenter before export; check non-emptiness and deviation, not only status |
+| Two-color 3MF bodies are separate build items | 3MF core spec §3.4.3.1 and §4.2 | One components object, one build item |
+| UUIDs come from names only | See section 4 | Identity scheme with instance paths |
 
 ## Reproduce
 
 ```bash
 uv venv --python 3.13 .venv-smoke
-uv pip install --python .venv-smoke/bin/python -r core-requirements-py3.13.lock.txt networkx lxml
+uv pip install --python .venv-smoke/bin/python -r core-requirements-py3.13.lock.txt
 .venv-smoke/bin/python flat_chain_smoke.py ./out
 .venv-smoke/bin/python half_pixel_check.py
 .venv-smoke/bin/python det3mf.py ./out/det.3mf

@@ -1,0 +1,9 @@
+# Interim notes from the crashed research review
+
+The first research review ran 52 web searches, then failed while compacting its context during a network outage. Its final findings were lost. These are its interim progress messages, extracted from the log. They were passed to the two follow-up runs as hypotheses to confirm or refute.
+
+> I’ll read the report and all seven notes, then check the claims that drive implementation choices against primary sources. I’ll also compare the report with the notes for lost caveats, contradictions, and omissions. I won’t modify any files.
+> The report mixes file-format conformance with physical printability. I’m checking that distinction closely: thickness, build-volume fit, and self-intersection are all placed in its warning tier. I also found that the erratum corrects Python compatibility claims that remain unchanged in the body.
+> The 3MF wording and Orca’s Linux-only `result.json` claim match the primary sources. Two synthesis problems are emerging: the notes warn only on self-intersection, while the report also downgrades thickness and bed fit; and the report says no Python slicer wrapper exists even though another note names one.
+> I found a material omission in the color workflow: OrcaSlicer 2.5 source includes textured-model import, and I’m tracing how it maps textures to filament paint. That may contradict the report’s claim that texture-to-AMS conversion is available only commercially. I also found that BOSL2’s hinge description combines defaults from two different hinge mechanisms.
+> The review now covers more than 20 primary-source checks. The most consequential findings concern the acceptance gate, thin-feature tests, licensing, and cloud-photo handling. I also confirmed a concrete macOS integration trap: the documented internal codes −50/−51/−59 reach the parent process as 206/205/197.
