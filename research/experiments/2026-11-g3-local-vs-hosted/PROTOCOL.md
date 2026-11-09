@@ -2,6 +2,15 @@
 
 **Status:** planned, not run. Written 2026-11-09 after the owner approved a measured test.
 
+**Update 2026-11-09:** the test machine is now the owner's **PC: 64 GB RAM, no discrete GPU**. The OS has not been confirmed. That changes the candidates:
+- **Drop out on a PC:** the Mac-only routes, which are AssetFurnace's Hunyuan3D-MLX, trellis-mac, and anything needing Metal or Xcode.
+- **Need a CPU-only check first:**
+  - TripoSR, which has a CPU fallback;
+  - AssetFurnace's Pixal3D C++/GGML backend. Its README lists Mac, NVIDIA and AMD; whether it runs CPU-only is unverified;
+  - Stable Fast 3D on CPU;
+  - upstream Hunyuan3D on CPU, which is likely very slow.
+- **Verify from each README before installing anything.** The M5 rows below are kept for reference.
+
 **Decision it informs:** which backend R4 (single-color figurine) uses. The owner prefers local, and accepts hosted for trials. Uploading photos is allowed for now, and privacy is flagged to revisit (docs/PLAN.md section 13).
 
 ## Candidates, rechecked 2026-11-09
@@ -54,7 +63,7 @@ The owner should confirm or change these before the run.
 
 ## Open before running
 
-- Is the 64 GB machine an Apple Silicon Mac? MLX and Metal backends need one; on a PC without a GPU only CPU paths such as TripoSR apply.
-- When can the M5 run unattended with other apps closed? Today only about 3.5 GB of its 16 GB was free.
-- Should full Xcode be installed, to enable the Pixal3D backend? It is several GB from the App Store.
-- Replicate and fal API keys are needed for the hosted comparison.
+- **Answered:** the 64 GB machine is a PC with no GPU, so the run moves there with CPU-only candidates.
+- **Not needed on a PC:** Xcode.
+- **Deferred by the owner:** Replicate and fal API keys for the hosted comparison, until the local results are in.
+- **Unresolved:** the PC's OS (Windows or Linux) and CPU, which decide which builds apply.

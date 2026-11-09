@@ -443,8 +443,10 @@ Answered by the project owner on 2026-11-09.
   - Uploading photos to hosted models is acceptable for now. **Revisit:** photo privacy and each host's data terms, including training use.
   - A single-color figurine is a useful first 3D result.
   - The owner wants a measured local test before deciding; see `research/experiments/2026-11-g3-local-vs-hosted/PROTOCOL.md`.
-  - A 64 GB machine with no discrete GPU is available for trials.
-  - The owner expects most work to be simple objects, so the 16 GB M5 may be enough.
+  - A 64 GB machine with no discrete GPU is available for trials. It is a **PC**, so the Mac-only routes (MLX, Metal) do not apply there. Development moves to that PC; see `docs/STATUS.md`.
+  - The owner expects most work to be simple objects, so a modest machine may be enough.
+  - **Decision rule for commercial services (option 3):** a cheap standard service, around one US dollar per model, is preferred over a homemade pipeline if it gives all the utility we would otherwise build. Our own gate still decides printability.
+  - **Deferred:** hosted API keys wait until the local run's results are known. Two questions are unanswered: whether a monthly plan is acceptable, and whether to use Meshy's printability check as a second opinion. Options 4 (rented GPU) and 5 (Bambu MakerLab) have not been walked through yet.
 
   No backend is chosen yet. The options are:
   1. running models locally on the M5;

@@ -1,6 +1,8 @@
 # Working on this repo
 
-This repo turns an image into an FDM-printable 3MF/STL. The owner is a data scientist new to 3D printing. They want vetted evidence over priors, deterministic code over LLM judgment, and every implementation double-checked. Read `docs/PLAN.md` before changing the design.
+This repo turns an image into an FDM-printable 3MF/STL. The owner is a data scientist new to 3D printing. They want vetted evidence over priors, deterministic code over LLM judgment, and every implementation double-checked.
+
+**Start every session by reading `docs/STATUS.md`** (where things stand, machines, next steps, open questions), then `docs/PLAN.md` before changing the design. Update `docs/STATUS.md` before ending a session.
 
 ## Rules for every change
 
@@ -21,7 +23,7 @@ uv run python scripts/gen_docs.py     # regenerate docs/reference/rules.md and d
 uv run ruff check .                   # lint
 ```
 
-## Environment facts (verified 2026-11-08/09 on the target Mac)
+## Environment facts (verified 2026-11-08/09 on the M5 Mac; re-verify on any other machine)
 
 - Apple M5, 16 GB, no CUDA. Python 3.13 is pinned: it is the only version with both `bpy` and orca123d.
 - trimesh needs `networkx` and `lxml` to load 3MF. Pass `engine=` to `trimesh.creation.extrude_polygon` explicitly.
