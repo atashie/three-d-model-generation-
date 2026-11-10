@@ -1,0 +1,29 @@
+# Subject selection (stage S1). Our own defaults, chosen from software measurements on two
+# owner images. kind stays hypothesis (validation untested) until wider tests support them.
+- id: perception.alpha.min_opaque
+  kind: hypothesis
+  summary: A pixel counts as opaque image content if its 8-bit alpha is at least this.
+  unit: alpha8
+  default: 128
+  range: [1, 255]
+  evidence:
+    - ref: research/verification/2026-11-10-subject-selection/README.md
+      locator: "Oddie is one 8-connected piece at every alpha cutoff tested"
+      provenance: primary
+      validation: untested
+      claim: On Oddie, cutoffs 1 to 255 all give one piece and change its area by 2.2%. 128 counts a pixel when it is at least half covered. Measured in software on one image; not a general result.
+  notes: Adjustable with --alpha-min. It matters only for images with partly transparent pixels.
+
+- id: perception.flood.color_tolerance
+  kind: hypothesis
+  summary: Euclidean distance in 8-bit RGB within which a pixel joins the colour region grown from a --remove-at point.
+  unit: rgb8_distance
+  default: 30
+  range: [0, 441.7]
+  evidence:
+    - ref: research/verification/2026-11-10-subject-selection/README.md
+      locator: "At tolerances 20, 30 and 40 the bird stays one piece; at 60 it splits."
+      provenance: primary
+      validation: untested
+      claim: On Roadie, removing the disc from one seed left the bird as one piece at 20, 30 and 40 and split it at 60. 30 is the middle of the range that worked. Measured in software on one image; not a general result.
+  notes: Adjustable with --tolerance. Lower values keep more of an anti-aliased fringe, and higher values can cut thin dark lines. Check the preview.
