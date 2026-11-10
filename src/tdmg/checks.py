@@ -4,6 +4,16 @@ Each check returns PASS, FAIL or UNKNOWN with what it measured, the threshold an
 rules-registry id that sets it. The F1 checks read the raw face array of an exactly
 merged mesh. They never call trimesh properties or methods that repair, merge or drop
 faces, so a defect in the file is a defect in the result.
+
+Known behaviour, by design:
+- Zero area means an exactly zero cross product. No tolerance is applied. If a cross
+  product overflows, that face's area cannot be decided and the check is UNKNOWN.
+- The vertex-link test accepts a 2-cycle link. A closed two-triangle "pillow" (one
+  triangle in both windings) passes it; no_duplicate_faces and positive_volume catch it.
+- positive_volume judges each connected shell on its own, so a correct inward-facing
+  cavity shell has negative volume and FAILs. This is conservative; revisit when a
+  recipe needs enclosed voids.
+- Vertices that no face uses are counted as unused_vertices, not as bad vertex links.
 """
 
 from __future__ import annotations
@@ -55,20 +65,24 @@ def merge_exact(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     return trimesh.Trimesh(unique, faces, process=False, validate=False)
 
 
-def _bad_vertex_links(faces: np.ndarray, n_vertices: int) -> int:
-    """Count vertices whose link (opposite edges of incident faces) is not one closed cycle.
+def _vertex_links(faces: np.ndarray, n_vertices: int) -> tuple[int, int]:
+    """Return (bad, unused): vertices whose link is not one closed cycle, and unused ones.
 
-    Ported from research/experiments/2026-11-g3-local-vs-hosted/inspect_makerlab.py
-    (lines 22-38). A vertex no face uses has an empty link and counts as bad.
+    The link of a vertex is the opposite edges of its incident faces. Ported from
+    research/experiments/2026-11-g3-local-vs-hosted/inspect_makerlab.py (lines 22-38),
+    except that a vertex no face uses (empty link) is counted as unused, not as bad.
     """
     links: list[dict[int, list[int]]] = [{} for _ in range(n_vertices)]
     for a, b, c in faces.tolist():
         for v, i, j in ((a, b, c), (b, c, a), (c, a, b)):
             links[v].setdefault(i, []).append(j)
             links[v].setdefault(j, []).append(i)
-    invalid = 0
+    invalid = unused = 0
     for graph in links:
-        if not graph or any(len(n) != 2 for n in graph.values()):
+        if not graph:
+            unused += 1
+            continue
+        if any(len(n) != 2 for n in graph.values()):
             invalid += 1
             continue
         seen, stack = set(), [next(iter(graph))]
@@ -78,12 +92,15 @@ def _bad_vertex_links(faces: np.ndarray, n_vertices: int) -> int:
                 seen.add(node)
                 stack.extend(graph[node])
         invalid += len(seen) != len(graph)
-    return invalid
+    return invalid, unused
 
 
 def _signed_volume(vertices: np.ndarray, faces: np.ndarray) -> float:
+    """Signed volume; may be inf or nan when coordinates overflow (callers check)."""
     tri = vertices[faces]
-    return float(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])).sum() / 6)
+    with np.errstate(all="ignore"):
+        products = np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2]))
+        return float(products.sum() / 6)
 
 
 def topology_checks(mesh: trimesh.Trimesh) -> list[CheckResult]:
@@ -110,10 +127,20 @@ def topology_checks(mesh: trimesh.Trimesh) -> list[CheckResult]:
                                     | (faces[:, 2] == faces[:, 0])))
     if finite:
         tri = vertices[faces]
-        cross = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
-        zero = int(np.count_nonzero(~cross.any(axis=1)))
-        results.append(_result("F1.no_degenerate_faces", repeated == 0 and zero == 0,
-                               {"repeated_index": repeated, "zero_area": zero}))
+        with np.errstate(all="ignore"):
+            cross = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+        undecided = ~np.isfinite(cross).all(axis=1)
+        zero = int(np.count_nonzero(~cross.any(axis=1) & ~undecided))
+        n_undecided = int(np.count_nonzero(undecided))
+        measured = {"repeated_index": repeated, "zero_area": zero}
+        if n_undecided == 0:
+            results.append(_result("F1.no_degenerate_faces", repeated == 0 and zero == 0,
+                                   measured))
+        else:
+            measured["undecided_area"] = n_undecided
+            results.append(CheckResult(
+                "F1.no_degenerate_faces", "FAIL" if repeated or zero else "UNKNOWN",
+                measured, None, None, "coordinates too large for exact area"))
     else:
         results.append(CheckResult(
             "F1.no_degenerate_faces", "FAIL" if repeated else "UNKNOWN",
@@ -141,9 +168,10 @@ def topology_checks(mesh: trimesh.Trimesh) -> list[CheckResult]:
                            {"bad_directed_edges": bad},
                            rules["F1.consistent_orientation"]))
 
-    bad_vertices = _bad_vertex_links(faces, len(vertices))
+    bad_vertices, unused = _vertex_links(faces, len(vertices))
     results.append(_result("F1.vertex_manifold", bad_vertices == 0,
-                           {"bad_vertices": bad_vertices}, rules["F1.vertex_manifold"]))
+                           {"bad_vertices": bad_vertices, "unused_vertices": unused},
+                           rules["F1.vertex_manifold"]))
 
     results.append(_positive_volume(vertices, faces, finite))
     return results
@@ -154,11 +182,19 @@ def _positive_volume(vertices: np.ndarray, faces: np.ndarray, finite: bool) -> C
         return CheckResult("F1.positive_volume", "UNKNOWN", {"body_volumes": None}, None,
                            None, "volumes not computed: coordinates are not finite")
     plain = trimesh.Trimesh(vertices, faces, process=False, validate=False)
-    bodies = plain.split(only_watertight=False, repair=False)
+    # split computes face normals internally, which overflow for huge coordinates;
+    # grouping faces into bodies depends only on shared edges, not on those normals.
+    with np.errstate(all="ignore"):
+        bodies = plain.split(only_watertight=False, repair=False)
     if sum(len(b.faces) for b in bodies) != len(faces):
         return CheckResult("F1.positive_volume", "UNKNOWN", {"body_volumes": None}, None,
                            None, "split into bodies did not account for every face")
     volumes = [_signed_volume(np.asarray(b.vertices), np.asarray(b.faces)) for b in bodies]
+    nonfinite = sum(1 for v in volumes if not np.isfinite(v))
+    if nonfinite:
+        return CheckResult("F1.positive_volume", "FAIL",
+                           {"body_volumes": None, "nonfinite_volumes": nonfinite}, None, None,
+                           "coordinates too large for exact volume")
     return _result("F1.positive_volume", all(v > 0 for v in volumes),
                    {"body_volumes": [round(v, VOLUME_DECIMALS) for v in volumes]})
 

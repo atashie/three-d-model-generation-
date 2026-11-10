@@ -1,5 +1,6 @@
 import io
 import json
+import warnings
 
 import numpy as np
 import pytest
@@ -104,8 +105,53 @@ def test_two_cubes_sharing_one_vertex_fail_only_vertex_manifold():
     assert mesh.is_watertight  # trimesh's own test does not see the pinch
     assert failing(mesh) == {"F1.vertex_manifold"}
     by_id = {r.id: r for r in topology_checks(mesh)}
-    assert by_id["F1.vertex_manifold"].measured == {"bad_vertices": 1}
+    assert by_id["F1.vertex_manifold"].measured == {"bad_vertices": 1, "unused_vertices": 0}
     assert by_id["F1.positive_volume"].measured == {"body_volumes": [1.0, 1.0]}
+
+
+def test_unused_vertex_is_not_a_bad_vertex_link():
+    mesh = cube()
+    mesh = raw(np.vstack([mesh.vertices, [[5.0, 5.0, 5.0]]]), mesh.faces)
+    assert statuses(mesh) == {k: "PASS" for k in F1}
+    by_id = {r.id: r for r in topology_checks(mesh)}
+    assert by_id["F1.vertex_manifold"].measured == {"bad_vertices": 0, "unused_vertices": 1}
+
+
+def test_two_triangle_pillow_is_caught():
+    # The same triangle in both windings: closed, edge-manifold and oriented, and each
+    # vertex link is a 2-cycle, which the vertex test accepts. Duplicate and volume catch it.
+    mesh = raw([[0, 0, 0], [1, 0, 0], [0, 1, 0]], [[0, 1, 2], [0, 2, 1]])
+    assert failing(mesh) == {"F1.no_duplicate_faces", "F1.positive_volume"}
+
+
+def test_inverted_inner_cavity_fails_positive_volume():
+    # Each connected shell is judged on its own, so a correct inward-facing cavity shell
+    # has negative volume and fails. Conservative; revisit when a recipe needs voids.
+    outer = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+    inner = trimesh.creation.box()
+    mesh = raw(np.vstack([outer.vertices, inner.vertices]),
+               np.vstack([outer.faces, inner.faces[:, ::-1] + len(outer.vertices)]))
+    assert failing(mesh) == {"F1.positive_volume"}
+    by_id = {r.id: r for r in topology_checks(mesh)}
+    assert sorted(by_id["F1.positive_volume"].measured["body_volumes"]) == [-1.0, 8.0]
+
+
+@pytest.mark.parametrize("scale", [1e150, 1e200])
+def test_huge_coordinates_never_pass_on_infinite_volume(scale):
+    mesh = cube()
+    mesh = raw(mesh.vertices * scale, mesh.faces)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        results = topology_checks(mesh)
+    by_id = {r.id: r for r in results}
+    volume = by_id["F1.positive_volume"]
+    assert volume.status == "FAIL"
+    assert volume.measured == {"body_volumes": None, "nonfinite_volumes": 1}
+    assert "too large" in volume.note
+    json.dumps([r.as_dict() for r in results], allow_nan=False)
+    # At 1e200 the cross products overflow, so zero area cannot be decided.
+    expected_area = "PASS" if scale == 1e150 else "UNKNOWN"
+    assert by_id["F1.no_degenerate_faces"].status == expected_area
 
 
 def test_duplicated_face_fails_no_duplicate_faces():
