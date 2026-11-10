@@ -1,6 +1,6 @@
 # Repository and documentation plan
 
-**Status:** v2, 2026-11-09. v1 (2026-11-08) was revised after an independent review by OpenAI Codex; section 12 lists what changed and why. Section 13 records the owner's decisions and the questions still open. Labels such as **(pending Qn)** in earlier sections now resolve through section 13.
+**Status:** v2.1, 2026-11-09. v2.1 adds the owner's explicit image-interpretation requirement after the local/MakerLab trials. v1 (2026-11-08) was revised after an independent review by OpenAI Codex; section 12 lists what changed and why. Section 13 records the owner's decisions and the questions still open. Labels such as **(pending Qn)** in earlier sections now resolve through section 13.
 
 **Inputs:**
 - The landscape report in `reports/`, including its erratum, and the seven research notes in `research_notes/`.
@@ -98,8 +98,8 @@ Each stage is a function with typed inputs and outputs. Each writes an artifact 
 
 | Stage | Purpose | Deterministic |
 |---|---|---|
-| S0 Intake | Load the image, fix EXIF orientation, hash it, and read the job spec: attributes, target size in mm, printer profile, filament list | Yes |
-| S1 Perception | Foreground mask, optional depth map. Fenced: pinned and cached | **No** |
+| S0 Intake | Load the image, fix EXIF orientation, hash it, and read the job spec: attributes, target size in mm, printer profile, filament list, and optional verbatim plain-language interpretation instructions | Yes |
+| S1 Perception | Resolve the requested subject/exclusions into an explicit selection and foreground mask; show an editable cutout preview and record unresolved instructions. Optional depth map. Fenced: pinned and cached | **No** |
 | S2 Base geometry | Build the shape for the geometry source. G3 is fenced | Yes for G1/G2. **No** for G3 |
 | S3 Normalize | Apply one explicit image-to-model transform: origin, pixel centers vs pixel edges, scale, Y flip. Then set units, scale to the target size, orient, and decimate to the triangle budget | Yes |
 | S4 Entry gate and repair | Make the geometry valid *before* booleans; manifold3d rejects non-manifold input. Run the repair ladder from least to most destructive, measuring what each step changed | Yes |
@@ -111,6 +111,16 @@ Each stage is a function with typed inputs and outputs. Each writes an artifact 
 | S10 Manifest | Write `manifest.json` and a readable report: verdicts, evidence, assumptions, and every artifact hash | Yes |
 
 ### Gate contract
+
+Subject selection precedes geometry generation. For example, "Roadie should simply
+be the roadrunner (bird) image while the grey background should be ignored" means
+retain the bird and exclude the circular background, including opaque background
+inside an otherwise transparent image. Record the original instructions, resolved
+selection, mask and prepared-image hashes. Geometry validity cannot establish that
+the intended subject was selected. Unsupported or ambiguous instructions must be
+reported, not silently ignored. See [input interpretation](guide/input-interpretation.md)
+for the planned interaction and acceptance cases. This is a design requirement,
+not an implemented natural-language interpreter; the default no-LLM rule remains.
 
 Each check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule ID. A check that cannot be measured returns UNKNOWN; it never silently passes. Each recipe declares its required checks in code. The overall verdict is PRINTABLE only if every required check passes.
 
@@ -179,7 +189,7 @@ three-d-model-generation/
 ├── research/
 │   ├── verification/          # local experiments
 │   └── reviews/               # independent review records
-└── .github/workflows/         # CI on macOS arm64 and Linux
+└── .github/workflows/         # CI on macOS arm64, Linux and Windows
 ```
 
 ## 6. Documentation system
@@ -282,7 +292,7 @@ General print-in-place clearance (Prusa ≥ 0.3 mm; 0.15–0.25 mm for 10 mm PLA
 3. **Property-based tests** with hypothesis. For example, any valid polygon extruded by any height gives a closed solid whose volume is area × height.
 4. **Corpus tests.** A fixed list of Thingi10K IDs. We record a confusion table against its labels, and document each disagreement rather than treating the labels as truth.
 5. **Golden-hash tests inside the pinned environment.** Across platforms, compare geometry within tolerances.
-6. **Slicer integration** on macOS and Linux, with exit statuses decoded correctly. The sliced output must contain the expected objects and filaments.
+6. **Slicer integration** on macOS, Linux and Windows, with platform-specific exit statuses verified. The sliced output must contain the expected objects and filaments. Windows exit-status behavior is not yet measured.
 7. **Physical calibration and print log.** Each physical test print gets a logged result:
    - the profile hash;
    - caliper measurements on named dimensions;
@@ -300,7 +310,7 @@ The 2026-11-08 smoke test and the Codex review found defects that are now requir
 
 ## 9. Environment, dependencies, licences
 
-**Python 3.13 with `uv`.** Verification states are kept separate, per package, in the dependency register. The states are resolved, installed and imported, functionally tested, and runtime-validated. On 2026-11-08 and 09:
+**Core Python 3.13 with `uv`.** Verification states are kept separate, per package, in the dependency register. The states are resolved, installed and imported, functionally tested, and runtime-validated. Historical M5 measurements on 2026-11-08 and 09:
 
 - **Installed, imported, and functionally tested on the M5:** the core stack, plus pymeshfix, PyMeshLab, and Open3D.
 - **Installed and imported only:** libigl, rembg (no model run), onnxruntime 1.31.1 (with its Core ML provider), orca123d, point-cloud-utils, the Apple Vision bindings, and MeshLib.
@@ -308,6 +318,15 @@ The 2026-11-08 smoke test and the Codex review found defects that are now requir
 - **Not installable on 3.13:** the CGAL bindings, which stop at 3.12.
 
 3.13 is the only version with wheels for both `bpy` and orca123d. 3.14 has no wheel for `bpy` or point-cloud-utils.
+
+Those wheel conclusions describe the original M5 survey, not every platform.
+Windows core verification is complete locally; its optional Python 3.13 environment
+installed bpy, PyMeshLab, Open3D and rembg/ONNX Runtime but their imports failed.
+The separate Python 3.11 TripoSR experiment successfully used torch 2.6.0+cpu,
+rembg 2.0.61 and ONNX Runtime 1.20.1. It required an approved MSVC installation
+and torchmcubes/ANTLR builds. See `docs/STATUS.md` and the platform-specific records
+in `research/verification/2026-11-09-pc-stack/` and
+`research/experiments/2026-11-g3-local-vs-hosted/`; the core pin remains 3.13.
 
 **Core dependencies:** numpy, scipy, trimesh, networkx, lxml, manifold3d, lib3mf, shapely, opencv-python-headless, build123d (with cadquery-ocp), vtracer, pillow, pydantic, typer, pyyaml.
 
@@ -387,7 +406,7 @@ These are not geometry problems, so the gate cannot catch them. The research did
 
 | Phase | Deliverable | Exit test |
 |---|---|---|
-| 0. Lean foundations | pyproject (3.13) + lock; CI on GitHub's macOS arm64 runner and Linux; CLAUDE.md; the Phase 0 docs from section 6; rules schema with about 15 seed rules; dependency register | CI green on both platforms; rules and doc lint pass |
+| 0. Lean foundations | pyproject (3.13) + lock; CI on macOS arm64 and Linux, extended to Windows; CLAUDE.md; Phase 0 docs; rules schema and dependency register | Original Mac/Linux baseline complete. Windows extension accepted only when its GitHub job passes locked install, lint, generated-doc check, tests and installed-wheel smoke check. Current state in STATUS.md |
 | 1. R1 vertical slice | Image → mask (plain-background threshold first; rembg optional) → trace → normalize → entry gate → loop and base → STL + 3MF → final gate (F1, F2, F3 wall and feature, F5) → Orca headless slice (F6) → manifest. First calibration generator: clearance ladders, radial and vertical | Six named fixture images give their expected verdicts: asymmetric glyph, hole inside a hole, thin stroke, diagonal touch, empty mask, photo with a plain background. Golden hashes stable on macOS CI. You print two outputs and the ladder; three named dimensions within ±0.2 mm by caliper; results logged in the printer profile |
 | 2. Gate hardening | Analytic negative fixtures; fixed Thingi10K sample (200 IDs); repair ladder with function-preservation checks | Each negative fixture flags exactly its defect; confusion table published with every disagreement explained |
 | 3. R2 flat multicolor | Palette snapped to the job's filament colors, up to the job's declared cap (default 4); one closed, named body per color on a shared base; standard color tags plus a palette manifest. An encoding bake-off with import fixtures picks between separate top-level objects and one assembly | In OrcaSlicer and PrusaSlicer, every body imports at its intended position and size and can be assigned its filament. The owner confirms the same in Bambu Studio. Filaments per layer within the cap. One physical print |
@@ -399,6 +418,12 @@ These are not geometry problems, so the gate cannot catch them. The research did
 | 9. R8 3D flexi | Research track: joint placement from rig predictions; ball-and-socket synthesis | Success criteria set at the start of the phase |
 
 ## 12. What changed after the 2026-11-09 review
+
+**v2.1 follow-up:** after viewing local generation and supplying MakerLab STLs, the
+owner requested plain-language input interpretation, specifically keeping Roadie's
+bird while ignoring its grey background. Added S0 instruction capture, S1 explicit
+selection/cutout preview, interpretation provenance and acceptance cases. This does
+not authorize default runtime LLM calls or imply that text alone controls TripoSR.
 
 An independent read-only review by OpenAI Codex covered the code, this plan, and the research. Its findings are saved in `research/reviews/2026-11-09-codex/`. Each finding below was reproduced or checked against its source before the plan changed. One finding was narrowed after checking.
 
@@ -446,13 +471,21 @@ Answered by the project owner on 2026-11-09.
   - A 64 GB machine with no discrete GPU is available for trials. It is a **PC**, so the Mac-only routes (MLX, Metal) do not apply there. Development moves to that PC; see `docs/STATUS.md`.
   - The owner expects most work to be simple objects, so a modest machine may be enough.
   - **Decision rule for commercial services (option 3):** a cheap standard service, around one US dollar per model, is preferred over a homemade pipeline if it gives all the utility we would otherwise build. Our own gate still decides printability.
-  - **Deferred:** hosted API keys wait until the local run's results are known. Two questions are unanswered: whether a monthly plan is acceptable, and whether to use Meshy's printability check as a second opinion. Options 4 (rented GPU) and 5 (Bambu MakerLab) have not been walked through yet.
+  - **Local results now available:** five TripoSR inputs ran twice in 32–35 seconds/model; all raw outputs fail closed-topology tests. See `research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md`.
+  - **Option 4:** owner agrees GPU rental is unnecessary for now. No rental was created.
+  - **Option 5:** owner supplied MakerLab Oddie/Roadie STLs. Both pass measured closed-topology tests, each has two bodies. Engine, cost, generation settings and exact input provenance are unknown. Roadie's disconnected frame was removed in a derived STL, leaving a flat-backed bird relief. No slicing or printing is verified. See `research/experiments/2026-11-g3-local-vs-hosted/MAKERLAB-RESULTS.md`.
+  - **Still open:** hosted API keys remain deferred (local results are now known, but no hosted batch is authorized); monthly-plan acceptability and Meshy's uploaded printability check are unanswered. No R4 backend is chosen.
 
   No backend is chosen yet. The options are:
-  1. running models locally on the M5;
+  1. running locally (TripoSR measured on the Windows PC; Mac alternatives researched);
   2. hosted open models;
   3. commercial APIs.
 
   Two variants also apply: a rented GPU, and Bambu MakerLab as a manual baseline. This only affects Phase 5 and later.
 - **Q4. Order: R1 → R2 → R3 → R4**, as in section 11. Confirmed.
 - **Q5. Interface: a CLI plus a Python library first**, with a simple local web UI later. Confirmed.
+- **Q6. Image interpretation instructions:** the user must be able to describe in
+  plain language what the image means for the model. Owner example: Roadie is the
+  bird alone; ignore the grey background. Support this before geometry generation
+  through explicit subject/exclusion selection and a reviewable foreground mask.
+  Implementation is planned; automatic language-to-selection behavior is not yet built.

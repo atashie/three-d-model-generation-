@@ -10,6 +10,14 @@ Versions are from `uv.lock`. The core is mostly permissive, but three bundled na
 
 ## Core
 
+The tables below retain the M5 verification baseline. Windows core verification
+and optional native-import failures are recorded in
+[PC stack results](../../research/verification/2026-11-09-pc-stack/README.md).
+The separate [TripoSR CPU experiment](../../research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md)
+used Python 3.11.15, torch 2.6.0+cpu, torchmcubes 0.1.0, rembg 2.0.61 with U2Net,
+and ONNX Runtime 1.20.1 successfully. Its per-run provenance records exact packages
+and model hashes; these are not core dependencies or changes to `uv.lock`.
+
 | Package | Version | Declared licence | Role | State on M5 | Notes |
 |---|---|---|---|---|---|
 | numpy | 2.5.4 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | arrays | tested | |
@@ -48,6 +56,11 @@ Versions are from `uv.lock`. The core is mostly permissive, but three bundled na
 | thingi10k | 1.5.0 | Apache-2.0 (code) | **Each model in the corpus has its own licence**; record it for any fixture we keep |
 
 ## External tools (not Python packages)
+
+This table is the original Mac baseline. On the PC, MSVC Build Tools 2022
+17.14.44 (compiler 14.44.35207) was installed for the isolated CPU experiment.
+The owner reports MakerLab available and supplied exported STLs; the installed
+Bambu Studio version and actual slicer execution have not been verified.
 
 | Tool | Version | Licence | State | Role |
 |---|---|---|---|---|

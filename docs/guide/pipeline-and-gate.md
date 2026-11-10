@@ -6,8 +6,8 @@ The full design is in [the plan, section 4](../PLAN.md#4-pipeline-stages-and-the
 
 | Stage | What happens |
 |---|---|
-| S0 Intake | Load and hash the image; read the job: print type, target size in mm, printer, filaments |
-| S1 Perception | Cut the subject out of the photo; optionally estimate depth. Machine learning, fenced and cached |
+| S0 Intake | Load and hash the image; read the job: print type, target size in mm, printer, filaments, optional plain-language interpretation |
+| S1 Perception | Resolve subject/exclusions, show an editable cutout preview, save the mask and report unresolved instructions; optionally estimate depth. Machine learning, fenced and cached |
 | S2 Base geometry | Build the shape: extrude a flat outline, build a height grid, or generate 3D |
 | S3 Normalize | One explicit image-to-model transform (origin, scale, Y flip), units, target size, orientation, triangle budget |
 | S4 Entry gate and repair | Make the geometry valid before any boolean operation; repair from least to most destructive |
@@ -19,6 +19,10 @@ The full design is in [the plan, section 4](../PLAN.md#4-pipeline-stages-and-the
 | S10 Manifest | Record verdicts, evidence, assumptions and file hashes |
 
 ## What "printable" means
+
+The planned [input interpretation](input-interpretation.md) step checks which
+subject the user wants. Geometry checks do not determine that: a valid solid can
+still include an unwanted background. The interpretation interface is not yet implemented.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 

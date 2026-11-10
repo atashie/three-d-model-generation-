@@ -28,7 +28,7 @@ uv run ruff check .                   # lint
 - Apple M5, 16 GB, no CUDA. Python 3.13 is pinned: it is the only version with both `bpy` and orca123d.
 - trimesh needs `networkx` and `lxml` to load 3MF. Pass `engine=` to `trimesh.creation.extrude_polygon` explicitly.
 - lib3mf and trimesh write random UUIDs into 3MF; set them explicitly for reproducible files.
-- OrcaSlicer exit codes reach a parent process as the low 8 bits (−50 → 206, −51 → 205, −59 → 197).
+- On macOS/Linux, OrcaSlicer exit codes reach a parent as the low 8 bits (−50 → 206, −51 → 205, −59 → 197). Do not apply this assumption to Windows without measuring it.
 - trimesh `is_watertight` and lib3mf `IsManifoldAndOriented` both pass two solids touching at one vertex; check vertex-manifoldness separately.
 - The package reads `rules/` and `profiles/` from the checkout; a built wheel carries copies in `tdmg/_data/` (CI tests this).
 
