@@ -1,0 +1,6 @@
+artifacts/tools/orcaslicer-2.5.0/app: files 4054, tree sha256 b5cf3ff821f71bb6dbfb07b2fb1e806ee15e58e5af76d605d59182f0a2c33402, 0.9 s
+  OrcaSlicer.dll  4c6a3772c21851623dfa88860f530a9971288bc8ca6e0d0b6b914c145cb987af
+  orca-slicer.exe  e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f
+C:/Users/arikt/AppData/Local/Temp/claude/c019a84b704b18c7/6e861619-9ccf-4bbe-beac-58586542bc70/scratchpad/orca-setup/app: files 4054, tree sha256 b5cf3ff821f71bb6dbfb07b2fb1e806ee15e58e5af76d605d59182f0a2c33402, 0.9 s
+  OrcaSlicer.dll  4c6a3772c21851623dfa88860f530a9971288bc8ca6e0d0b6b914c145cb987af
+  orca-slicer.exe  e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f

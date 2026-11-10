@@ -88,3 +88,66 @@ Every case passed the same settings, plus `--slice 0 --outputdir ... --export-st
 - **No printing:** G-code was not printed or compared with Bambu Studio's.
 - **Settings check:** the merged settings were not compared with the GUI's resolved
   presets.
+
+## Addendum, 2026-11-10 (later the same day)
+
+Added while building `tdmg slice`, after a review of the wrapper. The text above is left as
+first written; this section qualifies it. The scripts are `measure_more.py` (output
+`more.txt`) and `app_tree_hash.py` (output `app-tree.txt`). They used the same install,
+settings and argument form as above.
+
+1. **`--logfile` writes a log on success only with `--debug` 2 or higher.** On exit-0
+   runs of the 20 mm cube:
+
+   | Extra arguments | Log file |
+   |---|---|
+   | none | not written |
+   | `--debug 1` | not written |
+   | `--debug 2` | 44 bytes |
+   | `--debug 3` | about 12 kB, no line mentions "triangle" |
+   | `--debug 4` | about 28 kB, including a "volume triangle count" line |
+
+   The failing cases above (too big, unreadable file) wrote a log without `--debug`. So
+   finding 2's "`--logfile` captures a full log" holds only for failures, or for successful
+   runs with `--debug`. The earlier observation that "the log counts 31,200 triangles" came
+   from a `--debug 4` run. The "volume triangle count" line appears here only at
+   `--debug 4`. A wrapper must treat the log file as optional.
+2. **One STL is one object.** An STL holding two separate 10 × 10 × 3 mm boxes, 10 mm
+   apart (trimesh finds 2 bodies), sliced with exit 0 into 15 layers. The statistics list
+   **one** object (named after the file). So the statistics' object count cannot detect
+   several bodies in one STL.
+3. **Layer counts at half-layer thicknesses.** These are boxes of 20 × 20 × t mm with
+   initial_layer_print_height = layer_height = 0.2 mm. "Formula" is
+   1 + round((t − 0.2) / 0.2) in Python float arithmetic.
+
+   | t (mm) | (t − 0.2) / 0.2 | Formula | Slicer |
+   |---|---|---|---|
+   | 3.0 | 14.0 | 15 | 15 |
+   | 3.05 | 14.25 | 15 | 15 |
+   | 3.1 | 14.5 | 15 | 15 |
+   | 3.15 | 14.75 | 16 | 16 |
+   | 1.1 | 4.5 | 5 | **6** |
+   | 2.1 | 9.5 | 11 | **10** |
+   | 0.3 | 0.5 | 1 | **2** |
+   | 0.5 | 1.5 | 2 | 2 |
+
+   Away from a half layer, the slicer matched the nearest count. At exactly half a layer it
+   chose the lower count for 3.1, 2.1 and 0.5 and the upper count for 1.1 and 0.3. So a
+   check must accept either neighbour there. The plain formula disagrees with the slicer at
+   1.1, 2.1 and 0.3.
+4. **The whole app folder, hashed.** The folder has 4,054 files. Their tree hash is
+   `b5cf3ff821f71bb6dbfb07b2fb1e806ee15e58e5af76d605d59182f0a2c33402`. It is defined in
+   `app_tree_hash.py` as the SHA-256 of sorted `relpath<TAB>sha256` lines with `/`
+   separators. `OrcaSlicer.dll` has SHA-256
+   `4c6a3772c21851623dfa88860f530a9971288bc8ca6e0d0b6b914c145cb987af`. Two folders gave
+   the same tree hash: the install above, after all the slicer runs, and a fresh
+   extraction of the same zip by `scripts/setup_orcaslicer.py`. So slicing writes nothing
+   into the app folder. Hashing all of it took about 1 s when the files were cached, and
+   about 20 s right after extraction.
+5. **The manifest's bytes.** `flatten_profiles.py` wrote `source-manifest.json` with
+   `Path.write_text` on Windows, so with CRLF line ends. The flattened profiles were
+   written the same way. Its SHA-256 as written is
+   `2b1abe80173cf986d33de7df7708491ad2b41a36639535fb481f4cd933306cb4`, both in
+   `artifacts/tools/orcaslicer-2.5.0/profiles-flat/` and in this folder's working copy.
+   Git stores this folder's copy with LF, so a checkout's bytes depend on its line-end
+   settings. The JSON content does not change.

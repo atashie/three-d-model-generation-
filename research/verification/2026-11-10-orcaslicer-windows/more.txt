@@ -1,0 +1,23 @@
+profile: initial_layer_print_height 0.2, layer_height 0.2
+
+(a) log file on exit-0 runs (20 mm cube)
+  no --debug: returncode 0, log bytes None
+  --debug 1: returncode 0, log bytes None
+  --debug 2: returncode 0, log bytes 44; lines mentioning 'triangle': 0
+  --debug 3: returncode 0, log bytes 12081; lines mentioning 'triangle': 0
+  --debug 4: returncode 0, log bytes 28067; lines mentioning 'triangle': 3
+
+(b) two separate 10 x 10 x 3 mm boxes, 10 mm apart, in one STL
+  bodies in the STL: 2
+  returncode 0, objects in statistics: 1, names ['m.stl'], layer_count 15
+
+(c) layer counts against 1 + round((t - first) / h)
+  t_mm  (t-first)/h  formula  slicer
+  3.0   14.000000   15       15  (returncode 0)
+  3.05  14.250000   15       15  (returncode 0)
+  3.1   14.500000   15       15  (returncode 0)
+  3.15  14.750000   16       16  (returncode 0)
+  1.1   4.500000    5        6  (returncode 0)
+  2.1   9.500000    11       10  (returncode 0)
+  0.3   0.500000    1        2  (returncode 0)
+  0.5   1.500000    2        2  (returncode 0)
