@@ -14,7 +14,12 @@ is at the origin.
 
 from __future__ import annotations
 
+import hashlib
+import io
+import json
 import math
+from importlib.metadata import version as package_version
+from pathlib import Path
 
 import manifold3d
 import numpy as np
@@ -23,8 +28,21 @@ import trimesh
 from shapely import affinity
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
-from tdmg.checks import F1_CHECK_IDS, CheckResult
-from tdmg.profiles import PrinterProfile
+from tdmg import __version__
+from tdmg.checks import F1_CHECK_IDS, CheckResult, merge_exact, topology_checks, verdict
+from tdmg.profiles import PrinterProfile, load_printer, printer_ids
+from tdmg.records import (
+    RecordError,
+    canonical_json,
+    check_output_dir,
+    environment,
+    png_bytes,
+    record_text,
+    write_outputs,
+)
+from tdmg.rules import load_rules
+from tdmg.selection import RECORD_SCHEMA as SELECTION_SCHEMA
+from tdmg.selection import SelectionError, load_mask, pixels_sha256
 
 QUAD_SEGS = 8  # Buffer arcs per quarter circle. Chord error is r*(1-cos(pi/32)), about
                # 0.001 mm at r = 0.2 mm, far below a layer. An approximation setting.
@@ -38,6 +56,16 @@ DISPLAY_DECIMALS = 3  # Display rounding of listed thin-region areas and centroi
 WIDTH_RTOL = 1e-9  # F2.target_width float comparison only; the scale is exact up to rounding.
 THIN_RULE = "fdm.wall.min_thickness"
 TRIANGLE_RULE = "slicer.orca.max_triangles_per_plate"
+OPENING_RULE = "flat.sliver.opening_width"
+ISLAND_RULE = "flat.island.min_square_side"
+FLAT_ALGORITHM_VERSION = "flat-1"
+RECORD_SCHEMA = "tdmg.flat/1"
+# outline.png display colours only; these are not thresholds.
+OUTLINE_KEPT = (128, 128, 128)        # grey: printed
+OUTLINE_REMOVED = (220, 40, 40)       # red: in the mask, removed by cleaning
+OUTLINE_BACKGROUND = (255, 255, 255)  # white: not in the mask
+REVIEW = ("Open outline.png: grey is kept, red was removed as unprintable. The verdict stays "
+          "NOT CERTIFIED until F3 policy and slicer checks exist.")
 # Every check the flat gate needs. F3 and F6 are UNKNOWN until their policy and slicer
 # integration exist, so the verdict is NOT CERTIFIED for now.
 FLAT_REQUIRED_CHECKS = F1_CHECK_IDS | {"F2.fits_build_volume", "F2.target_width",
@@ -388,3 +416,162 @@ def flat_checks(mesh: trimesh.Trimesh, parts: list[Polygon], transform: dict,
     return [build_volume_check(mesh, printer), target_width_check(transform, width_mm, mesh),
             thin_region_check(parts, rules), body_count_check(mesh),
             triangle_check(mesh, rules), slicer_check()]
+
+
+# --- Run from a selection folder and write the outputs (S2-S4, S8) -------------------
+
+
+def rasterise(parts: list[Polygon], transform: dict, shape: tuple[int, int]) -> np.ndarray:
+    """H x W bool: the pixels of the mask's grid whose centres lie inside the parts.
+
+    Pixel (col, row) is the cell [col, col + 1) x [row, row + 1) in pixel units; it counts
+    as kept when its centre (col + 0.5, row + 0.5), mapped to model mm by to_model's
+    transform, is strictly inside a part. The test is shapely's exact point-in-polygon
+    predicate, so no edge-fill convention is involved: a part bounded by pixel-cell edges
+    rasterises to exactly its cells, because every centre is half a pixel from the edges.
+    """
+    h, w = shape
+    kept = np.zeros((h, w), bool)
+    if not parts:
+        return kept
+    s, x0, y1 = transform["scale_mm_per_px"], transform["x0_px"], transform["y1_px"]
+    region = shapely.union_all(parts)
+    minx, miny, maxx, maxy = region.bounds
+    # The region's bounding box in pixel columns and rows, widened by one pixel each way.
+    c0 = max(math.floor(minx / s + x0) - 1, 0)
+    c1 = min(math.ceil(maxx / s + x0) + 1, w)
+    r0 = max(math.floor(y1 - maxy / s) - 1, 0)
+    r1 = min(math.ceil(y1 - miny / s) + 1, h)
+    if c0 >= c1 or r0 >= r1:
+        return kept
+    cols, rows = np.meshgrid(np.arange(c0, c1), np.arange(r0, r1))
+    x_mm = (cols + 0.5 - x0) * s
+    y_mm = (y1 - (rows + 0.5)) * s
+    shapely.prepare(region)
+    kept[r0:r1, c0:c1] = shapely.contains_xy(region, x_mm, y_mm)
+    return kept
+
+
+def _outline_image(mask: np.ndarray, kept: np.ndarray) -> np.ndarray:
+    """H x W x 3: kept pixels grey, mask pixels removed by cleaning red, the rest white."""
+    image = np.empty((*mask.shape, 3), np.uint8)
+    image[...] = OUTLINE_BACKGROUND
+    image[mask & ~kept] = OUTLINE_REMOVED
+    image[kept] = OUTLINE_KEPT
+    return image
+
+
+def _read_selection(selection_dir: Path) -> tuple[dict, np.ndarray]:
+    """selection.json and the verified mask (bool, image-sized)."""
+    record_path = selection_dir / "selection.json"
+    if not record_path.is_file():
+        raise FlatError(f"{record_path} not found; give a tdmg select output folder")
+    try:
+        record = json.loads(record_path.read_bytes().decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as e:
+        raise FlatError(f"{record_path} is not valid JSON: {e}") from None
+    if not isinstance(record, dict) or record.get("schema") != SELECTION_SCHEMA:
+        raise FlatError(f"{record_path} is not a {SELECTION_SCHEMA} record")
+    size = record.get("input", {})
+    w, h = (size.get(k) if isinstance(size, dict) else None for k in ("width", "height"))
+    if not all(type(v) is int and v > 0 for v in (w, h)):
+        raise FlatError(f"{record_path} has no valid input width and height")
+    expected = record.get("mask_pixels_sha256")
+    if not isinstance(expected, str) or not isinstance(record.get("selection_id"), str):
+        raise FlatError(f"{record_path} has no mask_pixels_sha256 or selection_id")
+    mask_path = selection_dir / "mask.png"
+    if not mask_path.is_file():
+        raise FlatError(f"{mask_path} not found")
+    try:
+        mask = load_mask(mask_path, (h, w))
+    except SelectionError as e:
+        raise FlatError(f"mask.png cannot be used: {e}") from None
+    if pixels_sha256(mask) != expected:
+        raise FlatError("mask.png does not match selection.json")
+    return record, mask
+
+
+def _mesh_summary(mesh: trimesh.Trimesh) -> dict:
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    tri = vertices[faces]
+    volume = float(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])).sum() / 6)
+    return {"triangles": len(faces), "bodies": _body_count(mesh), "volume_mm3": volume,
+            "extents_mm": _extents(mesh)}
+
+
+def _flat_environment() -> dict:
+    """records.environment() plus the geometry libraries the mesh bytes depend on."""
+    return {**environment(), "shapely": shapely.__version__, "trimesh": trimesh.__version__,
+            "manifold3d": package_version("manifold3d")}
+
+
+def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1") -> dict:
+    """Make model.stl, outline.png and flat.json from a tdmg select output folder.
+
+    Everything is built, encoded and gated in memory first, so a refused run writes
+    nothing. The gate judges the STL bytes that are written: they are parsed back, merged
+    exactly, and checked. flat_id is a SHA-256 of the canonical JSON of the algorithm,
+    the mask's pixel hash, the parameters (with the rules that set them) and the printer;
+    the environment is not part of it. The output file hashes are integrity hashes,
+    valid within this environment only.
+    """
+    for name, value in (("width_mm", width_mm), ("thickness_mm", thickness_mm)):
+        if isinstance(value, bool):
+            raise FlatError(f"{name} must be a number, got {value!r}")
+    width_mm = _require_positive("width_mm", width_mm)
+    thickness_mm = _require_positive("thickness_mm", thickness_mm)
+    selection, mask = _read_selection(Path(selection_dir))
+    if printer not in printer_ids():
+        raise FlatError(f"no printer profile {printer!r}; choose one of {printer_ids()}")
+    profile = load_printer(printer)
+    rules = load_rules()
+    try:
+        create_folder = check_output_dir(out_dir)
+    except RecordError as e:
+        raise FlatError(str(e)) from None
+
+    opening = {"value": float(rules[OPENING_RULE].default), "rule": OPENING_RULE}
+    side = float(rules[ISLAND_RULE].default)
+    nozzle = float(profile.nozzle_diameter_mm)
+    min_island = {"value": (side * nozzle) ** 2, "rules": [ISLAND_RULE],
+                  "nozzle_diameter_mm": nozzle,
+                  "formula": "(min_square_side x nozzle_diameter_mm)^2"}
+    model, transform = to_model(mask_outline(mask), width_mm)
+    parts, cleaning = clean(model, opening["value"], min_island["value"],
+                            HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
+    stl = extrude(parts, thickness_mm).export(file_type="stl")
+    kept = rasterise(parts, transform, mask.shape)
+    files = {"model.stl": stl, "outline.png": png_bytes(_outline_image(mask, kept))}
+
+    gated = merge_exact(trimesh.load(io.BytesIO(stl), file_type="stl", process=False))
+    checks = topology_checks(gated) + flat_checks(gated, parts, transform, width_mm, profile,
+                                                  rules)
+    params = {"width_mm": width_mm, "thickness_mm": thickness_mm, "printer": profile.id,
+              "opening_mm": opening, "min_island_mm2": min_island}
+    identity = {"algorithm": FLAT_ALGORITHM_VERSION,
+                "mask_pixels_sha256": selection["mask_pixels_sha256"],
+                "params": params, "printer": profile.id}
+    record = {
+        "schema": RECORD_SCHEMA, "tdmg_version": __version__,
+        "algorithm": FLAT_ALGORITHM_VERSION,
+        "flat_id": hashlib.sha256(canonical_json(identity)).hexdigest(),
+        "selection": {"selection_id": selection["selection_id"],
+                      "mask_pixels_sha256": selection["mask_pixels_sha256"]},
+        "params": params, "transform": transform, "cleaning": cleaning,
+        "mesh": _mesh_summary(gated),
+        "checks": [c.as_dict() for c in checks],
+        "verdict": verdict(checks, FLAT_REQUIRED_CHECKS),
+        "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+        "environment": _flat_environment(),
+        "review": REVIEW,
+    }
+    try:
+        data = record_text(record)
+    except ValueError as e:
+        raise FlatError(f"the record cannot be stored as strict JSON: {e}") from None
+    try:
+        write_outputs(out_dir, files, "flat.json", data, create_folder=create_folder)
+    except RecordError as e:
+        raise FlatError(str(e)) from None
+    return record
