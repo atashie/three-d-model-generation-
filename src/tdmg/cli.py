@@ -1,5 +1,6 @@
-"""Command-line interface. Phase 0 exposes the registries. Phase 1 starts with `select`
-(subject selection for review); `make` and `check` follow."""
+"""Command-line interface. Phase 0 exposes the registries. Phase 1 has `select` (subject
+selection for review) and `flat` (flat geometry from a selection, gated on the written
+STL); `make` and `check` follow."""
 
 from pathlib import Path
 from typing import Annotated
@@ -8,6 +9,7 @@ import typer
 from pydantic import ValidationError
 
 from tdmg import __version__
+from tdmg.flat import FlatError, make_flat
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, RECIPES
 from tdmg.rules import load_rules
@@ -74,6 +76,11 @@ def _points(values: list[str] | None, flag: str) -> tuple[tuple[int, int], ...]:
     return tuple(out)
 
 
+def _os_error(e: OSError) -> None:
+    where = f": {e.filename}" if e.filename else ""
+    typer.echo(f"error: {e.strerror or e}{where}", err=True)
+
+
 @app.command()
 def select(
     image: Annotated[Path, typer.Argument(exists=True, dir_okay=False,
@@ -115,8 +122,7 @@ def select(
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
     except OSError as e:              # unreadable input, unwritable output, disk full ...
-        where = f": {e.filename}" if e.filename else ""
-        typer.echo(f"error: {e.strerror or e}{where}", err=True)
+        _os_error(e)
         raise typer.Exit(2) from None
     r = rec["result"]
     typer.echo(f"status {r['status']}: {r['selected_px']} px in {len(r['pieces_px'])} piece(s), "
@@ -125,6 +131,52 @@ def select(
         typer.echo(f"warning: {w}")
     typer.echo(f"selection_id {rec['selection_id']}")
     typer.echo(f"wrote {out / 'preview.png'} - check the subject before going on")
+
+
+@app.command()
+def flat(
+    selection: Annotated[Path, typer.Argument(exists=True, file_okay=False,
+                                              help="A tdmg select output folder.")],
+    width_mm: Annotated[float, typer.Option(
+        "--width-mm", help="Width of the selection in the model, in mm.")],
+    thickness_mm: Annotated[float, typer.Option(
+        "--thickness-mm", help="Thickness of the flat solid, in mm.")],
+    out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
+    printer: Annotated[str, typer.Option(
+        "--printer", help="Printer profile id (see `tdmg printers`).")] = "bambu-a1",
+) -> None:
+    """Make a flat solid from a selection: write model.stl, outline.png and flat.json.
+
+    Exit codes: 0 if the files were written and no check FAILed.
+
+    (A NOT CERTIFIED verdict with only UNKNOWN checks still exits 0.)
+
+    1 if any check FAILed; the files are still written, for review.
+
+    2 for input and usage errors; nothing is written.
+    """
+    try:
+        rec = make_flat(selection, width_mm, thickness_mm, out, printer=printer)
+    except (FlatError, SelectionError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:              # unreadable selection, unwritable output, disk full ...
+        _os_error(e)
+        raise typer.Exit(2) from None
+    typer.echo(f"verdict {rec['verdict']}")
+    for c in rec["checks"]:
+        if c["status"] != "PASS":
+            note = f": {c['note']}" if c["note"] else ""
+            typer.echo(f"  {c['id']} {c['status']}{note}")
+    mesh = rec["mesh"]
+    size = " x ".join(f"{e:.2f}" for e in mesh["extents_mm"])
+    bodies = f"{mesh['bodies']} bod{'y' if mesh['bodies'] == 1 else 'ies'}"
+    typer.echo(f"size {size} mm, {mesh['triangles']} triangles, {bodies}")
+    typer.echo(f"flat_id {rec['flat_id']}")
+    typer.echo(f"wrote {out / 'model.stl'}")
+    typer.echo(f"wrote {out / 'outline.png'} - open outline.png to check what cleaning removed")
+    if any(c["status"] == "FAIL" for c in rec["checks"]):
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

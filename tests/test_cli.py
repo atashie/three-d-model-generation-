@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from tdmg import __version__
 from tdmg.cli import app
+from tdmg.rules import load_rules
 from tdmg.selection import SelectionError
 
 # Under GITHUB_ACTIONS, Rich styles usage errors with escape codes and a box even when
@@ -162,3 +163,95 @@ def test_select_refuses_an_oversized_image(tmp_path, monkeypatch):
     r = runner.invoke(app, ["select", str(img), "--out", str(tmp_path / "o")])
     assert r.exit_code == 2 and "safety limit" in r.stderr
     assert isinstance(r.exception, SystemExit) and not (tmp_path / "o").exists()
+
+
+# --- tdmg flat ---------------------------------------------------------------------
+
+
+def _selection(tmp_path):
+    img = _img(tmp_path, roadie_like(), "roadie_like.png")
+    sel = tmp_path / "sel"
+    r = runner.invoke(app, ["select", str(img), "--out", str(sel), "--remove-at", "30,100",
+                            "--keep-at", "100,80"])
+    assert r.exit_code == 0, r.output
+    return sel
+
+
+def _flat(sel, out, *extra):
+    return runner.invoke(app, ["flat", str(sel), "--width-mm", "60", "--thickness-mm", "3",
+                               "--out", str(out), *extra])
+
+
+def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
+    out = tmp_path / "flat"
+    r = _flat(_selection(tmp_path), out)
+    assert r.exit_code == 0, r.output
+    record = json.loads((out / "flat.json").read_bytes())
+    assert sorted(p.name for p in out.iterdir()) == ["flat.json", "model.stl", "outline.png"]
+    text = r.stdout
+    assert "verdict NOT CERTIFIED" in text
+    assert "F3.thin_regions UNKNOWN: tapered tips always appear" in text
+    assert "F6.slicer UNKNOWN: no slicer integration yet" in text
+    assert "F1." not in text                        # passing checks are not listed
+    x, y, z = record["mesh"]["extents_mm"]
+    assert f"{x:.2f} x {y:.2f} x {z:.2f} mm" in text
+    assert f"{record['mesh']['triangles']} triangles, 1 body" in text
+    assert f"flat_id {record['flat_id']}" in text
+    assert str(out / "model.stl") in text
+    assert f"{out / 'outline.png'} - open outline.png to check what cleaning removed" in text
+
+
+def test_flat_without_width_is_a_usage_error(tmp_path):
+    r = runner.invoke(app, ["flat", str(_selection(tmp_path)), "--thickness-mm", "3",
+                            "--out", str(tmp_path / "flat")])
+    assert r.exit_code == 2
+    assert "Missing option '--width-mm'" in _plain(r.output)
+    assert not (tmp_path / "flat").exists()
+
+
+def test_flat_zero_thickness_exits_2_and_writes_nothing(tmp_path):
+    sel = _selection(tmp_path)
+    r = runner.invoke(app, ["flat", str(sel), "--width-mm", "60", "--thickness-mm", "0",
+                            "--out", str(tmp_path / "flat")])
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: thickness_mm")
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+    assert not (tmp_path / "flat").exists()
+
+
+def test_flat_on_a_non_selection_folder_exits_2(tmp_path):
+    other = tmp_path / "other"
+    other.mkdir()
+    r = _flat(other, tmp_path / "flat")
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and "selection.json" in r.stderr
+    assert not (tmp_path / "flat").exists()
+
+
+def test_flat_exits_1_when_a_check_fails_but_still_writes(tmp_path, monkeypatch):
+    sel = _selection(tmp_path)
+    rules = load_rules()
+    rule_id = "slicer.orca.max_triangles_per_plate"
+    rules[rule_id] = rules[rule_id].model_copy(update={"default": 4})
+    monkeypatch.setattr("tdmg.flat.load_rules", lambda: rules)
+    out = tmp_path / "flat"
+    r = _flat(sel, out)
+    assert r.exit_code == 1, r.output
+    assert "F5.triangles FAIL" in r.stdout
+    assert sorted(p.name for p in out.iterdir()) == ["flat.json", "model.stl", "outline.png"]
+
+
+def test_flat_reports_os_errors_without_a_traceback(tmp_path):
+    sel = _selection(tmp_path)
+    (tmp_path / "file.txt").write_text("not a folder")
+    r = _flat(sel, tmp_path / "file.txt" / "flat")
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and "file.txt" in r.stderr
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+
+
+def test_flat_help_documents_exit_codes():
+    text = _plain(runner.invoke(app, ["flat", "--help"]).output)
+    for option in ("--width-mm", "--thickness-mm", "--out", "--printer"):
+        assert option in text
+    assert "Exit codes: 0" in text and "1 if any check FAILed" in text and "2 for" in text
