@@ -30,6 +30,7 @@ uv run ruff check .                   # lint
 - lib3mf and trimesh write random UUIDs into 3MF; set them explicitly for reproducible files.
 - On macOS/Linux, OrcaSlicer exit codes reach a parent as the low 8 bits (−50 → 206, −51 → 205, −59 → 197). Do not apply this assumption to Windows without measuring it.
 - trimesh `is_watertight` and lib3mf `IsManifoldAndOriented` both pass two solids touching at one vertex; check vertex-manifoldness separately.
+- Under `GITHUB_ACTIONS`, Rich styles Typer usage errors with escape codes and a box, even with `NO_COLOR` set. CLI tests normalise the output with `_plain()`. Reproduce it locally with `CI=true GITHUB_ACTIONS=true uv run pytest` (verified 2026-11-10 on the PC).
 - The package reads `rules/` and `profiles/` from the checkout; a built wheel carries copies in `tdmg/_data/` (CI tests this).
 
 ## Review practice

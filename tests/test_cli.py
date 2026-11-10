@@ -1,4 +1,5 @@
 import json
+import re
 
 import numpy as np
 from PIL import Image
@@ -9,7 +10,18 @@ from tdmg import __version__
 from tdmg.cli import app
 from tdmg.selection import SelectionError
 
-runner = CliRunner()
+# Under GITHUB_ACTIONS, Rich styles usage errors with escape codes and a box even when
+# NO_COLOR is set; that split usage-error text and failed CI on 2026-11-10 (run
+# 42834453852). Wide output plus _plain() makes the assertions environment-independent.
+runner = CliRunner(env={"NO_COLOR": "1", "FORCE_COLOR": None, "COLUMNS": "200"})
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Output without escape codes, box-drawing characters or line breaks."""
+    text = ANSI.sub("", text)
+    text = "".join(" " if 0x2500 <= ord(c) <= 0x257F else c for c in text)
+    return " ".join(text.split())
 
 
 def test_version():
@@ -69,11 +81,11 @@ def test_select_rejects_bad_points(tmp_path):
     img = _img(tmp_path, np.zeros((4, 4, 4), np.uint8), "e.png")
     bad = runner.invoke(app, ["select", str(img), "--out", str(tmp_path / "o"),
                               "--remove-at", "a,b"])
-    assert bad.exit_code == 2 and "--remove-at expects X,Y" in bad.output
+    assert bad.exit_code == 2 and "--remove-at expects X,Y" in _plain(bad.output)
     assert not (tmp_path / "o").exists()
     three = runner.invoke(app, ["select", str(img), "--out", str(tmp_path / "o1"),
                                 "--keep-at", "1,2,3"])
-    assert three.exit_code == 2 and "--keep-at expects X,Y" in three.output
+    assert three.exit_code == 2 and "--keep-at expects X,Y" in _plain(three.output)
     off = runner.invoke(app, ["select", str(img), "--out", str(tmp_path / "o2"),
                               "--keep-at", "9,9"])
     assert off.exit_code == 2 and "outside" in off.output
