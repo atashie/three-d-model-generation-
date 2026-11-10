@@ -6,13 +6,24 @@ from selection_fixtures import (
     DARK_LINE,
     DISC,
     DISC_SEED,
+    GAP_BETWEEN_LEGS,
     RING_POINT,
     STROKE_POINT,
+    empty,
     roadie_like,
     soft_blob,
+    two_subjects,
 )
 
-from tdmg.selection import SelectionError, load_image
+from tdmg.rules import load_rules
+from tdmg.selection import (
+    Intake,
+    SelectionError,
+    SelectionSpec,
+    load_image,
+    pixels_sha256,
+    select_subject,
+)
 
 
 def _at(img, p):
@@ -133,3 +144,86 @@ def _garbage(tmp_path):
 def test_load_image_rejects_inputs_it_cannot_decode_faithfully(tmp_path, make, message):
     with pytest.raises(SelectionError, match=message):
         load_image(make(tmp_path))
+
+
+def _intake(rgba):
+    return Intake(rgba, "f" * 64, pixels_sha256(rgba), False, "x.png")
+
+
+def _m(sel, p):
+    x, y = p
+    return bool(sel.mask[y, x])
+
+
+def test_roadie_like_remove_disc_then_keep_bird():
+    sel = select_subject(_intake(roadie_like()),
+                         SelectionSpec(remove_at=((30, 100),), keep_at=((100, 80),)))
+    assert _m(sel, BIRD_SEED) and not _m(sel, DISC_SEED)
+    assert not _m(sel, GAP_BETWEEN_LEGS) and not _m(sel, RING_POINT)
+    assert _m(sel, (70, 143)) and _m(sel, (130, 143))          # both shoes kept
+    assert sel.result["status"] == "one_piece"
+    assert sel.controls["source"] == "controls"
+
+
+def test_high_tolerance_cuts_the_feet_off():
+    sel = select_subject(_intake(roadie_like()), SelectionSpec(
+        remove_at=((30, 100),), keep_at=((100, 80),), color_tolerance=80))
+    assert not _m(sel, (70, 143))
+    assert sel.steps[-1]["pieces_before"] > 2
+
+
+def test_frame_is_kept_when_not_removed():
+    sel = select_subject(_intake(roadie_like()), SelectionSpec())
+    assert _m(sel, DISC_SEED) and sel.result["status"] == "multiple_pieces"
+
+
+def test_defaults_come_from_the_rules_registry():
+    rules = load_rules()
+    sel = select_subject(_intake(roadie_like()), SelectionSpec())
+    c = sel.controls
+    assert c["alpha_min"] == {"value": rules["perception.alpha.min_opaque"].default,
+                              "rule": "perception.alpha.min_opaque"}
+    assert c["color_tolerance"]["rule"] == "perception.flood.color_tolerance"
+    explicit = select_subject(_intake(roadie_like()), SelectionSpec(color_tolerance=12))
+    assert explicit.controls["color_tolerance"] == {"value": 12.0, "rule": None}
+
+
+def test_soft_edges_keep_the_thin_stroke():
+    sel = select_subject(_intake(soft_blob()), SelectionSpec())
+    assert _m(sel, STROKE_POINT) and sel.result["status"] == "one_piece"
+
+
+def test_two_subjects_need_a_keep_point():
+    sel = select_subject(_intake(two_subjects()), SelectionSpec())
+    assert sel.result["status"] == "multiple_pieces"
+    assert any("--keep-at" in w for w in sel.result["warnings"])
+    one = select_subject(_intake(two_subjects()), SelectionSpec(keep_at=((30, 30),)))
+    assert one.result["status"] == "one_piece" and not one.mask[30, 90]
+
+
+def test_empty_image_does_not_crash():
+    sel = select_subject(_intake(empty()), SelectionSpec())
+    assert sel.result["status"] == "empty" and sel.result["selected_px"] == 0
+
+
+def test_instructions_alone_are_reported_as_not_applied():
+    sel = select_subject(_intake(two_subjects()), SelectionSpec(instructions="only the left one"))
+    assert sel.interpretation == {"text": "only the left one", "machine_interpreted": False}
+    assert any("not machine-interpreted" in w for w in sel.result["warnings"])
+
+
+def test_holes_are_counted():
+    img = two_subjects()
+    img[28:33, 28:33, 3] = 0                     # a 5x5 hole inside the left circle
+    sel = select_subject(_intake(img), SelectionSpec(keep_at=((15, 30),)))
+    assert sel.result["holes_px"] == [25]
+
+
+@pytest.mark.parametrize("spec", [
+    SelectionSpec(remove_at=((500, 5),)),                      # outside the image
+    SelectionSpec(remove_at=((0, 0),)),                        # transparent pixel
+    SelectionSpec(remove_at=((30, 100),), keep_at=((30, 100),)),  # keep a removed pixel
+])
+def test_unusable_points_raise(spec):
+    with pytest.raises(SelectionError):
+        select_subject(_intake(roadie_like()), spec)
