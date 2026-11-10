@@ -18,10 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 ORIENTATION_TAG = 0x0112   # EXIF Orientation; 1 means "as stored"
 TRANSPOSING_ORIENTATIONS = range(2, 9)   # ImageOps.exif_transpose leaves other values untouched
+# Pillow's convert("RGBA") clips these to 8 bits instead of rescaling, so they are refused.
+UNSUPPORTED_MODES = frozenset({"I;16", "I;16B", "I;16L", "I", "F"})
 
 
 class SelectionError(ValueError):
@@ -38,7 +40,11 @@ class Intake:
 
 
 def pixels_sha256(arr: np.ndarray) -> str:
-    """Hash of shape and pixel bytes, independent of file encoding."""
+    """Hash of shape and pixel bytes, independent of file encoding.
+
+    The pixels are what Pillow decodes and converts to RGBA, with no colour management, so
+    embedded ICC profiles are ignored and CMYK uses Pillow's conversion formula.
+    """
     a = np.ascontiguousarray(arr)
     return hashlib.sha256(repr((a.shape, str(a.dtype))).encode() + a.tobytes()).hexdigest()
 
@@ -46,7 +52,18 @@ def pixels_sha256(arr: np.ndarray) -> str:
 def load_image(path: str | Path) -> Intake:
     path = Path(path)
     data = path.read_bytes()
-    with Image.open(io.BytesIO(data)) as im:
+    try:
+        im = Image.open(io.BytesIO(data))
+    except UnidentifiedImageError as e:
+        raise SelectionError(f"{path.name} is not a readable image") from e
+    with im:
+        if im.mode in UNSUPPORTED_MODES or im.mode.startswith("I;16"):
+            raise SelectionError(f"{path.name} has mode {im.mode}: 16-bit and floating-point "
+                                 "images are not supported; export as 8-bit")
+        n_frames = getattr(im, "n_frames", 1)
+        if n_frames > 1:
+            raise SelectionError(f"{path.name} has {n_frames} frames; export the frame you "
+                                 "want as a single image")
         im.load()
         orientation = im.getexif().get(ORIENTATION_TAG, 1)
         oriented = ImageOps.exif_transpose(im)

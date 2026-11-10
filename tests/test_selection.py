@@ -1,7 +1,10 @@
 import numpy as np
+import pytest
 from PIL import Image
 from selection_fixtures import (
     BIRD_SEED,
+    DARK_LINE,
+    DISC,
     DISC_SEED,
     RING_POINT,
     STROKE_POINT,
@@ -9,7 +12,7 @@ from selection_fixtures import (
     soft_blob,
 )
 
-from tdmg.selection import load_image
+from tdmg.selection import SelectionError, load_image
 
 
 def _at(img, p):
@@ -35,6 +38,7 @@ def test_fixtures_have_the_structure_they_claim():
     s = soft_blob()
     assert 0 < np.count_nonzero((s[..., 3] > 0) & (s[..., 3] < 255))   # soft edges exist
     assert _at(s, STROKE_POINT)[3] >= 128
+    assert 30 < np.linalg.norm(np.subtract(DARK_LINE, DISC)) < 80   # kept at 30, cut at 80
 
 
 def test_load_image_hashes_and_keeps_rgba(tmp_path):
@@ -60,3 +64,72 @@ def test_load_image_ignores_out_of_range_orientation(tmp_path):
     p = _save(tmp_path, np.zeros((10, 20, 4), np.uint8), exif=exif)
     a = load_image(p)
     assert a.rgba.shape[:2] == (10, 20) and a.exif_transposed is False
+
+
+def test_pixels_sha256_changes_with_one_pixel(tmp_path):
+    img = roadie_like()
+    a = load_image(_save(tmp_path, img, "a.png"))
+    img[0, 0, 0] ^= 1
+    b = load_image(_save(tmp_path, img, "b.png"))
+    assert a.pixels_sha256 != b.pixels_sha256
+
+
+def test_pixels_sha256_ignores_file_encoding(tmp_path):
+    img = roadie_like()
+    png = load_image(_save(tmp_path, img, "x.png"))
+    tif = load_image(_save(tmp_path, img, "x.tif"))
+    assert np.array_equal(tif.rgba, img)                    # TIFF round-trip is lossless
+    assert png.pixels_sha256 == tif.pixels_sha256
+    assert png.file_sha256 != tif.file_sha256
+
+
+def _palette_png(tmp_path):
+    im = Image.new("P", (4, 4), 0)
+    im.putpalette([10, 20, 30, 200, 0, 0] + [0] * 762)
+    im.putpixel((1, 1), 1)
+    p = tmp_path / "p.png"
+    im.save(p, transparency=0)
+    return p, {(0, 0): (10, 20, 30, 0), (1, 1): (200, 0, 0, 255)}
+
+
+def _la_png(tmp_path):
+    p = tmp_path / "la.png"
+    Image.new("LA", (2, 2), (100, 50)).save(p)
+    return p, {(0, 0): (100, 100, 100, 50)}
+
+
+@pytest.mark.parametrize("make", [_palette_png, _la_png], ids=["palette-transparency", "LA"])
+def test_load_image_keeps_alpha_of_8bit_modes(tmp_path, make):
+    p, expected = make(tmp_path)
+    a = load_image(p)
+    for point, rgba in expected.items():
+        assert tuple(_at(a.rgba, point)) == rgba
+
+
+def _gray16_png(tmp_path):
+    p = tmp_path / "g16.png"
+    Image.fromarray(np.tile(np.arange(0, 65536, 4096, dtype=np.uint16), (4, 1))).save(p)
+    return p
+
+
+def _two_frame_gif(tmp_path):
+    p = tmp_path / "two.gif"
+    frames = [Image.new("RGB", (4, 4), c) for c in ("red", "blue")]
+    frames[0].save(p, save_all=True, append_images=frames[1:])
+    return p
+
+
+def _garbage(tmp_path):
+    p = tmp_path / "junk.png"
+    p.write_bytes(b"not an image")
+    return p
+
+
+@pytest.mark.parametrize("make, message", [
+    (_gray16_png, "16-bit"),
+    (_two_frame_gif, "2 frames"),
+    (_garbage, "not a readable image"),
+], ids=["16-bit", "multi-frame", "garbage"])
+def test_load_image_rejects_inputs_it_cannot_decode_faithfully(tmp_path, make, message):
+    with pytest.raises(SelectionError, match=message):
+        load_image(make(tmp_path))
