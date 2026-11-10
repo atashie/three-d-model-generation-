@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import math
 
+import manifold3d
 import numpy as np
 import shapely
+import trimesh
 from shapely import affinity
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
@@ -133,3 +135,33 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float) -> tuple[list[Polyg
                         f"{report['removed_area_mm2']:.6g} mm^2 of "
                         f"{area_before:.6g} mm^2)")
     return parts, report
+
+
+def extrude(parts: list[Polygon], thickness_mm: float) -> trimesh.Trimesh:
+    """manifold3d extrusion of oriented rings (FillRule.Positive). Raises FlatError if empty.
+
+    Exteriors are made counter-clockwise and holes clockwise, so under the Positive fill
+    rule each hole subtracts and separate parts stay separate. The solid spans z = 0 to
+    thickness_mm. Vertices come from manifold3d's float64 mesh.
+    """
+    thickness_mm = _require_positive("thickness_mm", thickness_mm)
+    rings = []
+    for part in parts:
+        if part.is_empty:
+            continue
+        oriented = shapely.orient_polygons(part)
+        for ring in (oriented.exterior, *oriented.interiors):
+            rings.append(np.asarray(ring.coords, dtype=np.float64)[:-1])
+    if not rings:
+        raise FlatError("nothing to extrude")
+    section = manifold3d.CrossSection(rings, manifold3d.FillRule.Positive)
+    solid = manifold3d.Manifold.extrude(section, thickness_mm)
+    status = solid.status()
+    if status != manifold3d.Error.NoError:
+        raise FlatError(f"extrusion failed: manifold3d status {status.name}")
+    if solid.is_empty():
+        raise FlatError("nothing to extrude")
+    mesh = solid.to_mesh64()
+    vertices = np.asarray(mesh.vert_properties, dtype=np.float64)[:, :3]
+    faces = np.asarray(mesh.tri_verts, dtype=np.int64)
+    return trimesh.Trimesh(vertices, faces, process=False, validate=False)

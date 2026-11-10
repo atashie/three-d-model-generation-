@@ -1,11 +1,17 @@
+import io
 import json
 import math
 
 import numpy as np
 import pytest
 import shapely
+import trimesh
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from selection_fixtures import RED, WHITE, roadie_like
 
-from tdmg.flat import QUAD_SEGS, FlatError, clean, mask_outline, to_model
+from tdmg.checks import merge_exact, topology_checks
+from tdmg.flat import QUAD_SEGS, FlatError, clean, extrude, mask_outline, to_model
 
 
 def polygons(geom) -> list:
@@ -216,3 +222,98 @@ def test_nothing_left_raises_with_removed_area():
 def test_bad_cleaning_parameters_raise(opening, island):
     with pytest.raises(FlatError):
         clean(shapely.box(0, 0, 5, 5), opening, island)
+
+
+# --- Task 5: extrusion --------------------------------------------------------------
+
+
+def statuses(mesh) -> dict[str, str]:
+    return {r.id: r.status for r in topology_checks(merge_exact(mesh))}
+
+
+def bodies(mesh) -> list:
+    return mesh.split(only_watertight=False, repair=False)
+
+
+@settings(max_examples=60, deadline=None)
+@given(x=st.floats(-50, 50), y=st.floats(-50, 50), w=st.floats(1, 80), h=st.floats(1, 80),
+       fx=st.floats(0.1, 0.8), fy=st.floats(0.1, 0.8), fw=st.floats(0.05, 0.8),
+       fh=st.floats(0.05, 0.8), thickness=st.floats(0.2, 10))
+def test_rectangle_with_hole_volume_and_topology(x, y, w, h, fx, fy, fw, fh, thickness):
+    hx, hy = x + fx * w, y + fy * h
+    hw, hh = min(fw, 0.95 - fx) * w, min(fh, 0.95 - fy) * h
+    shell = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+    hole = [(hx, hy), (hx + hw, hy), (hx + hw, hy + hh), (hx, hy + hh)]
+    part = shapely.Polygon(shell, [hole])
+    assert part.is_valid
+    mesh = extrude([part], thickness)
+    assert mesh.vertices.dtype == np.float64
+    expected = part.area * thickness
+    assert abs(mesh.volume - expected) <= 1e-6 * expected
+    assert set(statuses(mesh).values()) == {"PASS"}
+
+
+def test_hole_orientation_does_not_matter():
+    shell = [(0, 0), (0, 10), (10, 10), (10, 0)]       # clockwise exterior
+    hole = [(2, 2), (8, 2), (8, 8), (2, 8)]            # counter-clockwise hole
+    mesh = extrude([shapely.Polygon(shell, [hole])], 2.0)
+    assert mesh.volume == pytest.approx((100 - 36) * 2.0, rel=1e-12)
+    assert set(statuses(mesh).values()) == {"PASS"}
+
+
+def test_two_parts_give_two_bodies():
+    parts = [shapely.box(0, 0, 5, 5), shapely.box(7, 0, 9, 3)]
+    mesh = extrude(parts, 1.5)
+    found = bodies(mesh)
+    assert len(found) == 2
+    assert sorted(b.volume for b in found) == pytest.approx([6 * 1.5, 25 * 1.5])
+    assert set(statuses(mesh).values()) == {"PASS"}
+
+
+def test_extrusion_spans_zero_to_thickness():
+    mesh = extrude([shapely.box(1, 2, 4, 6)], 3.0)
+    assert mesh.bounds.tolist() == [[1.0, 2.0, 0.0], [4.0, 6.0, 3.0]]
+
+
+def test_repeated_extrusion_is_identical():
+    parts, _ = clean(shapely.union_all([shapely.box(0, 0, 5, 5), shapely.Point(8, 2).buffer(
+        1.5)]), OPENING, MIN_ISLAND)
+    first, second = extrude(parts, 2.0), extrude(parts, 2.0)
+    assert np.array_equal(first.vertices, second.vertices)
+    assert np.array_equal(first.faces, second.faces)
+
+
+def test_empty_parts_raise():
+    with pytest.raises(FlatError):
+        extrude([], 2.0)
+    with pytest.raises(FlatError):
+        extrude([shapely.Polygon()], 2.0)
+
+
+@pytest.mark.parametrize("thickness", [0.0, -1.0, math.inf, math.nan])
+def test_bad_thickness_raises(thickness):
+    with pytest.raises(FlatError, match="thickness"):
+        extrude([shapely.box(0, 0, 1, 1)], thickness)
+
+
+def bird_mask() -> np.ndarray:
+    img = roadie_like()
+    rgb, opaque = img[..., :3], img[..., 3] == 255
+    return opaque & ((rgb == RED).all(axis=2) | (rgb == WHITE).all(axis=2))
+
+
+def test_full_chain_on_a_bird_like_mask_passes_f1_after_stl_round_trip():
+    mask = bird_mask()
+    outline = mask_outline(mask)
+    assert outline.area == int(mask.sum())
+    model, transform = to_model(outline, 60.0)
+    assert transform["scale_mm_per_px"] == 60.0 / transform["mask_width_px"]
+    parts, report = clean(model, OPENING, MIN_ISLAND)
+    assert report["removed_area_mm2"] > 0          # the 1 px ring cannot survive opening
+    mesh = extrude(parts, 3.0)
+    assert set(statuses(mesh).values()) == {"PASS"}
+    assert mesh.volume == pytest.approx(report["area_after_mm2"] * 3.0, rel=1e-9)
+    assert len(bodies(mesh)) == len(parts) >= 3      # body and two separate shoes
+    written = trimesh.load(io.BytesIO(mesh.export(file_type="stl")), file_type="stl",
+                           process=False)
+    assert set(statuses(written).values()) == {"PASS"}
