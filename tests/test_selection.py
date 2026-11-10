@@ -680,3 +680,15 @@ def test_result_does_not_change_its_warnings_argument():
 def test_no_temporary_record_is_left_behind(tmp_path):
     _run(tmp_path, "a")
     assert not [p for p in (tmp_path / "a").iterdir() if p.name.startswith(".")]
+
+
+def test_record_and_selection_do_not_share_dicts(tmp_path):
+    controls = {"alpha_min": {"value": 128, "rule": None}, "source": "controls"}
+    sel = select_subject(_intake(roadie_like()), SPEC)
+    rec = write_selection(_intake(roadie_like()), sel, tmp_path / "a")
+    rec["controls"]["alpha_min"]["value"] = 1
+    rec["steps"].clear()
+    assert sel.controls["alpha_min"]["value"] == 128 and sel.steps
+    copied = type(sel)(**{**sel.__dict__, "controls": controls})
+    controls["alpha_min"]["value"] = 2
+    assert copied.controls["alpha_min"]["value"] == 128

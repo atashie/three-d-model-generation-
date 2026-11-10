@@ -12,6 +12,7 @@ the standard dual pair.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
@@ -143,6 +144,8 @@ class Selection:
         mask = self.mask.copy()          # never freeze or share the caller's array
         mask.flags.writeable = False
         object.__setattr__(self, "mask", mask)
+        for name in ("controls", "steps", "result", "interpretation"):   # own copies, unshared
+            object.__setattr__(self, name, copy.deepcopy(getattr(self, name)))
 
 
 def _interpretation(spec: SelectionSpec) -> dict:
@@ -376,8 +379,10 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
             "input": {"name": intake.source_name, "file_sha256": intake.file_sha256,
                       "pixels_sha256": intake.pixels_sha256, "width": w, "height": h,
                       "exif_transposed": intake.exif_transposed},
-            "interpretation": sel.interpretation, "controls": sel.controls,
-            "steps": sel.steps, "result": sel.result,
+            # Copies, so editing the returned record cannot change the Selection.
+            "interpretation": copy.deepcopy(sel.interpretation),
+            "controls": copy.deepcopy(sel.controls),
+            "steps": copy.deepcopy(sel.steps), "result": copy.deepcopy(sel.result),
             # The cache keys are selection_id and mask_pixels_sha256. The output file hashes
             # are integrity hashes, valid within this environment only: PNG bytes depend on
             # the Pillow and zlib versions. The environment is not part of selection_id.
