@@ -439,3 +439,7 @@ expected size. That is a manual import check, not F6.
   - a measured note that cleaning removes features up to the opening width plus about
     0.005% of it, because the erosion collapses numerically there;
   - honest wording for exit code 2 and for what cleaning removes.
+- **Later (2026-11-10):** `F3.thin_regions` stays UNKNOWN in `tdmg flat`, but
+  `tdmg slice` treats it as information only and judges thin features from the G-code
+  (`docs/plans/2026-11-10-thin-wall-policy.md`). `F6.slicer` is replaced there by
+  measured F6 checks (`docs/plans/2026-11-10-slicer-check.md`).

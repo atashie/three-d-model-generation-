@@ -23,7 +23,8 @@ step on 2026-11-10. The evidence is `research/verification/2026-11-10-thin-walls
   (0.075 mm), which gives gaps of up to 0.24 mm there.
 
 **Status:** written 2026-11-10. The owner approved Decision 2 and later Decision 2a.
-Executed the same day; see "Execution notes".
+Tasks 1–3 executed the same day; Task 4 in part (docs and STATUS done; Codex review,
+push and CI not done). See "Execution notes".
 
 ## Decisions
 
@@ -117,3 +118,7 @@ Executed the same day; see "Execution notes".
   Roadie and Oddie pass all three F3 checks. Only `F6.portability` blocks PRINTABLE.
 - **Known limits:** printed-over holes of 0.4 mm or less cannot be told apart at 0.2 mm;
   sharp corners are strict; strength is not judged.
+- **Task 4 (2026-11-10, in part):** the docs and `docs/STATUS.md` describe the three
+  F3 checks (documentation audit commit). Not done: an independent Codex review of
+  `src/tdmg/printed.py` (none is recorded in `research/reviews/`), the push, and CI.
+  The commits from `70806d2` onward are local only.

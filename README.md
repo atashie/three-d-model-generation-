@@ -4,15 +4,16 @@ Turn an image into a file a 3D printer can print: a 3MF, or an STL when that is 
 
 The pipeline is deterministic code. Machine learning appears only where no rule can do the job: cutting the subject out of a photo, estimating depth, and inventing 3D shape the camera never saw. Code, not a model's judgment, decides whether the result is printable. Every number the pipeline uses comes from a cited source.
 
-**Status:** Phase 0 foundations are complete; Phase 1's production pipeline is not implemented. Windows stack checks, local TripoSR CPU experiments, and inspection of owner-supplied MakerLab meshes are recorded. No output is certified printable. See [current status and session handoff](docs/STATUS.md) and the [roadmap](docs/PLAN.md#11-roadmap).
+**Status:** Phase 0 foundations are complete. Phase 1 (R1, flat single-color) is in progress: `tdmg select` picks the subject, `tdmg flat` makes a gated flat STL, and `tdmg slice` slices it with a pinned OrcaSlicer and checks the G-code. There is no keychain loop, base or 3MF output yet. No output is certified printable: `F6.portability` stays UNKNOWN until a second slicer (PrusaSlicer) is added. The owner printed one Roadie STL from `tdmg flat`, sliced in Bambu Studio, and judged it "great" by eye; nothing was measured. See [current status and session handoff](docs/STATUS.md) and the [roadmap](docs/PLAN.md#11-roadmap).
 
-**Target printer:** Bambu Lab A1 ([profile](profiles/printers/bambu-a1.yaml)). The planned output is portable standard 3MF, independent of AMS slots and slicers. OrcaSlicer/PrusaSlicer checks and manual Bambu Studio verification remain to be implemented/performed.
+**Target printer:** Bambu Lab A1 ([profile](profiles/printers/bambu-a1.yaml)). The planned output is portable standard 3MF, independent of AMS slots and slicers. The OrcaSlicer check exists (`tdmg slice`, set up on Windows x64 only); the PrusaSlicer check does not. Bambu Studio is checked by hand by the owner.
 
 ## Start here
 
 - New to 3D printing files? Read [docs/guide/00-start-here.md](docs/guide/00-start-here.md).
 - The design and its reasons: [docs/PLAN.md](docs/PLAN.md).
 - Choosing what in an image becomes the model (`tdmg select`): [input interpretation](docs/guide/input-interpretation.md).
+- What each command checks, and what "printable" means: [pipeline and gate](docs/guide/pipeline-and-gate.md).
 - Print types and recipes: [docs/print-types/README.md](docs/print-types/README.md).
 - Every design rule and its evidence: [docs/reference/rules.md](docs/reference/rules.md).
 - The research behind it: [reports/Image to printable 3D model landscape.md](reports/Image%20to%20printable%203D%20model%20landscape.md).
@@ -30,7 +31,7 @@ uv run tdmg select IMAGE --out DIR ...    # select the subject; writes a preview
 uv run tdmg flat SEL_DIR --width-mm W --thickness-mm T --out DIR   # flat solid + gate
                                           # (outline smoothed by default; --smooth-px 0 = exact)
 uv run python scripts/setup_orcaslicer.py --dest artifacts/tools/orcaslicer-2.5.0   # once, Windows x64
-uv run tdmg slice FLAT_DIR --out DIR --slicer-dir artifacts/tools/orcaslicer-2.5.0  # F6 checks
+uv run tdmg slice FLAT_DIR --out DIR --slicer-dir artifacts/tools/orcaslicer-2.5.0  # G-code + F3/F6
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

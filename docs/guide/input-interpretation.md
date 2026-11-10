@@ -2,8 +2,9 @@
 
 **Status:** explicit selection is implemented as `tdmg select` (2026-11-10). No language
 interpreter exists. Your words are stored verbatim, and code applies only the explicit
-controls described below. Selection is the first stage; tracing and geometry (the rest
-of R1) are not built yet. This feature came from the owner's Roadie example on 2026-11-09.
+controls described below. Selection is the first stage; `tdmg flat` and `tdmg slice`
+follow it (see [pipeline and gate](pipeline-and-gate.md)). This feature came from the
+owner's Roadie example on 2026-11-09.
 
 An image can contain the subject, a background, a frame, labels and shadows. The
 user needs an optional field: **What should become the 3D model?** Store the user's

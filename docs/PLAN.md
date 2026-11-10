@@ -1,6 +1,6 @@
 # Repository and documentation plan
 
-**Status:** v2.1, 2026-11-09. v2.1 adds the owner's explicit image-interpretation requirement after the local/MakerLab trials. v1 (2026-11-08) was revised after an independent review by OpenAI Codex; section 12 lists what changed and why. Section 13 records the owner's decisions and the questions still open. Labels such as **(pending Qn)** in earlier sections now resolve through section 13.
+**Status:** v2.1, 2026-11-09. v2.1 adds the owner's explicit image-interpretation requirement after the local/MakerLab trials. v1 (2026-11-08) was revised after an independent review by OpenAI Codex; section 12 lists what changed and why. Section 13 records the owner's decisions and the questions still open. Labels such as **(pending Qn)** in earlier sections now resolve through section 13. Factual notes dated 2026-11-10 in sections 4, 8 and 9 record what was measured since; the design is unchanged. Current state: `docs/STATUS.md`.
 
 **Inputs:**
 - The landscape report in `reports/`, including its erratum, and the seven research notes in `research_notes/`.
@@ -129,10 +129,10 @@ Each check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, 
 |---|---|
 | F1 Format and topology | Finite coordinates. No degenerate or duplicate faces. Every edge shared by exactly two faces. No pinched vertices. Closed. Consistent outward orientation. Positive volume (the 3MF core MUST rules). Self-intersection: a warning that triggers a rebuild |
 | F2 Scale and fit | Units explicit. Target dimensions met. Fits the build volume, per plate. Coordinates within float32-safe bounds; lib3mf and manifold3d store float32 |
-| F3 Printability geometry | Wall thickness: one fixed method per threshold. FAIL on any localized region thinner than the minimum, and report where it is and how much of the surface was sampled. A low percentile is reported as a summary only, because a thin connector can be under 5% of the samples. Minimum feature size. Overhang area and an estimate of support need. Supports trapped inside joints or cavities. Bed contact and stability (center of mass over the footprint). Thin necks along Z |
+| F3 Printability geometry | *R1 as built (2026-11-10, `docs/plans/2026-11-10-thin-wall-policy.md`): thin features are judged from the slicer's G-code by `F3.printed_connectivity`, `F3.edge_coverage` and `F3.edge_overprint`; the geometric `F3.thin_regions` is information only.* Wall thickness: one fixed method per threshold. FAIL on any localized region thinner than the minimum, and report where it is and how much of the surface was sampled. A low percentile is reported as a summary only, because a thin connector can be under 5% of the samples. Minimum feature size. Overhang area and an estimate of support need. Supports trapped inside joints or cavities. Bed contact and stability (center of mass over the footprint). Thin necks along Z |
 | F4 Structure-specific | Joint clearances, measured separately as radial, vertical, and first layer. Body count as expected. Connector fit. Minimum color-region size. Filaments per layer under the printer's cap |
-| F5 Resources | Triangle count under budget (OrcaSlicer refuses plates over 1,000,000 by default). File size |
-| F6 Sliced output | Exit status decoded correctly (on macOS and Linux a parent process sees only the low 8 bits, so Orca's −50 arrives as 206). G-code not empty. Expected objects and filaments present. Statistics parsed. **Portability:** two slicers with different 3MF readers, OrcaSlicer and PrusaSlicer, must both accept the file with the expected bodies and dimensions |
+| F5 Resources | Triangle count under budget (OrcaSlicer declares a 1,000,000 default per plate; on Windows its 2.5.0 CLI did not enforce the limit for STL input, so tdmg enforces it, `slicer.orca.max_triangles_per_plate`). File size |
+| F6 Sliced output | Exit status decoded correctly (on macOS and Linux a parent process sees only the low 8 bits, so Orca's −50 arrives as 206; on Windows the full 32-bit code arrives, measured 2026-11-10). G-code not empty. Expected objects and filaments present. Statistics parsed. **Portability:** two slicers with different 3MF readers, OrcaSlicer and PrusaSlicer, must both accept the file with the expected bodies and dimensions |
 
 When no slicer is installed, F6 is UNKNOWN, so the verdict cannot be PRINTABLE.
 
@@ -293,7 +293,7 @@ General print-in-place clearance (Prusa ≥ 0.3 mm; 0.15–0.25 mm for 10 mm PLA
 3. **Property-based tests** with hypothesis. For example, any valid polygon extruded by any height gives a closed solid whose volume is area × height.
 4. **Corpus tests.** A fixed list of Thingi10K IDs. We record a confusion table against its labels, and document each disagreement rather than treating the labels as truth.
 5. **Golden-hash tests inside the pinned environment.** Across platforms, compare geometry within tolerances.
-6. **Slicer integration** on macOS, Linux and Windows, with platform-specific exit statuses verified. The sliced output must contain the expected objects and filaments. Windows exit-status behavior is not yet measured.
+6. **Slicer integration** on macOS, Linux and Windows, with platform-specific exit statuses verified. The sliced output must contain the expected objects and filaments. Windows exit-status behavior was measured on 2026-11-10 (`research/verification/2026-11-10-orcaslicer-windows/`); macOS and Linux decoding is still assumed from the M5 notes, not measured with `tdmg slice`.
 7. **Physical calibration and print log.** Each physical test print gets a logged result:
    - the profile hash;
    - caliper measurements on named dimensions;
@@ -350,8 +350,8 @@ The dependency register records, for each entry, its licence and any obligations
   - The G-code statistics export (JSON: time, volume, and weight per layer and per object) is not behind a platform guard.
   - The structured warnings file, `result.json`, is written on **Linux only**.
 
-  None of this has been run on the M5 yet. The macOS adapter must be built and tested against real runs.
-- **PrusaSlicer 2.9.7** is the second checker. Its 3MF reader is independent of the Bambu/Orca lineage, so passing both is the portability test.
+  None of this has been run on the M5 yet. The macOS adapter must be built and tested against real runs. On the Windows PC (2026-11-10), the pinned 2.5.0 portable release runs headless in `tdmg slice`, set up by `scripts/setup_orcaslicer.py`.
+- **PrusaSlicer 2.9.7** is the second checker (not installed yet, so `F6.portability` is UNKNOWN). Its 3MF reader is independent of the Bambu/Orca lineage, so passing both is the portability test.
 - **Bambu Studio** is the owner's slicer, and the one their files must work in. Until its command line is automated here, the owner opens each phase's sample outputs in it by hand.
 - **OpenSCAD 2026.11**, once stable, is optional, for the BOSL2 hinge and joiner library.
 

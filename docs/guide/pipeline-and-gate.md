@@ -28,19 +28,21 @@ valid solid can still include an unwanted background.
 
 - **`tdmg select`** covers S0 and S1, with explicit controls and no language
   interpretation.
-- **`tdmg slice`** covers S9 (see below).
 - **`tdmg flat`** covers S2–S4 and S8 for flat (G1) shapes. It:
   - outlines the mask, smoothed by default (`--smooth-px 0` gives the exact pixel
     outline), and transforms it to millimetres;
   - removes slivers and specks by the cleaning rules (`flat.sliver.opening_width`,
     `flat.island.min_square_side`, both untested hypotheses);
-  - extrudes the shape and writes `model.stl`;
-  - gates the bytes it writes, with F1, F2, F3 (measured; UNKNOWN), F4, F5 and F6
-    (UNKNOWN).
+  - extrudes the shape and writes `model.stl`, `outline.png` and the record `DIR/flat.json` (`--out DIR`);
+  - gates the bytes it writes, with F1, F2, `F3.thin_regions` (measured; always
+    UNKNOWN), F4, F5 and the placeholder `F6.slicer` (always UNKNOWN).
 
-Its verdict is always NOT CERTIFIED for now. Exit code 0 means only that no check
-failed. There are no loops, bases or 3MF output yet. Slicing is the separate
-`tdmg slice` step, described below.
+  Its verdict is therefore always NOT CERTIFIED. Exit code 0 means only that no check
+  failed; 1 means a check failed (files written); 2 means an input or I/O error.
+- **`tdmg slice`** covers S9 (see below). It judges thin features from the G-code and
+  replaces the placeholder F6 check with measured ones.
+
+There are no loops, bases or 3MF output yet.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 
@@ -53,7 +55,8 @@ Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value,
 | F5 Resources | Triangle count (`slicer.orca.max_triangles_per_plate`), file size |
 | F6 Sliced output | Two slicers with different 3MF readers, OrcaSlicer and PrusaSlicer, accept the file and produce the expected objects |
 
-If no slicer is installed, F6 is UNKNOWN, so nothing can be PRINTABLE.
+If no slicer is installed, F6 is UNKNOWN, so nothing can be PRINTABLE. Today only
+OrcaSlicer is wired in, so `F6.portability` is UNKNOWN and nothing is PRINTABLE yet.
 
 **`tdmg slice` (S9, 2026-11-10)** slices a `tdmg flat` output with a pinned,
 hash-verified OrcaSlicer 2.5.0 and the Bambu A1 profiles. It replaces the placeholder
@@ -66,6 +69,38 @@ with measured F6 checks:
 - **F6.single_object:** one object in the slicer's statistics.
 - **F6.portability:** stays UNKNOWN until PrusaSlicer is added.
 
-The slicer does not validate meshes, so F1 still guards topology. A failed slice's
-G-code is renamed `.failed`. Setup is explicit: `uv run python
-scripts/setup_orcaslicer.py --dest artifacts/tools/orcaslicer-2.5.0` (Windows x64).
+It also measures F3 from the G-code (the thin-wall policy the owner approved,
+`docs/plans/2026-11-10-thin-wall-policy.md`). Each extruding move is modelled as a
+"bead", a line of its stated width with round ends, and the printed footprint of every
+layer is compared with the model's section at that height:
+
+- **F3.printed_connectivity:** on every layer, the printed parts and holes match the
+  model's one to one. A narrow connection the slicer drops FAILs it.
+- **F3.edge_coverage:** every model-edge sample is within `acceptance.dimension.tolerance`
+  (0.2 mm) of printed plastic; on the first layer the allowance adds the profile's
+  elephant-foot compensation (0.075 mm, so 0.275 mm).
+- **F3.edge_overprint:** the reverse. No printed plastic lies farther than the same
+  allowance outside the model.
+
+G-code the analysis does not understand gives UNKNOWN, never PASS. These checks hold
+only for the pinned OrcaSlicer 2.5.0 A1 profile, do not judge strength, and keep sharp
+corners strict (a corner sharper than about 62° can fail coverage). `F3.thin_regions`
+from the flat record is carried along as information only.
+
+The slice verdict requires every check of the flat record except `F6.slicer` and
+`F3.thin_regions`, plus the F3 and F6 checks above. While `F6.portability` is UNKNOWN it
+is NOT CERTIFIED; the owner's Roadie and Oddie (60 × 3 mm, smoothed) give "NOT
+CERTIFIED: F6.portability UNKNOWN".
+
+The slicer does not validate meshes, so F1 still guards topology. When any required
+check FAILs, the G-code is written as `plate_1.gcode.failed` instead of `plate_1.gcode`;
+do not print it. The record is `DIR/slice.json`; it links back to the flat record
+by hash. Exit codes are as for `tdmg flat`, with a missing or unverified slicer
+counted as exit 2.
+
+Setup is explicit and Windows x64 only: `uv run python scripts/setup_orcaslicer.py
+--dest artifacts/tools/orcaslicer-2.5.0` downloads and hash-checks the pinned release
+and flattens the A1 profiles (`--verify-only DIR` rechecks an install). Then pass
+`--slicer-dir DIR` or set `TDMG_ORCASLICER_DIR`. Every run re-hashes the whole app
+folder unless `--skip-tree-check` is given, which is recorded. `--timeout-s` overrides
+`slicer.orca.timeout_s`.

@@ -22,13 +22,13 @@ and model hashes; these are not core dependencies or changes to `uv.lock`.
 |---|---|---|---|---|---|
 | numpy | 2.5.4 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | arrays | tested | |
 | scipy | 1.18.1 | BSD | numerics | imported | |
-| trimesh | 5.2.0 | MIT | mesh I/O, checks, extrusion | tested | Its 3MF writer hard-codes millimetres, writes no color, and uses random UUIDs |
+| trimesh | 5.2.0 | MIT | mesh I/O, checks; STL read-back and layer sections in `tdmg slice` | tested | Its 3MF writer hard-codes millimetres, writes no color, and uses random UUIDs |
 | networkx | 3.7 | BSD-3-Clause | needed by trimesh to load 3MF | tested | |
 | lxml | 6.1.3 | BSD-3-Clause | needed by trimesh to load 3MF | tested | |
 | manifold3d | 3.5.4 | Apache-2.0 | robust booleans, manifold checks | tested | Rejects non-manifold input; stores float32 |
 | lib3mf | 2.5.0 | BSD | 3MF writing and spec-level checks | tested | Writes random UUIDs unless set |
-| shapely | 2.2.0 | BSD-3-Clause | 2D polygon cleanup | tested | **Bundles GEOS under LGPL-2.1** (wheel's `LICENSE_GEOS`). `make_valid` can return several polygons |
-| opencv-python-headless | 5.0.0.93 | Apache-2.0 | contour tracing | tested | **Bundles FFmpeg under LGPL-2.1**, plus other libraries on macOS (wheel's `LICENSE-3RD-PARTY.txt`) |
+| shapely | 2.2.0 | BSD-3-Clause | 2D polygon cleanup; printed-footprint analysis (`tdmg.printed`) | tested | **Bundles GEOS under LGPL-2.1** (wheel's `LICENSE_GEOS`). `make_valid` can return several polygons |
+| opencv-python-headless | 5.0.0.93 | Apache-2.0 | connected components (`tdmg select`), Gaussian blur (`tdmg.smoothing`); contour tracing in the stack tests | tested | **Bundles FFmpeg under LGPL-2.1**, plus other libraries on macOS (wheel's `LICENSE-3RD-PARTY.txt`) |
 | build123d | 0.13.0 | Apache-2.0 | parametric CAD | tested | |
 | cadquery-ocp-novtk | 8.0.1.1.0 | Apache-2.0 (wrapper) | OpenCASCADE kernel for build123d | tested | **The kernel itself is LGPL-2.1 with a special exception.** Used as an unmodified pip dependency |
 | vtracer | 0.6.15 | MIT | raster-to-vector tracing | imported | |
@@ -60,12 +60,14 @@ and model hashes; these are not core dependencies or changes to `uv.lock`.
 
 This table is the original Mac baseline. On the PC, MSVC Build Tools 2022
 17.14.44 (compiler 14.44.35207) was installed for the isolated CPU experiment.
-The owner reports MakerLab available and supplied exported STLs; the installed
-Bambu Studio version and actual slicer execution have not been verified.
+The owner reports MakerLab available and supplied exported STLs. The owner also
+reports importing `tdmg flat` STLs into Bambu Studio and printing one Roadie from it
+(2026-11-10); the machine and version are not recorded, and tdmg does not run it.
 
 | Tool | Version | Licence | State | Role |
 |---|---|---|---|---|
 | OrcaSlicer | 2.5.0 (Homebrew cask on the Mac; on the PC, the pinned Windows x64 portable, `profiles/slicers/orcaslicer-2.5.0.yaml`) | AGPL-3.0 | Mac: not installed. PC: installed by `scripts/setup_orcaslicer.py` into git-ignored `artifacts/tools/`; hash-verified; runtime-validated by `tdmg slice` (2026-11-10) | Headless slicer check (`tdmg slice`), run only as a subprocess; no code or profile files in the repo |
-| Bambu Studio | 2.9.1 (Homebrew cask) | AGPL-3.0 | not installed | The owner's slicer for sending prints to the A1 |
+| Bambu Studio | 2.9.1 (Homebrew cask) | AGPL-3.0 | Not installed on the M5 (2026-11-08 baseline). Used by the owner to slice and print Roadie (owner report); machine and version not recorded | The owner's slicer for sending prints to the A1 |
+| PrusaSlicer | 2.9.7 (planned) | AGPL-3.0 | not installed by this project | Planned second checker for `F6.portability` |
 
 The "imported" and "tested" states for packages not exercised by this repo's own tests come from `research/verification/2026-11-08-stack-smoke/README.md`.

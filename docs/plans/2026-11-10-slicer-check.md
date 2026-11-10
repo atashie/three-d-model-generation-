@@ -224,3 +224,7 @@ and names (as facts, cited to `src/libslic3r/Utils.hpp` v2.5.0) are fine.
 
   These change the slice ID's composition. The Task 4 IDs in the research record
   belong to commit `58ebe94`.
+- **Later (2026-11-10):** the thin-wall plan added three required F3 checks measured
+  from the G-code (`docs/plans/2026-11-10-thin-wall-policy.md`), with `F3.thin_regions`
+  information only. The owner's models now give "NOT CERTIFIED: F6.portability
+  UNKNOWN" instead of the Task 4 result in the OrcaSlicer research record.
