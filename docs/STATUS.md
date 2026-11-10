@@ -103,6 +103,10 @@ The real slicer is not installed in CI.
      - Owner's view in Bambu Studio (2026-11-10): Oddie is perfect; Roadie is close but
        still a bit rough, and acceptable for now. This remains an open item: perhaps
        a per-image `--smooth-px`, or a better source image.
+   - **First physical print (owner, reported 2026-11-10):** "I printed roadie and it looks great."
+     This is qualitative. Not yet recorded: which file was printed (STL via Bambu Studio, or
+     the tdmg G-code), the filament and settings, and any caliper measurements.
+     `acceptance.dimension.tolerance` therefore remains unchecked.
    - **Next, in order:**
      1. **Done 2026-11-10: the slicer check (`tdmg slice`).**
         - Plan: `docs/plans/2026-11-10-slicer-check.md`.
