@@ -8,6 +8,10 @@ research/verification/2026-11-10-orcaslicer-windows/ (README and its addendum):
   from the requested thickness, with a half-layer window widened by the storage rounding
   (allowed_layer_counts).
 
+F3 is measured from the G-code (tdmg.printed; docs/plans/2026-11-10-thin-wall-policy.md,
+Decision 2, approved by the owner): F3.printed_connectivity and F3.edge_coverage are
+required, and the flat record's F3.thin_regions is kept as information only.
+
 Any required check that FAILs quarantines the G-code: it is written as
 plate_1.gcode.failed, never as plate_1.gcode. By default the whole app tree is verified
 on every run, so the app_tree_sha256 in slice_id is a checked fact for that run;
@@ -15,9 +19,9 @@ check_tree=False (--skip-tree-check) skips that, records app_tree_verified false
 gives a different slice_id.
 
 The record's verdict combines the flat record's checks, minus its placeholder F6.slicer,
-with the F6 checks of this run, and requires all of them. The certification line names
-the required checks that are not PASS. Today F3.thin_regions (no policy yet) and
-F6.portability (no second slicer) are always UNKNOWN, so the verdict is NOT CERTIFIED.
+with the F3 and F6 checks of this run, and requires all of them except F3.thin_regions.
+The certification line names the required checks that are not PASS. Today F6.portability
+(no second slicer) is always UNKNOWN, so the verdict is NOT CERTIFIED.
 
 Check-to-use gaps: the STL and the three profiles are read once, hashed, and the
 slicer runs on copies of exactly those bytes in a temporary folder. The exe, its
@@ -35,6 +39,7 @@ import math
 import platform
 import re
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +49,7 @@ from tdmg import __version__
 from tdmg.checks import CheckResult, verdict
 from tdmg.flat import FLAT_REQUIRED_CHECKS, STL_COORD_RTOL, flat_identity
 from tdmg.flat import RECORD_SCHEMA as FLAT_SCHEMA
+from tdmg.printed import ELEPHANT_FOOT_KEY, F3_SLICE_CHECK_IDS, TOLERANCE_RULE, f3_checks
 from tdmg.records import (
     RecordError,
     canonical_json,
@@ -72,13 +78,21 @@ from tdmg.slicer import (
 )
 
 RECORD_SCHEMA = "tdmg.slice/1"
-SLICE_ALGORITHM_VERSION = "slice-1"
+# slice-2 (2026-11-10): F3.printed_connectivity and F3.edge_coverage, measured from the
+# G-code, are required, and F3.thin_regions is information only; the record has "printed".
+# The verdict for the same request can differ from slice-1's, so slice_id changes with it.
+# slice-1 required F3.thin_regions, which is always UNKNOWN.
+SLICE_ALGORITHM_VERSION = "slice-2"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
 FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run with a FAILed check
 SLICE_REQUIRED_EXTRA = frozenset({"F6.slicer_exit", "F6.gcode_present", "F6.layer_count",
                                   "F6.single_object", "F6.portability"})
-SLICE_REQUIRED_CHECKS = (FLAT_REQUIRED_CHECKS - {"F6.slicer"}) | SLICE_REQUIRED_EXTRA
+THIN_REGIONS = "F3.thin_regions"
+SLICE_REQUIRED_CHECKS = ((FLAT_REQUIRED_CHECKS - {"F6.slicer", THIN_REGIONS})
+                         | set(F3_SLICE_CHECK_IDS) | SLICE_REQUIRED_EXTRA)
+THIN_REGIONS_NOTE = ("information only in tdmg slice: F3.printed_connectivity and "
+                     "F3.edge_coverage judge thin features from the G-code")
 STATUSES = ("PASS", "FAIL", "UNKNOWN")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 # The command as recorded: placeholders, so the record holds no path from this machine.
@@ -90,9 +104,12 @@ REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or B
           "Studio's) and check the layers and the first layer. Time and weight are the "
           "slicer's estimates for the A1 0.20 mm Standard and PLA Basic profiles, not "
           "measurements. When any required check FAILs, the G-code is kept as "
-          f"{FAILED_GCODE_NAME}; do not print it. Every check of flat.json and of this run "
-          "is required: while F3.thin_regions has no policy and F6.portability has no second "
-          "slicer (PrusaSlicer), both stay UNKNOWN and the verdict is NOT CERTIFIED.")
+          f"{FAILED_GCODE_NAME}; do not print it. F3.printed_connectivity and "
+          "F3.edge_coverage compare what the G-code prints with the model, layer by layer "
+          "(printed records the layers); they model each line as a bead of its stated width "
+          "and do not judge strength. Every check of flat.json and of this run is required, "
+          "except F3.thin_regions, which is information only. While F6.portability has no "
+          "second slicer (PrusaSlicer), it stays UNKNOWN and the verdict is NOT CERTIFIED.")
 
 
 def slicer_command(slicer: Slicer) -> list[str]:
@@ -235,6 +252,22 @@ def _flat_checks(record: dict) -> list[CheckResult]:
     return checks
 
 
+def elephant_foot_mm(process_profile: dict) -> float:
+    """The process profile's elefant_foot_compensation in mm: finite and at least 0."""
+    if ELEPHANT_FOOT_KEY not in process_profile:
+        raise SlicerError(f"process profile has no {ELEPHANT_FOOT_KEY!r}")
+    value = process_profile[ELEPHANT_FOOT_KEY]
+    try:
+        mm = float(value)
+    except (TypeError, ValueError):
+        raise SlicerError(f"process profile {ELEPHANT_FOOT_KEY!r} is {value!r}, not a "
+                          "number") from None
+    if not (math.isfinite(mm) and mm >= 0):
+        raise SlicerError(f"process profile {ELEPHANT_FOOT_KEY!r} must be finite and at "
+                          f"least 0, not {value!r}")
+    return mm
+
+
 def _profile_bytes(slicer: Slicer) -> dict[str, bytes]:
     """The three profiles read once and checked against the hashes locate verified."""
     out = {}
@@ -273,13 +306,17 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     profile hashes; and the command template. The timeout is not part of it: it can stop a run
     but does not change what a completed run writes, so a timed-out and a completed run
     of the same request share a slice_id. The platform and the environment are recorded
-    beside it, not in it.
+    beside it, not in it. The F3 measurements of the G-code ("printed") are outputs, like
+    the G-code itself, so they are not part of it either.
     """
     flat_dir = Path(flat_dir)
     rules = load_rules()
     timeout = _timeout(timeout_s, rules)
     flat, flat_raw, stl = _read_flat(flat_dir)
-    previous = _flat_checks(flat)
+    # F3.thin_regions stays in the record as information; the note says so.
+    previous = [replace(c, note=f"{c.note}; {THIN_REGIONS_NOTE}" if c.note else
+                        THIN_REGIONS_NOTE) if c.id == THIN_REGIONS else c
+                for c in _flat_checks(flat)]
     try:
         create_folder = check_output_dir(out_dir)
     except RecordError as err:
@@ -294,6 +331,8 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     thickness = float(flat["params"]["thickness_mm"])
     z_min, z_max = stl_z_range(stl)
     allowed = allowed_layer_counts(stl, process)
+    tolerance = float(rules[TOLERANCE_RULE].default)
+    elephant = elephant_foot_mm(process)
 
     with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
         base = Path(tmp)
@@ -307,13 +346,18 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
             profiles[kind].write_bytes(profile_data[kind])
         run = run_slicer(slicer_command(slicer), model, profiles, base / "work",
                          timeout["value"])
-        checks, stats = f6_checks(run, allowed, pin, timeout_rule=timeout["rule"])
+        f6, stats = f6_checks(run, allowed, pin, timeout_rule=timeout["rule"])
+        gcode = ((run.out_dir / GCODE_NAME).read_bytes()
+                 if (run.out_dir / GCODE_NAME).is_file() else None)
+        exited = next(c for c in f6 if c.id == "F6.slicer_exit").status == "PASS"
+        f3, printed = f3_checks(gcode, stl, tolerance, elephant,
+                                None if exited else "the slicer failed (F6.slicer_exit)")
+        checks = f3 + f6
         quarantined = any(c.status == "FAIL" for c in previous + checks
                           if c.id in SLICE_REQUIRED_CHECKS)
         files = {}
-        if (run.out_dir / GCODE_NAME).is_file():
-            gcode_name = FAILED_GCODE_NAME if quarantined else GCODE_NAME
-            files[gcode_name] = (run.out_dir / GCODE_NAME).read_bytes()
+        if gcode is not None:
+            files[FAILED_GCODE_NAME if quarantined else GCODE_NAME] = gcode
         if (run.out_dir / STATS_NAME).is_file():
             files[STATS_NAME] = (run.out_dir / STATS_NAME).read_bytes()
         log_written = run.log_path.is_file()
@@ -356,6 +400,7 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         "command": COMMAND_TEMPLATE,
         "exit": {**exit_code, "timed_out": run.timed_out},
         "stats": stats,
+        "printed": printed,
         "checks": [c.as_dict() for c in all_checks],
         "verdict": verdict(all_checks, set(SLICE_REQUIRED_CHECKS)),
         "certification": certification(all_checks, SLICE_REQUIRED_CHECKS),

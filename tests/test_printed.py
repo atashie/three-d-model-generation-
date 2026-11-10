@@ -3,6 +3,7 @@
 The G-code is synthetic (tests/gcode_fixtures.py), so each case has a known answer.
 """
 
+import json
 import math
 
 import numpy as np
@@ -15,8 +16,10 @@ from tdmg.flat import extrude
 from tdmg.printed import (
     ARC_STEP_MM,
     EDGE_SAMPLE_MM,
+    QUARTER_TURNS,
     UnsupportedGcode,
     align,
+    f3_checks,
     footprint,
     gaps,
     layer_metrics,
@@ -266,3 +269,46 @@ def test_gaps_equal_shapely_distance():
     pts = rng.uniform(95, 115, size=(2000, 2))
     assert np.array_equal(gaps(pts, printed), shapely.distance(shapely.points(pts), printed))
     assert (gaps(pts, shapely.Polygon()) == math.inf).all()
+
+
+def test_a_layer_that_prints_nothing_fails_coverage():
+    # A Z_HEIGHT layer with no extrusion where the model has a section: no gap can be
+    # measured (it would be infinite), so the layer is named and the check FAILs.
+    model = square()
+    text = gcode([layer(0.2, solid(bed(model))), layer(0.4, ""), layer(0.6, solid(bed(model)))])
+    stl = extrude([model], 1.0).export(file_type="stl")
+    checks, record = f3_checks(text.encode(), stl, 0.2, 0.075)
+    connectivity, coverage = checks
+    assert connectivity.status == "FAIL" and connectivity.measured["mismatched_z"] == [0.4]
+    assert coverage.status == "FAIL"
+    assert coverage.measured["nothing_printed_z"] == [0.4]
+    assert "0.4" in coverage.note and "print nothing" in coverage.note
+    assert record["layers"][1] == {"z": 0.4, "max_gap_mm": None, "parts": [1, 0],
+                                   "holes": [0, 0]}
+    json.dumps(record, allow_nan=False)                       # strict JSON
+
+
+def test_f3_checks_on_a_covered_square():
+    model = square()
+    text = gcode([layer(0.2, solid(bed(model))), layer(0.4, solid(bed(model)))])
+    stl = extrude([model], 1.0).export(file_type="stl")
+    checks, record = f3_checks(text.encode(), stl, 0.2, 0.075)
+    assert [c.status for c in checks] == ["PASS", "PASS"]
+    assert checks[1].threshold == {"first_layer_mm": pytest.approx(0.275),
+                                   "other_layers_mm": 0.2}
+    assert checks[1].rule == "acceptance.dimension.tolerance"
+    assert record["measured"] is True and record["alignment"]["angle_deg"] in QUARTER_TURNS
+    json.dumps(record, allow_nan=False)
+
+
+@pytest.mark.parametrize(("gcode_bytes", "reason"), [
+    (None, "no G-code was written"),
+    (b"\xff\xfe", "not UTF-8"),
+    (b"G28\nG1 X10 Y10\n", "no Z_HEIGHT"),
+])
+def test_f3_checks_are_unknown_when_not_measurable(gcode_bytes, reason):
+    stl = extrude([square()], 1.0).export(file_type="stl")
+    checks, record = f3_checks(gcode_bytes, stl, 0.2, 0.075)
+    assert [c.status for c in checks] == ["UNKNOWN", "UNKNOWN"]
+    assert all(reason in c.note for c in checks)
+    assert record["measured"] is False and reason in record["reason"]

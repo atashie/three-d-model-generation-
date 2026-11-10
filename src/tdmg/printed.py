@@ -14,6 +14,8 @@ does not understand instead of skipping it:
 - align: where the slicer put the model (it centres it and may turn it by quarter turns).
 - layer_metrics: per layer, the largest distance from the model's edge to printed plastic,
   and the parts and holes of the model and of the footprint.
+- f3_checks: F3.printed_connectivity and F3.edge_coverage for tdmg slice, by the rule the
+  owner approved (docs/plans/2026-11-10-thin-wall-policy.md, Decision 2).
 
 Holes: a region the footprint encloses but does not print is a hole of the print only if
 it is not inside the model section. Sparse infill leaves many such voids inside the model,
@@ -32,6 +34,8 @@ import shapely
 import trimesh
 from scipy.spatial import cKDTree
 from shapely import affinity
+
+from tdmg.checks import CheckResult
 
 # Arcs are split into chords whose arc length is at most this. An approximation step, not
 # a threshold: a chord of length c lies at most r - sqrt(r^2 - c^2/4) inside an arc of
@@ -57,6 +61,14 @@ ALIGN_CONVERGED_MM = 1e-6
 QUARTER_TURNS = (0, 90, 180, 270)
 CUSTOM = "Custom"            # OrcaSlicer's feature name for the start and end code
 OUTER_WALL = "Outer wall"
+CONNECTIVITY = "F3.printed_connectivity"
+COVERAGE = "F3.edge_coverage"
+F3_SLICE_CHECK_IDS = (CONNECTIVITY, COVERAGE)
+TOLERANCE_RULE = "acceptance.dimension.tolerance"
+ELEPHANT_FOOT_KEY = "elefant_foot_compensation"      # OrcaSlicer's spelling
+SCOPE = ("The bead model (each extrusion a line of its stated width with round ends) "
+         "approximates real plastic. Strength is not judged: a single thin line is printed "
+         "but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only.")
 
 
 class UnsupportedGcode(ValueError):
@@ -430,15 +442,17 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
     section is the model's section in model coordinates, printed the layer's footprint in
     bed coordinates. The gap is the distance from each model-edge sample, every
     EDGE_SAMPLE_MM, to the footprint (0 inside it); share_over_allowance is the share of
-    samples whose gap exceeds allowance_mm. With no section, the gap entries are None.
+    samples whose gap exceeds allowance_mm. With no section, or with nothing printed where
+    there is one (nothing_printed, an infinite gap), the gap entries are None.
     """
     model_bed = alignment.apply(section)
     out = {"max_gap_mm": None, "at_bed_mm": None, "at_model_mm": None,
            "share_over_allowance": None,
+           "nothing_printed": not model_bed.is_empty and printed.is_empty,
            "parts_model": count_parts(model_bed), "parts_printed": count_parts(printed),
            "holes_model": count_holes(model_bed),
            "holes_printed": count_holes(printed, inside=model_bed)}
-    if model_bed.is_empty:
+    if model_bed.is_empty or printed.is_empty:
         return out
     model_pts = _edge_points(section)
     pts = alignment.to_bed(model_pts)
@@ -448,3 +462,129 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
                share_over_allowance=float((d > allowance_mm).mean()),
                at_model_mm=[float(v) for v in model_pts[i]])
     return out
+
+
+# --- F3 checks for tdmg slice ----------------------------------------------------------
+
+
+def analyse(text: str, stl: bytes | trimesh.Trimesh, allowance_first_mm: float,
+            allowance_mm: float) -> tuple[Alignment, list[dict]]:
+    """The alignment and every layer's metrics, lowest layer first.
+
+    The first layer is the lowest Z_HEIGHT; it gets allowance_first_mm and the others
+    allowance_mm. Raises UnsupportedGcode as parse_gcode and align do.
+    """
+    layers = parse_gcode(text)
+    mesh = load_mesh(stl)
+    zs = sorted(layers)
+    first = layers[zs[0]]
+    alignment = align(model_section(mesh, first.mid_z), first.segments)
+    out = []
+    for i, z in enumerate(zs):
+        allowance = allowance_first_mm if i == 0 else allowance_mm
+        m = layer_metrics(model_section(mesh, layers[z].mid_z), footprint(layers[z].segments),
+                          alignment, allowance)
+        out.append({"z": z, "allowance_mm": allowance, **m})
+    return alignment, out
+
+
+def _place(point) -> str:
+    return "(" + ", ".join(f"{v:.2f}" for v in point) + ")"
+
+
+def f3_checks(gcode: bytes | None, stl: bytes, tolerance_mm: float, elephant_foot_mm: float,
+              not_measured: str | None = None) -> tuple[list[CheckResult], dict]:
+    """F3.printed_connectivity and F3.edge_coverage, and the record's "printed" entry.
+
+    The rule (the plan, Decision 2):
+    - F3.printed_connectivity PASSes when on every layer the footprint has as many parts
+      and as many holes as the model section; otherwise it FAILs, naming the layers.
+    - F3.edge_coverage PASSes when every model-edge sample is within tolerance_mm
+      (acceptance.dimension.tolerance) of printed plastic, or within tolerance_mm plus
+      elephant_foot_mm (the profile's elefant_foot_compensation) on the first layer, where
+      the slicer shrinks the outline on purpose. Otherwise it FAILs, naming the largest gap.
+    Both are UNKNOWN, with the reason, when not_measured is given (the slicer failed), when
+    there is no G-code, or when the G-code or the alignment is unsupported.
+    """
+    first_mm = tolerance_mm + elephant_foot_mm
+    threshold = {"first_layer_mm": first_mm, "other_layers_mm": tolerance_mm}
+    record = {"measured": False, "reason": None,
+              "allowance_mm": {"first_layer": first_mm, "other_layers": tolerance_mm,
+                               "elefant_foot_compensation": elephant_foot_mm},
+              "edge_sample_mm": EDGE_SAMPLE_MM, "alignment": None, "layers": []}
+    reason = not_measured or (None if gcode else "no G-code was written")
+    if reason is None:
+        try:
+            alignment, layers = analyse(gcode.decode("utf-8"), stl, first_mm, tolerance_mm)
+        except UnicodeDecodeError as err:
+            reason = f"the G-code is not UTF-8 text: {err}"
+        except UnsupportedGcode as err:
+            reason = f"the G-code cannot be measured: {err}"
+    if reason is not None:
+        record["reason"] = reason
+        return [CheckResult(CONNECTIVITY, "UNKNOWN", None, None, None, f"not measured: {reason}"),
+                CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                            f"not measured: {reason}")], record
+    record.update(measured=True, alignment=alignment.as_dict(), layers=[
+        {"z": m["z"], "max_gap_mm": m["max_gap_mm"],
+         "parts": [m["parts_model"], m["parts_printed"]],
+         "holes": [m["holes_model"], m["holes_printed"]]} for m in layers])
+    return [_connectivity(layers, alignment), _coverage(layers, alignment, threshold)], record
+
+
+def _connectivity(layers: list[dict], alignment: Alignment) -> CheckResult:
+    bad = [m for m in layers if (m["parts_model"], m["holes_model"])
+           != (m["parts_printed"], m["holes_printed"])]
+    measured = {"layers": len(layers), "layers_mismatched": len(bad),
+                "angle_deg": alignment.angle}
+    how = ("Parts and holes of the printed footprint against the model section, per layer; "
+           "a void inside the model (sparse infill) is not a hole. ")
+    if not bad:
+        return CheckResult(CONNECTIVITY, "PASS", measured, None, None,
+                           how + "Every layer matches. " + SCOPE)
+    m = bad[0]
+    measured.update(mismatched_z=[b["z"] for b in bad], first_z=m["z"],
+                    parts_model=m["parts_model"], parts_printed=m["parts_printed"],
+                    holes_model=m["holes_model"], holes_printed=m["holes_printed"],
+                    largest_gap_at_bed_mm=m["at_bed_mm"],
+                    largest_gap_at_model_mm=m["at_model_mm"])
+    where = ("" if m["at_bed_mm"] is None else
+             f"; its largest edge gap, likely where the connection is lost, is at bed "
+             f"{_place(m['at_bed_mm'])}, model {_place(m['at_model_mm'])} mm")
+    return CheckResult(
+        CONNECTIVITY, "FAIL", measured, None, None,
+        how + f"{len(bad)} of {len(layers)} layers differ; the first, z = {m['z']:g} mm, has "
+        f"{m['parts_printed']} printed part(s) for the model's {m['parts_model']} and "
+        f"{m['holes_printed']} printed hole(s) for its {m['holes_model']}{where}: a "
+        "connection or a hole of the model is not printed as such. " + SCOPE)
+
+
+def _coverage(layers: list[dict], alignment: Alignment, threshold: dict) -> CheckResult:
+    measured_layers = [m for m in layers if m["max_gap_mm"] is not None]
+    nothing = [m["z"] for m in layers if m["nothing_printed"]]
+    if nothing:
+        return CheckResult(
+            COVERAGE, "FAIL", {"nothing_printed_z": nothing, "angle_deg": alignment.angle},
+            threshold, TOLERANCE_RULE,
+            f"{len(nothing)} layer(s), the first at z = {nothing[0]:g} mm, print nothing "
+            "where the model has a section. " + SCOPE)
+    if not measured_layers:
+        return CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                           "not measured: the model has no section at any printed layer")
+    worst = max(measured_layers, key=lambda m: m["max_gap_mm"] - m["allowance_mm"])
+    over = [m for m in measured_layers if m["max_gap_mm"] > m["allowance_mm"]]
+    measured = {"worst_z": worst["z"], "max_gap_mm": worst["max_gap_mm"],
+                "allowance_mm": worst["allowance_mm"], "at_bed_mm": worst["at_bed_mm"],
+                "at_model_mm": worst["at_model_mm"],
+                "share_over_allowance": worst["share_over_allowance"],
+                "layers_over": len(over), "angle_deg": alignment.angle}
+    how = (f"The largest distance from a model-edge sample (every {EDGE_SAMPLE_MM:g} mm; the "
+           f"true largest is at most {EDGE_SAMPLE_MM / 2:g} mm more) to printed plastic, "
+           "against the tolerance, plus the profile's elefant_foot_compensation on the "
+           "first layer. ")
+    summary = (f"The worst layer, z = {worst['z']:g} mm, leaves {worst['max_gap_mm']:.3f} mm "
+               f"against {worst['allowance_mm']:g} mm, at bed {_place(worst['at_bed_mm'])}, "
+               f"model {_place(worst['at_model_mm'])} mm"
+               + (f"; {len(over)} layer(s) are over. " if over else ". "))
+    return CheckResult(COVERAGE, "FAIL" if over else "PASS", measured, threshold,
+                       TOLERANCE_RULE, how + summary + SCOPE)

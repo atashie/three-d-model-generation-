@@ -16,7 +16,10 @@ import sys
 
 import numpy as np
 import pytest
+import shapely
 import trimesh
+from gcode_fixtures import gcode, layer, solid
+from shapely import affinity
 from test_make_flat import write_roadie_selection
 from test_selection import _intake
 from typer.testing import CliRunner
@@ -26,6 +29,7 @@ import tdmg.slicing
 from tdmg.cli import app
 from tdmg.flat import flat_identity, make_flat
 from tdmg.paths import REPO_ROOT
+from tdmg.printed import model_section
 from tdmg.records import canonical_json
 from tdmg.rules import load_rules
 from tdmg.selection import SelectionSpec, select_subject, write_selection
@@ -33,6 +37,7 @@ from tdmg.slicer import Slicer, SlicerError, load_pin, platform_key
 from tdmg.slicing import (
     RECORD_SCHEMA,
     SLICE_ALGORITHM_VERSION,
+    SLICE_REQUIRED_CHECKS,
     SLICE_REQUIRED_EXTRA,
     allowed_layer_counts,
     make_slice,
@@ -42,16 +47,20 @@ from tdmg.slicing import (
 
 FAKE = REPO_ROOT / "tests" / "fake_orca.py"
 PIN = load_pin()
-# The two process keys make_slice reads, with the A1 values (see tests/test_slicer.py).
-PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2"}
+# The three process keys make_slice reads, with the A1 values (see tests/test_slicer.py
+# and research/verification/2026-11-10-thin-walls/slicer-settings.txt).
+PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2",
+           "elefant_foot_compensation": "0.075"}
 FILES = {"machine.json": b"{}", "process.json": json.dumps(PROCESS).encode(),
          "filament.json": b"{}"}
 APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
 F6_IDS = ["F6.slicer_exit", "F6.gcode_present", "F6.layer_count", "F6.single_object",
           "F6.portability"]
+F3_IDS = ["F3.printed_connectivity", "F3.edge_coverage"]
 RECORD_KEYS = {"schema", "tdmg_version", "algorithm", "slice_id", "links", "params", "slicer",
                "command", "exit", "stats", "checks", "verdict", "certification", "gcode",
-               "stderr_tail", "log_written", "outputs", "environment", "review"}
+               "stderr_tail", "log_written", "outputs", "environment", "review",
+               "printed"}
 runner = CliRunner(env={"NO_COLOR": "1", "FORCE_COLOR": None, "COLUMNS": "200"})
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -120,7 +129,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
     flat = json.loads((flat_dir / "flat.json").read_bytes())
     assert set(record) == RECORD_KEYS
     assert (record["schema"], record["algorithm"]) == (RECORD_SCHEMA, SLICE_ALGORITHM_VERSION)
-    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-1"
+    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-2"
     assert record["links"] == {"flat_id": flat["flat_id"],
                                "flat_record_sha256": _sha((flat_dir / "flat.json").read_bytes()),
                                "model_stl_sha256": flat["outputs"]["model.stl"],
@@ -150,15 +159,18 @@ def test_record_contents(flat_dir, fake, tmp_path):
     assert record["exit"]["timed_out"] is False
     assert record["stats"]["layer_count"] == 15
     ids = [c["id"] for c in record["checks"]]
-    assert "F6.slicer" not in ids and ids[-5:] == F6_IDS
-    assert ids[:-5] == [c["id"] for c in flat["checks"] if c["id"] != "F6.slicer"]
+    assert "F6.slicer" not in ids and ids[-5:] == F6_IDS and ids[-7:-5] == F3_IDS
+    assert ids[:-7] == [c["id"] for c in flat["checks"] if c["id"] != "F6.slicer"]
     assert {c["id"]: c["status"] for c in record["checks"][-5:]} == {
         "F6.slicer_exit": "PASS", "F6.gcode_present": "PASS", "F6.layer_count": "PASS",
         "F6.single_object": "PASS", "F6.portability": "UNKNOWN"}
     assert record["verdict"] == "NOT CERTIFIED"
     # The reason is derived from the required checks that are not PASS, in check order.
-    assert record["certification"] == ("NOT CERTIFIED: F3.thin_regions UNKNOWN, "
-                                        "F6.portability UNKNOWN")
+    # The fake's default G-code has no layer comments, so the F3 checks cannot measure it.
+    assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
+                                        "F3.edge_coverage UNKNOWN, F6.portability UNKNOWN")
+    assert "no Z_HEIGHT" in by_id(record)["F3.edge_coverage"]["note"]
+    assert record["printed"]["measured"] is False
     assert record["environment"]["platform"] == platform.platform()
     assert record["log_written"] is False
     files = sorted(p.name for p in out.iterdir())
@@ -175,7 +187,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
 def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
     record = make_slice(flat_dir, tmp_path / "slice", fake())
     pin = fake.pin
-    identity = {"algorithm": "slice-1", "flat_id": record["links"]["flat_id"],
+    identity = {"algorithm": "slice-2", "flat_id": record["links"]["flat_id"],
                 "model_stl_sha256": record["links"]["model_stl_sha256"],
                 "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
@@ -279,8 +291,9 @@ def test_a_failed_slice_writes_the_record_and_fails(flat_dir, fake, tmp_path):
     assert record["exit"]["name"] == "CLI_NO_SUITABLE_OBJECTS"
     assert record["stats"] is None and record["gcode"] is None
     assert record["stderr_tail"].endswith("No object is fully inside")
-    assert record["certification"].startswith("NOT CERTIFIED: F3.thin_regions UNKNOWN, "
-                                              "F6.slicer_exit FAIL, F6.gcode_present FAIL")
+    assert record["certification"].startswith(
+        "NOT CERTIFIED: F3.printed_connectivity UNKNOWN, F3.edge_coverage UNKNOWN, "
+        "F6.slicer_exit FAIL, F6.gcode_present FAIL")
     # Like the real slicer, the fake writes a log when it fails.
     assert record["log_written"] is True
     assert sorted(p.name for p in out.iterdir()) == ["slice.json", "slicer.log"]
@@ -452,6 +465,217 @@ def test_a_bad_timeout_is_refused(flat_dir, fake, tmp_path, value):
         make_slice(flat_dir, tmp_path / "slice", fake(), timeout_s=value)
 
 
+# --- F3 from the printed footprint (tdmg.printed) -----------------------------------------
+
+BED_SHIFT = (100.0, 100.0)          # where the synthetic G-code puts the model on the bed
+
+
+@pytest.fixture(scope="module")
+def square_flat(tmp_path_factory):
+    """A 20 mm square (corners rounded by smoothing), 3 mm thick: 15 layers."""
+    rgba = np.zeros((60, 60, 4), np.uint8)
+    rgba[10:50, 10:50] = (230, 20, 20, 255)
+    intake = _intake(rgba)
+    sel = tmp_path_factory.mktemp("square") / "sel"
+    write_selection(intake, select_subject(intake, SelectionSpec()), sel)
+    out = tmp_path_factory.mktemp("square-flat") / "flat"
+    make_flat(sel, 20.0, 3.0, out)
+    return out
+
+
+def _bed_section(flat_dir):
+    section = model_section((flat_dir / "model.stl").read_bytes(), 0.1)
+    return affinity.translate(section, *BED_SHIFT)
+
+
+def _square_gcode(flat_dir, first=None, upper=None):
+    """15 layers of walls and fill covering first (layer 1) and upper (layers 2-15); both
+    are the model's section on the bed unless given."""
+    bed = _bed_section(flat_dir)
+    first = bed if first is None else first
+    upper = bed if upper is None else upper
+    return gcode([layer(0.2 * (i + 1), solid(first if i == 0 else upper)) for i in range(15)])
+
+
+def test_a_covered_square_passes_both_f3_checks(square_flat, fake, tmp_path):
+    out = tmp_path / "slice"
+    record = make_slice(square_flat, out, fake(gcode_text=_square_gcode(square_flat)))
+    checks = by_id(record)
+    assert checks["F3.printed_connectivity"]["status"] == "PASS"
+    coverage = checks["F3.edge_coverage"]
+    assert coverage["status"] == "PASS"
+    assert coverage["rule"] == "acceptance.dimension.tolerance"
+    # The allowance: the tolerance, plus elefant_foot_compensation on the first layer.
+    assert coverage["threshold"] == {"first_layer_mm": pytest.approx(0.275),
+                                     "other_layers_mm": 0.2}
+    # A square looks the same at every quarter turn, so any turn may be found (the turn is
+    # tested on an L shape in tests/test_printed.py).
+    assert coverage["measured"]["angle_deg"] in (0, 90, 180, 270)
+    assert coverage["measured"]["max_gap_mm"] < 0.2
+    assert "strength is not judged" in coverage["note"].lower()
+    assert "bead model" in checks["F3.printed_connectivity"]["note"].lower()
+    # Only the second slicer blocks certification now.
+    assert record["certification"] == "NOT CERTIFIED: F6.portability UNKNOWN"
+    assert record["verdict"] == "NOT CERTIFIED"
+    thin = checks["F3.thin_regions"]
+    assert thin["status"] == "UNKNOWN" and "information only" in thin["note"]
+    printed = record["printed"]
+    assert printed["measured"] is True and printed["reason"] is None
+    assert [lay["z"] for lay in printed["layers"]] == pytest.approx(
+        [0.2 * (i + 1) for i in range(15)])
+    assert all(lay["parts"] == [1, 1] and lay["holes"] == [0, 0] for lay in printed["layers"])
+    assert set(printed["layers"][0]) == {"z", "max_gap_mm", "parts", "holes"}
+    assert printed["alignment"]["angle_deg"] == coverage["measured"]["angle_deg"]
+    assert printed["alignment"]["median_edge_mm"] < 0.01
+    assert printed["allowance_mm"] == {"first_layer": pytest.approx(0.275),
+                                       "other_layers": 0.2, "elefant_foot_compensation": 0.075}
+    assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == ("plate_1.gcode", False)
+    assert json.loads((out / "slice.json").read_bytes()) == record
+
+
+def _split(flat_dir):
+    bed = _bed_section(flat_dir)
+    x0, y0, x1, y1 = bed.bounds
+    cx = (x0 + x1) / 2
+    return cx, bed.difference(shapely.box(cx - 0.5, y0 - 1, cx + 0.5, y1 + 1))
+
+
+def test_a_split_print_fails_connectivity_and_is_quarantined(square_flat, fake, tmp_path):
+    cx, split = _split(square_flat)
+    out = tmp_path / "slice"
+    record = make_slice(square_flat, out,
+                        fake(gcode_text=_square_gcode(square_flat, upper=split)))
+    c = by_id(record)["F3.printed_connectivity"]
+    assert c["status"] == "FAIL"
+    m = c["measured"]
+    assert (m["layers"], m["layers_mismatched"], m["first_z"]) == (15, 14, pytest.approx(0.4))
+    assert (m["parts_model"], m["parts_printed"], m["holes_model"], m["holes_printed"]) == (
+        1, 2, 0, 0)
+    assert m["largest_gap_at_bed_mm"][0] == pytest.approx(cx, abs=0.5)
+    assert "z = 0.4 mm" in c["note"] and "2 printed part(s)" in c["note"]
+    assert "F3.printed_connectivity FAIL" in record["certification"]
+    assert sorted(p.name for p in out.iterdir()) == [
+        "plate_1.gcode.failed", "plate_1.statistics.json", "slice.json"]
+    assert record["gcode"]["quarantined"] is True
+
+
+def test_cli_exit_1_on_an_f3_fail(square_flat, fake, tmp_path):
+    _, split = _split(square_flat)
+    out = tmp_path / "slice"
+    r = _slice(square_flat, out, "--slicer-dir",
+               str(fake(gcode_text=_square_gcode(square_flat, upper=split))))
+    assert r.exit_code == 1, r.output
+    assert "F3.printed_connectivity FAIL - measured" in r.stdout
+    assert "do not print this G-code" in r.stdout
+    assert not (out / "plate_1.gcode").exists()
+
+
+def test_an_unprinted_corner_fails_coverage_only(square_flat, fake, tmp_path):
+    bed = _bed_section(square_flat)
+    _, _, x1, y1 = bed.bounds
+    clipped = bed.difference(shapely.box(x1 - 2, y1 - 2, x1 + 1, y1 + 1))
+    record = make_slice(square_flat, tmp_path / "slice",
+                        fake(gcode_text=_square_gcode(square_flat, upper=clipped)))
+    checks = by_id(record)
+    assert checks["F3.printed_connectivity"]["status"] == "PASS"   # still one part
+    c = checks["F3.edge_coverage"]
+    assert c["status"] == "FAIL"
+    m = c["measured"]
+    assert m["max_gap_mm"] > 1 and m["layers_over"] == 14
+    assert m["worst_z"] > 0.3                    # one of the 14 identical upper layers
+    assert m["at_bed_mm"][0] > x1 - 2 and m["at_bed_mm"][1] > y1 - 2
+    # The model point is the bed point under the recorded alignment.
+    a = record["printed"]["alignment"]
+    moved = affinity.translate(affinity.rotate(shapely.Point(m["at_model_mm"]), a["angle_deg"],
+                                               origin=tuple(a["centre_mm"])), *a["shift_mm"])
+    assert [moved.x, moved.y] == pytest.approx(m["at_bed_mm"], abs=1e-9)
+    assert record["gcode"]["quarantined"] is True
+
+
+@pytest.mark.parametrize(("where", "gap", "status"), [
+    ("first", 0.25, "PASS"),     # inside 0.2 + 0.075 mm on the first layer
+    ("first", 0.30, "FAIL"),
+    ("upper", 0.25, "FAIL"),     # above the first layer the allowance is 0.2 mm
+])
+def test_the_first_layer_is_allowed_the_elephant_foot(square_flat, fake, tmp_path, where, gap,
+                                                      status):
+    shrunk = _bed_section(square_flat).buffer(-gap)
+    text = (_square_gcode(square_flat, first=shrunk) if where == "first"
+            else _square_gcode(square_flat, upper=shrunk))
+    record = make_slice(square_flat, tmp_path / "slice", fake(gcode_text=text))
+    c = by_id(record)["F3.edge_coverage"]
+    assert c["status"] == status
+    m = c["measured"]
+    if where == "first":
+        assert m["worst_z"] == pytest.approx(0.2)
+    else:
+        assert m["worst_z"] > 0.3                # one of the 14 identical upper layers
+    assert m["max_gap_mm"] == pytest.approx(gap, abs=0.01)
+    assert m["allowance_mm"] == pytest.approx(0.275 if where == "first" else 0.2)
+    assert by_id(record)["F3.printed_connectivity"]["status"] == "PASS"
+
+
+def test_unsupported_gcode_leaves_f3_unknown(square_flat, fake, tmp_path):
+    text = _square_gcode(square_flat).replace("M83", "M82")
+    record = make_slice(square_flat, tmp_path / "slice", fake(gcode_text=text))
+    for cid in F3_IDS:
+        check = by_id(record)[cid]
+        assert check["status"] == "UNKNOWN" and "absolute extrusion" in check["note"]
+    assert record["printed"]["measured"] is False
+    assert "absolute extrusion" in record["printed"]["reason"]
+    assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
+                                       "F3.edge_coverage UNKNOWN, F6.portability UNKNOWN")
+    assert record["gcode"]["quarantined"] is False          # UNKNOWN is not a FAIL
+
+
+def test_f3_is_not_measured_after_a_failed_slice(square_flat, fake, tmp_path):
+    record = make_slice(square_flat, tmp_path / "slice",
+                        fake(exit=-100, gcode_text=_square_gcode(square_flat)))
+    for cid in F3_IDS:
+        check = by_id(record)[cid]
+        assert check["status"] == "UNKNOWN" and "the slicer failed" in check["note"]
+
+
+def test_the_printed_analysis_is_not_part_of_slice_id(square_flat, fake, tmp_path):
+    a = make_slice(square_flat, tmp_path / "a", fake(gcode_text=_square_gcode(square_flat)))
+    b = make_slice(square_flat, tmp_path / "b", fake())
+    assert by_id(a)["F3.edge_coverage"]["status"] != by_id(b)["F3.edge_coverage"]["status"]
+    assert a["slice_id"] == b["slice_id"]          # an output, not part of the request
+
+
+def _with_process(fake, monkeypatch, process: dict) -> None:
+    """Replace the fake install's process profile, and its hash in the fake pin."""
+    data = json.dumps(process).encode()
+    (fake.root / "profiles-flat" / "process.json").write_bytes(data)
+    flat = dict(fake.pin.profiles.flat)
+    flat["process"] = flat["process"].model_copy(update={"sha256": _sha(data)})
+    pin = fake.pin.model_copy(update={"profiles": fake.pin.profiles.model_copy(
+        update={"flat": flat})})
+    monkeypatch.setattr(tdmg.slicing, "load_pin", lambda: pin)
+
+
+@pytest.mark.parametrize("value", [None, "-0.1", "nan", "abc"])
+def test_a_bad_elefant_foot_compensation_is_refused(flat_dir, fake, tmp_path, monkeypatch,
+                                                     value):
+    root = fake()
+    process = {k: v for k, v in PROCESS.items() if k != "elefant_foot_compensation"}
+    if value is not None:
+        process["elefant_foot_compensation"] = value
+    _with_process(fake, monkeypatch, process)
+    with pytest.raises(SlicerError, match="elefant_foot_compensation"):
+        make_slice(flat_dir, tmp_path / "slice", root)
+    assert not (tmp_path / "slice").exists()
+
+
+def test_the_required_checks_swap_thin_regions_for_the_printed_checks():
+    assert set(F3_IDS) <= SLICE_REQUIRED_CHECKS
+    assert "F3.thin_regions" not in SLICE_REQUIRED_CHECKS
+    assert "F3.thin_regions" in tdmg.flat.FLAT_REQUIRED_CHECKS      # flat is unchanged
+    assert SLICE_REQUIRED_CHECKS == (tdmg.flat.FLAT_REQUIRED_CHECKS
+                                     - {"F6.slicer", "F3.thin_regions"}
+                                     | set(F3_IDS) | SLICE_REQUIRED_EXTRA)
+
+
 # --- The command line -------------------------------------------------------------------
 
 def _plain(text: str) -> str:
@@ -468,7 +692,8 @@ def test_cli_exit_0_prints_the_summary(flat_dir, fake, tmp_path):
     assert r.exit_code == 0, r.output
     record = json.loads((out / "slice.json").read_bytes())
     text = r.stdout
-    assert text.startswith("NOT CERTIFIED: F3.thin_regions UNKNOWN, F6.portability UNKNOWN\n")
+    assert text.startswith("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
+                           "F3.edge_coverage UNKNOWN, F6.portability UNKNOWN\n")
     assert "do not print" not in text
     assert "slicer exit 0 (CLI_SUCCESS)" in text
     assert "15 layers, 766.1 s, 3.727 g (slicer estimates)" in text
@@ -575,4 +800,9 @@ def test_roadie_slices_with_the_real_slicer(tmp_path):
                       "F6.portability": "UNKNOWN"}
     assert record["stats"]["layer_count"] == 15
     assert record["slicer"]["exe_sha256"] == PIN.exe.sha256
+    checks = by_id(record)
+    f3 = [checks["F3.printed_connectivity"], checks["F3.edge_coverage"]]
+    assert [c["status"] for c in f3] == ["PASS", "PASS"], f3
+    assert record["printed"]["measured"] is True and len(record["printed"]["layers"]) == 15
+    assert record["gcode"]["quarantined"] is False
     assert record["slicer"]["app_tree_verified"] is True
