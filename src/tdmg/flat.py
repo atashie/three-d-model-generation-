@@ -211,16 +211,23 @@ def _directed_distance(source, target, step: float) -> float:
 
 
 def _sampled_hausdorff(a, b, step: float) -> float:
-    """Two-sided Hausdorff distance between regions a and b, sampled on both boundaries.
+    """Sampled boundary-to-region distance between regions a and b, taken both ways.
 
     Each boundary is split into pieces no longer than step, and every vertex is a sample.
-    A sample covered by the other region is at distance 0, else at its exact distance to
-    the other boundary. Samples are points of the boundaries and their distances are
-    exact, so the result is a lower bound of the boundary-to-region Hausdorff distance
-    and lies within step / 2 of it. It does not see interior points: clean reports a
-    derived upper bound for the region distance. GEOS's plain hausdorff_distance looks
-    only at vertices, so it misses a removed bar whose middle has no vertex. a and b
-    must be non-empty; clean guarantees that.
+    A sample covered by the other REGION is at distance 0, else at its exact distance to
+    the other region (its nearest boundary point). The result is the larger of the two
+    directions. What it is and is not:
+    - It is within step / 2 below the boundary-to-region value, the sup over boundary
+      points of a of d(., b) and of b of d(., a): every boundary point is within step / 2
+      of a sample, and d(., region) is 1-Lipschitz.
+    - It is a lower bound of the two-sided region Hausdorff distance, since the samples
+      are points of the regions. It does not see interior points: clean reports a derived
+      upper bound for the region distance.
+    - It is NOT the boundary-to-boundary distance. A change enclosed by the other region
+      counts 0: a hole of a that b fills has its boundary inside b, so the hole is
+      under-reported against how far the boundary moved.
+    GEOS's plain hausdorff_distance looks only at vertices, so it misses a removed bar
+    whose middle has no vertex. a and b must be non-empty; clean guarantees that.
     """
     return max(_directed_distance(a, b, step), _directed_distance(b, a, step))
 
@@ -275,8 +282,10 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float,
     erased entirely, and ignored_non_polygonal, the count of lines and points in the
     input, which have no printable area.
 
-    boundary_hausdorff_mm is the two-sided distance sampled on both boundaries at
-    sample_step_mm: a lower bound of the boundary distance, accurate to step / 2.
+    boundary_hausdorff_mm is _sampled_hausdorff at sample_step_mm: the boundary-to-region
+    distance (0 for samples inside the other region), both ways, within step / 2 of it; a
+    lower bound of the two-sided region Hausdorff distance, and not the boundary-to-
+    boundary distance (see _sampled_hausdorff).
     hausdorff_upper_bound_mm is a derived (not measured) bound on the true Hausdorff
     distance between the regions before and after cleaning:
         boundary_hausdorff_mm + step / 2 + max(r, rho) + e,
@@ -659,10 +668,12 @@ def _smooth_value(smooth_px) -> float | None:
 
 
 SMOOTHING_KEYS = ("applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
-                  "added_area_px2", "boundary_hausdorff_lower_bound_px",
+                  "added_area_px2", "hausdorff_lower_bound_px",
                   "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
                   "holes_exact_cleaned", "holes_smoothed_cleaned", "removed_regions",
-                  "added_regions")
+                  "added_regions", "topology_changes")
+TOPOLOGY_KINDS = ("disappeared", "appeared", "split", "merged", "holes_closed",
+                  "holes_opened")
 SMOOTHING_OFF = {"applied": False} | {key: None for key in SMOOTHING_KEYS[1:]}
 SMOOTHING_ADVICE = ("; check outline.png, or use smooth_px 0 (--smooth-px 0) or a smaller "
                     "value")
@@ -695,41 +706,69 @@ def _holes(parts: list[Polygon]) -> int:
     return sum(len(p.interiors) for p in parts)
 
 
-def _unmatched(parts: list[Polygon], others: list[Polygon]) -> list[Polygon]:
-    """The parts that intersect none of others."""
+def _partners(parts: list[Polygon], others: list[Polygon]) -> list[list[int]]:
+    """For each part, the indices of others it overlaps with positive area."""
     if not others:
-        return list(parts)
-    other = shapely.union_all(others)
-    shapely.prepare(other)
-    return [p for p in parts if not other.intersects(p)]
+        return [[] for _ in parts]
+    tree = shapely.STRtree(others)
+    found = []
+    for part in parts:
+        candidates = sorted(int(j) for j in tree.query(part, predicate="intersects"))
+        found.append([j for j in candidates if part.intersection(others[j]).area > 0])
+    return found
 
 
-def _topology_warnings(exact_parts: list[Polygon], parts: list[Polygon]) -> list[str]:
-    """Warnings for topology changes between the cleaned exact and cleaned smoothed parts.
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
-    They fire only when the part counts differ, when a part of one meets no part of the
-    other (it disappeared or appeared), or when the total number of holes differs. They
-    use no threshold. Limitation: smoothing can remove a thin appendage attached to a part
-    (a neck or tip narrower than about sigma) without changing the topology; that is not
-    warned about. Check removed_regions and outline.png for it.
+
+def _topology_changes(exact_parts: list[Polygon],
+                      parts: list[Polygon]) -> tuple[dict, list[str]]:
+    """Topology changes between the cleaned exact parts and the cleaned smoothed parts.
+
+    Two parts correspond when they overlap with positive area (touching is not enough).
+    - An exact part with no partner disappeared; with two or more, it split.
+    - A smoothed part with no partner appeared; with two or more, it merged.
+    - In a one-to-one pair, a difference in the number of holes (interior rings) counts as
+      holes closed or opened, by the number of holes.
+    Returns the counts by kind (TOPOLOGY_KINDS; parts, except holes_* count holes) and one
+    warning per kind that occurred. No threshold is involved.
+    Limitation: smoothing can remove a thin appendage attached to a part (a neck or tip
+    narrower than about sigma) without changing the topology; that is not warned about.
+    Check removed_regions and outline.png for it.
     """
+    forward = _partners(exact_parts, parts)
+    backward = _partners(parts, exact_parts)
+    changes = dict.fromkeys(TOPOLOGY_KINDS, 0)
     warnings = []
-    a, b = len(exact_parts), len(parts)
-    if a != b:
-        change = "parts merged or disappeared" if b < a else "parts split or appeared"
-        warnings.append(f"smoothing changed the number of parts from {a} to {b} ({change})")
-    for found, verb in ((_unmatched(exact_parts, parts), "disappeared"),
-                        (_unmatched(parts, exact_parts), "appeared")):
+    gone = [exact_parts[i] for i, js in enumerate(forward) if not js]
+    new = [parts[j] for j, iis in enumerate(backward) if not iis]
+    split = [js for js in forward if len(js) >= 2]
+    merged = [iis for iis in backward if len(iis) >= 2]
+    changes.update(disappeared=len(gone), appeared=len(new), split=len(split),
+                   merged=len(merged))
+    for found, verb in ((gone, "disappeared"), (new, "appeared")):
         if found:
-            n = len(found)
             area = sum(p.area for p in found)
-            warnings.append(f"{n} part{'' if n == 1 else 's'} {verb} with smoothing "
+            warnings.append(f"{_plural(len(found), 'part')} {verb} with smoothing "
                             f"({area:.3g} mm^2 in all)")
-    a, b = _holes(exact_parts), _holes(parts)
-    if a != b:
-        change = "holes closed" if b < a else "holes opened"
-        warnings.append(f"smoothing changed the number of holes from {a} to {b} ({change})")
-    return [w + SMOOTHING_ADVICE for w in warnings]
+    if split:
+        warnings.append(f"smoothing split {_plural(len(split), 'part')} into "
+                        f"{_plural(sum(len(js) for js in split), 'part')}")
+    if merged:
+        warnings.append(f"smoothing merged {_plural(sum(len(i) for i in merged), 'part')} "
+                        f"into {_plural(len(merged), 'part')}")
+    for i, js in enumerate(forward):
+        if len(js) == 1 and len(backward[js[0]]) == 1:
+            change = len(parts[js[0]].interiors) - len(exact_parts[i].interiors)
+            if change < 0:
+                changes["holes_closed"] -= change
+            elif change > 0:
+                changes["holes_opened"] += change
+    for kind, verb in (("holes_closed", "closed"), ("holes_opened", "opened")):
+        if changes[kind]:
+            warnings.append(f"smoothing {verb} {_plural(changes[kind], 'hole')}")
+    return changes, [w + SMOOTHING_ADVICE for w in warnings]
 
 
 def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigma: dict,
@@ -742,15 +781,20 @@ def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigm
     - The exact outline goes through the same transform and the same clean (opening,
       min_island, step) as the smoothed one. parts_*_cleaned and holes_*_cleaned count
       the parts and the holes (interior rings) each gives.
-    - boundary_hausdorff_lower_bound_px is _sampled_hausdorff between the two cleaned
-      regions, sampled at hausdorff_sample_step_px (HAUSDORFF_STEP_PX) and converted to
-      pixels. It compares cleaned shapes, so specks that cleaning removes anyway do not
-      dominate it. It is a lower bound of the boundary distance, within step / 2 of it.
-      It is null if cleaning leaves nothing of the exact outline.
+    - hausdorff_lower_bound_px is _sampled_hausdorff between the two cleaned regions,
+      sampled at hausdorff_sample_step_px (HAUSDORFF_STEP_PX) and converted to pixels. It
+      compares cleaned shapes, so specks that cleaning removes anyway do not dominate it.
+      It is the boundary-to-region distance (0 for samples inside the other region),
+      within step / 2 of it, and a lower bound of the two-sided region Hausdorff distance.
+      It is NOT the boundary-to-boundary distance: a change enclosed by the other region,
+      such as a hole that smoothing fills, is under-reported against how far the boundary
+      moved. It is null if cleaning leaves nothing of the exact outline.
     - removed_regions and added_regions (_regions) are the pieces of (cleaned exact -
       cleaned smooth) and (cleaned smooth - cleaned exact) that survive the cleaning
       rules. They are information only and include corner and tip rounding.
-    - The warnings are topology changes only (_topology_warnings).
+    - topology_changes and the warnings come from part correspondence
+      (_topology_changes): parts that disappeared, appeared, split or merged, and holes
+      closed or opened in one-to-one pairs.
     """
     s = transform["scale_mm_per_px"]
     step_mm = HAUSDORFF_STEP_PX * s
@@ -767,7 +811,7 @@ def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigm
                "area_change_px2": float(smooth.area - exact.area),
                "removed_area_px2": float(exact.difference(smooth).area),
                "added_area_px2": float(smooth.difference(exact).area),
-               "boundary_hausdorff_lower_bound_px": hausdorff,
+               "hausdorff_lower_bound_px": hausdorff,
                "hausdorff_sample_step_px": HAUSDORFF_STEP_PX,
                "parts_exact_cleaned": len(exact_parts), "parts_smoothed_cleaned": len(parts),
                "holes_exact_cleaned": _holes(exact_parts),
@@ -776,7 +820,8 @@ def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigm
                                            opening_mm, min_island_mm2),
                "added_regions": _regions(smooth_region.difference(exact_region),
                                          opening_mm, min_island_mm2)}
-    return section, _topology_warnings(exact_parts, parts)
+    section["topology_changes"], warnings = _topology_changes(exact_parts, parts)
+    return section, warnings
 
 
 def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1",
@@ -787,9 +832,9 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     None takes the default of rule flat.smooth.sigma_px, 0 keeps the exact pixel outline,
     and any other value must be finite and above 0. The record's smoothing section
     measures what smoothing changed (see _smoothing_report). The record's warnings list
-    says when smoothing changed the topology of the cleaned geometry: the number of
-    parts, a part disappearing or appearing, or the number of holes. A thin attached
-    appendage that smoothing removes is not warned about (see _topology_warnings). A
+    says when smoothing changed the topology of the cleaned geometry: a part that
+    disappeared, appeared, split or merged, or a hole closed or opened. A thin attached
+    appendage that smoothing removes is not warned about (see _topology_changes). A
     warning is not a gate check and does not change the verdict.
 
     Everything is built, encoded and gated in memory first, so a refused input writes

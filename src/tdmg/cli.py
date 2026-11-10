@@ -160,19 +160,24 @@ def _check_line(check: dict) -> str:
 
 
 def _smoothing_line(record: dict) -> str:
-    """'smoothing off', or the sigma, its source, the sampled boundary change and the
-    area removed and added, in mm (ASCII only, so any console encoding can print it)."""
+    """'smoothing off', or the sigma, its source, the sampled outline change and the area
+    removed and added, in mm (ASCII only, so any console encoding can print it).
+
+    The outline change is the record's hausdorff_lower_bound_px in mm: a boundary-to-
+    region distance, so a change enclosed by the other region (a filled hole) counts 0.
+    """
     smoothing = record["smoothing"]
     if not smoothing["applied"]:
         return "smoothing off"
     sigma = smoothing["sigma_px"]
     source = f"rule {sigma['rule']}" if sigma["rule"] else "set by --smooth-px"
     scale = record["transform"]["scale_mm_per_px"]
-    bound = smoothing["boundary_hausdorff_lower_bound_px"]
-    moved = "unknown" if bound is None else f"at least {bound * scale:.3g} mm (sampled)"
+    bound = smoothing["hausdorff_lower_bound_px"]
+    moved = ("unknown" if bound is None else
+             f"at least {bound * scale:.3g} mm (sampled; boundary-to-region)")
     removed = smoothing["removed_area_px2"] * scale ** 2
     added = smoothing["added_area_px2"] * scale ** 2
-    return (f"smoothing sigma {sigma['value']:g} px ({source}): boundary changed by {moved}, "
+    return (f"smoothing sigma {sigma['value']:g} px ({source}): outline changed by {moved}, "
             f"area -{removed:.3g}/+{added:.3g} mm^2")
 
 

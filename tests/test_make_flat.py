@@ -10,6 +10,7 @@ import trimesh
 from PIL import Image
 from selection_fixtures import BIRD_SEED, DISC_SEED, roadie_like
 from shapely import affinity
+from test_smoothing import kernel
 
 import tdmg.flat
 from tdmg.checks import F1_CHECK_IDS, merge_exact, topology_checks
@@ -31,6 +32,7 @@ from tdmg.flat import (
     to_model,
 )
 from tdmg.flat import _sampled_hausdorff as sampled_hausdorff
+from tdmg.flat import _topology_changes as topology_changes
 from tdmg.records import canonical_json, record_text
 from tdmg.rules import load_rules
 from tdmg.selection import Intake, SelectionSpec, pixels_sha256, select_subject, write_selection
@@ -43,11 +45,13 @@ FILES = ("model.stl", "outline.png", "flat.json")
 # Re-pinned for flat-2 (2026-11-10): smoothing on by default, and params.smoothing added.
 GOLDEN_FLAT_ID = "1d64c015d890492208b46c0e0ab6f6f6fbb45c3d20e7d19f1177b048028c2c6d"
 SMOOTHING_KEYS = {"applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
-                  "added_area_px2", "boundary_hausdorff_lower_bound_px",
+                  "added_area_px2", "hausdorff_lower_bound_px",
                   "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
                   "holes_exact_cleaned", "holes_smoothed_cleaned", "removed_regions",
-                  "added_regions"}
+                  "added_regions", "topology_changes"}
 REGION_KEYS = {"count", "total_area_mm2", "largest_mm2"}
+TOPOLOGY_KEYS = ("disappeared", "appeared", "split", "merged", "holes_closed", "holes_opened")
+NO_CHANGE = dict.fromkeys(TOPOLOGY_KEYS, 0)
 ADVICE = "; check outline.png, or use smooth_px 0 (--smooth-px 0) or a smaller value"
 # sha256 of model.stl for roadie_like at 60 x 3 mm, computed with flat-1 (commit b987845,
 # from git archive) on 2026-11-10. The off path (smooth_px=0) must still give these bytes.
@@ -450,9 +454,9 @@ def test_default_run_smooths_with_the_rule_and_records_it(run):
     assert smoothing["sigma_px"] == {"value": 2.5, "rule": "flat.smooth.sigma_px"}
     assert smoothing["method"] == METHOD
     for key in ("area_change_px2", "removed_area_px2", "added_area_px2",
-                "boundary_hausdorff_lower_bound_px"):
+                "hausdorff_lower_bound_px"):
         assert isinstance(smoothing[key], float)
-    assert smoothing["boundary_hausdorff_lower_bound_px"] > 0
+    assert smoothing["hausdorff_lower_bound_px"] > 0
     assert smoothing["hausdorff_sample_step_px"] == HAUSDORFF_STEP_PX
     assert smoothing["removed_area_px2"] > 0 and smoothing["added_area_px2"] > 0
     assert smoothing["area_change_px2"] == pytest.approx(
@@ -471,6 +475,7 @@ def test_default_run_smooths_with_the_rule_and_records_it(run):
     assert set(removed) == set(added) == REGION_KEYS
     assert (removed["count"], added["count"]) == (4, 6)
     assert all(a >= 0.64 for a in removed["largest_mm2"] + added["largest_mm2"])
+    assert smoothing["topology_changes"] == NO_CHANGE
     assert record["warnings"] == []
 
 
@@ -491,8 +496,7 @@ def test_smoothing_measurements_match_a_direct_computation(run, selection_dir):
     step = HAUSDORFF_STEP_PX * s
     cleaned = [shapely.union_all(clean(affinity.affine_transform(g, matrix), 0.4,
                                        (2.0 * 0.4) ** 2, step)[0]) for g in (exact, smooth)]
-    assert smoothing["boundary_hausdorff_lower_bound_px"] == sampled_hausdorff(
-        *cleaned, step) / s
+    assert smoothing["hausdorff_lower_bound_px"] == sampled_hausdorff(*cleaned, step) / s
 
 
 def test_off_run_records_a_fixed_shape(run_off):
@@ -637,11 +641,10 @@ def test_a_part_that_disappears_with_smoothing_is_warned_about(tmp_path):
     assert max(corners) == pytest.approx(min(corners), rel=1e-6)
     assert lost["total_area_mm2"] == pytest.approx(stroke + sum(corners), rel=1e-12)
     assert smoothing["added_regions"]["count"] == 0
-    # The stroke's exact part meets no smoothed part, so it disappeared; the part count
-    # changes too. The corner rounding does not warn.
+    # The stroke's exact part overlaps no smoothed part, so it disappeared. The body is
+    # one-to-one with its smoothed part. The corner rounding does not warn.
+    assert smoothing["topology_changes"] == NO_CHANGE | {"disappeared": 1}
     assert record["warnings"] == [
-        "smoothing changed the number of parts from 2 to 1 (parts merged or disappeared)"
-        + ADVICE,
         f"1 part disappeared with smoothing ({lost['largest_mm2'][0]:.3g} mm^2 in all)"
         + ADVICE]
     assert sorted(p.name for p in (tmp_path / "out").iterdir()) == sorted(FILES)
@@ -655,6 +658,15 @@ def selection_from(rgba, folder, keep_at):
                                                                  keep_at=keep_at)),
                     folder)
     return folder
+
+
+def boundary_to_region(a, b, step: float) -> float:
+    """max over boundary samples of a of the distance to the region b (0 inside b), and the
+    same from b to a: written independently of tdmg.flat._sampled_hausdorff."""
+    def one_way(src, dst):
+        xy = shapely.get_coordinates(shapely.segmentize(src.boundary, step))
+        return float(shapely.distance(dst, shapely.points(xy)).max())
+    return max(one_way(a, b), one_way(b, a))
 
 
 def test_a_hole_that_smoothing_closes_is_warned_about(tmp_path):
@@ -671,8 +683,23 @@ def test_a_hole_that_smoothing_closes_is_warned_about(tmp_path):
     smoothing = record["smoothing"]
     assert (smoothing["holes_exact_cleaned"], smoothing["holes_smoothed_cleaned"]) == (1, 0)
     assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (1, 1)
-    assert record["warnings"] == [
-        "smoothing changed the number of holes from 1 to 0 (holes closed)" + ADVICE]
+    assert smoothing["topology_changes"] == NO_CHANGE | {"holes_closed": 1}
+    assert record["warnings"] == ["smoothing closed 1 hole" + ADVICE]
+    # The distance is boundary-to-region: the hole's boundary lies inside the smoothed
+    # region, so it counts 0, although it is about 9.5 mm from the smoothed boundary.
+    mask = png(sel / "mask.png") == 255
+    t = record["transform"]
+    s = t["scale_mm_per_px"]
+    matrix = [s, 0.0, 0.0, -s, -t["x0_px"] * s, t["y1_px"] * s]
+    step = HAUSDORFF_STEP_PX * s
+    cleaned = [shapely.union_all(clean(affinity.affine_transform(g, matrix), 0.4,
+                                       (2.0 * 0.4) ** 2, step)[0])
+               for g in (mask_outline(mask), smooth_outline(mask, 2.5))]
+    measured = smoothing["hausdorff_lower_bound_px"] * s
+    assert measured == pytest.approx(boundary_to_region(*cleaned, step), rel=1e-12)
+    hole_to_boundary = cleaned[1].boundary.distance(shapely.Polygon(
+        cleaned[0].interiors[0]).centroid)
+    assert hole_to_boundary > 9.0 > measured
 
 
 def test_parts_that_smoothing_merges_are_warned_about(tmp_path):
@@ -688,6 +715,55 @@ def test_parts_that_smoothing_merges_are_warned_about(tmp_path):
     assert record["transform"]["scale_mm_per_px"] == pytest.approx(0.5, rel=1e-3)
     smoothing = record["smoothing"]
     assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (2, 1)
-    assert record["warnings"] == [
-        "smoothing changed the number of parts from 2 to 1 (parts merged or disappeared)"
-        + ADVICE]
+    assert smoothing["topology_changes"] == NO_CHANGE | {"merged": 1}
+    assert record["warnings"] == ["smoothing merged 2 parts into 1 part" + ADVICE]
+
+
+def test_a_merge_and_a_split_together_are_both_warned_about(tmp_path):
+    # Two 20 x 20 px squares 1 px apart (they merge, as in the test above) and, below them,
+    # a dumbbell: two 20 x 20 px bulbs joined by a neck 3 px high and 12 px long (columns
+    # 25-36). The neck is 1.5 mm at 0.5 mm per pixel, so cleaning keeps it. At the centres
+    # of neck columns 30 and 31 the neck gives at most w_-1 + w_0 + w_1 and each bulb, at
+    # least 6 columns away, at most sum_{k>=6} w_k, below 0.5 together, so no smoothed
+    # part crosses there and the dumbbell splits. The part and hole totals stay 3 and 0.
+    w = kernel()
+    assert w[-1] + w[0] + w[1] + 2 * sum(v for k, v in w.items() if k >= 6) < 0.5
+    rgba = np.zeros((65, 65, 4), np.uint8)
+    rgba[5:25, 5:25] = (230, 20, 20, 255)
+    rgba[5:25, 26:46] = (230, 20, 20, 255)
+    rgba[35:55, 5:25] = (230, 20, 20, 255)
+    rgba[44:47, 25:37] = (230, 20, 20, 255)
+    rgba[35:55, 37:57] = (230, 20, 20, 255)
+    sel = selection_from(rgba, tmp_path / "sel", ((10, 10), (30, 10), (10, 40)))
+    record = make_flat(sel, 26.0, 2.0, tmp_path / "out")      # 52 px wide
+    assert record["transform"]["scale_mm_per_px"] == pytest.approx(0.5, rel=1e-3)
+    smoothing = record["smoothing"]
+    assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (3, 3)
+    assert (smoothing["holes_exact_cleaned"], smoothing["holes_smoothed_cleaned"]) == (0, 0)
+    assert smoothing["topology_changes"] == NO_CHANGE | {"split": 1, "merged": 1}
+    assert record["warnings"] == ["smoothing split 1 part into 2 parts" + ADVICE,
+                                  "smoothing merged 2 parts into 1 part" + ADVICE]
+
+
+def test_offsetting_hole_changes_are_both_warned_about():
+    # Hand-made: part A loses its hole and part B gains one, so the hole total stays 1.
+    a = shapely.box(0, 0, 10, 10)
+    b = shapely.box(20, 0, 30, 10)
+    a_holed = a.difference(shapely.box(4, 4, 6, 6))
+    b_holed = b.difference(shapely.box(24, 4, 26, 6))
+    changes, warnings = topology_changes([a_holed, b], [a, b_holed])
+    assert changes == NO_CHANGE | {"holes_closed": 1, "holes_opened": 1}
+    assert warnings == ["smoothing closed 1 hole" + ADVICE, "smoothing opened 1 hole" + ADVICE]
+
+
+def test_parts_that_only_touch_do_not_correspond():
+    # Correspondence needs an overlap of positive area; a shared edge is not one.
+    a = shapely.box(0, 0, 10, 10)
+    changes, _ = topology_changes([a], [shapely.box(10, 0, 20, 10)])
+    assert changes == NO_CHANGE | {"disappeared": 1, "appeared": 1}
+
+
+def test_no_parts_on_either_side():
+    changes, warnings = topology_changes([shapely.box(0, 0, 1, 1)], [])
+    assert changes == NO_CHANGE | {"disappeared": 1}
+    assert warnings == ["1 part disappeared with smoothing (1 mm^2 in all)" + ADVICE]

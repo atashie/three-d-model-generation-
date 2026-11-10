@@ -208,11 +208,12 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
             "changed") in text
     assert f"wrote {out / 'flat.json'}" in text
     smoothing, scale = record["smoothing"], record["transform"]["scale_mm_per_px"]
-    moved = smoothing["boundary_hausdorff_lower_bound_px"] * scale
+    moved = smoothing["hausdorff_lower_bound_px"] * scale
     removed = smoothing["removed_area_px2"] * scale ** 2
     added = smoothing["added_area_px2"] * scale ** 2
-    assert (f"smoothing sigma 2.5 px (rule flat.smooth.sigma_px): boundary changed by at "
-            f"least {moved:.3g} mm (sampled), area -{removed:.3g}/+{added:.3g} mm^2\n") in text
+    assert (f"smoothing sigma 2.5 px (rule flat.smooth.sigma_px): outline changed by at "
+            f"least {moved:.3g} mm (sampled; boundary-to-region), area -{removed:.3g}/"
+            f"+{added:.3g} mm^2\n") in text
     assert record["warnings"] == [] and r.stderr == ""
 
 
@@ -328,7 +329,7 @@ def test_flat_explicit_smooth_px_is_used(tmp_path):
     assert r.exit_code == 0, r.output
     record = json.loads((out / "flat.json").read_bytes())
     assert record["smoothing"]["sigma_px"] == {"value": 1.5, "rule": None}
-    assert ("smoothing sigma 1.5 px (set by --smooth-px): boundary changed by at least "
+    assert ("smoothing sigma 1.5 px (set by --smooth-px): outline changed by at least "
             in r.stdout)
 
 
@@ -356,5 +357,5 @@ def test_flat_prints_smoothing_warnings_to_stderr_and_still_exits_0(tmp_path):
                             "--out", str(out)])
     assert r.exit_code == 0, r.output
     record = json.loads((out / "flat.json").read_bytes())
-    assert len(record["warnings"]) == 2                 # the part count, and the stroke
+    assert len(record["warnings"]) == 1                 # the stroke disappeared
     assert r.stderr == "".join(f"warning: {w}\n" for w in record["warnings"])
