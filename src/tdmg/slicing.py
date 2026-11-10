@@ -4,8 +4,15 @@ docs/plans/2026-11-10-slicer-check.md, Decisions 6-8, as amended by the measurem
 research/verification/2026-11-10-orcaslicer-windows/ (README and its addendum):
 - the argument form is exactly the measured one, without --debug, so the slicer writes
   slicer.log only on errors; it is copied when it exists and log_written records that;
-- the allowed layer counts come from the flat record's thickness and the process
-  profile (tdmg.slicer.expected_layer_counts).
+- the allowed layer counts come from the z extent of model.stl as stored (float32), not
+  from the requested thickness, with a half-layer window widened by the storage rounding
+  (allowed_layer_counts).
+
+Any required check that FAILs quarantines the G-code: it is written as
+plate_1.gcode.failed, never as plate_1.gcode. By default the whole app tree is verified
+on every run, so the app_tree_sha256 in slice_id is a checked fact for that run;
+check_tree=False (--skip-tree-check) skips that, records app_tree_verified false, and
+gives a different slice_id.
 
 The record's verdict combines the flat record's checks, minus its placeholder F6.slicer,
 with the F6 checks of this run, and requires all of them. The certification line names
@@ -13,14 +20,16 @@ the required checks that are not PASS. Today F3.thin_regions (no policy yet) and
 F6.portability (no second slicer) are always UNKNOWN, so the verdict is NOT CERTIFIED.
 
 Check-to-use gaps: the STL and the three profiles are read once, hashed, and the
-slicer runs on copies of exactly those bytes in a temporary folder. The exe and its
-libraries are hashed by locate but run from the install, so a change between the hash
-and the run is not detected; the install folder is assumed to be the user's own.
+slicer runs on copies of exactly those bytes in a temporary folder. The exe, its
+libraries and the app tree are hashed by locate but run from the install, so a change
+between the hash and the run is not detected; the install folder is assumed to be the
+user's own.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import platform
@@ -28,9 +37,12 @@ import re
 import tempfile
 from pathlib import Path
 
+import numpy as np
+import trimesh
+
 from tdmg import __version__
 from tdmg.checks import CheckResult, verdict
-from tdmg.flat import FLAT_REQUIRED_CHECKS, flat_identity
+from tdmg.flat import FLAT_REQUIRED_CHECKS, STL_COORD_RTOL, flat_identity
 from tdmg.flat import RECORD_SCHEMA as FLAT_SCHEMA
 from tdmg.records import (
     RecordError,
@@ -63,7 +75,7 @@ RECORD_SCHEMA = "tdmg.slice/1"
 SLICE_ALGORITHM_VERSION = "slice-1"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
-FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run that did not exit cleanly
+FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run with a FAILed check
 SLICE_REQUIRED_EXTRA = frozenset({"F6.slicer_exit", "F6.gcode_present", "F6.layer_count",
                                   "F6.single_object", "F6.portability"})
 SLICE_REQUIRED_CHECKS = (FLAT_REQUIRED_CHECKS - {"F6.slicer"}) | SLICE_REQUIRED_EXTRA
@@ -73,13 +85,11 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 COMMAND_TEMPLATE = ["<orca-slicer.exe>", *slicer_args(
     Path("<model.stl>"), {k: Path(f"<{k}.json>") for k in PROFILE_KINDS},
     Path("<outdir>"), Path(f"<{LOG_NAME}>"))]
-APP_TREE_NOTE = ("as pinned; the full app tree is verified by scripts/setup_orcaslicer.py "
-                 "and its --verify-only, not on every run")
-DO_NOT_PRINT = "a check FAILed: do not print this G-code"
+DO_NOT_PRINT = f"a check FAILed: do not print this G-code; it is kept as {FAILED_GCODE_NAME}"
 REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or Bambu "
           "Studio's) and check the layers and the first layer. Time and weight are the "
           "slicer's estimates for the A1 0.20 mm Standard and PLA Basic profiles, not "
-          "measurements. G-code from a run that did not exit cleanly is kept as "
+          "measurements. When any required check FAILs, the G-code is kept as "
           f"{FAILED_GCODE_NAME}; do not print it. Every check of flat.json and of this run "
           "is required: while F3.thin_regions has no policy and F6.portability has no second "
           "slicer (PrusaSlicer), both stay UNKNOWN and the verdict is NOT CERTIFIED.")
@@ -88,6 +98,35 @@ REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or B
 def slicer_command(slicer: Slicer) -> list[str]:
     """The program to run: the verified exe (tests replace this with the fake slicer)."""
     return [str(slicer.exe)]
+
+
+def stl_z_range(stl: bytes) -> tuple[float, float]:
+    """(lowest, highest) z of the STL's vertices, as stored (float32 widened to float64)."""
+    try:
+        mesh = trimesh.load(io.BytesIO(stl), file_type="stl", process=False)
+        z = np.asarray(mesh.vertices, dtype=np.float64)[:, 2]
+    except (ValueError, TypeError, IndexError, AttributeError) as err:   # a malformed STL
+        raise SlicerError(f"model.stl cannot be read as an STL: {err}") from None
+    if z.size == 0 or not np.isfinite(z).all():
+        raise SlicerError("model.stl has no vertices, or a non-finite z")
+    return float(z.min()), float(z.max())
+
+
+def allowed_layer_counts(stl: bytes, process_profile: dict) -> set[int]:
+    """The layer counts the slicer may produce for this STL, from its z extent as stored.
+
+    Binary STL stores float32. Rounding to nearest moves a coordinate z by at most
+    |z| * 2^-24, so the extent z_max - z_min is off by at most 2 * zabs * 2^-24, with zabs
+    the larger of |z_min| and |z_max|. As flat's export check does with STL_COORD_RTOL
+    (2^-23, twice one coordinate's rounding), this is doubled to cover the float64
+    arithmetic: storage error = 2 * STL_COORD_RTOL * zabs = zabs * 2^-22. A numerical
+    bound, not a rule. Two thicknesses that round to the same float32 STL therefore get
+    the same allowed set.
+    """
+    z_min, z_max = stl_z_range(stl)
+    zabs = max(abs(z_min), abs(z_max))
+    return expected_layer_counts(z_max - z_min, process_profile,
+                                 storage_error_mm=2 * STL_COORD_RTOL * zabs)
 
 
 def certification(checks: list[CheckResult], required: set[str] | frozenset[str]) -> str:
@@ -214,21 +253,24 @@ def _profile_bytes(slicer: Slicer) -> dict[str, bytes]:
     return out
 
 
-def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None) -> dict:
+def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
+               check_tree: bool = True) -> dict:
     """Slice a tdmg flat output folder and write the G-code, the statistics, the log
     (when the slicer wrote one) and slice.json, last.
 
     timeout_s None takes the default of rule slicer.orca.timeout_s. A refused input, an
     unusable output folder or an unverified slicer raises SlicerError with nothing
     written. A check that FAILs (including a failed slice) still writes the record. When
-    F6.slicer_exit is not PASS, any G-code is written as plate_1.gcode.failed.
+    any required check FAILs, the G-code is written as plate_1.gcode.failed (quarantined).
+    check_tree=False skips the full app-tree check (exe, libraries and profiles are still
+    checked) and records app_tree_verified false.
 
     slice_id is a SHA-256 of the canonical JSON of: the algorithm; the flat_id, which is
     lineage (it identifies the geometry request, not the checks); the model.stl hash; the
     hash of the flat.json bytes, which pins the inherited checks; the pinned slicer
-    (version, exe and library hashes as verified, and the app-tree hash as the pin claims
-    it; the tree itself is checked only at setup and by --verify-only); the three profile
-    hashes; and the command template. The timeout is not part of it: it can stop a run
+    (version, exe and library hashes as verified, the pinned app-tree hash and whether this
+    run verified it, app_tree_verified, so a skipped check gives a different id); the three
+    profile hashes; and the command template. The timeout is not part of it: it can stop a run
     but does not change what a completed run writes, so a timed-out and a completed run
     of the same request share a slice_id. The platform and the environment are recorded
     beside it, not in it.
@@ -243,14 +285,15 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None) -> dict:
     except RecordError as err:
         raise SlicerError(str(err)) from None
     pin = load_pin()
-    slicer = locate(slicer_dir, pin)
+    slicer = locate(slicer_dir, pin, full_tree=check_tree)
     profile_data = _profile_bytes(slicer)
     try:
         process = json.loads(profile_data["process"])
     except ValueError as err:
         raise SlicerError(f"cannot read {slicer.profiles['process']}: {err}") from None
     thickness = float(flat["params"]["thickness_mm"])
-    allowed = expected_layer_counts(thickness, process)
+    z_min, z_max = stl_z_range(stl)
+    allowed = allowed_layer_counts(stl, process)
 
     with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
         base = Path(tmp)
@@ -265,10 +308,11 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None) -> dict:
         run = run_slicer(slicer_command(slicer), model, profiles, base / "work",
                          timeout["value"])
         checks, stats = f6_checks(run, allowed, pin, timeout_rule=timeout["rule"])
-        exited_ok = checks[0].status == "PASS"
+        quarantined = any(c.status == "FAIL" for c in previous + checks
+                          if c.id in SLICE_REQUIRED_CHECKS)
         files = {}
         if (run.out_dir / GCODE_NAME).is_file():
-            gcode_name = GCODE_NAME if exited_ok else FAILED_GCODE_NAME
+            gcode_name = FAILED_GCODE_NAME if quarantined else GCODE_NAME
             files[gcode_name] = (run.out_dir / GCODE_NAME).read_bytes()
         if (run.out_dir / STATS_NAME).is_file():
             files[STATS_NAME] = (run.out_dir / STATS_NAME).read_bytes()
@@ -286,7 +330,8 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None) -> dict:
     flat_record_sha256 = hashlib.sha256(flat_raw).hexdigest()
     slicer_identity = {"version": pin.version, "exe_sha256": verified["exe_sha256"],
                        "libraries": verified["libraries"],
-                       "app_tree_sha256": pin.app_tree.sha256}
+                       "app_tree_sha256": pin.app_tree.sha256,
+                       "app_tree_verified": "app_tree" in verified}
     identity = {"algorithm": SLICE_ALGORITHM_VERSION, "flat_id": flat["flat_id"],
                 "model_stl_sha256": flat["outputs"]["model.stl"],
                 "slicer": slicer_identity,
@@ -302,10 +347,11 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None) -> dict:
                   "model_stl_sha256": flat["outputs"]["model.stl"],
                   "selection_id": flat["selection"]["selection_id"]},
         "params": {"timeout_s": timeout, "thickness_mm": thickness,
+                   "stl_z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
                    "expected_layer_counts": sorted(allowed)},
         "slicer": {"name": pin.name, "version": pin.version, "pin": pin.id,
                    **{k: v for k, v in slicer_identity.items() if k != "version"},
-                   "app_tree_note": APP_TREE_NOTE, "profiles": verified["profiles"],
+                   "profiles": verified["profiles"],
                    "platform": platform_key()},
         "command": COMMAND_TEMPLATE,
         "exit": {**exit_code, "timed_out": run.timed_out},
@@ -314,7 +360,8 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None) -> dict:
         "verdict": verdict(all_checks, set(SLICE_REQUIRED_CHECKS)),
         "certification": certification(all_checks, SLICE_REQUIRED_CHECKS),
         "gcode": (None if gcode_name is None else
-                  {"file": gcode_name, **gcode_hashes(files[gcode_name])}),
+                  {"file": gcode_name, "quarantined": quarantined,
+                   **gcode_hashes(files[gcode_name])}),
         "stderr_tail": run.stderr,
         "log_written": log_written,
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},

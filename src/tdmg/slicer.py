@@ -235,12 +235,14 @@ class Slicer:
     pin: SlicerPin
 
 
-def locate(slicer_dir: str | Path | None, pin: SlicerPin | None = None) -> Slicer:
+def locate(slicer_dir: str | Path | None, pin: SlicerPin | None = None,
+           full_tree: bool = True) -> Slicer:
     """The install in slicer_dir, else in $TDMG_ORCASLICER_DIR, verified against the pin.
 
-    Checks the exe, the libraries and the profiles (not the whole app tree; the setup
-    script and --verify-only do that). Never searches the system: an unpinned OrcaSlicer
-    must not be used by accident.
+    Checks the exe, the libraries and the profiles, and with full_tree (the default) every
+    file of the app tree: about 2.6 s for the 4,054 files on the owner's PC, measured
+    2026-11-10. Never searches the system: an unpinned OrcaSlicer must not be used by
+    accident.
     """
     pin = pin or load_pin()
     folder = slicer_dir if slicer_dir is not None else os.environ.get(ENV_VAR)
@@ -251,7 +253,7 @@ def locate(slicer_dir: str | Path | None, pin: SlicerPin | None = None) -> Slice
     if not root.is_dir():
         raise SlicerError(f"slicer folder {root} is not a folder; install one with "
                           "`uv run python scripts/setup_orcaslicer.py --dest DIR`")
-    verified = verify_install(root, pin)
+    verified = verify_install(root, pin, full_tree=full_tree)
     profiles = {k: root / pin.profiles.folder / pin.profiles.flat[k].file for k in PROFILE_KINDS}
     return Slicer(root, root / pin.exe.path, profiles, verified, pin)
 
@@ -388,12 +390,15 @@ def _height(process: dict, key: str) -> float:
     return height
 
 
-def expected_layer_counts(thickness_mm: float, process_profile: dict) -> set[int]:
+def expected_layer_counts(thickness_mm: float, process_profile: dict,
+                          storage_error_mm: float = 0.0) -> set[int]:
     """The layer counts OrcaSlicer may produce for a part of this thickness.
 
     With q = (thickness - initial_layer_print_height) / layer_height, both heights from the
     flattened process profile: {1 + round(q)}, or both neighbours {1 + floor(q), 2 + floor(q)}
-    when q is within HALF_LAYER_TOL of x.5. Measured on OrcaSlicer 2.5.0 with 0.2/0.2 mm
+    when q is within storage_error_mm / layer_height + HALF_LAYER_TOL of x.5.
+    storage_error_mm bounds how far the stored thickness may be from the one the slicer
+    reads (tdmg.slicing derives it for float32 STL). Measured on OrcaSlicer 2.5.0 with 0.2/0.2 mm
     (research README, addendum item 3): 20 mm gave 100 and 3.0 mm 15; away from a half layer
     it matched the nearest count (3.05 -> 15, 3.15 -> 16); at exactly half a layer it went
     either way (1.1 -> 6, 0.3 -> 2, but 2.1 -> 10, 3.1 -> 15, 0.5 -> 2).
@@ -404,9 +409,11 @@ def expected_layer_counts(thickness_mm: float, process_profile: dict) -> set[int
     if not math.isfinite(thickness) or thickness < first:
         raise SlicerError(f"thickness {thickness_mm} mm is thinner than the first layer "
                           f"({first} mm)")
+    if not (math.isfinite(storage_error_mm) and storage_error_mm >= 0):
+        raise SlicerError(f"storage_error_mm must be finite and >= 0, not {storage_error_mm}")
     q = (thickness - first) / layer
     whole = math.floor(q)
-    if abs(q - whole - 0.5) <= HALF_LAYER_TOL:
+    if abs(q - whole - 0.5) <= storage_error_mm / layer + HALF_LAYER_TOL:
         return {1 + whole, 2 + whole}
     return {1 + round(q)}
 

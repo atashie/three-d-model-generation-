@@ -16,6 +16,7 @@ import sys
 
 import numpy as np
 import pytest
+import trimesh
 from test_make_flat import write_roadie_selection
 from test_selection import _intake
 from typer.testing import CliRunner
@@ -33,8 +34,10 @@ from tdmg.slicing import (
     RECORD_SCHEMA,
     SLICE_ALGORITHM_VERSION,
     SLICE_REQUIRED_EXTRA,
+    allowed_layer_counts,
     make_slice,
     slicer_command,
+    stl_z_range,
 )
 
 FAKE = REPO_ROOT / "tests" / "fake_orca.py"
@@ -43,7 +46,7 @@ PIN = load_pin()
 PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2"}
 FILES = {"machine.json": b"{}", "process.json": json.dumps(PROCESS).encode(),
          "filament.json": b"{}"}
-APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll"}
+APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
 F6_IDS = ["F6.slicer_exit", "F6.gcode_present", "F6.layer_count", "F6.single_object",
           "F6.portability"]
 RECORD_KEYS = {"schema", "tdmg_version", "algorithm", "slice_id", "links", "params", "slicer",
@@ -75,7 +78,7 @@ def fake(tmp_path, monkeypatch):
     """A fake install and its pin; returns a function that sets the fake's behaviour."""
     root = tmp_path / "orca"
     for rel, data in APP.items():
-        (root / "app").mkdir(parents=True, exist_ok=True)
+        (root / "app" / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / "app" / rel).write_bytes(data)
     (root / "profiles-flat").mkdir()
     for name, data in FILES.items():
@@ -86,7 +89,7 @@ def fake(tmp_path, monkeypatch):
         "exe": PIN.exe.model_copy(update={"sha256": _sha(APP["orca-slicer.exe"])}),
         "libraries": [PIN.libraries[0].model_copy(
             update={"sha256": _sha(APP["OrcaSlicer.dll"])})],
-        "app_tree": PIN.app_tree.model_copy(update={"files": 2, "sha256": _tree(APP)}),
+        "app_tree": PIN.app_tree.model_copy(update={"files": len(APP), "sha256": _tree(APP)}),
         "profiles": PIN.profiles.model_copy(update={"flat": flat})})
     monkeypatch.setattr(tdmg.slicing, "load_pin", lambda: pin)
     monkeypatch.setattr(tdmg.slicing, "slicer_command", lambda slicer: [sys.executable,
@@ -122,16 +125,19 @@ def test_record_contents(flat_dir, fake, tmp_path):
                                "flat_record_sha256": _sha((flat_dir / "flat.json").read_bytes()),
                                "model_stl_sha256": flat["outputs"]["model.stl"],
                                "selection_id": flat["selection"]["selection_id"]}
+    z = stl_z_range((flat_dir / "model.stl").read_bytes())
+    assert z == (0.0, 3.0)                         # 3.0 is exact in float32
     assert record["params"] == {"timeout_s": {"value": 300, "rule": "slicer.orca.timeout_s"},
-                                "thickness_mm": 3.0, "expected_layer_counts": [15]}
+                                "thickness_mm": 3.0,
+                                "stl_z_mm": {"min": 0.0, "max": 3.0, "extent": 3.0},
+                                "expected_layer_counts": [15]}
     pin = fake.pin
     assert record["slicer"] == {
         "name": "OrcaSlicer", "version": "2.5.0", "pin": "orcaslicer-2.5.0",
         "exe_sha256": pin.exe.sha256,
         "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
         "app_tree_sha256": pin.app_tree.sha256,
-        "app_tree_note": "as pinned; the full app tree is verified by "
-                         "scripts/setup_orcaslicer.py and its --verify-only, not on every run",
+        "app_tree_verified": True,
         "profiles": {k: {"name": p.preset, "file": p.file, "sha256": p.sha256}
                      for k, p in pin.profiles.flat.items()},
         "platform": platform_key()}
@@ -161,6 +167,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
                                  if n != "slice.json"}
     assert record["gcode"]["sha256"] == record["outputs"]["plate_1.gcode"]
     assert record["gcode"]["normalised_lines"] == 1
+    assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == ("plate_1.gcode", False)
     assert json.loads((out / "slice.json").read_bytes()) == record
     assert str(tmp_path) not in (out / "slice.json").read_text(encoding="utf-8")
 
@@ -172,11 +179,28 @@ def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
                 "model_stl_sha256": record["links"]["model_stl_sha256"],
                 "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
-                           "app_tree_sha256": pin.app_tree.sha256},
+                           "app_tree_sha256": pin.app_tree.sha256,
+                           "app_tree_verified": True},
                 "profiles": {k: p.sha256 for k, p in pin.profiles.flat.items()},
                 "flat_record_sha256": record["links"]["flat_record_sha256"],
                 "command": record["command"]}
     assert record["slice_id"] == _sha(canonical_json(identity))
+
+
+def _box_stl(height):
+    return trimesh.creation.box((20, 20, height)).apply_translation(
+        (10, 10, height / 2)).export(file_type="stl")
+
+
+def test_layer_counts_come_from_the_stl_as_stored():
+    # Two thicknesses either side of 100.1 mm (q = 499.5 at 0.2/0.2 mm) are stored as the
+    # same float32 STL, so they must get the same allowed set, with both neighbours.
+    a, b = _box_stl(100.099999), _box_stl(100.100001)
+    assert a == b
+    assert allowed_layer_counts(a, PROCESS) == allowed_layer_counts(b, PROCESS) == {500, 501}
+    assert allowed_layer_counts(_box_stl(3.0), PROCESS) == {15}
+    assert allowed_layer_counts(_box_stl(3.05), PROCESS) == {15}
+    assert allowed_layer_counts(_box_stl(1.1), PROCESS) == {5, 6}
 
 
 def test_flat_identity_is_the_definition_make_flat_uses(flat_dir):
@@ -269,7 +293,19 @@ def test_gcode_from_a_failed_slice_is_renamed(flat_dir, fake, tmp_path):
     names = sorted(p.name for p in out.iterdir())
     assert "plate_1.gcode" not in names and "plate_1.gcode.failed" in names
     assert record["gcode"]["file"] == "plate_1.gcode.failed"
+    assert record["gcode"]["quarantined"] is True
     assert record["gcode"]["sha256"] == record["outputs"]["plate_1.gcode.failed"]
+
+
+def test_a_truncated_print_with_exit_0_is_quarantined(flat_dir, fake, tmp_path):
+    out = tmp_path / "slice"
+    record = make_slice(flat_dir, out, fake(layers=2))
+    assert by_id(record)["F6.slicer_exit"]["status"] == "PASS"
+    assert by_id(record)["F6.layer_count"]["status"] == "FAIL"
+    names = sorted(p.name for p in out.iterdir())
+    assert names == ["plate_1.gcode.failed", "plate_1.statistics.json", "slice.json"]
+    assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == (
+        "plate_1.gcode.failed", True)
 
 
 def _two_body_flat(tmp_path):
@@ -362,8 +398,8 @@ def test_a_profile_changed_after_locate_is_refused(flat_dir, fake, tmp_path, mon
     root = fake()
     real_locate = tdmg.slicing.locate
 
-    def locate_then_change(slicer_dir, pin):
-        found = real_locate(slicer_dir, pin)
+    def locate_then_change(slicer_dir, pin, full_tree=True):
+        found = real_locate(slicer_dir, pin, full_tree)
         (root / "profiles-flat" / "process.json").write_bytes(b'{"layer_height": "0.1"}')
         return found
     monkeypatch.setattr(tdmg.slicing, "locate", locate_then_change)
@@ -378,6 +414,36 @@ def test_a_changed_install_is_refused(flat_dir, fake, tmp_path):
     with pytest.raises(SlicerError, match="OrcaSlicer.dll.*does not match the pin"):
         make_slice(flat_dir, tmp_path / "slice", root)
     assert not (tmp_path / "slice").exists()
+
+
+@pytest.mark.parametrize("change", ["changed", "added"])
+def test_the_whole_app_tree_is_checked_unless_skipped(flat_dir, fake, tmp_path, change):
+    root = fake()
+    good = make_slice(flat_dir, tmp_path / "good", root)
+    if change == "changed":           # an auxiliary file: not checked by name, only in the tree
+        (root / "app" / "resources" / "x.txt").write_bytes(b"changed")
+    else:
+        (root / "app" / "extra.dll").write_bytes(b"new")
+    with pytest.raises(SlicerError, match="app tree.*does not match the pin"):
+        make_slice(flat_dir, tmp_path / "refused", root)
+    assert not (tmp_path / "refused").exists()
+    skipped = make_slice(flat_dir, tmp_path / "skipped", root, check_tree=False)
+    assert skipped["slicer"]["app_tree_verified"] is False
+    assert good["slicer"]["app_tree_verified"] is True
+    # The flag is part of slice_id: an unverified tree is a different claim.
+    assert skipped["slice_id"] != good["slice_id"]
+
+
+def test_cli_skip_tree_check(flat_dir, fake, tmp_path):
+    root = fake()
+    (root / "app" / "extra.dll").write_bytes(b"new")
+    r = _slice(flat_dir, tmp_path / "a", "--slicer-dir", str(root))
+    assert r.exit_code == 2 and "app tree" in r.stderr
+    r = _slice(flat_dir, tmp_path / "b", "--slicer-dir", str(root), "--skip-tree-check")
+    assert r.exit_code == 0, r.output
+    assert "app tree not verified (--skip-tree-check)" in r.stdout
+    assert json.loads((tmp_path / "b" / "slice.json").read_bytes())[
+        "slicer"]["app_tree_verified"] is False
 
 
 @pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf")])
@@ -417,8 +483,9 @@ def test_cli_exit_1_on_a_truncated_print(flat_dir, fake, tmp_path):
     r = _slice(flat_dir, out, "--slicer-dir", str(fake(layers=2)))
     assert r.exit_code == 1, r.output
     assert "F6.layer_count FAIL - measured 2; threshold [15]" in r.stdout
-    assert "a check FAILed: do not print this G-code" in r.stdout
-    assert (out / "slice.json").is_file()
+    assert ("a check FAILed: do not print this G-code; it is kept as plate_1.gcode.failed"
+            in r.stdout)
+    assert (out / "slice.json").is_file() and not (out / "plate_1.gcode").exists()
 
 
 def test_cli_exit_1_when_a_flat_check_failed(fake, tmp_path, monkeypatch):
@@ -433,6 +500,10 @@ def test_cli_exit_1_when_a_flat_check_failed(fake, tmp_path, monkeypatch):
     assert r.exit_code == 1, r.output
     assert "F5.triangles FAIL" in r.stdout
     assert "a check FAILed: do not print this G-code" in r.stdout
+    # The slicer itself succeeded; the inherited FAIL still quarantines the G-code.
+    assert sorted(p.name for p in out.iterdir()) == [
+        "plate_1.gcode.failed", "plate_1.statistics.json", "slice.json"]
+    assert json.loads((out / "slice.json").read_bytes())["gcode"]["quarantined"] is True
 
 
 def test_cli_timeout_option(flat_dir, fake, tmp_path):
@@ -504,3 +575,4 @@ def test_roadie_slices_with_the_real_slicer(tmp_path):
                       "F6.portability": "UNKNOWN"}
     assert record["stats"]["layer_count"] == 15
     assert record["slicer"]["exe_sha256"] == PIN.exe.sha256
+    assert record["slicer"]["app_tree_verified"] is True

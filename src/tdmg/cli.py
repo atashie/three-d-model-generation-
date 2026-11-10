@@ -253,6 +253,9 @@ def slice_(
     timeout_s: Annotated[float | None, typer.Option(
         "--timeout-s", help="Stop the slicer after this many seconds; default from rule "
                             "slicer.orca.timeout_s")] = None,
+    skip_tree_check: Annotated[bool, typer.Option(
+        "--skip-tree-check", help="Do not hash every file of the slicer's app folder (saves "
+                                  "about 3 s); recorded as app_tree_verified false")] = False,
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
 
@@ -266,7 +269,8 @@ def slice_(
     Exit 0 does not mean the part is certified; read verdict in slice.json.
     """
     try:
-        rec = make_slice(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s)
+        rec = make_slice(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s,
+                         check_tree=not skip_tree_check)
     except SlicerError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -274,6 +278,8 @@ def slice_(
         _os_error(e)
         raise typer.Exit(2) from None
     typer.echo(rec["certification"])     # the verdict, with the checks that block it
+    if not rec["slicer"]["app_tree_verified"]:
+        typer.echo("app tree not verified (--skip-tree-check)")
     code = rec["exit"]
     if code["timed_out"]:
         typer.echo(f"slicer stopped after {rec['params']['timeout_s']['value']:g} s")
