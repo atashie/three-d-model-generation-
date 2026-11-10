@@ -1,0 +1,16 @@
+{
+ "files_sha256": {
+  "filament/Bambu PLA Basic @BBL A1.json": "966589ca1c1d5007a470fb0d60e42a4fae2b15ef2fba535fbd8ad72aa92c047d",
+  "filament/Bambu PLA Basic @base.json": "596726a8e36bf0c4f616e386335dfbdf05898e3234d64b8bafd26d2945451f85",
+  "filament/fdm_filament_common.json": "8c7105b7d59a28f600c43a946f067b8b4d707b9711c0bf6b88e9166e48878548",
+  "filament/fdm_filament_pla.json": "670d21ea6bdf1cd4b0a2bfddc743612ffd896cd6e5dbe767c25d2c4165c49a30",
+  "machine/Bambu Lab A1 0.4 nozzle.json": "1291507434ad10363d164ed4b31a2bbd2e9410479b533aa824a4e1ada4ca04f4",
+  "machine/fdm_bbl_3dp_001_common.json": "982c81d5f93762970befc453bb99352b6dbeb4c8b88dd5ae271eb7fa416fe5b0",
+  "machine/fdm_machine_common.json": "cee021d6dbf12c2bf0bc6e2394cb4f0fa37af78296930cc753498f7ad3341a4a",
+  "process/0.20mm Standard @BBL A1.json": "2bd33159b3ec659567a63b6ea6f5373af7431c68516e7d3e02693a4cef395079",
+  "process/fdm_process_common.json": "25602054557e1fed37fd530e12914640c1ec33910f526dbc96deab4a016997d1",
+  "process/fdm_process_single_0.20.json": "cdda8d56d67f62a0faa892cb6efc605ebb5c745bf742f6ead4daaeb6627c182a",
+  "process/fdm_process_single_common.json": "05b38ac1318e465e817978b36da51754f928da0172738a20bb3a8d4a69eb4769"
+ },
+ "tag": "v2.5.0"
+}

@@ -1,0 +1,3 @@
+Bambu Lab A1 0.4 nozzle chain: fdm_machine_common <- fdm_bbl_3dp_001_common <- Bambu Lab A1 0.4 nozzle keys 109
+0.20mm Standard @BBL A1 chain: fdm_process_common <- fdm_process_single_common <- fdm_process_single_0.20 <- 0.20mm Standard @BBL A1 keys 191
+Bambu PLA Basic @BBL A1 chain: fdm_filament_common <- fdm_filament_pla <- Bambu PLA Basic @base <- Bambu PLA Basic @BBL A1 keys 138

@@ -1,0 +1,2 @@
+e355d9f8ac0be4efa4b4f99ecae448d4e99def8dee97683847ede5aa0ccb9166 *download/OrcaSlicer_Windows_V2.5.0_x64_portable.zip
+e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f *app/orca-slicer.exe

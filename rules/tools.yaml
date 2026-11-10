@@ -1,7 +1,7 @@
 # Limits and measured behaviour of specific tools. kind: tool_limit.
 - id: slicer.orca.max_triangles_per_plate
   kind: tool_limit
-  summary: OrcaSlicer refuses a plate with more triangles than this, unless the limit is changed.
+  summary: Triangle limit per plate declared by OrcaSlicer's --mtcpp option (default value); used here as our F5 budget.
   unit: triangles
   default: 1000000
   evidence:
@@ -11,7 +11,12 @@
       validation: untested
       claim: OrcaSlicer CLI option --mtcpp; exceeding it exits with internal code -59 (seen as 197 by a parent process).
       source_url: "https://github.com/OrcaSlicer/OrcaSlicer/wiki/cli_actions"
-  notes: Configurable with --mtcpp. Decimate below this before slicing.
+    - ref: research/verification/2026-11-10-orcaslicer-windows/README.md
+      locator: "`--mtcpp` did not take effect on this STL path."
+      provenance: primary
+      validation: measured
+      claim: OrcaSlicer 2.5.0 on Windows sliced a 31,200-triangle STL with --mtcpp=1000 and exit 0; the refusal branch exists in source but was not reached for STL input. Enforcement by the slicer is therefore not assumed.
+  notes: The declared --mtcpp default. tdmg's own F5 check enforces it as a budget; do not rely on OrcaSlicer to refuse (measured 2026-11-10). Decimate below this before slicing.
 
 - id: vectorize.opencv.contour_offset_px
   kind: tool_limit

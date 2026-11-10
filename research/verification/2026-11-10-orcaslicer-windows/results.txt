@@ -1,0 +1,8 @@
+cube: returncode 0 (signed 0) 0.2s files ['plate_1.gcode', 'plate_1.statistics.json'] {"layer_count": 100, "time": 766.104, "volume": 2957.692, "weight": 3.7267} stderr: 
+open_cube: returncode 0 (signed 0) 0.2s files ['plate_1.gcode', 'plate_1.statistics.json'] {"layer_count": 10, "time": 148.13, "volume": 776.774, "weight": 0.9787} stderr: 
+too_big: returncode 4294967246 (signed -50) 0.2s files [] {} stderr: ons. If an object only fits the bed when rotated, pass --allow-rotations. Otherwise the plate is empty or an object is larger than the printable area or height.
+garbage: returncode 4294967290 (signed -6) 0.2s files [] {} stderr: Users\arikt\AppData\Local\Temp\claude\c019a84b704b18c7\6e861619-9ccf-4bbe-beac-58586542bc70\scratchpad\orca-measure\garbage.stl: Loading of a model file failed.
+missing: returncode 4294967293 (signed -3) 0.2s files [] {} stderr: No such file: C:\Users\arikt\AppData\Local\Temp\claude\c019a84b704b18c7\6e861619-9ccf-4bbe-beac-58586542bc70\scratchpad\orca-measure\missing.stl
+roadie-tol30-60x3-s3: returncode 0 (signed 0) 0.5s files ['plate_1.gcode', 'plate_1.statistics.json'] {"layer_count": 15, "time": 473.008, "volume": 1803.51, "weight": 2.2724} stderr: 
+oddie-60x3-s3: returncode 0 (signed 0) 0.4s files ['plate_1.gcode', 'plate_1.statistics.json'] {"layer_count": 15, "time": 484.189, "volume": 3449.273, "weight": 4.3461} stderr: 
+roadie-tol30-60x3-s3_mtcpp1000: returncode 0 (signed 0) 0.5s files ['plate_1.gcode', 'plate_1.statistics.json'] {"layer_count": 15, "time": 473.008, "volume": 1803.51, "weight": 2.2724} stderr: 

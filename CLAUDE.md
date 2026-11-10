@@ -29,6 +29,7 @@ uv run ruff check .                   # lint
 - trimesh needs `networkx` and `lxml` to load 3MF. Pass `engine=` to `trimesh.creation.extrude_polygon` explicitly.
 - lib3mf and trimesh write random UUIDs into 3MF; set them explicitly for reproducible files.
 - On macOS/Linux, OrcaSlicer exit codes reach a parent as the low 8 bits (−50 → 206, −51 → 205, −59 → 197). Do not apply this assumption to Windows without measuring it.
+- On Windows (measured 2026-11-10, OrcaSlicer 2.5.0 portable), Python receives the full 32-bit code as unsigned (−50 → 4294967246, −6 → 4294967290, −3 → 4294967293). A slicer exit of 0 does not mean the mesh is valid: an open cube sliced to 10 of 100 layers with exit 0. See `research/verification/2026-11-10-orcaslicer-windows/`.
 - trimesh `is_watertight` and lib3mf `IsManifoldAndOriented` both pass two solids touching at one vertex; check vertex-manifoldness separately.
 - Under `GITHUB_ACTIONS`, Rich styles Typer usage errors with escape codes and a box, even with `NO_COLOR` set. CLI tests normalise the output with `_plain()`. Reproduce it locally with `CI=true GITHUB_ACTIONS=true uv run pytest` (verified 2026-11-10 on the PC).
 - The package reads `rules/` and `profiles/` from the checkout; a built wheel carries copies in `tdmg/_data/` (CI tests this).
