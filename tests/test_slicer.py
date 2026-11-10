@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -11,11 +12,14 @@ import pytest
 from tdmg.paths import REPO_ROOT
 from tdmg.slicer import (
     GCODE_NAME,
+    KILL_WAIT_S,
+    OUTPUT_TAIL_CHARS,
     PIN_ID,
     STATS_NAME,
     SlicerError,
+    app_tree_sha256,
     decode_exit,
-    expected_layers,
+    expected_layer_counts,
     f6_checks,
     gcode_hashes,
     load_pin,
@@ -59,6 +63,31 @@ def test_pin_hashes_equal_the_research_record():
     assert PIN.profiles.upstream_sha256 == manifest["files_sha256"]
 
 
+def test_pin_app_tree_and_library_equal_the_research_record():
+    # app-tree.txt: "<folder>: files N, tree sha256 H, T s" then "  <file>  <sha256>" lines.
+    lines = (RECORD / "app-tree.txt").read_text(encoding="utf-8").splitlines()
+    head = lines[0].split(": files ", 1)[1].split(", ")
+    assert PIN.app_tree.files == int(head[0])
+    assert PIN.app_tree.sha256 == head[1].removeprefix("tree sha256 ")
+    files = dict(line.split() for line in lines[1:3])
+    assert files["orca-slicer.exe"] == PIN.exe.sha256
+    assert [(lib.path, lib.sha256) for lib in PIN.libraries] == [
+        ("app/OrcaSlicer.dll", files["OrcaSlicer.dll"])]
+    # Both folders hashed (the install and a fresh extraction) gave the same tree.
+    assert {ln.split(", ")[1] for ln in lines if ": files " in ln} == {
+        "tree sha256 " + PIN.app_tree.sha256}
+
+
+def test_app_tree_sha256_follows_its_definition(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "b.txt").write_bytes(b"b")
+    (tmp_path / "sub" / "a.txt").write_bytes(b"a")
+    lines = sorted([f"b.txt\t{hashlib.sha256(b'b').hexdigest()}",
+                    f"sub/a.txt\t{hashlib.sha256(b'a').hexdigest()}"])
+    want = hashlib.sha256("".join(x + "\n" for x in lines).encode()).hexdigest()
+    assert app_tree_sha256(tmp_path) == (2, want)
+
+
 def test_pin_chains_equal_the_research_record():
     # flatten.txt is the research script's output: "<leaf> chain: a <- b <- leaf keys N".
     lines = (RECORD / "flatten.txt").read_text(encoding="utf-8").splitlines()
@@ -95,21 +124,38 @@ def test_pin_decoding_rules_and_their_sources():
     assert "exit codes reach a parent as the low 8 bits" in claude
 
 
-def _fake_install(tmp_path, pin, exe=b"exe", profiles=None):
+APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
+
+
+def _fake_install(tmp_path, pin, exe=b"exe", profiles=None, app=None):
     profiles = profiles or {"machine.json": b"m", "process.json": b"p", "filament.json": b"f"}
-    (tmp_path / "app").mkdir()
-    (tmp_path / pin.exe.path).write_bytes(exe)
+    app = {**APP, "orca-slicer.exe": exe, **(app or {})}
+    for rel, data in app.items():
+        path = tmp_path / "app" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
     (tmp_path / pin.profiles.folder).mkdir()
     for name, data in profiles.items():
         (tmp_path / pin.profiles.folder / name).write_bytes(data)
     return tmp_path
 
 
-def _pin_for(exe: bytes, files: dict[str, bytes]):
+def _tree(app: dict[str, bytes]) -> str:
+    """The tree hash, computed here from its definition (not with tdmg.slicer)."""
+    lines = sorted(f"{rel}\t{hashlib.sha256(d).hexdigest()}" for rel, d in app.items())
+    return hashlib.sha256("".join(x + "\n" for x in lines).encode()).hexdigest()
+
+
+def _pin_for(exe: bytes, files: dict[str, bytes], app=None):
+    app = {**APP, "orca-slicer.exe": exe, **(app or {})}
     flat = {k: p.model_copy(update={"sha256": hashlib.sha256(files[p.file]).hexdigest()})
             for k, p in PIN.profiles.flat.items()}
+    lib = PIN.libraries[0].model_copy(update={"sha256": hashlib.sha256(app["OrcaSlicer.dll"])
+                                              .hexdigest()})
     return PIN.model_copy(update={
         "exe": PIN.exe.model_copy(update={"sha256": hashlib.sha256(exe).hexdigest()}),
+        "libraries": [lib],
+        "app_tree": PIN.app_tree.model_copy(update={"files": len(app), "sha256": _tree(app)}),
         "profiles": PIN.profiles.model_copy(update={"flat": flat})})
 
 
@@ -123,6 +169,29 @@ def test_verify_install_accepts_matching_hashes(tmp_path):
     assert found["profiles"]["process"] == {"name": "0.20mm Standard @BBL A1",
                                             "file": "process.json",
                                             "sha256": pin.profiles.flat["process"].sha256}
+
+
+def test_verify_install_checks_the_library_every_time(tmp_path):
+    pin = _pin_for(b"exe", FILES)
+    folder = _fake_install(tmp_path, pin, app={"OrcaSlicer.dll": b"patched"})
+    with pytest.raises(SlicerError, match="OrcaSlicer.dll.*does not match the pin"):
+        verify_install(folder, pin)
+
+
+def test_verify_install_full_tree(tmp_path):
+    pin = _pin_for(b"exe", FILES)
+    found = verify_install(_fake_install(tmp_path, pin), pin, full_tree=True)
+    assert found["app_tree"] == {"files": 3, "sha256": pin.app_tree.sha256}
+    assert found["libraries"] == {"app/OrcaSlicer.dll": pin.libraries[0].sha256}
+
+
+@pytest.mark.parametrize("change", [{"resources/x.txt": b"changed"}, {"extra.dll": b"new"}])
+def test_verify_install_full_tree_refuses_any_other_change(tmp_path, change):
+    pin = _pin_for(b"exe", FILES)
+    folder = _fake_install(tmp_path, pin, app=change)
+    assert verify_install(folder, pin)["exe_sha256"] == pin.exe.sha256   # quick check passes
+    with pytest.raises(SlicerError, match="app tree.*does not match the pin"):
+        verify_install(folder, pin, full_tree=True)
 
 
 def test_verify_install_refuses_a_changed_exe(tmp_path):
@@ -224,34 +293,44 @@ def test_decode_exit_unknown_codes_signals_and_bad_values():
 # The two keys and their values in the flattened A1 process profile
 # (artifacts/tools/orcaslicer-2.5.0/profiles-flat/process.json, read 2026-11-10):
 # "layer_height": "0.2", "initial_layer_print_height": "0.2". Hard-coded because CI does
-# not have the file; test_expected_layers_with_the_local_profile reads it when present.
+# not have the file; test_expected_layer_counts_with_the_local_profile reads it.
 A1_PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2"}
 LOCAL_PROCESS = (REPO_ROOT / "artifacts" / "tools" / "orcaslicer-2.5.0" / "profiles-flat"
                  / "process.json")
 
 
-def test_expected_layers_for_the_a1_profile():
+def test_expected_layer_counts_for_the_a1_profile():
     # The 20 mm cube sliced into 100 layers and the 3 mm models into 15 (research record).
-    assert expected_layers(20, A1_PROCESS) == 100
-    assert expected_layers(3, A1_PROCESS) == 15
-    assert expected_layers(0.2, A1_PROCESS) == 1
-    assert expected_layers(3, {"layer_height": "0.1", "initial_layer_print_height": "0.3"}) == 28
+    assert expected_layer_counts(20, A1_PROCESS) == {100}
+    assert expected_layer_counts(3, A1_PROCESS) == {15}
+    assert expected_layer_counts(0.2, A1_PROCESS) == {1}
+    assert expected_layer_counts(
+        3, {"layer_height": "0.1", "initial_layer_print_height": "0.3"}) == {28}
+
+
+@pytest.mark.parametrize(("t", "allowed"), [
+    # README addendum item 3: at exactly half a layer the slicer chose 6, 10, 2, 15, 2.
+    (1.1, {5, 6}), (2.1, {10, 11}), (0.3, {1, 2}), (3.1, {15, 16}), (0.5, {2, 3}),
+    # Away from a half layer it matched the nearest count.
+    (3.0, {15}), (3.05, {15}), (3.15, {16})])
+def test_expected_layer_counts_accept_either_neighbour_at_half_a_layer(t, allowed):
+    assert expected_layer_counts(t, A1_PROCESS) == allowed
 
 
 @pytest.mark.skipif(not LOCAL_PROCESS.is_file(), reason="no local OrcaSlicer install")
-def test_expected_layers_with_the_local_profile():
+def test_expected_layer_counts_with_the_local_profile():
     process = json.loads(LOCAL_PROCESS.read_text(encoding="utf-8"))
     assert {k: process[k] for k in A1_PROCESS} == A1_PROCESS
-    assert expected_layers(20, process) == 100
+    assert expected_layer_counts(20, process) == {100}
 
 
-def test_expected_layers_refuses_bad_input():
+def test_expected_layer_counts_refuse_bad_input():
     with pytest.raises(SlicerError, match="layer_height"):
-        expected_layers(3, {"initial_layer_print_height": "0.2"})
+        expected_layer_counts(3, {"initial_layer_print_height": "0.2"})
     with pytest.raises(SlicerError, match="positive"):
-        expected_layers(3, {"layer_height": "0", "initial_layer_print_height": "0.2"})
+        expected_layer_counts(3, {"layer_height": "0", "initial_layer_print_height": "0.2"})
     with pytest.raises(SlicerError, match="thinner than the first layer"):
-        expected_layers(0.1, A1_PROCESS)
+        expected_layer_counts(0.1, A1_PROCESS)
 
 
 def _stats(path, layers=100, objects=1, units=None):
@@ -299,10 +378,10 @@ def _setup_run(tmp_path, **control):
     return stl, profiles, work
 
 
-def _run(tmp_path, timeout=60, **control):
+def _run(tmp_path, timeout=60, expected=frozenset({100}), **control):
     stl, profiles, work = _setup_run(tmp_path, **control)
     run = run_slicer(FAKE, stl, profiles, work, timeout)
-    return run, f6_checks(run, expected=100)
+    return run, f6_checks(run, expected)
 
 
 def _by_id(checks):
@@ -328,7 +407,7 @@ def test_success_passes_every_measured_f6_check(tmp_path):
                       "F6.layer_count": "PASS", "F6.single_object": "PASS",
                       "F6.portability": "UNKNOWN"}
     by = _by_id(checks)
-    assert by["F6.layer_count"].measured == 100 and by["F6.layer_count"].threshold == 100
+    assert by["F6.layer_count"].measured == 100 and by["F6.layer_count"].threshold == [100]
     assert by["F6.slicer_exit"].measured["name"] == "CLI_SUCCESS"
     assert "PrusaSlicer" in by["F6.portability"].note
     assert stats["layer_count"] == 100 and stats["objects"] == ["m0"]
@@ -370,7 +449,21 @@ def test_a_truncated_print_fails_the_layer_count(tmp_path):
     by = _by_id(checks)
     assert by["F6.slicer_exit"].status == "PASS"
     assert by["F6.layer_count"].status == "FAIL"
-    assert (by["F6.layer_count"].measured, by["F6.layer_count"].threshold) == (10, 100)
+    assert (by["F6.layer_count"].measured, by["F6.layer_count"].threshold) == (10, [100])
+    assert "height" in by["F6.layer_count"].note and "F1" in by["F6.layer_count"].note
+
+
+@pytest.mark.parametrize("layers", [5, 6])
+def test_either_half_layer_neighbour_passes(tmp_path, layers):
+    _, (checks, _) = _run(tmp_path, expected={5, 6}, layers=layers)
+    by = _by_id(checks)
+    assert by["F6.layer_count"].status == "PASS"
+    assert by["F6.layer_count"].threshold == [5, 6]
+
+
+def test_a_count_outside_the_allowed_set_fails(tmp_path):
+    _, (checks, _) = _run(tmp_path, expected={5, 6}, layers=7)
+    assert _by_id(checks)["F6.layer_count"].status == "FAIL"
 
 
 def test_two_objects_fail_single_object(tmp_path):
@@ -388,6 +481,33 @@ def test_a_slow_slicer_is_stopped_at_the_timeout(tmp_path):
     assert by["F6.slicer_exit"].rule == "slicer.orca.timeout_s"
     assert "0.5 s" in by["F6.slicer_exit"].note
     assert by["F6.layer_count"].status == "UNKNOWN" and stats is None
+
+
+def test_the_timeout_kills_the_whole_process_tree(tmp_path):
+    # The fake starts a child that keeps the output pipes open for 30 s. Killing only the
+    # fake leaves run_slicer waiting on those pipes until KILL_WAIT_S (measured 10.5 s on
+    # Windows, 2026-11-10); killing the tree returned in 0.6 s.
+    start = time.perf_counter()
+    run, _ = _run(tmp_path, timeout=0.5, sleep=30, grandchild=30)
+    assert run.timed_out
+    assert time.perf_counter() - start < KILL_WAIT_S / 2
+
+
+def test_run_slicer_runs_in_the_work_folder(tmp_path):
+    record = tmp_path / "cwd.txt"
+    run, _ = _run(tmp_path, cwd_file=str(record))
+    assert Path(record.read_text()) == run.out_dir.parent
+
+
+def test_run_slicer_keeps_only_the_end_of_long_output(tmp_path):
+    run, _ = _run(tmp_path, stderr="x" * (OUTPUT_TAIL_CHARS * 2) + "END")
+    assert len(run.stderr) == OUTPUT_TAIL_CHARS and run.stderr.endswith("END")
+
+
+def test_run_slicer_needs_an_absolute_program(tmp_path):
+    stl, profiles, work = _setup_run(tmp_path)
+    with pytest.raises(SlicerError, match="absolute"):
+        run_slicer(["orca-slicer.exe"], stl, profiles, work, 10)
 
 
 def test_the_fake_refuses_another_argument_form(tmp_path):
@@ -412,25 +532,32 @@ def test_run_slicer_needs_an_empty_work_folder(tmp_path):
 
 # --- G-code hash ------------------------------------------------------------------------
 
+START, END = b"; HEADER_BLOCK_START\n", b"; HEADER_BLOCK_END\n"
+
+
 def test_gcode_hash_ignores_only_the_generated_line():
-    a = b"; HEADER_BLOCK_START\n; generated by OrcaSlicer 2.5.0 on 2026-11-10 at 12:46:23\nG28\n"
-    b = b"; HEADER_BLOCK_START\n; generated by OrcaSlicer 2.5.0 on 2026-11-11 at 08:00:00\nG28\n"
+    a = START + b"; generated by OrcaSlicer 2.5.0 on 2026-11-10 at 12:46:23\n" + END + b"G28\n"
+    b = START + b"; generated by OrcaSlicer 2.5.0 on 2026-11-11 at 08:00:00\n" + END + b"G28\n"
     ha, hb = gcode_hashes(a), gcode_hashes(b)
     assert ha["sha256"] != hb["sha256"]
     assert ha["normalised_sha256"] == hb["normalised_sha256"]
     assert ha["normalised_lines"] == 1
-    assert ha["normalised_sha256"] == hashlib.sha256(b"; HEADER_BLOCK_START\n\nG28\n").hexdigest()
+    assert ha["normalised_sha256"] == hashlib.sha256(START + b"\n" + END + b"G28\n").hexdigest()
     # Any other change still changes the normalised hash.
     c = a.replace(b"G28", b"G29")
     assert gcode_hashes(c)["normalised_sha256"] != ha["normalised_sha256"]
-    # Only the first such line is blanked, and a file without one is hashed as it is.
+    # Only the first such line in the header block is blanked; outside it nothing is.
     twice = a + b"; generated by X at Y\n"
     assert gcode_hashes(twice)["normalised_lines"] == 1
     assert gcode_hashes(twice)["normalised_sha256"] != ha["normalised_sha256"]
-    plain = gcode_hashes(b"G28\n")
-    assert plain["normalised_lines"] == 0 and plain["normalised_sha256"] == plain["sha256"]
+    for plain in (b"G28\n", b"; generated by X at Y\nG28\n",
+                  START + END + b"; generated by X at Y\n",
+                  START + b"; generated by X at Y\n"):   # no block, outside it, or unclosed
+        got = gcode_hashes(plain)
+        assert got["normalised_lines"] == 0 and got["normalised_sha256"] == got["sha256"]
 
 
 def test_gcode_hash_keeps_crlf_line_ends():
-    a = b"; generated by OrcaSlicer 2.5.0 on d at t\r\nG28\r\n"
-    assert gcode_hashes(a)["normalised_sha256"] == hashlib.sha256(b"\r\nG28\r\n").hexdigest()
+    a = b"; HEADER_BLOCK_START\r\n; generated by O on d at t\r\n; HEADER_BLOCK_END\r\nG28\r\n"
+    assert gcode_hashes(a)["normalised_sha256"] == hashlib.sha256(
+        b"; HEADER_BLOCK_START\r\n\r\n; HEADER_BLOCK_END\r\nG28\r\n").hexdigest()

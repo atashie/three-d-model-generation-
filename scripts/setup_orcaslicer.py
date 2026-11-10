@@ -6,10 +6,13 @@
 
 Everything is checked against profiles/slicers/orcaslicer-2.5.0.yaml:
 1. download the release asset to DIR/download/ (or take --zip) and check its SHA-256;
-2. extract it into a fresh DIR/app/ and check the exe's SHA-256;
+2. extract it into a fresh DIR/app/ and check the exe, the main library and the whole
+   app tree (every file) against the pin;
 3. fetch the A1 preset chains from the OrcaSlicer source at the pinned tag, check every
    upstream file against the pinned manifest, merge each chain, and check the merged
-   files against the pinned hashes before writing DIR/profiles-flat/.
+   files and source-manifest.json against the pinned hashes before writing
+   DIR/profiles-flat/.
+--verify-only checks the same hashes, including the whole app tree, without downloading.
 
 The merge is the one in research/verification/2026-11-10-orcaslicer-windows/
 flatten_profiles.py, which produced the pinned hashes: each chain parent first, child keys
@@ -37,7 +40,14 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from tdmg.slicer import SlicerError, SlicerPin, load_pin, sha256_file, verify_install
+from tdmg.slicer import (
+    SlicerError,
+    SlicerPin,
+    app_tree_sha256,
+    load_pin,
+    sha256_file,
+    verify_install,
+)
 
 USER_AGENT = "tdmg-setup-orcaslicer"
 HTTP_TIMEOUT_S = 60   # per network read; a stalled connection fails instead of hanging
@@ -96,17 +106,25 @@ def install_app(dest: Path, pin: SlicerPin, zip_path: Path | None = None) -> Non
                 partial.unlink()
                 raise
             os.replace(partial, zip_path)
+        elif sha256_file(zip_path) != pin.release.sha256:
+            raise SetupError(f"the cached download {zip_path} does not match the pin "
+                             f"({pin.release.sha256}); delete {zip_path} and run again")
     _check(str(zip_path), sha256_file(zip_path), pin.release.sha256)
 
-    exe_in_app = Path(pin.exe.path).relative_to("app")
     tmp = Path(tempfile.mkdtemp(dir=dest, prefix=".app-"))
     try:
         with zipfile.ZipFile(zip_path) as z:
             z.extractall(tmp)   # extractall drops absolute paths and ".." components
-        exe = tmp / exe_in_app
-        if not exe.is_file():
-            raise SetupError(f"the zip has no {exe_in_app}")
-        _check(str(exe_in_app), sha256_file(exe), pin.exe.sha256)
+        for pinned in (pin.exe, *pin.libraries):
+            rel = Path(pinned.path).relative_to(pin.app_tree.folder)
+            if not (tmp / rel).is_file():
+                raise SetupError(f"the zip has no {rel}")
+            _check(str(rel), sha256_file(tmp / rel), pinned.sha256)
+        files, tree = app_tree_sha256(tmp)
+        if (files, tree) != (pin.app_tree.files, pin.app_tree.sha256):
+            raise SetupError(f"the extracted app tree ({files} files, sha256 {tree}) does not "
+                             f"match the pin ({pin.app_tree.files} files, "
+                             f"{pin.app_tree.sha256})")
         if app.exists():
             app.rmdir()         # empty, checked above
         os.replace(tmp, app)
@@ -170,7 +188,9 @@ def flatten(pin: SlicerPin) -> dict[str, bytes]:
     unused = sorted(set(prof.upstream_sha256) - set(seen))
     if unused:
         raise SetupError(f"pinned upstream files were not part of any chain: {unused}")
-    out["source-manifest.json"] = _json_bytes({"tag": pin.tag, "files_sha256": seen})
+    manifest = _json_bytes({"tag": pin.tag, "files_sha256": seen})
+    _check("source-manifest.json", hashlib.sha256(manifest).hexdigest(), prof.manifest_sha256)
+    out["source-manifest.json"] = manifest
     return out
 
 
@@ -198,7 +218,7 @@ def setup(dest: Path, zip_path: Path | None = None) -> dict:
     profiles = flatten(pin)            # small and quick: fail before a 200 MB download
     install_app(dest, pin, zip_path)
     write_profiles(dest, pin, profiles)
-    return verify_install(dest, pin)
+    return verify_install(dest, pin, full_tree=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -211,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.verify_only is not None:
-            found = verify_install(args.verify_only, load_pin())
+            found = verify_install(args.verify_only, load_pin(), full_tree=True)
         else:
             found = setup(args.dest, args.zip)
     except (SetupError, SlicerError) as err:

@@ -1,9 +1,11 @@
 # OrcaSlicer 2.5.0 and the Bambu Lab A1 profiles, pinned for `tdmg slice`.
 #
 # Every value is copied from research/verification/2026-11-10-orcaslicer-windows/
-# (README.md, install-hashes.txt, flattened-hashes.txt, source-manifest.json, flatten.txt),
-# except the exit-code table, which is copied from src/libslic3r/Utils.hpp at tag v2.5.0.
-# tests/test_slicer.py checks the hashes against those files.
+# (README.md, install-hashes.txt, flattened-hashes.txt, source-manifest.json, flatten.txt,
+# app-tree.txt), except the exit-code table, which is copied from src/libslic3r/Utils.hpp
+# at tag v2.5.0. tests/test_slicer.py checks the hashes against those files.
+# Lines holding a hash or a URL may exceed 100 characters; they are not wrapped, so each
+# value stays copyable as one string.
 #
 # OrcaSlicer is AGPL-3.0. It is only run as a subprocess. No OrcaSlicer code or profile
 # file is in this repo: only hashes, preset names and exit-code numbers and names (facts).
@@ -25,6 +27,19 @@ release:
 exe:
   path: app/orca-slicer.exe   # relative to the slicer folder the setup script writes
   sha256: e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f
+
+# Checked with the exe before every run (tdmg.slicer.locate): the slicer's main library.
+libraries:
+  - path: app/OrcaSlicer.dll
+    sha256: 4c6a3772c21851623dfa88860f530a9971288bc8ca6e0d0b6b914c145cb987af
+
+# Every file under app/, checked by the setup script and by --verify-only. The tree hash
+# is the SHA-256 of the UTF-8 lines "<path relative to app/, with />\t<file sha256>\n",
+# sorted as Python strings (app_tree_hash.py in the research record).
+app_tree:
+  folder: app
+  files: 4054
+  sha256: b5cf3ff821f71bb6dbfb07b2fb1e806ee15e58e5af76d605d59182f0a2c33402
 
 profiles:
   folder: profiles-flat        # relative to the slicer folder
@@ -52,6 +67,8 @@ profiles:
       chain: [fdm_filament_common, fdm_filament_pla, Bambu PLA Basic @base,
               Bambu PLA Basic @BBL A1]
       sha256: 0254183f025d9f34351caa8371018bae540203344020ec69fc9bd5be0d741104
+  # source-manifest.json as flatten_profiles.py wrote it (CRLF; README addendum, item 5).
+  manifest_sha256: 2b1abe80173cf986d33de7df7708491ad2b41a36639535fb481f4cd933306cb4
   # SHA-256 of each upstream file in the chains (source-manifest.json), by path under BBL/.
   upstream_sha256:
     filament/Bambu PLA Basic @BBL A1.json: 966589ca1c1d5007a470fb0d60e42a4fae2b15ef2fba535fbd8ad72aa92c047d
@@ -71,7 +88,9 @@ decoding:
   windows:
     rule: unsigned32        # the full 32-bit code, unsigned: -50 arrives as 4294967246
     status: measured
-    source: "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    source: >-
+      research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes
+      are not truncated.
   posix:
     rule: low8              # the low 8 bits: -50 arrives as 206
     status: assumed

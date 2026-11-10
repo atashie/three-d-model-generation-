@@ -14,10 +14,16 @@ Its behaviour comes from a JSON control file next to the model, MODEL.fake.json:
     objects    number of entries in "objects" (default 1)
     log        write the log file (default false; the real slicer wrote one only on errors)
     sleep      seconds to wait first (default 0)
+    grandchild start a child process that sleeps this many seconds and holds the output
+               pipes open, as a slicer helper process might (default: none)
+    cwd_file   write the working folder's path to this file
+    stderr     text to write to stderr
 """
 
 import datetime
 import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -40,6 +46,14 @@ def main(argv: list[str]) -> int:
         return -3
     control_path = model.with_name(model.stem + ".fake.json")
     control = json.loads(control_path.read_text()) if control_path.is_file() else {}
+    if "cwd_file" in control:
+        Path(control["cwd_file"]).write_text(os.getcwd())
+    if "stderr" in control:
+        sys.stderr.write(control["stderr"])
+        sys.stderr.flush()
+    if "grandchild" in control:
+        code = f"import time; time.sleep({control['grandchild']})"
+        subprocess.Popen([sys.executable, "-c", code], stdout=sys.stdout, stderr=sys.stderr)
     time.sleep(control.get("sleep", 0))
     if control.get("log", False):
         log.write_text("fake log\n")
