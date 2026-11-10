@@ -14,18 +14,30 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from selection_fixtures import RED, WHITE, roadie_like
 
-from tdmg.checks import merge_exact, topology_checks
+from tdmg.checks import F1_CHECK_IDS, CheckResult, merge_exact, topology_checks, verdict
 from tdmg.flat import (
     DROPPED_LISTED,
+    FLAT_REQUIRED_CHECKS,
     HAUSDORFF_STEP_PX,
     QUAD_SEGS,
+    THIN_LISTED,
     FlatError,
+    body_count_check,
+    build_volume_check,
     clean,
     extrude,
+    flat_checks,
     mask_outline,
+    slicer_check,
+    target_width_check,
+    thin_region_check,
+    thin_regions,
     to_model,
+    triangle_check,
 )
 from tdmg.flat import _sampled_hausdorff as sampled_hausdorff
+from tdmg.profiles import load_printer
+from tdmg.rules import load_rules
 
 
 def polygons(geom) -> list:
@@ -533,3 +545,175 @@ def test_two_fresh_processes_give_identical_mesh_and_report():
         outputs.append(done.stdout.split())
     assert len(outputs[0]) == 2
     assert outputs[0] == outputs[1]
+
+
+# --- Task 6: thin regions and the F2-F6 checks ------------------------------------
+
+
+def a1():
+    return load_printer("bambu-a1")
+
+
+def with_default(rule_id: str, value) -> dict:
+    """The rules registry with one rule's default replaced, for testing a check's FAIL path."""
+    rules = load_rules()
+    rules[rule_id] = rules[rule_id].model_copy(update={"default": value})
+    return rules
+
+
+def by_id(results) -> dict:
+    return {r.id: r for r in results}
+
+
+def test_thin_regions_find_a_thin_strip_and_report_its_centroid():
+    # A 10 x 10 mm square with a 0.5 x 6 mm strip on its right: the strip is below 0.9 mm.
+    square = shapely.box(0, 0, 10, 10)
+    strip = shapely.box(10, 2, 16, 2.5)
+    found = thin_regions([shapely.union_all([square, strip])], 0.9)
+    assert found["min_width_mm"] == 0.9
+    biggest = found["largest"][0]
+    assert biggest["area_mm2"] == pytest.approx(3.0, abs=0.1)
+    assert biggest["centroid_mm"] == pytest.approx([13.0, 2.25], abs=0.05)
+    assert found["area_mm2"] >= biggest["area_mm2"]
+    assert found["pieces"] >= 1
+    assert len(found["largest"]) <= THIN_LISTED
+    json.dumps(found, allow_nan=False)
+
+
+def test_thin_regions_of_a_wide_square_are_only_its_corners():
+    # Opening rounds convex corners. With a true circle each loses r^2 (1 - pi/4), r = 0.45
+    # mm. The buffer's quarter arc is QUAD_SEGS chords inscribed in the circle, whose area is
+    # QUAD_SEGS * r^2 sin(pi / (2 QUAD_SEGS)) / 2, so each corner loses slightly more.
+    found = thin_regions([shapely.box(0, 0, 10, 10)], 0.9)
+    r = 0.45
+    corner = r ** 2 * (1 - QUAD_SEGS * math.sin(math.pi / (2 * QUAD_SEGS)) / 2)
+    assert corner > r ** 2 * (1 - math.pi / 4)
+    assert found["area_mm2"] == pytest.approx(4 * corner, rel=1e-6)
+    assert found["pieces"] == 4
+    assert all(e["area_mm2"] == pytest.approx(corner, abs=1e-3) for e in found["largest"])
+
+
+def test_thin_regions_list_at_most_the_largest_five_largest_first():
+    strips = [shapely.box(3 * i, 0, 3 * i + 0.5, 1 + i) for i in range(7)]
+    found = thin_regions(strips, 0.9)
+    areas = [e["area_mm2"] for e in found["largest"]]
+    assert len(areas) == THIN_LISTED == 5
+    assert areas == sorted(areas, reverse=True)
+    assert areas[0] == pytest.approx(0.5 * 7, rel=1e-6)
+    assert found["pieces"] == 7
+
+
+def test_f3_thin_regions_is_unknown_with_the_measurement():
+    parts = [shapely.union_all([shapely.box(0, 0, 10, 10), shapely.box(10, 2, 16, 2.5)])]
+    check = thin_region_check(parts, load_rules())
+    assert check.id == "F3.thin_regions"
+    assert check.status == "UNKNOWN"
+    assert check.rule == "fdm.wall.min_thickness"
+    assert check.threshold == load_rules()["fdm.wall.min_thickness"].default == 0.9
+    assert check.measured == thin_regions(parts, 0.9)
+    assert check.note == ("tapered tips always appear; pass/fail policy pending research on "
+                          "slicer handling of narrow features")
+
+
+def test_f2_fits_build_volume_passes_and_fails():
+    small = extrude([shapely.box(0, 0, 60, 40)], 3.0)
+    check = build_volume_check(merge_exact(small), a1())
+    assert check.status == "PASS"
+    assert check.measured == [60.0, 40.0, 3.0]
+    assert check.threshold == [256.0, 256.0, 256.0]
+    assert check.rule is None
+    assert "bambu-a1" in check.note and "build_volume_mm" in check.note
+    wide = extrude([shapely.box(0, 0, 300, 40)], 3.0)
+    assert build_volume_check(merge_exact(wide), a1()).status == "FAIL"
+
+
+def test_f2_fits_build_volume_checks_every_axis():
+    tall = raw_box(10.0, 10.0, 257.0)
+    assert build_volume_check(tall, a1()).status == "FAIL"
+    exact = raw_box(256.0, 256.0, 256.0)
+    assert build_volume_check(exact, a1()).status == "PASS"
+
+
+def raw_box(x: float, y: float, z: float) -> trimesh.Trimesh:
+    box = trimesh.creation.box(extents=(x, y, z))
+    return trimesh.Trimesh(box.vertices, box.faces, process=False)
+
+
+def test_f2_target_width_passes_and_reports_final_extents():
+    mask = np.zeros((10, 20), bool)
+    mask[2:8, 3:13] = True
+    model, transform = to_model(mask_outline(mask), 40.0)
+    mesh = merge_exact(extrude(polygons(model), 2.0))
+    check = target_width_check(transform, 40.0, mesh)
+    assert check.status == "PASS"
+    assert check.measured == pytest.approx(40.0, rel=1e-12)
+    assert check.threshold == 40.0
+    assert check.rule is None
+    assert "40 x 24 x 2 mm" in check.note
+    assert "cleaning removes material" in check.note
+
+
+def test_f2_target_width_fails_on_a_wrong_scale():
+    mask = np.zeros((10, 20), bool)
+    mask[2:8, 3:13] = True
+    model, transform = to_model(mask_outline(mask), 40.0)
+    mesh = merge_exact(extrude(polygons(model), 2.0))
+    assert target_width_check(transform, 41.0, mesh).status == "FAIL"
+    off = {**transform, "scale_mm_per_px": transform["scale_mm_per_px"] * (1 + 1e-6)}
+    assert target_width_check(off, 40.0, mesh).status == "FAIL"
+
+
+def test_f4_body_count_pass_for_one_and_unknown_for_more():
+    one = body_count_check(merge_exact(extrude([shapely.box(0, 0, 5, 5)], 1.0)))
+    assert (one.id, one.status, one.measured, one.threshold) == ("F4.body_count", "PASS", 1, 1)
+    two = body_count_check(merge_exact(extrude(
+        [shapely.box(0, 0, 5, 5), shapely.box(7, 0, 9, 3)], 1.0)))
+    assert (two.status, two.measured) == ("UNKNOWN", 2)
+    assert two.note == "separate pieces print loose; join them or accept"
+
+
+def test_f5_triangles_pass_and_fail_with_a_tiny_limit():
+    mesh = merge_exact(extrude([shapely.box(0, 0, 5, 5)], 1.0))
+    check = triangle_check(mesh, load_rules())
+    assert check.status == "PASS"
+    assert check.measured == len(mesh.faces)
+    assert check.rule == "slicer.orca.max_triangles_per_plate"
+    assert check.threshold == 1_000_000
+    tiny = triangle_check(mesh, with_default("slicer.orca.max_triangles_per_plate", 4))
+    assert (tiny.status, tiny.threshold) == ("FAIL", 4)
+    at_limit = with_default("slicer.orca.max_triangles_per_plate", len(mesh.faces))
+    assert triangle_check(mesh, at_limit).status == "PASS"
+
+
+def test_f6_slicer_is_always_unknown():
+    check = slicer_check()
+    assert (check.id, check.status, check.note) == ("F6.slicer", "UNKNOWN",
+                                                   "no slicer integration yet")
+
+
+def test_required_checks_are_f1_to_f6():
+    assert FLAT_REQUIRED_CHECKS == F1_CHECK_IDS | {
+        "F2.fits_build_volume", "F2.target_width", "F3.thin_regions", "F4.body_count",
+        "F5.triangles", "F6.slicer"}
+    assert {r.id for r in topology_checks(merge_exact(extrude([shapely.box(0, 0, 1, 1)],
+                                                              1.0)))} == F1_CHECK_IDS
+
+
+def test_verdict_is_not_certified_even_for_a_perfect_part():
+    mask = np.zeros((10, 20), bool)
+    mask[2:8, 3:13] = True
+    model, transform = to_model(mask_outline(mask), 40.0)
+    parts = polygons(model)
+    mesh = merge_exact(extrude(parts, 2.0))
+    results = topology_checks(mesh) + flat_checks(mesh, parts, transform, 40.0, a1(),
+                                                  load_rules())
+    found = by_id(results)
+    assert set(found) == FLAT_REQUIRED_CHECKS
+    assert len(results) == len(found)
+    unknown = {i for i, r in found.items() if r.status != "PASS"}
+    assert unknown == {"F3.thin_regions", "F6.slicer"}
+    assert verdict(results, FLAT_REQUIRED_CHECKS) == "NOT CERTIFIED"
+    # Only the two pending checks hold it back.
+    passed = [r if r.status == "PASS" else CheckResult(r.id, "PASS", r.measured, r.threshold,
+                                                       r.rule) for r in results]
+    assert verdict(passed, FLAT_REQUIRED_CHECKS) == "PRINTABLE"

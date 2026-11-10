@@ -29,6 +29,10 @@ from tdmg.rules import load_rules
 
 Status = Literal["PASS", "FAIL", "UNKNOWN"]
 VOLUME_DECIMALS = 6  # rounding of reported body volumes only; decisions use the raw value
+F1_ORDER = ("F1.finite", "F1.no_degenerate_faces", "F1.no_duplicate_faces",
+            "F1.edge_manifold", "F1.consistent_orientation", "F1.vertex_manifold",
+            "F1.positive_volume")  # the ids topology_checks returns, in its order
+F1_CHECK_IDS = frozenset(F1_ORDER)
 
 
 @dataclass(frozen=True)
@@ -107,9 +111,7 @@ def topology_checks(mesh: trimesh.Trimesh) -> list[CheckResult]:
     """F1 on an exactly merged mesh."""
     vertices = np.asarray(mesh.vertices, dtype=np.float64)
     faces = np.asarray(mesh.faces, dtype=np.int64).reshape(-1, 3)
-    ids = ("F1.finite", "F1.no_degenerate_faces", "F1.no_duplicate_faces",
-           "F1.edge_manifold", "F1.consistent_orientation", "F1.vertex_manifold",
-           "F1.positive_volume")
+    ids = F1_ORDER
     rules = {"F1.edge_manifold": "format.3mf.edge_manifold",
              "F1.consistent_orientation": "format.3mf.consistent_orientation",
              "F1.vertex_manifold": "gate.topology.vertex_manifold"}

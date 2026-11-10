@@ -23,6 +23,9 @@ import trimesh
 from shapely import affinity
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
+from tdmg.checks import F1_CHECK_IDS, CheckResult
+from tdmg.profiles import PrinterProfile
+
 QUAD_SEGS = 8  # Buffer arcs per quarter circle. Chord error is r*(1-cos(pi/32)), about
                # 0.001 mm at r = 0.2 mm, far below a layer. An approximation setting.
 HAUSDORFF_STEP_PX = 0.25  # Boundary sampling step for the measured change, in pixels.
@@ -30,6 +33,16 @@ HAUSDORFF_STEP_PX = 0.25  # Boundary sampling step for the measured change, in p
                           # HAUSDORFF_STEP_PX * scale_mm_per_px as clean's sample_step_mm.
 DROPPED_LISTED = 10  # Display only: how many dropped-island areas the report lists.
 MASK_ON = 255  # Integer masks hold 0 and 255, as mask.png does (selection.load_mask).
+THIN_LISTED = 5  # Display only: how many thin-region pieces the F3 measurement lists.
+DISPLAY_DECIMALS = 3  # Display rounding of listed thin-region areas and centroids (mm).
+WIDTH_RTOL = 1e-9  # F2.target_width float comparison only; the scale is exact up to rounding.
+THIN_RULE = "fdm.wall.min_thickness"
+TRIANGLE_RULE = "slicer.orca.max_triangles_per_plate"
+# Every check the flat gate needs. F3 and F6 are UNKNOWN until their policy and slicer
+# integration exist, so the verdict is NOT CERTIFIED for now.
+FLAT_REQUIRED_CHECKS = F1_CHECK_IDS | {"F2.fits_build_volume", "F2.target_width",
+                                       "F3.thin_regions", "F4.body_count", "F5.triangles",
+                                       "F6.slicer"}
 
 
 class FlatError(ValueError):
@@ -275,3 +288,103 @@ def extrude(parts: list[Polygon], thickness_mm: float) -> trimesh.Trimesh:
     vertices = np.asarray(mesh.vert_properties, dtype=np.float64)[:, :3]
     faces = np.asarray(mesh.tri_verts, dtype=np.int64)
     return trimesh.Trimesh(vertices, faces, process=False, validate=False)
+
+
+# --- Gate checks F2-F6 for flat output (F1 is tdmg.checks.topology_checks) ------------
+
+
+def thin_regions(parts: list[Polygon], min_width_mm: float) -> dict:
+    """Where the solid is narrower than min_width_mm: union(parts) minus its opening.
+
+    The opening (round joins, QUAD_SEGS) is by a disk of diameter min_width_mm, so what it
+    removes is every region a disk of that width cannot reach. Convex corners always lose a
+    sliver (r^2 (1 - pi/4) for a right angle, r = min_width_mm / 2), so every outline has
+    some thin area. Returns min_width_mm, the total area, the number of pieces and the
+    largest THIN_LISTED pieces by area, each with its area and centroid in model mm,
+    rounded to DISPLAY_DECIMALS for display.
+    """
+    min_width_mm = _require_positive("min_width_mm", min_width_mm)
+    union = shapely.union_all(parts)
+    radius = min_width_mm / 2
+    opened = union.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
+    pieces, _ = _polygons(union.difference(opened))
+    pieces.sort(key=_order_key)
+    largest = [{"area_mm2": round(float(p.area), DISPLAY_DECIMALS),
+                "centroid_mm": [round(float(p.centroid.x), DISPLAY_DECIMALS),
+                                round(float(p.centroid.y), DISPLAY_DECIMALS)]}
+               for p in pieces[:THIN_LISTED]]
+    return {"min_width_mm": min_width_mm, "area_mm2": float(sum(p.area for p in pieces)),
+            "pieces": len(pieces), "largest": largest}
+
+
+def thin_region_check(parts: list[Polygon], rules: dict) -> CheckResult:
+    """F3.thin_regions: always UNKNOWN for now, with the measurement."""
+    threshold = rules[THIN_RULE].default
+    return CheckResult("F3.thin_regions", "UNKNOWN", thin_regions(parts, threshold),
+                       threshold, THIN_RULE,
+                       "tapered tips always appear; pass/fail policy pending research on "
+                       "slicer handling of narrow features")
+
+
+def _extents(mesh: trimesh.Trimesh) -> list[float]:
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    return [float(v) for v in vertices.max(axis=0) - vertices.min(axis=0)]
+
+
+def build_volume_check(mesh: trimesh.Trimesh, printer: PrinterProfile) -> CheckResult:
+    """F2.fits_build_volume: the mesh extents fit the printer's build volume, axis by axis.
+
+    The printer profile, not the rules registry, is the source, so rule is None.
+    """
+    extents = _extents(mesh)
+    volume = [float(v) for v in printer.build_volume_mm]
+    ok = all(e <= v for e, v in zip(extents, volume, strict=True))
+    return CheckResult("F2.fits_build_volume", "PASS" if ok else "FAIL", extents, volume,
+                       None, f"threshold is build_volume_mm from printer profile {printer.id}; "
+                             "axes as placed, no rotation tried")
+
+
+def target_width_check(transform: dict, width_mm: float, mesh: trimesh.Trimesh) -> CheckResult:
+    """F2.target_width: the scale maps the mask's bounding-box width to width_mm."""
+    scaled = transform["scale_mm_per_px"] * transform["mask_width_px"]
+    ok = math.isclose(scaled, width_mm, rel_tol=WIDTH_RTOL, abs_tol=0.0)
+    size = " x ".join(f"{e:.6g}" for e in _extents(mesh))
+    return CheckResult("F2.target_width", "PASS" if ok else "FAIL", scaled, float(width_mm),
+                       None, f"the mask's width is scaled to the requested width; final "
+                             f"extents after cleaning are {size} mm, which can be smaller "
+                             "because cleaning removes material")
+
+
+def _body_count(mesh: trimesh.Trimesh) -> int:
+    with np.errstate(all="ignore"):
+        return len(mesh.split(only_watertight=False, repair=False))
+
+
+def body_count_check(mesh: trimesh.Trimesh) -> CheckResult:
+    """F4.body_count: PASS for one body; with more, UNKNOWN, since that is the user's call."""
+    n = _body_count(mesh)
+    if n == 1:
+        return CheckResult("F4.body_count", "PASS", n, 1, None)
+    return CheckResult("F4.body_count", "UNKNOWN", n, 1, None,
+                       "separate pieces print loose; join them or accept")
+
+
+def triangle_check(mesh: trimesh.Trimesh, rules: dict) -> CheckResult:
+    """F5.triangles: the triangle count is within the slicer's per-plate limit."""
+    limit = rules[TRIANGLE_RULE].default
+    n = len(mesh.faces)
+    return CheckResult("F5.triangles", "PASS" if n <= limit else "FAIL", n, limit,
+                       TRIANGLE_RULE)
+
+
+def slicer_check() -> CheckResult:
+    """F6.slicer: UNKNOWN until a slicer is installed and wrapped."""
+    return CheckResult("F6.slicer", "UNKNOWN", None, None, None, "no slicer integration yet")
+
+
+def flat_checks(mesh: trimesh.Trimesh, parts: list[Polygon], transform: dict,
+                width_mm: float, printer: PrinterProfile, rules: dict) -> list[CheckResult]:
+    """The F2-F6 checks, on an exactly merged mesh and the cleaned parts it came from."""
+    return [build_volume_check(mesh, printer), target_width_check(transform, width_mm, mesh),
+            thin_region_check(parts, rules), body_count_check(mesh),
+            triangle_check(mesh, rules), slicer_check()]
