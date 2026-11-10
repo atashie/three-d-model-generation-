@@ -61,14 +61,14 @@ def pixels_sha256(arr: np.ndarray) -> str:
     return hashlib.sha256(repr((a.shape, str(a.dtype))).encode() + a.tobytes()).hexdigest()
 
 
-def load_image(path: str | Path) -> Intake:
-    path = Path(path)
-    data = path.read_bytes()
+def _open_checked(path: Path, data: bytes) -> Image.Image:
+    """Open and decode an image Pillow reads faithfully as 8-bit: one frame, no 16-bit or
+    float, and complete pixel data."""
     try:
         im = Image.open(io.BytesIO(data))
     except UnidentifiedImageError as e:
         raise SelectionError(f"{path.name} is not a readable image") from e
-    with im:
+    try:
         if im.mode in UNSUPPORTED_MODES or im.mode.startswith("I;16"):
             raise SelectionError(f"{path.name} has mode {im.mode}: 16-bit and floating-point "
                                  "images are not supported; export as 8-bit")
@@ -76,7 +76,20 @@ def load_image(path: str | Path) -> Intake:
         if n_frames > 1:
             raise SelectionError(f"{path.name} has {n_frames} frames; export the frame you "
                                  "want as a single image")
-        im.load()
+        try:
+            im.load()
+        except OSError as e:          # e.g. "image file is truncated"
+            raise SelectionError(f"{path.name} is not a readable image: {e}") from e
+    except SelectionError:
+        im.close()
+        raise
+    return im
+
+
+def load_image(path: str | Path) -> Intake:
+    path = Path(path)
+    data = path.read_bytes()
+    with _open_checked(path, data) as im:
         orientation = im.getexif().get(ORIENTATION_TAG, 1)
         oriented = ImageOps.exif_transpose(im)
         rgba = np.asarray(oriented.convert("RGBA")).copy()
@@ -182,5 +195,36 @@ def select_subject(intake: Intake, spec: SelectionSpec) -> Selection:
     if spec.instructions and not (spec.remove_at or spec.keep_at):
         warnings.append(NOT_INTERPRETED)
     return Selection(mask=mask, controls=controls, steps=steps,
+                     result=_result(mask, warnings),
+                     interpretation={"text": spec.instructions, "machine_interpreted": False})
+
+
+def load_mask(path: str | Path, shape: tuple[int, int]) -> np.ndarray:
+    """A corrected mask: 8-bit or 1-bit, only 0 and 255, same size as the oriented image.
+
+    The mask is read as stored; EXIF orientation is not applied to it.
+    """
+    path = Path(path)
+    with _open_checked(path, path.read_bytes()) as im:
+        arr = np.asarray(im.convert("L"))
+    if arr.shape != tuple(shape):
+        raise SelectionError(f"mask size {arr.shape[1]}x{arr.shape[0]} does not match image "
+                             f"size {shape[1]}x{shape[0]}")
+    if not np.isin(arr, (0, 255)).all():
+        raise SelectionError("mask must contain only 0 and 255 (black = drop, white = keep)")
+    return arr == 255
+
+
+def select_from_mask(intake: Intake, mask: np.ndarray, spec: SelectionSpec) -> Selection:
+    if spec.remove_at or spec.keep_at:
+        raise SelectionError("use either --mask or --remove-at/--keep-at, not both")
+    controls = _resolve(spec)
+    controls.update(source="user_mask", user_mask_sha256=pixels_sha256(mask))
+    warnings = []
+    transparent = int((mask & (intake.rgba[..., 3] < controls["alpha_min"]["value"])).sum())
+    if transparent:
+        warnings.append(f"{transparent} selected pixels are transparent in the image")
+    return Selection(mask=mask.copy(), controls=controls,
+                     steps=[{"op": "user_mask", "selected_px": int(mask.sum())}],
                      result=_result(mask, warnings),
                      interpretation={"text": spec.instructions, "machine_interpreted": False})

@@ -21,7 +21,9 @@ from tdmg.selection import (
     SelectionError,
     SelectionSpec,
     load_image,
+    load_mask,
     pixels_sha256,
+    select_from_mask,
     select_subject,
 )
 
@@ -136,11 +138,21 @@ def _garbage(tmp_path):
     return p
 
 
+def _truncated_png(tmp_path):
+    full = tmp_path / "full.png"
+    Image.fromarray(np.zeros((200, 200), np.uint8)).save(full)   # 4x4 fails at open instead
+    data = full.read_bytes()
+    p = tmp_path / "cut.png"
+    p.write_bytes(data[:len(data) // 2])          # valid header, missing pixel data
+    return p
+
+
 @pytest.mark.parametrize("make, message", [
     (_gray16_png, "16-bit"),
     (_two_frame_gif, "2 frames"),
     (_garbage, "not a readable image"),
-], ids=["16-bit", "multi-frame", "garbage"])
+    (_truncated_png, "not a readable image"),
+], ids=["16-bit", "multi-frame", "garbage", "truncated"])
 def test_load_image_rejects_inputs_it_cannot_decode_faithfully(tmp_path, make, message):
     with pytest.raises(SelectionError, match=message):
         load_image(make(tmp_path))
@@ -227,3 +239,42 @@ def test_holes_are_counted():
 def test_unusable_points_raise(spec):
     with pytest.raises(SelectionError):
         select_subject(_intake(roadie_like()), spec)
+
+
+def _mask_file(tmp_path, arr, name="m.png"):
+    p = tmp_path / name
+    Image.fromarray(arr).save(p)
+    return p
+
+
+def test_user_mask_replaces_controls(tmp_path):
+    m = np.zeros((200, 200), np.uint8)
+    m[60:100, 65:135] = 255
+    m[0, 0] = 255                                   # a transparent pixel in the image
+    sel = select_from_mask(_intake(roadie_like()), load_mask(_mask_file(tmp_path, m), (200, 200)),
+                           SelectionSpec(instructions="just the body"))
+    assert sel.controls["source"] == "user_mask" and sel.mask.sum() == 40 * 70 + 1
+    assert any("transparent" in w for w in sel.result["warnings"])
+    assert not any("not machine-interpreted" in w for w in sel.result["warnings"])
+
+
+def test_bad_user_masks_raise(tmp_path):
+    grey = np.full((200, 200), 100, np.uint8)
+    with pytest.raises(SelectionError, match="0 and 255"):
+        load_mask(_mask_file(tmp_path, grey), (200, 200))
+    with pytest.raises(SelectionError, match="size"):
+        load_mask(_mask_file(tmp_path, np.zeros((5, 5), np.uint8), "s.png"), (200, 200))
+    with pytest.raises(SelectionError, match="either"):
+        select_from_mask(_intake(roadie_like()), np.zeros((200, 200), bool),
+                         SelectionSpec(remove_at=((30, 100),)))
+
+
+@pytest.mark.parametrize("make, message", [
+    (_gray16_png, "16-bit"),
+    (_two_frame_gif, "2 frames"),
+    (_garbage, "not a readable image"),
+    (_truncated_png, "not a readable image"),
+], ids=["16-bit", "multi-frame", "garbage", "truncated"])
+def test_load_mask_rejects_files_it_cannot_decode_faithfully(tmp_path, make, message):
+    with pytest.raises(SelectionError, match=message):
+        load_mask(make(tmp_path), (4, 4))
