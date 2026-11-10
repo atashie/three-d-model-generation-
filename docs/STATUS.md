@@ -104,9 +104,11 @@ The real slicer is not installed in CI.
        still a bit rough, and acceptable for now. This remains an open item: perhaps
        a per-image `--smooth-px`, or a better source image.
    - **First physical print (owner, reported 2026-11-10):** "I printed roadie and it looks great."
-     This is qualitative. Not yet recorded: which file was printed (STL via Bambu Studio, or
-     the tdmg G-code), the filament and settings, and any caliper measurements.
-     `acceptance.dimension.tolerance` therefore remains unchecked.
+     - Printed: `artifacts/flat-runs/roadie-tol30-60x3-s3/model.stl` (smoothed, 60 × 3 mm;
+       sha256 3d5d2601…6d653), sliced in Bambu Studio with its standard settings, in
+       matte PLA. The tdmg G-code was not used.
+     - The owner has no calipers, so `acceptance.dimension.tolerance` is unchecked. Visual
+       judgement only: the thin spike tips (the F3 regions) printed acceptably by eye.
    - **Next, in order:**
      1. **Done 2026-11-10: the slicer check (`tdmg slice`).**
         - Plan: `docs/plans/2026-11-10-slicer-check.md`.

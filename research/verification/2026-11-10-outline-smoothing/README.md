@@ -95,3 +95,14 @@ CERTIFIED (F3 and F6 UNKNOWN).
   perfect, roadie is close but still a bit too rough. But this is fine for now."
   Roadie's remaining roughness is an open item. Options include a per-image sigma
   (`--smooth-px`) or a better source image. Neither has been tested.
+
+## First physical print, 2026-11-10 (owner report)
+
+- **What was printed:** `artifacts/flat-runs/roadie-tol30-60x3-s3/model.stl` (sha256
+  `3d5d260194d75bc048d31e5deb7319a612a86e82700396ac78e515233ef6d653`), the smoothed
+  Roadie at 60 × 3 mm.
+- **How:** in matte PLA on the owner's Bambu Lab A1, sliced in Bambu Studio with its
+  standard settings, not with the tdmg G-code.
+- **Owner's verdict:** "it looks great."
+- **No measurements:** the owner has no calipers, so none were taken. This is
+  qualitative evidence only; no dimension is verified.
