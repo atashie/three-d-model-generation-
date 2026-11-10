@@ -23,9 +23,9 @@ from tdmg.flat import (
     clean,
     extrude,
     mask_outline,
-    sampled_hausdorff,
     to_model,
 )
+from tdmg.flat import _sampled_hausdorff as sampled_hausdorff
 
 
 def polygons(geom) -> list:
@@ -127,7 +127,8 @@ OPENING = 0.4
 MIN_ISLAND = 0.64  # (2.0 x 0.4 mm)^2, the rule defaults with the A1 nozzle
 STEP = 0.01        # Hausdorff sampling step for hand-made geometry, in mm
 REPORT_KEYS = {"opening_mm", "min_island_mm2", "area_before_mm2", "area_after_mm2",
-               "removed_area_mm2", "hausdorff_mm", "hausdorff_sample_step_mm",
+               "removed_area_mm2", "boundary_hausdorff_mm", "hausdorff_upper_bound_mm",
+               "hausdorff_sample_step_mm",
                "dropped_islands", "vanished_parts", "ignored_non_polygonal"}
 
 
@@ -170,7 +171,7 @@ def test_thin_hair_is_removed():
     # The farthest removed points are the hair's tip corners, which are sample points.
     tip = max(parts[0].distance(shapely.Point(9, y)) for y in (2.4, 2.6))
     assert 3.9 < tip < 4.0
-    assert report["hausdorff_mm"] == pytest.approx(tip, abs=1e-9)
+    assert report["boundary_hausdorff_mm"] == pytest.approx(tip, abs=1e-9)
 
 
 def bridged_blobs() -> np.ndarray:
@@ -193,15 +194,42 @@ def test_hausdorff_sees_a_removed_bar_between_vertices():
     dense = shapely.hausdorff_distance(before, after, densify=0.002)
     assert dense > 1.4  # the bar's middle is 1.5 mm from either square
     assert report["hausdorff_sample_step_mm"] == step
-    assert report["hausdorff_mm"] <= dense + 1e-9
-    assert report["hausdorff_mm"] == pytest.approx(dense, abs=step)
-    assert report["hausdorff_mm"] == pytest.approx(1.5, abs=step)
+    assert report["boundary_hausdorff_mm"] <= dense + 1e-9
+    assert report["boundary_hausdorff_mm"] == pytest.approx(dense, abs=step)
+    assert report["boundary_hausdorff_mm"] == pytest.approx(1.5, abs=step)
+    assert report["hausdorff_upper_bound_mm"] >= dense
 
 
 def test_sampled_hausdorff_is_symmetric_and_zero_for_equal_regions():
     a, b = shapely.box(0, 0, 4, 4), shapely.box(0, 0, 4, 6)
     assert sampled_hausdorff(a, a, 0.1) == 0.0
     assert sampled_hausdorff(a, b, 0.1) == sampled_hausdorff(b, a, 0.1) == 2.0
+
+
+def test_upper_bound_covers_a_dropped_island_far_inside_a_hole():
+    # Reviewer's counterexample: the farthest removed point is the island's centre, which
+    # no boundary sample sees. Boundary value about 9.6, true value about 10.
+    centre = shapely.Point(15, 15)
+    frame = shapely.box(0, 0, 30, 30).difference(centre.buffer(10, quad_segs=64))
+    island = centre.buffer(0.4, quad_segs=64)            # 0.503 mm^2 < MIN_ISLAND
+    parts, report = run_clean(shapely.union_all([frame, island]))
+    assert len(parts) == 1
+    assert report["dropped_islands"]["count"] == 1
+    assert report["dropped_islands"]["largest_mm2"][0] == pytest.approx(0.503, abs=0.002)
+    true_at_centre = parts[0].distance(centre)
+    assert true_at_centre == pytest.approx(9.999, abs=0.002)
+    assert report["boundary_hausdorff_mm"] == pytest.approx(9.599, abs=0.002)
+    assert report["boundary_hausdorff_mm"] <= true_at_centre
+    assert report["hausdorff_upper_bound_mm"] >= true_at_centre
+
+
+def test_upper_bound_formula():
+    square = shapely.box(0, 0, 5, 5)
+    hair = shapely.box(5, 2.4, 9, 2.6)
+    _, report = run_clean(shapely.union_all([square, hair]))
+    chord_error = 0.2 * (1 - math.cos(math.pi / (4 * QUAD_SEGS)))
+    assert report["hausdorff_upper_bound_mm"] == pytest.approx(
+        report["boundary_hausdorff_mm"] + STEP / 2 + 0.2 + chord_error, abs=1e-12)
 
 
 def test_specks_below_min_island_are_dropped_and_reported():

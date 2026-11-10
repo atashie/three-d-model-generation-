@@ -131,7 +131,8 @@ def _directed_distance(source, target, step: float) -> float:
     """Largest distance from source's boundary, sampled at step, to the region target."""
     xy = shapely.get_coordinates(shapely.segmentize(source.boundary, step))
     shapely.prepare(target)
-    outside = xy[~shapely.contains_xy(target, xy[:, 0], xy[:, 1])]
+    # Samples in the target or on its boundary are at distance 0; only the rest need the tree.
+    outside = xy[~shapely.intersects_xy(target, xy[:, 0], xy[:, 1])]
     if len(outside) == 0:
         return 0.0
     tree = shapely.STRtree(_boundary_segments(target))
@@ -139,17 +140,46 @@ def _directed_distance(source, target, step: float) -> float:
     return float(distances.max())
 
 
-def sampled_hausdorff(a, b, step: float) -> float:
+def _sampled_hausdorff(a, b, step: float) -> float:
     """Two-sided Hausdorff distance between regions a and b, sampled on both boundaries.
 
     Each boundary is split into pieces no longer than step, and every vertex is a sample.
     A sample covered by the other region is at distance 0, else at its exact distance to
     the other boundary. Samples are points of the boundaries and their distances are
     exact, so the result is a lower bound of the boundary-to-region Hausdorff distance
-    and lies within step / 2 of it. GEOS's plain hausdorff_distance looks only at
-    vertices, so it misses a removed bar whose middle has no vertex.
+    and lies within step / 2 of it. It does not see interior points: clean reports a
+    derived upper bound for the region distance. GEOS's plain hausdorff_distance looks
+    only at vertices, so it misses a removed bar whose middle has no vertex. a and b
+    must be non-empty; clean guarantees that.
     """
     return max(_directed_distance(a, b, step), _directed_distance(b, a, step))
+
+
+def _hausdorff_upper_bound(boundary: float, step: float, radius: float,
+                           largest_dropped_mm2: float) -> float:
+    """Derived bound on the region Hausdorff distance between before and after cleaning.
+
+    Derivation, for the exact opening by a disk of radius r, then the polygonal one:
+    1. after -> before. after lies inside before, so this side is 0. The polygonal
+       buffers can poke out of before by at most the chord error e (measured 0.0003 mm
+       at a hair's root, under e = 0.00096 mm), and e is added below.
+    2. before -> after, for a point x of before not in after, with d = d(x, boundary of
+       before). If d >= r, the disk of radius r at x lies in before, so x is in the
+       opening. So a point the opening removed has d < r. Otherwise x is in a dropped
+       island D. If d >= r, every point within d - r of x survives the erosion, so D
+       holds the disk of radius d around x, area(D) >= pi d^2 and d <= rho_D =
+       sqrt(area(D) / pi). So d <= max(r, rho) with rho for the largest dropped island.
+    3. d(., after) is 1-Lipschitz, so d(x, after) <= d + sup over the boundary of before
+       of d(., after). That sup is at most the sampled value plus step / 2, because every
+       boundary point is within step / 2 of a sample.
+    4. Polygonal buffers: the erosion's polygon lies inside the true disk, so it erodes
+       no more than the exact one, and point 2's "d >= r means kept" still holds. The
+       dilation's polygon holds the disk of radius r - e, which shrinks the disk of
+       point 2 by e: d <= rho + e. Adding e to the whole bound covers both cases.
+    """
+    rho = math.sqrt(largest_dropped_mm2 / math.pi)
+    chord_error = radius * (1 - math.cos(math.pi / (4 * QUAD_SEGS)))
+    return boundary + step / 2 + max(radius, rho) + chord_error
 
 
 def clean(geom_mm, opening_mm: float, min_island_mm2: float,
@@ -159,11 +189,20 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float,
     opening_mm must be above 0: the opening is what separates parts that touch only at a
     corner. Returns the parts, largest first, and a report with a fixed key set:
     opening_mm, min_island_mm2, area_before_mm2, area_after_mm2, removed_area_mm2,
-    hausdorff_mm (sampled_hausdorff at sample_step_mm, a lower bound within the step),
-    hausdorff_sample_step_mm, dropped_islands {count, total_area_mm2, largest_mm2} for
-    parts the opening left below min_island_mm2, vanished_parts {count, total_area_mm2}
-    for input parts the opening erased entirely, and ignored_non_polygonal, the count of
-    lines and points in the input, which have no printable area.
+    boundary_hausdorff_mm, hausdorff_upper_bound_mm, hausdorff_sample_step_mm,
+    dropped_islands {count, total_area_mm2, largest_mm2} for parts the opening left below
+    min_island_mm2, vanished_parts {count, total_area_mm2} for input parts the opening
+    erased entirely, and ignored_non_polygonal, the count of lines and points in the
+    input, which have no printable area.
+
+    boundary_hausdorff_mm is the two-sided distance sampled on both boundaries at
+    sample_step_mm: a lower bound of the boundary distance, accurate to step / 2.
+    hausdorff_upper_bound_mm is a derived (not measured) bound on the true Hausdorff
+    distance between the regions before and after cleaning:
+        boundary_hausdorff_mm + step / 2 + max(r, rho) + e,
+    with r = opening_mm / 2, rho = sqrt(largest dropped island area / pi) (0 if none)
+    and e = r * (1 - cos(pi / (4 * QUAD_SEGS))), the buffer chord error. See
+    _hausdorff_upper_bound for the derivation.
     """
     opening_mm = _require_positive("opening_mm", opening_mm)
     min_island_mm2 = _require_non_negative("min_island_mm2", min_island_mm2)
@@ -191,10 +230,13 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float,
         raise FlatError("nothing printable remains after cleaning (removed "
                         f"{area_before - area_after:.6g} mm^2 of {area_before:.6g} mm^2)")
     after = shapely.union_all(parts)
+    boundary = _sampled_hausdorff(before, after, sample_step_mm)
     report = {"opening_mm": opening_mm, "min_island_mm2": min_island_mm2,
               "area_before_mm2": area_before, "area_after_mm2": area_after,
               "removed_area_mm2": area_before - area_after,
-              "hausdorff_mm": sampled_hausdorff(before, after, sample_step_mm),
+              "boundary_hausdorff_mm": boundary,
+              "hausdorff_upper_bound_mm": _hausdorff_upper_bound(
+                  boundary, sample_step_mm, radius, dropped[0] if dropped else 0.0),
               "hausdorff_sample_step_mm": sample_step_mm,
               "dropped_islands": {"count": len(dropped),
                                   "total_area_mm2": float(sum(dropped)),
