@@ -45,7 +45,7 @@ and names (as facts, cited to `src/libslic3r/Utils.hpp` v2.5.0) are fine.
 - Run both test environments.
 - Keep the doc-lint rule-id caveat in mind: write dotted file names in docs with a path.
 
-**Status:** written 2026-11-10; not started.
+**Status:** written and executed 2026-11-10; see "Execution notes".
 
 ## Decisions
 
@@ -189,3 +189,29 @@ and names (as facts, cited to `src/libslic3r/Utils.hpp` v2.5.0) are fine.
 - An F3 policy.
 - macOS and Linux setup. The decoding rule for those platforms is recorded as
   "assumed, from M5 notes" until it is measured.
+
+## Execution notes
+
+- **Tasks 1–2.**
+  - The pin covers the release zip, the exe, `OrcaSlicer.dll` and a tree hash of all
+    4,054 app files, plus the upstream and flattened profiles and the exit-code table.
+  - `locate` checks the exe, the dll and the profiles on every run (0.13 s). The full
+    tree is checked at setup and by `--verify-only` (2.6 s).
+- **Corrections, measured and recorded in the research record's addendum:**
+  - `--logfile` writes a log on success only with `--debug` 2 or higher; it is always
+    written on failure.
+  - Two bodies in one STL count as one object, so F4.body_count is the real guard.
+  - At exact half-layer thicknesses the slicer rounds either way, so `F6.layer_count`
+    accepts both neighbouring counts there.
+- **Task 3, after review.**
+  - The NOT CERTIFIED reason is now built from the required checks that are not PASS.
+  - `tdmg slice` recomputes `flat_id` with the shared `tdmg.flat.flat_identity`, and pins the
+    exact `out/flat.json` bytes (`links.flat_record_sha256`, part of `slice_id`).
+  - A failed slice's G-code is written as `plate_1.gcode.failed`, and the CLI warns not
+    to print it.
+  - The profiles are hashed in memory and sliced from those copies. The exe and dll
+    keep a millisecond check-to-use gap; this is documented.
+  - **Known limit:** a hand-edited check status with unchanged parameters is not
+    refused, only pinned by the record hash. Refusing it would mean re-running flat's
+    checks.
+- **Task 4:** see the OrcaSlicer research record's "Slicing the owner's models" section.

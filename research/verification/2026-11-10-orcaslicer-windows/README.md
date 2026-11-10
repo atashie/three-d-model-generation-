@@ -151,3 +151,21 @@ settings and argument form as above.
    `artifacts/tools/orcaslicer-2.5.0/profiles-flat/` and in this folder's working copy.
    Git stores this folder's copy with LF, so a checkout's bytes depend on its line-end
    settings. The JSON content does not change.
+
+## Slicing the owner's models with `tdmg slice` (plan Task 4, commit `58ebe94`)
+
+The command was `uv run tdmg slice artifacts/flat-runs/<sel>-60x3-s3 --out
+artifacts/slice-runs/<sel>-60x3-<a|b> --slicer-dir artifacts/tools/orcaslicer-2.5.0`,
+run twice for each model. Every run exited 0 (slicer exit 0, CLI_SUCCESS).
+
+| Model | Certification | Layers | Time (slicer estimate) | Weight | slice_id (first 12) |
+|---|---|---:|---:|---:|---|
+| Roadie, smoothed, 60 × 3 mm | NOT CERTIFIED: F3.thin_regions UNKNOWN, F6.portability UNKNOWN | 15 | 473.0 s | 2.272 g | ba787536a811 |
+| Oddie, smoothed, 60 × 3 mm | NOT CERTIFIED: F3.thin_regions UNKNOWN, F6.portability UNKNOWN | 15 | 484.2 s | 4.346 g | 2a987fbbe7b2 |
+
+- **Checks:** every other required check passed, including the four measured F6 checks.
+- **Repeatability:** for each model, both runs gave the same `slice_id` and the same
+  normalised G-code hash. The raw G-code hashes differ only through the timestamp
+  line.
+- **Outputs:** the outputs are in the git-ignored `artifacts/slice-runs/`.
+- **Not done:** nothing was printed. Bambu Studio's own estimates were not compared.

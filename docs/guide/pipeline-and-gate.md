@@ -28,6 +28,7 @@ valid solid can still include an unwanted background.
 
 - **`tdmg select`** covers S0 and S1, with explicit controls and no language
   interpretation.
+- **`tdmg slice`** covers S9 (see below).
 - **`tdmg flat`** covers S2–S4 and S8 for flat (G1) shapes. It:
   - outlines the mask, smoothed by default (`--smooth-px 0` gives the exact pixel
     outline), and transforms it to millimetres;
@@ -52,3 +53,18 @@ Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value,
 | F6 Sliced output | Two slicers with different 3MF readers, OrcaSlicer and PrusaSlicer, accept the file and produce the expected objects |
 
 If no slicer is installed, F6 is UNKNOWN, so nothing can be PRINTABLE.
+
+**`tdmg slice` (S9, 2026-11-10)** slices a `tdmg flat` output with a pinned,
+hash-verified OrcaSlicer 2.5.0 and the Bambu A1 profiles. It replaces the placeholder
+with measured F6 checks:
+
+- **F6.slicer_exit:** the decoded exit code.
+- **F6.gcode_present:** the slicer wrote G-code.
+- **F6.layer_count:** the layer count matches the expected count. This catches a
+  truncated print; an open mesh slices with exit 0 to a fraction of its layers.
+- **F6.single_object:** one object in the slicer's statistics.
+- **F6.portability:** stays UNKNOWN until PrusaSlicer is added.
+
+The slicer does not validate meshes, so F1 still guards topology. A failed slice's
+G-code is renamed `.failed`. Setup is explicit: `uv run python
+scripts/setup_orcaslicer.py --dest artifacts/tools/orcaslicer-2.5.0` (Windows x64).

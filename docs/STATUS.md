@@ -1,14 +1,17 @@
 # Project status
 
-**Last updated:** 2026-11-10. Phase 1 is under way, with two commands:
+**Last updated:** 2026-11-10. Phase 1 is under way, with three commands:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
-- **`tdmg flat`** (S2–S4, S8): makes a flat STL and gates it.
+- **`tdmg flat`** (S2–S4, S8): makes a flat STL, smoothed by default, and gates it.
+- **`tdmg slice`** (S9): slices it with a pinned, hash-verified OrcaSlicer 2.5.0 and the
+  Bambu A1 profiles, measuring F6.
 
-Both ran on the owner's Roadie and Oddie at 60 × 3 mm, giving one valid body each.
-The verdicts are NOT CERTIFIED, held back by the thin-wall policy (F3) and the slicer
-check (F6). Not done yet: loop or base, 3MF, a slicer, and printing. The R4 backend is
-still open.
+The owner's Roadie and Oddie at 60 × 3 mm each give one valid body that slices to 15
+layers (about 8 minutes, 2.3 g and 4.3 g). The certification is NOT CERTIFIED:
+F3.thin_regions UNKNOWN (no thin-wall policy) and F6.portability UNKNOWN (no second
+slicer). Not done yet: loop or base, 3MF, the F3 policy, PrusaSlicer, and printing. The
+R4 backend is still open.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
 
@@ -38,11 +41,12 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
-Latest local validation (2026-11-10, Windows PC, after outline smoothing): **550 tests
-passed**, both plain and with `CI=true GITHUB_ACTIONS=true`. `ruff check .` and the
-generated-doc check also passed. CI passed on all three OSes for `60e1688`, which
-includes smoothing (run 42863637999, verified 2026-11-10). Cross-machine byte
-equality of smoothed STLs is unmeasured: OpenCV's blur may vary between CPUs.
+Latest local validation (2026-11-10, Windows PC, after the slicer check): **677 tests
+passed and 1 skipped** (the real-slicer test, which runs only when
+`TDMG_ORCASLICER_DIR` is set; it passed locally). Both plain and
+`CI=true GITHUB_ACTIONS=true` runs passed, as did `ruff check .` and the
+generated-doc check. CI last passed for `60e1688` (smoothing); the slicer commits are
+checked after pushing.
 
 ## Next steps, in order
 
@@ -96,13 +100,18 @@ equality of smoothed STLs is unmeasured: OpenCV's blur may vary between CPUs.
        still a bit rough, and acceptable for now. This remains an open item: perhaps
        a per-image `--smooth-px`, or a better source image.
    - **Next, in order:**
-     1. A slicer plan. The owner approved installing a pinned OrcaSlicer release; record
-        its version. The plan covers a headless slice of the flat STL, Windows exit codes
-        measured (not assumed), and F6 from real output.
+     1. **Done 2026-11-10: the slicer check (`tdmg slice`).**
+        - Plan: `docs/plans/2026-11-10-slicer-check.md`.
+        - Evidence: `research/verification/2026-11-10-orcaslicer-windows/`.
+        - Setup: `scripts/setup_orcaslicer.py`, which installs into the git-ignored
+          `artifacts/tools/orcaslicer-2.5.0`.
      2. An F3 thin-wall pass/fail policy, based on research into how the slicer prints
-        narrow regions.
-     3. R1 features (keychain loop or base) and 3MF output with a UUID identity scheme.
-     4. The first physical print and caliper check (`acceptance.dimension.tolerance`).
+        narrow regions. The G-code and statistics are now available to measure it.
+     3. A first physical print and caliper check (`acceptance.dimension.tolerance`). The
+        G-code exists, so the owner can print a slice now if they want. It is still NOT
+        CERTIFIED.
+     4. R1 features (keychain loop or base) and 3MF output with a UUID identity scheme.
+     5. The F6 portability check with PrusaSlicer.
    - Owner images are not committed until their rights are confirmed; the tests use synthetic look-alikes.
 
 ## Open questions for the owner
@@ -139,13 +148,19 @@ The full list is in `docs/PLAN.md` section 13.
     green.
   - **Flat geometry:** `tdmg flat` was built by subagents with two reviews per task,
     reviewed by Codex, and run on the owner's selections.
+  - **Outline smoothing and the slicer check:** both were built and reviewed the same
+    way. The owner approved the OrcaSlicer install. The A1 profiles are flattened from
+    the pinned v2.5.0 source and kept out of the repo (AGPL).
   - **Pushing:** the owner said "push, then proceed" for this line of work. Push after
     the Codex findings are handled, then confirm that CI passes.
 - **Start next session:** read `CLAUDE.md`, this page, `docs/PLAN.md`, then the two
   plans in `docs/plans/`.
-  - The CLI has `select` and `flat`. It has no slicer, 3MF, loop or base, and no
-    language interpreter.
-  - The local outputs are in `artifacts/selection-runs/` and `artifacts/flat-runs/`.
+  - The CLI has `select`, `flat` and `slice`. It has no 3MF, loop or base, second
+    slicer, or language interpreter.
+  - The local outputs are in `artifacts/selection-runs/`, `artifacts/flat-runs/` and
+    `artifacts/slice-runs/`. The pinned slicer is in `artifacts/tools/orcaslicer-2.5.0/`.
+  - The real-slicer test runs with `TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0
+    uv run pytest -m slicer`.
 - **Evidence:** read `RESULTS-PC.md` and `MAKERLAB-RESULTS.md` in the experiment
   directory. Local TripoSR: fast, repeatable geometry, invalid raw topology.
   MakerLab: both supplied meshes pass measured closed-topology checks but each

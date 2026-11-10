@@ -29,6 +29,8 @@ uv run tdmg recipes                       # list the print recipes
 uv run tdmg select IMAGE --out DIR ...    # select the subject; writes a preview to check
 uv run tdmg flat SEL_DIR --width-mm W --thickness-mm T --out DIR   # flat solid + gate
                                           # (outline smoothed by default; --smooth-px 0 = exact)
+uv run python scripts/setup_orcaslicer.py --dest artifacts/tools/orcaslicer-2.5.0   # once, Windows x64
+uv run tdmg slice FLAT_DIR --out DIR --slicer-dir artifacts/tools/orcaslicer-2.5.0  # F6 checks
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

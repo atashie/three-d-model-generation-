@@ -65,7 +65,7 @@ Bambu Studio version and actual slicer execution have not been verified.
 
 | Tool | Version | Licence | State | Role |
 |---|---|---|---|---|
-| OrcaSlicer | 2.5.0 (Homebrew cask) | AGPL-3.0 | not installed yet | Headless slicer check, run as a subprocess |
+| OrcaSlicer | 2.5.0 (Homebrew cask on the Mac; on the PC, the pinned Windows x64 portable, `profiles/slicers/orcaslicer-2.5.0.yaml`) | AGPL-3.0 | Mac: not installed. PC: installed by `scripts/setup_orcaslicer.py` into git-ignored `artifacts/tools/`; hash-verified; runtime-validated by `tdmg slice` (2026-11-10) | Headless slicer check (`tdmg slice`), run only as a subprocess; no code or profile files in the repo |
 | Bambu Studio | 2.9.1 (Homebrew cask) | AGPL-3.0 | not installed | The owner's slicer for sending prints to the A1 |
 
 The "imported" and "tested" states for packages not exercised by this repo's own tests come from `research/verification/2026-11-08-stack-smoke/README.md`.
