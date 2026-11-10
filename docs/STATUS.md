@@ -92,7 +92,9 @@ equality of smoothed STLs is unmeasured: OpenCV's blur may vary between CPUs.
      - Warnings fire only on topology changes.
      - Plan: `docs/plans/2026-11-10-outline-smoothing.md`. Record:
        `research/verification/2026-11-10-outline-smoothing/`.
-     - Pending: the owner's view of the smoothed `artifacts/flat-runs/*-60x3-s3/model.stl`.
+     - Owner's view in Bambu Studio (2026-11-10): Oddie is perfect; Roadie is close but
+       still a bit rough, and acceptable for now. This remains an open item: perhaps
+       a per-image `--smooth-px`, or a better source image.
    - **Next, in order:**
      1. A slicer plan. The owner approved installing a pinned OrcaSlicer release; record
         its version. The plan covers a headless slice of the flat STL, Windows exit codes

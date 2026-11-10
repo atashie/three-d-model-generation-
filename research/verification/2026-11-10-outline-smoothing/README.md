@@ -91,4 +91,7 @@ CERTIFIED (F3 and F6 UNKNOWN).
   - oddie sha256 `8cc3ca1bbbc787f73296f7dace5e4f928a6de4fbdbd9e24686e96280ec4b160c`
 - **What `outline.png` showed:** the changes sit at the spike tips and leaf tips, which
   are shortened by a few pixels, and in narrow crevices, which are slightly filled.
-- **Owner's verdict on the smoothed edges in Bambu Studio:** pending.
+- **Owner's verdict on the smoothed edges in Bambu Studio (2026-11-10):** "oddie is
+  perfect, roadie is close but still a bit too rough. But this is fine for now."
+  Roadie's remaining roughness is an open item. Options include a per-image sigma
+  (`--smooth-px`) or a better source image. Neither has been tested.
