@@ -689,6 +689,112 @@ def test_record_and_selection_do_not_share_dicts(tmp_path):
     rec["controls"]["alpha_min"]["value"] = 1
     rec["steps"].clear()
     assert sel.controls["alpha_min"]["value"] == 128 and sel.steps
-    copied = type(sel)(**{**sel.__dict__, "controls": controls})
+    copied = dataclasses.replace(sel, controls=controls)
     controls["alpha_min"]["value"] = 2
     assert copied.controls["alpha_min"]["value"] == 128
+
+
+def test_mutating_a_selection_after_construction_changes_nothing_written(tmp_path):
+    clean = _run(tmp_path, "a")
+    sel = select_subject(_intake(roadie_like()), SPEC)
+    sel.controls["alpha_min"]["value"] = 1
+    sel.steps.clear()
+    sel.result["status"] = "edited"
+    sel.interpretation["text"] = "something else"
+    rec = write_selection(_intake(roadie_like()), sel, tmp_path / "b")
+    assert rec["selection_id"] == clean["selection_id"]
+    assert rec["controls"]["alpha_min"]["value"] == clean["controls"]["alpha_min"]["value"]
+    assert rec == clean
+
+
+def test_intake_pixels_are_read_only(tmp_path):
+    p = _save(tmp_path, roadie_like())
+    for intake in (load_image(p), _intake(roadie_like())):
+        with pytest.raises(ValueError, match="read-only"):
+            intake.rgba[0, 0] = (1, 2, 3, 4)
+    rgba = roadie_like()
+    hand_built = _intake(rgba)
+    rgba[0, 0] = (1, 2, 3, 4)                     # the caller's array stays independent
+    assert (hand_built.rgba[0, 0] == 0).all() and rgba.flags.writeable
+
+
+def test_a_concurrent_writer_is_detected_at_the_first_file(tmp_path, monkeypatch):
+    out = tmp_path / "a"
+    out.mkdir()
+    real = selection_module._png_bytes
+
+    def racing(arr):                              # another run starts writing after our check
+        if not (out / "mask.png").exists():
+            (out / "mask.png").write_bytes(b"other run")
+        return real(arr)
+
+    monkeypatch.setattr(selection_module, "_png_bytes", racing)
+    with pytest.raises(SelectionError, match="another run is writing"):
+        _run(tmp_path, "a")
+    assert [p.name for p in out.iterdir()] == ["mask.png"]
+    assert (out / "mask.png").read_bytes() == b"other run"
+
+
+def test_a_concurrently_created_folder_is_detected(tmp_path, monkeypatch):
+    out = tmp_path / "a"
+    real = selection_module._png_bytes
+
+    def racing(arr):
+        out.mkdir(exist_ok=True)
+        return real(arr)
+
+    monkeypatch.setattr(selection_module, "_png_bytes", racing)
+    with pytest.raises(SelectionError, match="another run is writing"):
+        _run(tmp_path, "a")
+    assert list(out.iterdir()) == []
+
+
+def test_oversized_images_are_refused(tmp_path, monkeypatch):
+    p = _save(tmp_path, roadie_like())
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    with pytest.raises(SelectionError, match="safety limit"):
+        load_image(p)
+    with pytest.raises(SelectionError, match="safety limit"):
+        load_mask(p, (200, 200))
+
+
+def _rgb_mask(tmp_path, colours):
+    m = np.zeros((2, 2, 3), np.uint8)
+    for i, c in enumerate(colours):
+        m[i // 2, i % 2] = c
+    return _mask_file(tmp_path, m, "rgb.png")
+
+
+@pytest.mark.parametrize("colour", [(0, 0, 4), (255, 255, 251), (255, 0, 0)])
+def test_rgb_masks_must_be_pure_black_and_white(tmp_path, colour):
+    with pytest.raises(SelectionError, match="0 and 255"):
+        load_mask(_rgb_mask(tmp_path, [(0, 0, 0), (255, 255, 255), colour]), (2, 2))
+
+
+def test_pure_black_and_white_masks_are_accepted_in_every_mode(tmp_path):
+    rgb = _rgb_mask(tmp_path, [(0, 0, 0), (255, 255, 255), (255, 255, 255)])
+    expected = np.array([[False, True], [True, False]])
+    with Image.open(rgb) as im:
+        im.load()
+        variants = {"RGB": im.copy(), "RGBA": im.convert("RGBA"), "L": im.convert("L"),
+                    "1": im.convert("1"), "P": im.convert("P")}
+    for mode, v in variants.items():
+        assert v.mode == mode
+        path = tmp_path / f"m_{mode}.png"
+        v.save(path)
+        assert (load_mask(path, (2, 2)) == expected).all(), mode
+
+
+def test_palette_masks_with_non_grey_entries_are_refused(tmp_path):
+    im = Image.new("P", (2, 1))
+    im.putpalette([0, 0, 0, 255, 255, 251] + [0] * 762)
+    im.putpixel((1, 0), 1)
+    im.save(tmp_path / "p.png")
+    with pytest.raises(SelectionError, match="0 and 255"):
+        load_mask(tmp_path / "p.png", (1, 2))
+
+
+def test_masks_in_other_modes_are_refused(tmp_path):
+    Image.new("CMYK", (2, 2)).save(tmp_path / "c.jpg")
+    with pytest.raises(SelectionError, match="CMYK"):
+        load_mask(tmp_path / "c.jpg", (2, 2))

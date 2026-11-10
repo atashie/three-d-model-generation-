@@ -61,6 +61,7 @@ def test_select_reports_os_errors_without_a_traceback(tmp_path):
     r = runner.invoke(app, ["select", str(img), "--out", str(out)])
     assert r.exit_code == 2, r.output
     assert r.stderr.startswith("error: ") and "file.txt" in r.stderr
+    assert "another run" not in r.stderr
     assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
 
 
@@ -141,3 +142,11 @@ def test_select_rejects_a_non_finite_tolerance(tmp_path):
                             "--remove-at", "30,100", "--tolerance", "nan"])
     assert r.exit_code == 2 and "color_tolerance" in r.output and "finite" in r.output
     assert not (tmp_path / "o").exists()
+
+
+def test_select_refuses_an_oversized_image(tmp_path, monkeypatch):
+    img = _img(tmp_path, roadie_like())
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    r = runner.invoke(app, ["select", str(img), "--out", str(tmp_path / "o")])
+    assert r.exit_code == 2 and "safety limit" in r.stderr
+    assert isinstance(r.exception, SystemExit) and not (tmp_path / "o").exists()

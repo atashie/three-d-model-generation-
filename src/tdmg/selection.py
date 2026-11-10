@@ -19,7 +19,8 @@ import json
 import math
 import os
 import platform
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -47,6 +48,8 @@ RECORD_SCHEMA = "tdmg.selection/1"
 CHECKER_CELL_PX = 8
 CHECKER_SHADES = (200, 235)
 REMOVED_TINT = np.array([255, 0, 255], np.uint16)
+RECORD_FIELDS = ("controls", "steps", "result", "interpretation")
+NOT_BINARY = "mask must contain only 0 and 255 (black = drop, white = keep)"
 NOT_INTERPRETED = ("instructions recorded verbatim but not machine-interpreted; "
                    "no control or mask applied them")
 
@@ -64,6 +67,11 @@ class Intake:
     pixels_sha256: str
     exif_transposed: bool
     source_name: str
+
+    def __post_init__(self):
+        rgba = self.rgba.copy()          # read-only and unshared, so pixels_sha256 stays true
+        rgba.flags.writeable = False
+        object.__setattr__(self, "rgba", rgba)
 
 
 def pixels_sha256(arr: np.ndarray) -> str:
@@ -83,6 +91,9 @@ def _open_checked(path: Path, data: bytes) -> Image.Image:
         im = Image.open(io.BytesIO(data))
     except UnidentifiedImageError as e:
         raise SelectionError(f"{path.name} is not a readable image") from e
+    except Image.DecompressionBombError as e:
+        raise SelectionError(f"{path.name} is larger than Pillow's safety limit "
+                             f"({2 * Image.MAX_IMAGE_PIXELS} pixels)") from e
     try:
         if im.mode in UNSUPPORTED_MODES or im.mode.startswith(UNSUPPORTED_MODE_PREFIX):
             raise SelectionError(f"{path.name} has mode {im.mode}: 16-bit and floating-point "
@@ -139,13 +150,24 @@ class Selection:
     result: dict
     interpretation: dict
     input_pixels_sha256: str             # the intake this selection was made from
+    # JSON text of the record fields, taken at construction. write_selection uses only this,
+    # so editing the dicts afterwards cannot change the selection_id or the record.
+    _snapshot: str = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
         mask = self.mask.copy()          # never freeze or share the caller's array
         mask.flags.writeable = False
         object.__setattr__(self, "mask", mask)
-        for name in ("controls", "steps", "result", "interpretation"):   # own copies, unshared
+        for name in RECORD_FIELDS:       # own copies, unshared
             object.__setattr__(self, name, copy.deepcopy(getattr(self, name)))
+        # Text, not bytes: encoding errors (e.g. a lone surrogate) surface in write_selection.
+        object.__setattr__(self, "_snapshot", json.dumps(
+            {name: getattr(self, name) for name in RECORD_FIELDS}, sort_keys=True,
+            separators=(",", ":"), ensure_ascii=False, allow_nan=False))
+
+    def snapshot(self) -> dict:
+        """Fresh copies of controls, steps, result and interpretation as constructed."""
+        return json.loads(self._snapshot)
 
 
 def _interpretation(spec: SelectionSpec) -> dict:
@@ -267,13 +289,32 @@ def load_mask(path: str | Path, shape: tuple[int, int]) -> np.ndarray:
                                  "matches the image's displayed orientation")
         if im.has_transparency_data and (np.asarray(im.convert("RGBA"))[..., 3] != 255).any():
             raise SelectionError("mask has transparent pixels; use an opaque black/white image")
-        arr = np.asarray(im.convert("L"))
+        arr = _mask_values(im)
     if arr.shape != tuple(shape):
         raise SelectionError(f"mask size {arr.shape[1]}x{arr.shape[0]} does not match image "
                              f"size {shape[1]}x{shape[0]}")
     if not np.isin(arr, (0, 255)).all():
-        raise SelectionError("mask must contain only 0 and 255 (black = drop, white = keep)")
+        raise SelectionError(NOT_BINARY)
     return arr == 255
+
+
+def _mask_values(im: Image.Image) -> np.ndarray:
+    """One grey value per pixel, read from the decoded channels without rounding.
+
+    Colour pixels must have equal channels; (0, 0, 4) is not black. Transparency has been
+    refused already, so any alpha channel is all 255 and is ignored.
+    """
+    if im.mode in ("1", "L"):
+        return np.asarray(im.convert("L"))            # "1" maps exactly to 0 and 255
+    if im.mode == "LA":
+        return np.asarray(im)[..., 0]
+    if im.mode in ("RGB", "RGBA", "P", "PA"):
+        rgb = np.asarray(im if im.mode in ("RGB", "RGBA") else im.convert("RGB"))[..., :3]
+        if not ((rgb[..., 0] == rgb[..., 1]) & (rgb[..., 1] == rgb[..., 2])).all():
+            raise SelectionError(NOT_BINARY)
+        return rgb[..., 0]
+    raise SelectionError(f"mask has mode {im.mode}; save it as a black/white PNG "
+                         "(mode 1, L, P, RGB or RGBA)")
 
 
 def select_from_mask(intake: Intake, mask: np.ndarray, spec: SelectionSpec) -> Selection:
@@ -353,6 +394,7 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
     incomplete and must not be used. The record holds no absolute paths and no timestamps.
     """
     out = Path(out_dir)
+    create_folder = not out.exists()
     if out.exists() and not out.is_dir():
         raise SelectionError(f"output path {out} is a file, not a folder; choose a new one")
     if out.exists() and any(out.iterdir()):
@@ -369,8 +411,11 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
     # Provenance is deliberately part of the identity: a value given explicitly and the same
     # value taken from the rule default ({"rule": None} vs {"rule": id}) give different ids.
     # In mask mode the controls carry user_mask_sha256, so the mask is part of the id too.
+    # Built from the construction-time snapshot, never from the live dicts.
+    snap, for_id = sel.snapshot(), sel.snapshot()    # two independent copies
     identity = {"algorithm": ALGORITHM_VERSION, "input_pixels_sha256": intake.pixels_sha256,
-                "controls": sel.controls, "instructions": sel.interpretation["text"]}
+                "controls": for_id["controls"],
+                "instructions": for_id["interpretation"]["text"]}
     try:
         record = {
             "schema": RECORD_SCHEMA, "tdmg_version": __version__,
@@ -379,10 +424,8 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
             "input": {"name": intake.source_name, "file_sha256": intake.file_sha256,
                       "pixels_sha256": intake.pixels_sha256, "width": w, "height": h,
                       "exif_transposed": intake.exif_transposed},
-            # Copies, so editing the returned record cannot change the Selection.
-            "interpretation": copy.deepcopy(sel.interpretation),
-            "controls": copy.deepcopy(sel.controls),
-            "steps": copy.deepcopy(sel.steps), "result": copy.deepcopy(sel.result),
+            # Fresh copies, so editing the returned record cannot change the Selection.
+            **snap,
             # The cache keys are selection_id and mask_pixels_sha256. The output file hashes
             # are integrity hashes, valid within this environment only: PNG bytes depend on
             # the Pillow and zlib versions. The environment is not part of selection_id.
@@ -397,10 +440,26 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
     except UnicodeEncodeError as e:
         raise SelectionError(f"instructions or input name cannot be stored as UTF-8: "
                              f"{e.reason} at position {e.start}") from None
-    out.mkdir(parents=True, exist_ok=True)
-    for name, png in pngs.items():
-        (out / name).write_bytes(png)
-    tmp = out / ".selection.json.tmp"
-    tmp.write_bytes(data)
-    os.replace(tmp, out / "selection.json")
+    busy = f"another run is writing to {out}; choose a new folder"
+    if create_folder:
+        # Decided at the check above: a folder that has appeared since is another run's.
+        try:
+            out.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            if out.is_dir():
+                raise SelectionError(busy) from None
+            raise                        # e.g. a parent is a file: a plain OS error
+    try:
+        # Exclusive create: a second writer fails at its first PNG instead of overwriting.
+        for name, png in pngs.items():
+            with open(out / name, "xb") as f:
+                f.write(png)
+    except FileExistsError:
+        raise SelectionError(busy) from None
+    with tempfile.NamedTemporaryFile(dir=out, delete=False, prefix=".selection-",
+                                     suffix=".tmp") as f:
+        f.write(data)
+    # os.replace overwrites on Windows too, but two writers cannot both get here: the second
+    # one has already failed on its first "xb" PNG above.
+    os.replace(f.name, out / "selection.json")
     return record
