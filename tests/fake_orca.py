@@ -5,7 +5,9 @@ It accepts only the argument form tdmg.slicer.slicer_args builds (the measured f
     --outputdir OUT --export-statistics --logfile LOG
 Anything else exits -2 (CLI_INVALID_PARAMS), as a real argument error would.
 
-Its behaviour comes from a JSON control file next to the model, MODEL.fake.json:
+Its behaviour comes from a JSON control file: the path in $TDMG_FAKE_ORCA_CONTROL if set
+(for runs on a copy of the model in a temporary folder), else MODEL.fake.json next to
+the model:
     exit       signed code passed to sys.exit (default 0), so the parent sees the
                platform's own encoding: 4294967246 on Windows, 206 on POSIX, for -50
     gcode      write plate_1.gcode (default true)
@@ -44,7 +46,8 @@ def main(argv: list[str]) -> int:
     model = Path(stl)
     if not model.is_file():
         return -3
-    control_path = model.with_name(model.stem + ".fake.json")
+    env = os.environ.get("TDMG_FAKE_ORCA_CONTROL")
+    control_path = Path(env) if env else model.with_name(model.stem + ".fake.json")
     control = json.loads(control_path.read_text()) if control_path.is_file() else {}
     if "cwd_file" in control:
         Path(control["cwd_file"]).write_text(os.getcwd())

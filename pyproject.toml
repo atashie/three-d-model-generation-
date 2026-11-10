@@ -63,6 +63,9 @@ packages = ["src/tdmg"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "slicer: runs the real OrcaSlicer; skipped unless TDMG_ORCASLICER_DIR is set",
+]
 
 [tool.ruff]
 line-length = 100

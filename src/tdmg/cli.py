@@ -1,6 +1,7 @@
 """Command-line interface. Phase 0 exposes the registries. Phase 1 has `select` (subject
-selection for review) and `flat` (flat geometry from a selection, gated on the written
-STL); `make` and `check` follow."""
+selection for review), `flat` (flat geometry from a selection, gated on the written
+STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6); `make` and `check`
+follow."""
 
 from pathlib import Path
 from typing import Annotated
@@ -22,6 +23,8 @@ from tdmg.selection import (
     select_subject,
     write_selection,
 )
+from tdmg.slicer import SlicerError
+from tdmg.slicing import make_slice
 
 app = typer.Typer(help="Image -> FDM-printable 3MF/STL. See docs/guide/00-start-here.md.",
                   no_args_is_help=True)
@@ -235,6 +238,60 @@ def flat(
     typer.echo(f"wrote {out / 'outline.png'} - open outline.png to check what smoothing and "
                "cleaning changed")
     typer.echo(f"wrote {out / 'flat.json'}")
+    if any(c["status"] == "FAIL" for c in rec["checks"]):
+        raise typer.Exit(1)
+
+
+@app.command("slice")
+def slice_(
+    flat_dir: Annotated[Path, typer.Argument(exists=True, file_okay=False, metavar="FLAT_DIR",
+                                             help="A tdmg flat output folder.")],
+    out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
+    slicer_dir: Annotated[Path | None, typer.Option(
+        "--slicer-dir", help="OrcaSlicer folder from scripts/setup_orcaslicer.py; default "
+                             "$TDMG_ORCASLICER_DIR")] = None,
+    timeout_s: Annotated[float | None, typer.Option(
+        "--timeout-s", help="Stop the slicer after this many seconds; default from rule "
+                            "slicer.orca.timeout_s")] = None,
+) -> None:
+    """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
+
+    Exit codes:
+      0  files written, and no check FAILed (UNKNOWN checks allowed)
+      1  files written, and at least one check FAILed
+      2  input or setup error (including a missing or unverified
+         slicer): nothing is written; or an I/O failure while
+         writing, which can leave a folder without slice.json:
+         such a folder is incomplete and must not be used
+    Exit 0 does not mean the part is certified; read verdict in slice.json.
+    """
+    try:
+        rec = make_slice(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s)
+    except SlicerError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:              # unreadable input, unwritable output, disk full ...
+        _os_error(e)
+        raise typer.Exit(2) from None
+    typer.echo(f"verdict {rec['verdict']}")
+    typer.echo(rec["certification"])
+    code = rec["exit"]
+    if code["timed_out"]:
+        typer.echo(f"slicer stopped after {rec['params']['timeout_s']['value']:g} s")
+    else:
+        shown = code["signed"] if code["signed"] is not None else code["raw"]
+        typer.echo(f"slicer exit {shown} ({code['name'] or 'not in the v2.5.0 table'})")
+    for c in rec["checks"]:
+        if c["status"] != "PASS":
+            typer.echo(_check_line(c))
+    stats = rec["stats"]
+    if stats is not None:
+        typer.echo(f"{stats['layer_count']} layers, {stats['time_s']:.1f} s, "
+                   f"{stats['weight_g']:.4g} g (slicer estimates)")
+    typer.echo(f"slice_id {rec['slice_id']}")
+    for name in rec["outputs"]:
+        typer.echo(f"wrote {out / name}")
+    typer.echo(f"wrote {out / 'slice.json'}")
     if any(c["status"] == "FAIL" for c in rec["checks"]):
         raise typer.Exit(1)
 
