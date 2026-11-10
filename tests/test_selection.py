@@ -278,3 +278,30 @@ def test_bad_user_masks_raise(tmp_path):
 def test_load_mask_rejects_files_it_cannot_decode_faithfully(tmp_path, make, message):
     with pytest.raises(SelectionError, match=message):
         load_mask(make(tmp_path), (4, 4))
+
+
+def test_load_mask_rejects_an_exif_rotation(tmp_path):
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    p = tmp_path / "rot.png"
+    Image.fromarray(np.zeros((4, 4), np.uint8)).save(p, exif=exif)
+    with pytest.raises(SelectionError, match="EXIF rotation"):
+        load_mask(p, (4, 4))
+
+
+def test_load_mask_accepts_orientation_one(tmp_path):
+    exif = Image.Exif()
+    exif[0x0112] = 1
+    p = tmp_path / "one.png"
+    Image.fromarray(np.zeros((4, 4), np.uint8)).save(p, exif=exif)
+    assert load_mask(p, (4, 4)).shape == (4, 4)
+
+
+@pytest.mark.parametrize("mask", [
+    np.zeros((100, 200), bool),                  # wrong shape
+    np.zeros((200, 200, 1), bool),               # not 2-D
+    np.zeros((200, 200), np.uint8),              # not bool
+], ids=["wrong-shape", "3-d", "uint8"])
+def test_select_from_mask_validates_its_array(mask):
+    with pytest.raises(SelectionError, match="mask"):
+        select_from_mask(_intake(roadie_like()), mask, SelectionSpec())

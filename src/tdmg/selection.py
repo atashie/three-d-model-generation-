@@ -202,10 +202,14 @@ def select_subject(intake: Intake, spec: SelectionSpec) -> Selection:
 def load_mask(path: str | Path, shape: tuple[int, int]) -> np.ndarray:
     """A corrected mask: 8-bit or 1-bit, only 0 and 255, same size as the oriented image.
 
-    The mask is read as stored; EXIF orientation is not applied to it.
+    The mask is read as stored. A mask with an EXIF Orientation of 2-8 is refused, because
+    it is ambiguous whether it was drawn on the stored or the displayed image.
     """
     path = Path(path)
     with _open_checked(path, path.read_bytes()) as im:
+        if im.getexif().get(ORIENTATION_TAG, 1) in TRANSPOSING_ORIENTATIONS:
+            raise SelectionError("mask has an EXIF rotation tag; save it without one so it "
+                                 "matches the image's displayed orientation")
         arr = np.asarray(im.convert("L"))
     if arr.shape != tuple(shape):
         raise SelectionError(f"mask size {arr.shape[1]}x{arr.shape[0]} does not match image "
@@ -218,6 +222,10 @@ def load_mask(path: str | Path, shape: tuple[int, int]) -> np.ndarray:
 def select_from_mask(intake: Intake, mask: np.ndarray, spec: SelectionSpec) -> Selection:
     if spec.remove_at or spec.keep_at:
         raise SelectionError("use either --mask or --remove-at/--keep-at, not both")
+    shape = intake.rgba.shape[:2]
+    if mask.dtype != np.bool_ or mask.shape != shape:
+        raise SelectionError(f"mask must be a {shape[1]}x{shape[0]} boolean array; got "
+                             f"shape {mask.shape} and dtype {mask.dtype}")
     controls = _resolve(spec)
     controls.update(source="user_mask", user_mask_sha256=pixels_sha256(mask))
     warnings = []
