@@ -35,7 +35,7 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 | M5 MacBook | Apple M5, arm64, 16 GB, macOS 26.3, no CUDA | Python 3.13 stack installed and functionally tested (`research/verification/2026-11-08-stack-smoke/`); all tests; wheel build and install. OrcaSlicer is not installed, so `tdmg slice` has not run a real slicer here |
 | PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, tests, lint, docs, wheel installation and geometry smoke checks passed. Optional import failures recorded in `research/verification/2026-11-09-pc-stack/README.md`. The pinned OrcaSlicer 2.5.0 is installed in `artifacts/tools/orcaslicer-2.5.0/` and run by `tdmg slice` |
 
-CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. `origin/main` is at `0cf75c9`. The F3 work, the documentation audit and the F3 Codex review fixes (commits from `70806d2` onward) are being pushed; check CI before calling them verified.
+CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. `origin/main` is at `0cf75c9`. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI.
 
 Latest local validation (2026-11-10, Windows PC, after the F3 Codex review fixes, `slice-3`):
 `uv run pytest -q` gave **833 passed and 1 skipped**, both plain and with
@@ -156,8 +156,7 @@ The full list is in `docs/PLAN.md` section 13.
     (`research/reviews/2026-11-10-thin-walls/`).
   - **Known costs and limits:** slices take about 10–14 s. Nearly symmetric parts can be
     "placement ambiguous" (UNKNOWN).
-  - **Pushing:** the owner said "push, then proceed" for this line of work. After
-    pushing, confirm that CI passes.
+  - **Pushed and CI-verified:** `5e87442` (run 42922009479).
 - **Start next session:** read `CLAUDE.md`, this page, `docs/PLAN.md`, then the plans in
   `docs/plans/` (the latest is the thin-wall policy).
   - The CLI has `select`, `flat` and `slice`. It has no 3MF, loop or base, second

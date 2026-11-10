@@ -23,8 +23,8 @@ step on 2026-11-10. The evidence is `research/verification/2026-11-10-thin-walls
   (0.075 mm), which gives gaps of up to 0.24 mm there.
 
 **Status:** written 2026-11-10. The owner approved Decision 2 and later Decision 2a.
-Tasks 1–3 executed the same day; Task 4 in part (docs and STATUS done; Codex review,
-push and CI not done). See "Execution notes".
+All four tasks were executed the same day: the docs and STATUS, the Codex critical review
+and its fixes, the push, and green CI for `5e87442` (run 42922009479). See "Execution notes".
 
 ## Decisions
 
