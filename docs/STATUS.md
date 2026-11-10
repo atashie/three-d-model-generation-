@@ -43,12 +43,14 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
-Latest local validation (2026-11-10, Windows PC, after the slicer check): **677 tests
+Latest local validation (2026-11-10, Windows PC, after the slicer check): **682 tests
 passed and 1 skipped** (the real-slicer test, which runs only when
 `TDMG_ORCASLICER_DIR` is set; it passed locally). Both plain and
 `CI=true GITHUB_ACTIONS=true` runs passed, as did `ruff check .` and the
-generated-doc check. CI last passed for `60e1688` (smoothing); the slicer commits are
-checked after pushing.
+generated-doc check. CI passed on all three OSes for `fdb6e67`, which includes
+`tdmg slice` (run 42877445218, verified 2026-11-10). That was the first CI run of
+the POSIX timeout tree-kill path, and the fake-slicer tests passed on macOS and Linux.
+The real slicer is not installed in CI.
 
 ## Next steps, in order
 
