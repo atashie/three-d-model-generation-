@@ -57,7 +57,8 @@ def layer(z, body, height=0.2) -> str:
 
 
 def gcode(layers: list[str], start: str = START) -> str:
-    return start + "".join(layers) + "; FEATURE: Custom\nG1 X0 Y0 E5\n"
+    # The end code travels and retracts but does not extrude, as the real one.
+    return start + "".join(layers) + "; FEATURE: Custom\nG1 X0 Y0\nG1 E-.8\n"
 
 
 def solid(geometry, width=WIDTH) -> str:

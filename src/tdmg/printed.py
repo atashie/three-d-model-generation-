@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import io
 import math
+import re
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -71,6 +72,21 @@ CUSTOM = "Custom"            # OrcaSlicer's feature name for the start and end c
 MODEL_FEATURES = frozenset({"Outer wall", "Inner wall", "Gap infill", "Sparse infill",
                             "Internal solid infill", "Top surface", "Bottom surface",
                             "Internal Bridge"})
+# The G-commands read, each seen in the pinned OrcaSlicer's G-code for the A1 profile (the
+# owner's runs, the bridge controls and the review's hair cases): moves and arcs, the XY
+# plane, millimetres, homing and bed levelling (start code), absolute positioning and
+# setting the position. G91 was not seen but is followed exactly. Any other G-command
+# (G4, G5, G10, G18, G19, ...) makes the G-code unsupported. G17 is the only plane, so
+# arcs are always read in X and Y.
+G_COMMANDS = frozenset({"G0", "G1", "G2", "G3", "G17", "G21", "G28", "G29", "G90", "G91",
+                        "G92"})
+# A command as OrcaSlicer writes it: G, M or T, a number without a leading zero, and for
+# M an optional ".n" subcode (M73.2, M201.2, M622.1 are written). Line numbers (N...),
+# checksums (*nn), lower case, leading zeros and words run together are not written by
+# OrcaSlicer, so they are refused rather than parsed.
+COMMAND = re.compile(r"(?:G|T)(?:0|[1-9][0-9]*)|M(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
+# A word: an upper-case letter and a plain decimal number (no exponent, nan or inf).
+WORD = re.compile(r"([A-Z])(-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))")
 CONNECTIVITY = "F3.printed_connectivity"
 COVERAGE = "F3.edge_coverage"
 F3_SLICE_CHECK_IDS = (CONNECTIVITY, COVERAGE)
@@ -174,11 +190,10 @@ def _comment_value(line: str, lineno: int) -> float:
 def _words(code: str, lineno: int) -> dict[str, float]:
     words = {}
     for word in code.split()[1:]:
-        letter, text = word[0].upper(), word[1:]
-        try:
-            value = float(text)
-        except ValueError:
-            raise UnsupportedGcode(f"line {lineno}: cannot read {word!r} in {code!r}") from None
+        found = WORD.fullmatch(word)
+        if found is None:
+            raise UnsupportedGcode(f"line {lineno}: cannot read {word!r} in {code!r}")
+        letter, value = found.group(1), float(found.group(2))
         if not math.isfinite(value):
             raise UnsupportedGcode(f"line {lineno}: {word!r} in {code!r} is not finite")
         words[letter] = value
@@ -239,12 +254,25 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
     that is not a finite number, a position beyond plate.within_bound, and G20 (inches).
     And for G-code with no Z_HEIGHT layer, a Z_HEIGHT that repeats, or a layer that has no
     LAYER_HEIGHT by the end, even if it prints nothing.
+
+    Every line that is not a comment must start with a command matching COMMAND, and a
+    G-command must be in G_COMMANDS; anything else is refused, never skipped. M- and
+    T-commands are ignored except M82 and M83, which set the extrusion mode: the others
+    in this G-code (M17, M73, M104, M106, M109, M140, M190, M201, M203, M204, M205, M220,
+    M221, M400, M620-M625, M970, M971, M974, M981, M991, M1002 and T255) set temperatures,
+    speeds, fans, progress and the A1's own functions, not where plastic goes. An
+    extrusion in "Custom" after the first model extrusion is refused: in all the pinned
+    slicer's G-code for this profile (the owner's runs, the controls and the hair cases)
+    Custom extrudes only before the model, in the purge line; the end code does not
+    extrude.
     """
     relative_e = None                      # unknown until M82 or M83
     relative_xy = False
     x = y = None
     z = width = feature = None
     layers: dict[float, Layer] = {}
+    model_lines: list[int] = []            # lines of model extrusions
+    custom_lines: list[int] = []           # lines of Custom extrusions
     for lineno, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if line.startswith(";"):
@@ -269,7 +297,13 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
         code = line.split(";", 1)[0].strip()
         if not code:
             continue
-        command = code.split()[0].upper()
+        command = code.split()[0]
+        if COMMAND.fullmatch(command) is None:
+            raise UnsupportedGcode(f"line {lineno}: {command!r} in {code!r} is not a command "
+                                   "as OrcaSlicer writes it")
+        if command.startswith("G") and command not in G_COMMANDS:
+            raise UnsupportedGcode(f"line {lineno}: {command} is not a G-command this check "
+                                   "reads")
         if command == "M82":
             relative_e = False
         elif command == "M83":
@@ -300,7 +334,10 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
             if moves and e != 0.0 and feature != CUSTOM and relative_e is not True:
                 raise UnsupportedGcode(f"{where}: absolute extrusion (M82, or no M83 before "
                                        "it): only relative E is supported")
+            if moves and e > 0 and feature == CUSTOM:
+                custom_lines.append(lineno)
             if moves and e > 0 and feature != CUSTOM:
+                model_lines.append(lineno)
                 _check_extrusion(where, command, words, (x, y, nx, ny), z, width, feature)
                 if command == "G1" or command == "G0":
                     pts = [(nx, ny)]
@@ -315,6 +352,10 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
     if not layers:
         raise UnsupportedGcode("no Z_HEIGHT layer: this is not OrcaSlicer G-code with layer "
                                "comments")
+    after = [n for n in custom_lines if model_lines and n > model_lines[0]]
+    if after:
+        raise UnsupportedGcode(f"line {after[0]}: a Custom extrusion after the model began, "
+                               "which is not the start code's purge")
     unknown = [z for z, lay in layers.items() if math.isnan(lay.height)]
     if unknown:
         raise UnsupportedGcode(f"layer(s) {', '.join(f'{z:g}' for z in unknown)} have no "
@@ -462,7 +503,7 @@ def gaps(points: np.ndarray, printed) -> np.ndarray:
     return out
 
 
-def align(model_bounds, first_section, first_printed, plate: Plate) -> Alignment:
+def align(model_bounds, first_section, first_printed, plate: Plate) -> list[Alignment]:
     """Where the slicer put the model: its bounding box centred on the plate, quarter-turned.
 
     OrcaSlicer centres the model's bounding box on the plate (measured: on layers above the
@@ -472,7 +513,12 @@ def align(model_bounds, first_section, first_printed, plate: Plate) -> Alignment
     (the bridge controls were turned 90 degrees). So the placement is known, not fitted:
     model_bounds (x0, y0, x1, y1, the whole model's) gives the box centre, which goes to
     plate.centre, and only the turn is chosen, as the one whose first-layer model edge has
-    the smallest median distance to first_printed (the first of equals). A fitted shift
+    the smallest median distance to first_printed.
+
+    Returns that turn first, then every other turn whose median is within
+    EDGE_SAMPLE_MM / 2 of it, by median: the sampled distances are only that exact, so
+    such turns cannot be told apart (a bar that is symmetric but for a small tab and an
+    unprinted hair is one). The caller measures each and keeps the worse result. A fitted shift
     could absorb a one-sided error, such as a long side printed short; the known one cannot.
     If the slicer ever placed the part elsewhere, every edge would move off the print, the
     gaps would grow and the checks would FAIL: the safe direction.
@@ -481,15 +527,16 @@ def align(model_bounds, first_section, first_printed, plate: Plate) -> Alignment
         raise UnsupportedGcode("the model has no section at the first layer")
     x0, y0, x1, y1 = model_bounds
     centre = (float(x0 + x1) / 2, float(y0 + y1) / 2)
-    best = None
+    medians = []
     for angle in QUARTER_TURNS:
         candidate = Alignment(angle, centre, plate.centre, None)
         edge = _edge_points(candidate.apply(first_section))
-        med = float(np.median(gaps(edge, first_printed)))
-        if best is None or med < best[0]:
-            best = (med, angle)
-    med, angle = best
-    return Alignment(angle, centre, plate.centre, med if math.isfinite(med) else None)
+        medians.append((float(np.median(gaps(edge, first_printed))), angle))
+    medians.sort()                      # by median, then by angle
+    best = medians[0][0]
+    tied = [(m, a) for m, a in medians if m - best <= EDGE_SAMPLE_MM / 2 or m == best]
+    return [Alignment(a, centre, plate.centre, m if math.isfinite(m) else None)
+            for m, a in tied]
 
 
 def _polygons(geometry) -> list:
@@ -585,8 +632,9 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
 
 
 def analyse(text: str, stl: bytes | trimesh.Trimesh, plate: Plate, allowance_first_mm: float,
-            allowance_mm: float) -> tuple[Alignment, list[dict]]:
-    """The alignment and every layer's metrics, lowest layer first.
+            allowance_mm: float) -> list[tuple[Alignment, list[dict]]]:
+    """For each turn align returns (the best first), the alignment and every layer's
+    metrics, lowest layer first.
 
     The first layer is the lowest Z_HEIGHT; it gets allowance_first_mm and the others
     allowance_mm. Raises UnsupportedGcode as parse_gcode and align do.
@@ -597,14 +645,17 @@ def analyse(text: str, stl: bytes | trimesh.Trimesh, plate: Plate, allowance_fir
     zs = sorted(layers)
     sections = [model_section(mesh, layers[z].mid_z) for z in zs]
     printed = [footprint(layers[z].segments) for z in zs]
-    alignment = align((bounds[0, 0], bounds[0, 1], bounds[1, 0], bounds[1, 1]), sections[0],
-                      printed[0], plate)
-    out = []
-    for i, z in enumerate(zs):
-        allowance = allowance_first_mm if i == 0 else allowance_mm
-        m = layer_metrics(sections[i], printed[i], alignment, allowance)
-        out.append({"z": z, "allowance_mm": allowance, **m})
-    return alignment, out
+    turns = align((bounds[0, 0], bounds[0, 1], bounds[1, 0], bounds[1, 1]), sections[0],
+                  printed[0], plate)
+    results = []
+    for alignment in turns:
+        out = []
+        for i, z in enumerate(zs):
+            allowance = allowance_first_mm if i == 0 else allowance_mm
+            m = layer_metrics(sections[i], printed[i], alignment, allowance)
+            out.append({"z": z, "allowance_mm": allowance, **m})
+        results.append((alignment, out))
+    return results
 
 
 def _place(point) -> str:
@@ -627,6 +678,11 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
     Both are UNKNOWN, with the reason, when not_measured is given (the slicer failed), when
     there is no G-code, when the G-code is unsupported, or when the analysis raises any
     other error (an "analysis error", never a PASS).
+
+    When align finds tied turns, each check is judged under every one and the worse
+    result is kept (FAIL over PASS, then the larger excess over the allowance or the more
+    mismatched layers); the record holds the layers under the turn coverage kept, and
+    alignment.tied_angles_deg lists the tied turns.
     """
     first_mm = tolerance_mm + elephant_foot_mm
     threshold = {"first_layer_mm": first_mm, "other_layers_mm": tolerance_mm}
@@ -637,8 +693,7 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
     reason = not_measured or (None if gcode else "no G-code was written")
     if reason is None:
         try:
-            alignment, layers = analyse(gcode.decode("utf-8"), stl, plate, first_mm,
-                                        tolerance_mm)
+            results = analyse(gcode.decode("utf-8"), stl, plate, first_mm, tolerance_mm)
         except UnicodeDecodeError as err:
             reason = f"the G-code is not UTF-8 text: {err}"
         except UnsupportedGcode as err:
@@ -650,12 +705,31 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
         return [CheckResult(CONNECTIVITY, "UNKNOWN", None, None, None, f"not measured: {reason}"),
                 CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
                             f"not measured: {reason}")], record
-    record.update(measured=True, alignment=alignment.as_dict(), layers=[
-        {"z": m["z"], "max_gap_mm": m["max_gap_mm"],
-         "parts": [m["parts_model"], m["parts_printed"]],
-         "holes": [m["holes_model"], m["holes_printed"]],
-         "unmatched": len(m["unmatched"])} for m in layers])
-    return [_connectivity(layers, alignment), _coverage(layers, alignment, threshold)], record
+    judged = [(_connectivity(layers, a), _coverage(layers, a, threshold), a, layers)
+              for a, layers in results]
+    connectivity = max((j[0] for j in judged), key=_badness)
+    kept = max(judged, key=lambda j: _badness(j[1]))
+    coverage, alignment, layers = kept[1], kept[2], kept[3]
+    record.update(measured=True,
+                  alignment={**alignment.as_dict(),
+                             "tied_angles_deg": [a.angle for a, _ in results]},
+                  layers=[{"z": m["z"], "max_gap_mm": m["max_gap_mm"],
+                           "parts": [m["parts_model"], m["parts_printed"]],
+                           "holes": [m["holes_model"], m["holes_printed"]],
+                           "unmatched": len(m["unmatched"])} for m in layers])
+    return [connectivity, coverage], record
+
+
+def _badness(check: CheckResult) -> tuple:
+    """How bad a result is, for keeping the worse of tied turns (the first on equals)."""
+    rank = {"PASS": 0, "UNKNOWN": 1, "FAIL": 2}[check.status]
+    m = check.measured or {}
+    if check.id == COVERAGE:
+        detail = (len(m.get("nothing_printed_z", [])),
+                  (m["max_gap_mm"] - m["allowance_mm"]) if "max_gap_mm" in m else -math.inf)
+    else:
+        detail = (m.get("layers_mismatched", 0), 0)
+    return (rank, *detail)
 
 
 def _connectivity(layers: list[dict], alignment: Alignment) -> CheckResult:

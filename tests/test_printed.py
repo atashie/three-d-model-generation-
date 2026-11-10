@@ -6,6 +6,7 @@ placed as the slicer places a model: its bounding box centred on the A1's 256 mm
 
 import json
 import math
+import re
 
 import numpy as np
 import pytest
@@ -53,7 +54,8 @@ def bridge(width):
 
 
 def measure(model, text, allowance=0.2):
-    alignment, layers = analyse(text, extrude([model], 1.0), PLATE, allowance, allowance)
+    """The best turn's alignment and layers (ties are judged in f3_checks)."""
+    alignment, layers = analyse(text, extrude([model], 1.0), PLATE, allowance, allowance)[0]
     return alignment, {m["z"]: m for m in layers}
 
 
@@ -62,6 +64,12 @@ def checks_for(model, printed_geometry, layers=(0.2, 0.4)):
     body = solid(placed(printed_geometry, model))
     stl = extrude([model], 1.0).export(file_type="stl")
     return f3_checks(gcode([layer(z, body) for z in layers]).encode(), stl, PLATE, 0.2, 0.075)
+
+
+def checks_for_text(text, model=None):
+    """f3_checks on this G-code text for model (a 10 mm square by default)."""
+    stl = extrude([model if model is not None else square()], 1.0).export(file_type="stl")
+    return f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
 
 
 def parse(text):
@@ -182,18 +190,20 @@ GOOD = "; FEATURE: Outer wall\n; LINE_WIDTH: 0.42\nG1 X100 Y100\nG1 X101 Y100 E.
      "G28\nG1 X1 Y0 E.1\n", "unknown position"),
     (START + "; Z_HEIGHT: 0.2\n; LAYER_HEIGHT: 0.2\n; FEATURE: Outer wall\n"
      "; LINE_WIDTH: 0\nG1 X0 Y0\nG1 X1 Y0 E.1\n", "LINE_WIDTH"),
-    (START + "G20\n", "inch"),
+    (START + "G20\n", "G20"),                          # inches
     (START, "no Z_HEIGHT"),
     ("G28\nG1 X10 Y10\n", "no Z_HEIGHT"),              # what the fake slicer writes by default
     # Non-finite or absurd numbers: refused, not followed.
-    (gcode([layer(0.2, GOOD + "G1 Xnan Y105 E.1\n")]), "not finite"),
-    (gcode([layer(0.2, GOOD + "G1 Xinf Y105 E.1\n")]), "not finite"),
-    (gcode([layer(0.2, GOOD + "G1 X101 Y101 Enan\n")]), "not finite"),
+    (gcode([layer(0.2, GOOD + "G1 Xnan Y105 E.1\n")]), "'Xnan'"),
+    (gcode([layer(0.2, GOOD + "G1 Xinf Y105 E.1\n")]), "'Xinf'"),
+    (gcode([layer(0.2, GOOD + "G1 X101 Y101 Enan\n")]), "'Enan'"),
     (gcode([layer(0.2, GOOD.replace("0.42", "nan"))]), "not finite"),
     (START + "; Z_HEIGHT: nan\n; LAYER_HEIGHT: 0.2\n" + GOOD, "not finite"),
-    (gcode([layer(0.2, GOOD + "G1 X1e30 Y105 E.1\n")]), "beyond the plate"),
+    (gcode([layer(0.2, GOOD + "G1 X1e30 Y105 E.1\n")]), "'X1e30'"),
+    (gcode([layer(0.2, GOOD + "G1 X100000 Y105 E.1\n")]), "beyond the plate"),
     (gcode([layer(0.2, GOOD + "G1 X600 Y105\n")]), "beyond the plate"),     # travel too
-    (gcode([layer(0.2, GOOD + "G2 X101.1 Y100 I1e7 J0 E.1\n")]), "arc"),   # once a hang
+    (gcode([layer(0.2, GOOD + "G2 X101.1 Y100 I1e7 J0 E.1\n")]), "'I1e7'"),
+    (gcode([layer(0.2, GOOD + "G2 X101.1 Y100 I10000000 J0 E.1\n")]), "arc"),  # once a hang
     (gcode([layer(0.2, GOOD + "G2 X101 Y100 I300 J0 E.1\n")]), "arc"),     # beyond the bound
     # Layers: a repeated Z_HEIGHT, or one with no LAYER_HEIGHT even if it prints nothing.
     (gcode([layer(0.2, GOOD), layer(0.2, GOOD, height=0.1)]), "repeats"),
@@ -329,7 +339,7 @@ def test_one_sided_shortfalls_fail_coverage(model, printed, gap):
     # to about 0.05 mm (0.296 mm measured for 0.25 mm).
     assert gap - 0.03 <= coverage.measured["max_gap_mm"] <= gap + 0.06
     assert connectivity.status == "PASS"
-    assert record["alignment"]["angle_deg"] == 0
+    assert 0 in record["alignment"]["tied_angles_deg"]     # a bar is the same turned 180
 
 
 def test_a_model_hole_is_matched_and_a_closed_hole_is_found():
@@ -452,3 +462,83 @@ def test_a_nearly_straight_arc_with_a_large_radius_is_read():
             f"G3 X{x1:.6f} Y{y1:.6f} I{-r} J0 E.2\n")
     segs = parse(gcode([layer(0.2, body)]))[0.2].segments
     assert sum(math.hypot(s.x1 - s.x0, s.y1 - s.y0) for s in segs) == pytest.approx(5, abs=1e-3)
+
+
+# --- Strict reading: what is not understood is refused, never dropped -------------------
+
+STRAY = "G1 X200 Y200\n"        # travel far away; an extrusion there would be an extra part
+
+
+def _square_text(extra: str) -> str:
+    body = solid(placed(square()))
+    return gcode([layer(0.2, body), layer(0.4, body + extra)])
+
+
+def test_a_stray_part_written_plainly_fails():
+    # The control for the forms below: read, it is an extra printed part.
+    (connectivity, _), _ = checks_for_text(_square_text(STRAY + "G1 X205 Y200 E.2\n"))
+    assert connectivity.status == "FAIL"
+
+
+@pytest.mark.parametrize(("extra", "reason"), [
+    (STRAY + "G01 X205 Y200 E.2\n", "'G01'"),                     # a leading zero
+    (STRAY + "G1X205Y200E.2\n", "'G1X205Y200E.2'"),               # no spaces
+    (STRAY + "g1 X205 Y200 E.2\n", "'g1'"),                       # lower case
+    (STRAY + "N10 G1 X205 Y200 E.2*33\n", "'N10'"),               # a line number
+    (STRAY + "G1 X205 Y200 E.2*33\n", "'E.2\\*33'"),              # a checksum
+    (STRAY + "G1 X205 Y200 E2e-1\n", "'E2e-1'"),                  # an exponent
+    (STRAY + "G5 I1 J1 P1 Q1 X205 Y200 E.2\n", "G5"),             # a Bezier move
+    ("G18\nG1 X128 Y128\nG2 X130 Y128 I1 J0 E.1\nG17\n", "G18"),  # an arc in another plane
+    ("G19\n", "G19"),
+    ("G10\nG11\n", "G10"),                                        # firmware retraction
+    ("G4 P100\n", "G4"),                                          # not seen in this G-code
+    # A Custom extrusion between model extrusions: not start or end code.
+    ("; FEATURE: Custom\n" + STRAY + "G1 X205 Y200 E.2\n", "Custom extrusion"),
+    ("plain text\n", "'plain'"),
+])
+def test_forms_this_parser_does_not_read_are_unknown(extra, reason):
+    (connectivity, coverage), record = checks_for_text(_square_text(extra))
+    assert [connectivity.status, coverage.status] == ["UNKNOWN", "UNKNOWN"], record["reason"]
+    assert re.search(reason, record["reason"]), record["reason"]
+
+
+def test_custom_at_the_start_and_end_is_still_excluded():
+    # gcode() writes a Custom purge before the first layer and a Custom move after the last.
+    (connectivity, coverage), _ = checks_for_text(_square_text(""))
+    assert [connectivity.status, coverage.status] == ["PASS", "PASS"]
+
+
+def test_m_and_t_codes_are_ignored_except_the_extrusion_mode():
+    extra = "M204 S6000\nM73 P3 R7\nM622.1 S1\nT255\nM1002 judge_flag g29_before_print_flag\n"
+    (connectivity, coverage), _ = checks_for_text(_square_text(extra))
+    assert [connectivity.status, coverage.status] == ["PASS", "PASS"]
+    (connectivity, _), record = checks_for_text(_square_text("M82\n" + STRAY
+                                                             + "G1 X205 Y200 E.2\n"))
+    assert connectivity.status == "UNKNOWN" and "absolute extrusion" in record["reason"]
+
+
+# --- Rotation ties -----------------------------------------------------------------------
+
+@pytest.mark.parametrize("turn", [0, 180])
+def test_a_tie_between_turns_keeps_the_worse_result(turn):
+    # The review's bar: a 60 x 3 mm body with an unprinted hair at one end and a printed
+    # tab at the other. Turned 0 or 180 degrees the medians are within EDGE_SAMPLE_MM / 2,
+    # so the turn cannot be told apart. Under the wrong one the tab would land on the hair
+    # and hide it; both are measured and the worse is kept, which FAILs either way.
+    body = shapely.box(0, 0, 60, 3)
+    tab = shapely.box(-0.18, 1.1, 0, 1.9)
+    model = shapely.union_all([body, shapely.box(60, 1.35, 60.35, 1.65), tab])
+    printed = shapely.union_all([body, tab])
+    stl = extrude([model], 1.0).export(file_type="stl")
+    text = gcode([layer(z, solid(placed(printed, model, turn))) for z in (0.2, 0.4)])
+    (_, coverage), record = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    assert coverage.status == "FAIL"
+    assert coverage.measured["max_gap_mm"] >= 0.3
+    assert {0, 180} <= set(record["alignment"]["tied_angles_deg"])
+
+
+def test_a_clear_turn_has_no_tie():
+    model = l_shape()
+    (_, coverage), record = checks_for(model, model)
+    assert record["alignment"]["tied_angles_deg"] == [0]
+    assert coverage.status == "PASS"
