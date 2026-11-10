@@ -1,4 +1,5 @@
-# Limits and measured behaviour of specific tools. kind: tool_limit.
+# Limits and measured behaviour of specific tools (kind: tool_limit), and settings for
+# running them (slicer.orca.timeout_s, a hypothesis).
 - id: slicer.orca.max_triangles_per_plate
   kind: tool_limit
   summary: Triangle limit per plate declared by OrcaSlicer's --mtcpp option (default value); used here as our F5 budget.
@@ -17,6 +18,19 @@
       validation: measured
       claim: OrcaSlicer 2.5.0 on Windows sliced a 31,200-triangle STL with --mtcpp=1000 and exit 0; the refusal branch exists in source but was not reached for STL input. Enforcement by the slicer is therefore not assumed.
   notes: The declared --mtcpp default. tdmg's own F5 check enforces it as a budget; do not rely on OrcaSlicer to refuse (measured 2026-11-10). Decimate below this before slicing.
+
+- id: slicer.orca.timeout_s
+  kind: hypothesis
+  summary: Wall-clock limit for one OrcaSlicer run in tdmg slice; a run still going after this long is stopped and reported as a failure.
+  unit: s
+  default: 300
+  evidence:
+    - ref: research/verification/2026-11-10-orcaslicer-windows/README.md
+      locator: "every case took about 0.2–0.5 s."
+      provenance: primary
+      validation: untested
+      claim: "OrcaSlicer 2.5.0 on the owner's Windows PC took 0.2-0.5 s per run on a 20 mm cube and the owner's two 60 x 3 mm models (the Roadie STL has 31,200 triangles). 300 s is about 600 times the slowest measured run: room for models near the 1,000,000-triangle budget and slower machines, while a hung slicer is still stopped. The margin is a guess; no large model or slow machine was timed."
+  notes: Bounds a hung or runaway slicer; it is not a performance target. Raise it, with evidence, if a legitimate model is ever stopped by it.
 
 - id: vectorize.opencv.contour_offset_px
   kind: tool_limit

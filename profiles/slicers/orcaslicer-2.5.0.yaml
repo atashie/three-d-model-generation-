@@ -1,0 +1,131 @@
+# OrcaSlicer 2.5.0 and the Bambu Lab A1 profiles, pinned for `tdmg slice`.
+#
+# Every value is copied from research/verification/2026-11-10-orcaslicer-windows/
+# (README.md, install-hashes.txt, flattened-hashes.txt, source-manifest.json, flatten.txt),
+# except the exit-code table, which is copied from src/libslic3r/Utils.hpp at tag v2.5.0.
+# tests/test_slicer.py checks the hashes against those files.
+#
+# OrcaSlicer is AGPL-3.0. It is only run as a subprocess. No OrcaSlicer code or profile
+# file is in this repo: only hashes, preset names and exit-code numbers and names (facts).
+id: orcaslicer-2.5.0
+name: OrcaSlicer
+version: "2.5.0"
+tag: v2.5.0
+licence: AGPL-3.0 (run as a separate program only; never copied into this repo)
+record: research/verification/2026-11-10-orcaslicer-windows/README.md
+
+release:
+  platform: windows-x64
+  asset: OrcaSlicer_Windows_V2.5.0_x64_portable.zip
+  # The standard GitHub release-download URL for this tag and asset. It resolved on
+  # 2026-11-10 to a 217,711,758-byte file; the sha256 below is what makes it trusted.
+  url: https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.5.0/OrcaSlicer_Windows_V2.5.0_x64_portable.zip
+  sha256: e355d9f8ac0be4efa4b4f99ecae448d4e99def8dee97683847ede5aa0ccb9166
+
+exe:
+  path: app/orca-slicer.exe   # relative to the slicer folder the setup script writes
+  sha256: e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f
+
+profiles:
+  folder: profiles-flat        # relative to the slicer folder
+  # Upstream files are read from this base; the vendor index maps preset names to files.
+  source_base: https://raw.githubusercontent.com/OrcaSlicer/OrcaSlicer/v2.5.0/resources/profiles/
+  vendor: BBL
+  # The merge in flatten_profiles.py: each chain parent first, child keys override; these
+  # keys are then dropped, and "name" is set to the leaf preset and "from" to "User".
+  drop_keys: [inherits, from, instantiation, setting_id, description]
+  flat:
+    machine:
+      file: machine.json
+      preset: Bambu Lab A1 0.4 nozzle
+      chain: [fdm_machine_common, fdm_bbl_3dp_001_common, Bambu Lab A1 0.4 nozzle]
+      sha256: cac6616b1320e588f8d8eb58c6a65e7306963293187df7ce577c6929a2b21af1
+    process:
+      file: process.json
+      preset: 0.20mm Standard @BBL A1
+      chain: [fdm_process_common, fdm_process_single_common, fdm_process_single_0.20,
+              0.20mm Standard @BBL A1]
+      sha256: b4af99bd1e6c8256430ae7c21604aa755e63a9e33ac8871d58a60ddde2e8988c
+    filament:
+      file: filament.json
+      preset: Bambu PLA Basic @BBL A1
+      chain: [fdm_filament_common, fdm_filament_pla, Bambu PLA Basic @base,
+              Bambu PLA Basic @BBL A1]
+      sha256: 0254183f025d9f34351caa8371018bae540203344020ec69fc9bd5be0d741104
+  # SHA-256 of each upstream file in the chains (source-manifest.json), by path under BBL/.
+  upstream_sha256:
+    filament/Bambu PLA Basic @BBL A1.json: 966589ca1c1d5007a470fb0d60e42a4fae2b15ef2fba535fbd8ad72aa92c047d
+    filament/Bambu PLA Basic @base.json: 596726a8e36bf0c4f616e386335dfbdf05898e3234d64b8bafd26d2945451f85
+    filament/fdm_filament_common.json: 8c7105b7d59a28f600c43a946f067b8b4d707b9711c0bf6b88e9166e48878548
+    filament/fdm_filament_pla.json: 670d21ea6bdf1cd4b0a2bfddc743612ffd896cd6e5dbe767c25d2c4165c49a30
+    machine/Bambu Lab A1 0.4 nozzle.json: 1291507434ad10363d164ed4b31a2bbd2e9410479b533aa824a4e1ada4ca04f4
+    machine/fdm_bbl_3dp_001_common.json: 982c81d5f93762970befc453bb99352b6dbeb4c8b88dd5ae271eb7fa416fe5b0
+    machine/fdm_machine_common.json: cee021d6dbf12c2bf0bc6e2394cb4f0fa37af78296930cc753498f7ad3341a4a
+    process/0.20mm Standard @BBL A1.json: 2bd33159b3ec659567a63b6ea6f5373af7431c68516e7d3e02693a4cef395079
+    process/fdm_process_common.json: 25602054557e1fed37fd530e12914640c1ec33910f526dbc96deab4a016997d1
+    process/fdm_process_single_0.20.json: cdda8d56d67f62a0faa892cb6efc605ebb5c745bf742f6ead4daaeb6627c182a
+    process/fdm_process_single_common.json: 05b38ac1318e465e817978b36da51754f928da0172738a20bb3a8d4a69eb4769
+
+# How a parent process sees the slicer's exit code, per platform.
+decoding:
+  windows:
+    rule: unsigned32        # the full 32-bit code, unsigned: -50 arrives as 4294967246
+    status: measured
+    source: "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+  posix:
+    rule: low8              # the low 8 bits: -50 arrives as 206
+    status: assumed
+    source: "CLAUDE.md environment facts (M5 notes, 2026-11-08/09); not re-measured for 2.5.0"
+
+# Exit codes: the CLI_* #defines in src/libslic3r/Utils.hpp at tag v2.5.0.
+exit_codes_source: src/libslic3r/Utils.hpp at tag v2.5.0 (fetched 2026-11-10, sha256 fa08fea0cb0aa37b397a05b2543ceaa8318c49193fb6389cc90247f07d793433)
+exit_codes:
+    0: CLI_SUCCESS
+    -1: CLI_ENVIRONMENT_ERROR
+    -2: CLI_INVALID_PARAMS
+    -3: CLI_FILE_NOTFOUND
+    -4: CLI_FILELIST_INVALID_ORDER
+    -5: CLI_CONFIG_FILE_ERROR
+    -6: CLI_DATA_FILE_ERROR
+    -7: CLI_INVALID_PRINTER_TECH
+    -8: CLI_UNSUPPORTED_OPERATION
+    -9: CLI_COPY_OBJECTS_ERROR
+    -10: CLI_SCALE_TO_FIT_ERROR
+    -11: CLI_EXPORT_STL_ERROR
+    -12: CLI_EXPORT_OBJ_ERROR
+    -13: CLI_EXPORT_3MF_ERROR
+    -14: CLI_OUT_OF_MEMORY
+    -15: CLI_3MF_NOT_SUPPORT_MACHINE_CHANGE
+    -16: CLI_3MF_NEW_MACHINE_NOT_SUPPORTED
+    -17: CLI_PROCESS_NOT_COMPATIBLE
+    -18: CLI_INVALID_VALUES_IN_3MF
+    -19: CLI_POSTPROCESS_NOT_SUPPORTED
+    -20: CLI_PRINTABLE_SIZE_REDUCED
+    -21: CLI_OBJECT_ARRANGE_FAILED
+    -22: CLI_OBJECT_ORIENT_FAILED
+    -23: CLI_MODIFIED_PARAMS_TO_PRINTER
+    -24: CLI_FILE_VERSION_NOT_SUPPORTED
+    -25: CLI_EXPORT_STATISTICS_ERROR
+    -50: CLI_NO_SUITABLE_OBJECTS
+    -51: CLI_VALIDATE_ERROR
+    -52: CLI_OBJECTS_PARTLY_INSIDE
+    -53: CLI_EXPORT_CACHE_DIRECTORY_CREATE_FAILED
+    -54: CLI_EXPORT_CACHE_WRITE_FAILED
+    -55: CLI_IMPORT_CACHE_NOT_FOUND
+    -56: CLI_IMPORT_CACHE_DATA_CAN_NOT_USE
+    -57: CLI_IMPORT_CACHE_LOAD_FAILED
+    -58: CLI_SLICING_TIME_EXCEEDS_LIMIT
+    -59: CLI_TRIANGLE_COUNT_EXCEEDS_LIMIT
+    -60: CLI_NO_SUITABLE_OBJECTS_AFTER_SKIP
+    -61: CLI_FILAMENT_NOT_MATCH_BED_TYPE
+    -62: CLI_FILAMENTS_DIFFERENT_TEMP
+    -63: CLI_OBJECT_COLLISION_IN_SEQ_PRINT
+    -64: CLI_OBJECT_COLLISION_IN_LAYER_PRINT
+    -65: CLI_SPIRAL_MODE_INVALID_PARAMS
+    -66: CLI_FILAMENT_CAN_NOT_MAP
+    -67: CLI_ONLY_ONE_TPU_SUPPORTED
+    -68: CLI_FILAMENTS_NOT_SUPPORTED_BY_EXTRUDER
+    -69: CLI_MIXED_FILAMENT_INVALID
+    -100: CLI_SLICING_ERROR
+    -101: CLI_GCODE_PATH_CONFLICTS
+    -102: CLI_GCODE_PATH_IN_UNPRINTABLE_AREA

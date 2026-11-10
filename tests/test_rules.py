@@ -43,3 +43,9 @@ def test_clearance_rules_never_scale_with_the_model():
 def test_smoothing_rule_exists_with_its_unit_and_default():
     rule = RULES["flat.smooth.sigma_px"]
     assert (rule.unit, rule.default, rule.kind) == ("px", 2.5, "hypothesis")
+
+
+def test_slicer_timeout_rule_exists_with_its_unit_and_default():
+    rule = RULES["slicer.orca.timeout_s"]
+    assert (rule.unit, rule.default, rule.kind) == ("s", 300, "hypothesis")
+    assert rule.best_validation == "untested"

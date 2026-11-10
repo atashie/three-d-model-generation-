@@ -39,3 +39,4 @@ jobs:
           n=$("$wheel_python" -m tdmg.cli rules | wc -l)
           echo "rules found by the installed package: $n"
           test "$n" -ge 15
+          "$wheel_python" -c "from tdmg.slicer import load_pin; print('slicer pin:', load_pin().id)"

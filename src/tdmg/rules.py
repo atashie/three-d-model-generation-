@@ -28,7 +28,8 @@ Provenance = Literal["primary", "secondary", "unverified"]
 # measured: software behaviour measured (no print). source-tested: the source printed it.
 Validation = Literal["untested", "measured", "source-tested", "peer-reviewed", "calibrated"]
 RULE_ID = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)+$")
-UNITS = {"mm", "mm2", "deg", "px", "x_nozzle", "triangles", "bool", "alpha8", "rgb8_distance"}
+UNITS = {"mm", "mm2", "deg", "px", "x_nozzle", "triangles", "bool", "alpha8", "rgb8_distance",
+         "s"}
 ATTRIBUTE_KEYS = {"geometry": "G", "articulation": "A", "color": "C", "assembly": "L"}
 
 
