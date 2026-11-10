@@ -54,7 +54,9 @@ from tdmg.printed import (
     ELEPHANT_FOOT_KEY,
     F3_SLICE_CHECK_IDS,
     TOLERANCE_RULE,
+    Setup,
     f3_checks,
+    flow_from_profile,
     plate_from_profile,
 )
 from tdmg.records import (
@@ -85,15 +87,20 @@ from tdmg.slicer import (
 )
 
 RECORD_SCHEMA = "tdmg.slice/1"
-# slice-2 (2026-11-10): F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint,
-# measured from the G-code by tdmg.printed, are required, and F3.thin_regions is
-# information only; the record has "printed", and slice_id's identity adds the F3
-# tolerance and elefant_foot_compensation values. slice-1 required F3.thin_regions, which
-# is always UNKNOWN, so the verdict for the same request can differ and slice_id changes.
-# All F3 work so far is one unpushed slice-2 (nothing after commit fdb6e67 was pushed), so
-# no slice-2 record exists with an earlier F3 method. The method and constants of
-# tdmg.printed are part of this version: bump it when they change after a push.
-SLICE_ALGORITHM_VERSION = "slice-2"
+# The version of what slice_id names, bumped whenever the verdict for the same request can
+# change, pushed or not (a local record made with an older method must not share an id
+# with a newer one). The method and constants of tdmg.printed are part of it.
+# slice-1: F3.thin_regions required (always UNKNOWN).
+# slice-2 (2026-11-10, local only): F3.printed_connectivity, F3.edge_coverage and
+#   F3.edge_overprint from the G-code required, F3.thin_regions information only; the
+#   record has "printed"; slice_id adds the F3 tolerance and elefant_foot_compensation.
+#   Its rotation and acceptance rules changed several times within slice-2 locally.
+# slice-3 (2026-11-10): the quarter turn chosen by a two-sided score over all layers, with
+#   ambiguous placements UNKNOWN; coverage and overprint judged with their sampling
+#   bounds (UNKNOWN in between); the G-code reconciled with the model's height and layer
+#   count, and with the statistics in F6.layer_count; commanded Z, G92 and extrusion
+#   amounts checked against the filament profile.
+SLICE_ALGORITHM_VERSION = "slice-3"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
 FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run with a FAILed check
@@ -299,6 +306,29 @@ def _profile_bytes(slicer: Slicer) -> dict[str, bytes]:
     return out
 
 
+def _cross_check_layers(f6: list[CheckResult], stats: dict | None,
+                        printed: dict) -> list[CheckResult]:
+    """F6.layer_count FAILs when the G-code's own layers disagree with the statistics.
+
+    The statistics file is written beside the G-code; a G-code cut short with untouched
+    statistics would otherwise pass the count. Only when both counts are known: an
+    unmeasurable G-code leaves the F3 checks UNKNOWN instead.
+    """
+    counted = printed.get("layer_count")
+    if stats is None or counted is None or counted == stats["layer_count"]:
+        return f6
+    out = []
+    for c in f6:
+        if c.id == "F6.layer_count":
+            c = CheckResult(c.id, "FAIL", {"statistics": stats["layer_count"],
+                                           "gcode": counted}, c.threshold, c.rule,
+                            f"the G-code has {counted} layers but its statistics say "
+                            f"{stats['layer_count']}: the G-code or the statistics are "
+                            "not from the same complete slice")
+        out.append(c)
+    return out
+
+
 def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
                check_tree: bool = True) -> dict:
     """Slice a tdmg flat output folder and write the G-code, the statistics, the log
@@ -349,11 +379,17 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
         raise SlicerError(f"cannot read the plate from {slicer.profiles['machine']}: "
                           f"{err}") from None
+    try:
+        flow = flow_from_profile(json.loads(profile_data["filament"]))
+    except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
+        raise SlicerError(f"cannot read the filament from {slicer.profiles['filament']}: "
+                          f"{err}") from None
     thickness = float(flat["params"]["thickness_mm"])
     z_min, z_max = stl_z_range(stl)
     allowed = allowed_layer_counts(stl, process)
     tolerance = float(rules[TOLERANCE_RULE].default)
     elephant = elephant_foot_mm(process)
+    setup = Setup(plate, flow, tolerance, elephant, frozenset(allowed))
 
     with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
         base = Path(tmp)
@@ -371,8 +407,9 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         gcode = ((run.out_dir / GCODE_NAME).read_bytes()
                  if (run.out_dir / GCODE_NAME).is_file() else None)
         exited = next(c for c in f6 if c.id == "F6.slicer_exit").status == "PASS"
-        f3, printed = f3_checks(gcode, stl, plate, tolerance, elephant,
+        f3, printed = f3_checks(gcode, stl, setup,
                                 None if exited else "the slicer failed (F6.slicer_exit)")
+        f6 = _cross_check_layers(f6, stats, printed)
         checks = f3 + f6
         quarantined = any(c.status == "FAIL" for c in previous + checks
                           if c.id in SLICE_REQUIRED_CHECKS)

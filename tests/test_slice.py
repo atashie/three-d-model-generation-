@@ -52,10 +52,13 @@ PIN = load_pin()
 # and research/verification/2026-11-10-thin-walls/slicer-settings.txt).
 PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2",
            "elefant_foot_compensation": "0.075"}
+# The filament keys make_slice reads: the A1 PLA Basic values (profiles-flat/filament.json).
+FILAMENT = {"filament_diameter": ["1.75"], "filament_flow_ratio": ["0.98"]}
 # The machine key make_slice reads: the A1's plate (profiles-flat/machine.json).
 MACHINE = {"printable_area": ["0x0", "256x0", "256x256", "0x256"]}
 FILES = {"machine.json": json.dumps(MACHINE).encode(),
-         "process.json": json.dumps(PROCESS).encode(), "filament.json": b"{}"}
+         "process.json": json.dumps(PROCESS).encode(),
+         "filament.json": json.dumps(FILAMENT).encode()}
 APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
 F6_IDS = ["F6.slicer_exit", "F6.gcode_present", "F6.layer_count", "F6.single_object",
           "F6.portability"]
@@ -132,7 +135,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
     flat = json.loads((flat_dir / "flat.json").read_bytes())
     assert set(record) == RECORD_KEYS
     assert (record["schema"], record["algorithm"]) == (RECORD_SCHEMA, SLICE_ALGORITHM_VERSION)
-    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-2"
+    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-3"
     assert record["links"] == {"flat_id": flat["flat_id"],
                                "flat_record_sha256": _sha((flat_dir / "flat.json").read_bytes()),
                                "model_stl_sha256": flat["outputs"]["model.stl"],
@@ -191,7 +194,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
 def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
     record = make_slice(flat_dir, tmp_path / "slice", fake())
     pin = fake.pin
-    identity = {"algorithm": "slice-2", "flat_id": record["links"]["flat_id"],
+    identity = {"algorithm": "slice-3", "flat_id": record["links"]["flat_id"],
                 "model_stl_sha256": record["links"]["model_stl_sha256"],
                 "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
@@ -539,7 +542,7 @@ def test_a_covered_square_passes_both_f3_checks(square_flat, fake, tmp_path):
     assert all(lay["unmatched"] == 0 for lay in printed["layers"])
     assert printed["alignment"]["plate_centre_mm"] == list(PLATE_CENTRE)
     assert printed["alignment"]["angle_deg"] == coverage["measured"]["angle_deg"]
-    assert printed["alignment"]["median_edge_mm"] < 0.01
+    assert len(printed["alignment"]["scores"]) == 4
     assert printed["allowance_mm"] == {"first_layer": pytest.approx(0.275),
                                        "other_layers": 0.2, "elefant_foot_compensation": 0.075}
     assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == ("plate_1.gcode", False)
@@ -614,7 +617,8 @@ def test_an_unprinted_corner_fails_coverage_only(square_flat, fake, tmp_path):
 
 
 @pytest.mark.parametrize(("where", "gap", "status"), [
-    ("first", 0.25, "PASS"),     # inside 0.2 + 0.075 mm on the first layer
+    # Inside 0.2 + 0.075 mm on the first layer with the 0.025 mm sampling bound added.
+    ("first", 0.24, "PASS"),
     ("first", 0.30, "FAIL"),
     ("upper", 0.25, "FAIL"),     # above the first layer the allowance is 0.2 mm
 ])
@@ -723,6 +727,34 @@ def test_the_tolerance_used_is_part_of_slice_id(flat_dir, fake, tmp_path, monkey
                         lambda: {**rules, "acceptance.dimension.tolerance": wider})
     b = make_slice(flat_dir, tmp_path / "b", root)
     assert a["slice_id"] != b["slice_id"]
+
+
+def test_a_g_code_cut_short_fails_coverage_and_the_layer_count(square_flat, fake, tmp_path):
+    # Codex item 2: the G-code stops after 2 of the model's 15 layers, while the statistics
+    # still say 15. F3 reconciles the G-code with the model, and F6 with the statistics.
+    bed = _bed_section(square_flat)
+    text = gcode([layer(0.2 * (i + 1), solid(bed)) for i in range(2)])
+    record = make_slice(square_flat, tmp_path / "slice", fake(gcode_text=text))
+    checks = by_id(record)
+    assert checks["F3.edge_coverage"]["status"] == "FAIL"
+    assert "the G-code has 2 layers, not one of [15]" in checks["F3.edge_coverage"]["note"]
+    assert checks["F6.layer_count"]["status"] == "FAIL"
+    assert checks["F6.layer_count"]["measured"] == {"statistics": 15, "gcode": 2}
+    assert record["gcode"]["quarantined"] is True
+
+
+@pytest.mark.parametrize("filament", [{}, {"filament_diameter": ["1.75"]},
+                                      {"filament_diameter": ["0"],
+                                       "filament_flow_ratio": ["0.98"]},
+                                      {"filament_diameter": ["x"],
+                                       "filament_flow_ratio": ["0.98"]}])
+def test_a_filament_profile_without_its_flow_is_refused(flat_dir, fake, tmp_path,
+                                                        monkeypatch, filament):
+    root = fake()
+    _with_profile(fake, monkeypatch, "filament", json.dumps(filament).encode())
+    with pytest.raises(SlicerError, match="filament"):
+        make_slice(flat_dir, tmp_path / "slice", root)
+    assert not (tmp_path / "slice").exists()
 
 
 def test_the_required_checks_swap_thin_regions_for_the_printed_checks():

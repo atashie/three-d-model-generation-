@@ -11,8 +11,8 @@ does not understand instead of skipping it:
 - footprint: the printed area of a layer. Every extruding move is a "bead": a line of its
   stated width with round ends. This approximates real squashed plastic.
 - model_section: the model's outline at a height, from the STL as stored.
-- align: where the slicer put the model: its bounding box centred on the plate, turned by
-  a quarter turn.
+- analyse: where the slicer put the model (its bounding box centred on the plate, turned
+  by the quarter turn that fits best over all layers) and every layer's metrics.
 - layer_metrics: per layer, the largest distance from the model's edge to printed plastic,
   and whether the parts and holes of the print match those of the model one to one.
 - f3_checks: F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint for tdmg
@@ -99,6 +99,24 @@ F3_SLICE_CHECK_IDS = (CONNECTIVITY, COVERAGE, OVERPRINT)
 # sixth significant digit, and the float height within (|z| + |z_prev| + |h|) * 2^-24 of
 # the exact difference. Z_SIG_DIGITS is that format's precision, not a threshold.
 Z_SIG_DIGITS = 6
+# Model moves as OrcaSlicer writes them: X, Y, Z, I and J with at most 3 decimals and E with
+# at most 5 (every model move in the owner's G-code, the bridge controls and the hair
+# cases; its GCodeFormatter rounds each axis to a fixed number of digits and drops trailing
+# zeros, GCodeWriter.cpp at v2.5.0). So a printed coordinate is within XY_ROUND_MM of the
+# slicer's own, and a printed E within E_ROUND_MM. Precision of the format, not thresholds.
+XY_ROUND_MM = 0.5e-3
+E_ROUND_MM = 0.5e-5
+# Bridges are extruded as round beads of the line width (OrcaSlicer v2.5.0
+# Flow::mm3_per_mm); every other model feature as a rectangle with round ends.
+BRIDGE_FEATURES = frozenset({"Internal Bridge"})
+# M-codes that change where plastic goes or how much, none of which the pinned slicer
+# writes for this profile: steps per mm (M92), volumetric extrusion (M200), firmware
+# retraction settings (M207, M208, M209) and Z babystepping (M290). They make the G-code
+# unsupported anywhere. M221 (flow percent) is read only as S100, as the start code
+# writes it. G92 may set E only: no real file sets X, Y or Z with it.
+REFUSED_M_COMMANDS = frozenset({"M92", "M200", "M207", "M208", "M209", "M290"})
+FILAMENT_DIAMETER_KEY = "filament_diameter"
+FILAMENT_FLOW_KEY = "filament_flow_ratio"
 TOLERANCE_RULE = "acceptance.dimension.tolerance"
 ELEPHANT_FOOT_KEY = "elefant_foot_compensation"      # OrcaSlicer's spelling
 PRINTABLE_AREA_KEY = "printable_area"
@@ -164,6 +182,48 @@ def plate_from_profile(machine_profile: dict) -> Plate:
     return plate
 
 
+@dataclass(frozen=True)
+class Flow:
+    """The filament profile's diameter and flow ratio, which set E per mm of bead."""
+    filament_diameter_mm: float
+    flow_ratio: float
+
+    def e_per_mm(self, width: float, height: float, bridge: bool) -> float:
+        """E per mm of move, as OrcaSlicer v2.5.0 computes it.
+
+        Flow::mm3_per_mm: a bridge is a circle of the width, pi w^2 / 4; any other bead a
+        rectangle with round ends, h (w - h (1 - pi / 4)). E is that volume over the
+        filament's cross-section, times the filament's flow ratio. The pinned process
+        profile's other flow ratios (print, first layer and per feature) are all 1, so they
+        are not modelled: a profile that changed them would give mismatched E and UNKNOWN.
+        Measured on every model move of the owner's G-code and the controls (58,344): the
+        ratio of written to computed E has median 1.0000.
+        """
+        mm3 = (width * width * math.pi / 4 if bridge
+               else height * (width - height * (1 - math.pi / 4)))
+        area = math.pi * self.filament_diameter_mm ** 2 / 4
+        return mm3 / area * self.flow_ratio
+
+
+def _profile_number(profile: dict, key: str) -> float:
+    value = profile.get(key)
+    if isinstance(value, list) and len(value) == 1:
+        value = value[0]
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"filament profile {key!r} is {value!r}, not one number") from None
+    if not (math.isfinite(number) and number > 0):
+        raise ValueError(f"filament profile {key!r} must be finite and above 0, not {value!r}")
+    return number
+
+
+def flow_from_profile(filament_profile: dict) -> Flow:
+    """The Flow from a flattened filament profile (values are one-item lists of strings)."""
+    return Flow(_profile_number(filament_profile, FILAMENT_DIAMETER_KEY),
+                _profile_number(filament_profile, FILAMENT_FLOW_KEY))
+
+
 class Segment(NamedTuple):
     x0: float
     y0: float
@@ -210,8 +270,9 @@ def _words(code: str, lineno: int) -> dict[str, float]:
 
 
 def _arc(x, y, nx, ny, words, clockwise, plate: Plate,
-         where: str) -> list[tuple[float, float]]:
-    """The chord ends of a G2/G3 arc in the I/J centre form, ending exactly at (nx, ny).
+         where: str) -> tuple[list[tuple[float, float]], float, float]:
+    """The chord ends of a G2/G3 arc in the I/J centre form, ending exactly at (nx, ny),
+    with the arc's length and its sweep in radians.
 
     The sweep follows the usual firmware convention (Marlin's plan_arc): the arc turns
     clockwise for G2 and anticlockwise for G3 from the start to the end angle, and a start
@@ -243,10 +304,10 @@ def _arc(x, y, nx, ny, words, clockwise, plate: Plate,
     if not all(plate.within_bound(px, py) for px, py in pts):
         raise UnsupportedGcode(f"{where}: the arc (radius {r:g}) reaches beyond the plate by "
                                "more than its own size")
-    return [*pts, (nx, ny)]
+    return [*pts, (nx, ny)], length, abs(a1 - a0)
 
 
-def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
+def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float, Layer]:
     """{z: Layer} for every "; Z_HEIGHT:" layer, with its extruding moves.
 
     An extruding move is a G1, G2 or G3 with a positive E that moves in X or Y. Moves in
@@ -279,11 +340,19 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
     slicer's G-code for this profile (the owner's runs, the controls and the hair cases)
     Custom extrudes only before the model, in the purge line; the end code does not
     extrude.
+
+    What is commanded must be what is analysed: every model extrusion must be at the
+    layer's Z_HEIGHT as commanded by Z words (followed through G90/G91; Z-hops on travel
+    are fine), within the precision both are written with (_commanded_z_tolerance). G92 may
+    set E only, and REFUSED_M_COMMANDS and M221 other than S100 are refused. With flow
+    given, as tdmg slice always does, each model extrusion's E must be the amount for its
+    stated width and bead height (the latest LAYER_HEIGHT) over its length
+    (_check_amount); a move with too little or too much plastic for its bead is refused.
     """
     relative_e = None                      # unknown until M82 or M83
     relative_xy = False
-    x = y = None
-    z = width = feature = None
+    x = y = z_cmd = None                   # z_cmd: the Z the moves command
+    z = width = feature = bead_height = None
     layers: dict[float, Layer] = {}
     model_lines: list[int] = []            # lines of model extrusions
     custom_lines: list[int] = []           # lines of Custom extrusions
@@ -303,6 +372,7 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
                 if not height > 0:
                     raise UnsupportedGcode(f"line {lineno}: layer height {height} is not "
                                            "positive")
+                bead_height = height
                 if math.isnan(layers[z].height):          # the layer's, not a feature's
                     layers[z] = Layer(z, height, layers[z].segments)
             elif tag.startswith("LINE_WIDTH:"):
@@ -320,6 +390,12 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
         if command.startswith("G") and command not in G_COMMANDS:
             raise UnsupportedGcode(f"line {lineno}: {command} is not a G-command this check "
                                    "reads")
+        if command in REFUSED_M_COMMANDS:
+            raise UnsupportedGcode(f"line {lineno}: {command} changes the extrusion or Z, "
+                                   "which this check does not follow")
+        if command == "M221" and _words(code, lineno).get("S") != 100:
+            raise UnsupportedGcode(f"line {lineno}: {code!r} sets the flow to other than "
+                                   "100%")
         if command == "M82":
             relative_e = False
         elif command == "M83":
@@ -331,11 +407,11 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
         elif command == "G20":
             raise UnsupportedGcode(f"line {lineno}: G20 (inch units) is not supported")
         elif command == "G28":
-            x = y = None
+            x = y = z_cmd = None
         elif command == "G92":
-            words = _words(code, lineno)
-            x, y = words.get("X", x), words.get("Y", y)
-            _check_bound(f"line {lineno} ({code!r})", x, y, plate)
+            if set(_words(code, lineno)) - {"E"}:
+                raise UnsupportedGcode(f"line {lineno}: {code!r} sets a position other than "
+                                       "E, which OrcaSlicer does not write")
         elif command in ("G0", "G1", "G2", "G3"):
             words = _words(code, lineno)
             if relative_xy:
@@ -345,6 +421,11 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
                 nx, ny = words.get("X", x), words.get("Y", y)
             where = f"line {lineno} ({code!r})"
             _check_bound(where, nx, ny, plate)
+            if "Z" in words:
+                if relative_xy:
+                    z_cmd = None if z_cmd is None else z_cmd + words["Z"]
+                else:
+                    z_cmd = words["Z"]
             moves = (nx, ny) != (x, y) or (command in ("G2", "G3") and "E" in words)
             e = words.get("E", 0.0)
             if moves and e != 0.0 and feature != CUSTOM and relative_e is not True:
@@ -354,11 +435,16 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
                 custom_lines.append(lineno)
             if moves and e > 0 and feature != CUSTOM:
                 model_lines.append(lineno)
-                _check_extrusion(where, command, words, (x, y, nx, ny), z, width, feature)
+                _check_extrusion(where, command, words, (x, y, nx, ny), z, width, feature,
+                                 z_cmd, None if z is None else layers[z].height)
                 if command == "G1" or command == "G0":
-                    pts = [(nx, ny)]
+                    pts, length, sweep = [(nx, ny)], math.hypot(nx - x, ny - y), None
                 else:
-                    pts = _arc(x, y, nx, ny, words, command == "G2", plate, where)
+                    pts, length, sweep = _arc(x, y, nx, ny, words, command == "G2", plate,
+                                              where)
+                if flow is not None:
+                    _check_amount(where, e, length, sweep, width, bead_height,
+                                  feature in BRIDGE_FEATURES, flow)
                 px, py = x, y
                 for qx, qy in pts:
                     if (qx, qy) != (px, py):
@@ -405,15 +491,50 @@ def _z_tolerance(z: float, previous: float, height: float) -> float:
     return 2 * (rounding + (abs(z) + abs(previous) + abs(height)) * 2.0 ** -24)
 
 
+def _commanded_z_tolerance(z: float) -> float:
+    """How far a commanded Z word may be from Z_HEIGHT: the 3-decimal rounding of the word
+    (XY_ROUND_MM) and the %g rounding of Z_HEIGHT, doubled for float arithmetic."""
+    return 2 * (XY_ROUND_MM + _half_digit(z))
+
+
+def _check_amount(where, e, length, sweep, width, height, bridge, flow: Flow) -> None:
+    """Refuse an extrusion whose E is not the amount for its bead over its length.
+
+    The slicer computes E from its own coordinates; the file holds them rounded. A
+    straight move's two ends each lie within XY_ROUND_MM * sqrt 2 (u) of the slicer's, so
+    its length is within 2 u. An arc's length r theta moves by at most theta |dr| + r |d
+    theta|: r changes by at most u (the I/J rounding) and r d theta by at most u at the
+    start and 3 u at the end (its own rounding plus the centre's two), so by (4 + theta) u
+    in all. So |E - expected| may be E_ROUND_MM plus e_per_mm times that. Measured on the
+    58,344 model moves of the owner's G-code and the controls: the implied length error was
+    at most 0.0012 mm for lines (bound 0.0014) and 0.0022 mm for arcs (bound at least
+    0.0028).
+    """
+    if height is None:
+        raise UnsupportedGcode(f"{where}: an extrusion before any LAYER_HEIGHT")
+    per_mm = flow.e_per_mm(width, height, bridge)
+    u = XY_ROUND_MM * math.sqrt(2)
+    length_error = 2 * u if sweep is None else (4 + sweep) * u
+    expected = per_mm * length
+    if abs(e - expected) > E_ROUND_MM + per_mm * length_error:
+        raise UnsupportedGcode(f"{where}: extrusion amount E{e:g} does not match the stated "
+                               f"width {width:g} mm and height {height:g} mm over "
+                               f"{length:.3f} mm (expected {expected:.5f})")
+
+
 def _check_bound(where, x, y, plate: Plate) -> None:
     if (x is not None and y is not None) and not plate.within_bound(x, y):
         raise UnsupportedGcode(f"{where}: position ({x:g}, {y:g}) is beyond the plate by "
                                "more than its own size")
 
 
-def _check_extrusion(where, command, words, ends, z, width, feature) -> None:
+def _check_extrusion(where, command, words, ends, z, width, feature, z_cmd,
+                     layer_height) -> None:
     if z is None:
         raise UnsupportedGcode(f"{where}: an extrusion before any Z_HEIGHT")
+    if math.isnan(layer_height):
+        raise UnsupportedGcode(f"{where}: an extrusion on layer {z:g}, which has no "
+                               "LAYER_HEIGHT")
     if feature is None:
         raise UnsupportedGcode(f"{where}: an extrusion before any FEATURE")
     if feature not in MODEL_FEATURES:
@@ -431,6 +552,9 @@ def _check_extrusion(where, command, words, ends, z, width, feature) -> None:
             raise UnsupportedGcode(f"{where}: arcs with a P (turns) word are not supported")
         if "I" not in words and "J" not in words:
             raise UnsupportedGcode(f"{where}: an arc with neither I nor J")
+    if z_cmd is None or abs(z_cmd - z) > _commanded_z_tolerance(z):
+        raise UnsupportedGcode(f"{where}: an extrusion at commanded Z {z_cmd} on the layer "
+                               f"at Z_HEIGHT {z:g}")
 
 
 def footprint(segments: list[Segment]):
@@ -485,7 +609,6 @@ class Alignment:
     angle: int
     centre: tuple[float, float]           # the model's bounding-box centre, model mm
     plate_centre: tuple[float, float]     # bed mm
-    median_edge_mm: float | None          # first layer, for the chosen turn
 
     @property
     def shift(self) -> tuple[float, float]:
@@ -509,8 +632,7 @@ class Alignment:
 
     def as_dict(self) -> dict:
         return {"angle_deg": self.angle, "model_bbox_centre_mm": list(self.centre),
-                "plate_centre_mm": list(self.plate_centre), "shift_mm": list(self.shift),
-                "median_edge_mm": self.median_edge_mm}
+                "plate_centre_mm": list(self.plate_centre), "shift_mm": list(self.shift)}
 
 
 def _edge_points(geometry, spacing: float = EDGE_SAMPLE_MM) -> np.ndarray:
@@ -543,42 +665,6 @@ def gaps(points: np.ndarray, printed) -> np.ndarray:
     np.minimum.at(nearest, which, dist)
     out[outside] = nearest
     return out
-
-
-def align(model_bounds, first_section, first_printed, plate: Plate) -> list[Alignment]:
-    """Where the slicer put the model: its bounding box centred on the plate, quarter-turned.
-
-    OrcaSlicer centres the model's bounding box on the plate (measured: on layers above the
-    first, the outer walls' box centre was within 0.004 mm of the plate centre for Roadie and
-    Oddie, and their models' box centres came out at (128.0007, 128.0013) and
-    (127.995, 128.002) on the A1's 256 mm plate). It may turn the model by a quarter turn
-    (the bridge controls were turned 90 degrees). So the placement is known, not fitted:
-    model_bounds (x0, y0, x1, y1, the whole model's) gives the box centre, which goes to
-    plate.centre, and only the turn is chosen, as the one whose first-layer model edge has
-    the smallest median distance to first_printed.
-
-    Returns that turn first, then every other turn whose median is within
-    EDGE_SAMPLE_MM / 2 of it, by median: the sampled distances are only that exact, so
-    such turns cannot be told apart (a bar that is symmetric but for a small tab and an
-    unprinted hair is one). The caller measures each and keeps the worse result. A fitted shift
-    could absorb a one-sided error, such as a long side printed short; the known one cannot.
-    If the slicer ever placed the part elsewhere, every edge would move off the print, the
-    gaps would grow and the checks would FAIL: the safe direction.
-    """
-    if first_section.is_empty:
-        raise UnsupportedGcode("the model has no section at the first layer")
-    x0, y0, x1, y1 = model_bounds
-    centre = (float(x0 + x1) / 2, float(y0 + y1) / 2)
-    medians = []
-    for angle in QUARTER_TURNS:
-        candidate = Alignment(angle, centre, plate.centre, None)
-        edge = _edge_points(candidate.apply(first_section))
-        medians.append((float(np.median(gaps(edge, first_printed))), angle))
-    medians.sort()                      # by median, then by angle
-    best = medians[0][0]
-    tied = [(m, a) for m, a in medians if m - best <= EDGE_SAMPLE_MM / 2 or m == best]
-    return [Alignment(a, centre, plate.centre, m if math.isfinite(m) else None)
-            for m, a in tied]
 
 
 def _polygons(geometry) -> list:
@@ -666,7 +752,18 @@ def overprint_points(printed, model_bed, spacing: float = EDGE_SAMPLE_MM) -> np.
     return np.vstack([edge, grid]) if len(grid) else edge
 
 
-def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -> dict:
+def edge_gaps(section, printed, alignment: Alignment):
+    """(model-edge samples in model mm, the same in bed mm, their gaps to the footprint),
+    or None when there is no section or nothing printed."""
+    if section.is_empty or printed.is_empty:
+        return None
+    model_pts = _edge_points(section)
+    pts = alignment.to_bed(model_pts)
+    return model_pts, pts, gaps(pts, printed)
+
+
+def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float,
+                  edges=None) -> dict:
     """One layer: the largest model-edge-to-plastic gap, where it is, and parts and holes.
 
     section is the model's section in model coordinates, printed the layer's footprint in
@@ -677,7 +774,9 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
     lists the parts and holes of the model and of the print not matched one to one.
     max_over_mm is the largest distance from printed plastic to the model region
     (overprint_points), with where it is; plastic printed where the model has no section
-    is printed_without_model, and the overprint entries are then None.
+    is printed_without_model, and the overprint entries are then None. score is the mean
+    gap plus the mean overprint over their samples (0 for none), for choosing the turn.
+    edges is edge_gaps' result for this layer and alignment, when already computed.
     """
     model_bed = alignment.apply(section)
     model_parts, printed_parts = _polygons(model_bed), _polygons(printed)
@@ -690,7 +789,8 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
            "unmatched": (match(model_parts, printed_parts, "part", alignment)
                          + match(model_holes, holes, "hole", alignment)),
            "printed_without_model": model_bed.is_empty and not printed.is_empty,
-           "max_over_mm": None, "over_at_bed_mm": None, "over_at_model_mm": None}
+           "max_over_mm": None, "over_at_bed_mm": None, "over_at_model_mm": None,
+           "score": 0.0}
     if not printed.is_empty and not model_bed.is_empty:
         over = overprint_points(printed, model_bed)
         if len(over):
@@ -698,56 +798,146 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
             j = int(np.argmax(d))
             out.update(max_over_mm=float(d[j]), over_at_bed_mm=[float(v) for v in over[j]],
                        over_at_model_mm=[float(v) for v in alignment.to_model(over[j:j + 1])[0]])
+            out["score"] += float(d.mean())
         else:
             out["max_over_mm"] = 0.0
     if model_bed.is_empty or printed.is_empty:
         return out
-    model_pts = _edge_points(section)
-    pts = alignment.to_bed(model_pts)
-    d = gaps(pts, printed)
+    model_pts, pts, d = edges if edges is not None else edge_gaps(section, printed, alignment)
     i = int(np.argmax(d))
     out.update(max_gap_mm=float(d[i]), at_bed_mm=[float(v) for v in pts[i]],
                share_over_allowance=float((d > allowance_mm).mean()),
                at_model_mm=[float(v) for v in model_pts[i]])
+    out["score"] += float(d.mean())
     return out
+
+
+# --- Choosing the turn ------------------------------------------------------------------
+
+# How far a layer score (a mean of sampled distances) can be from the same mean taken over
+# the continuous edge and plastic: each sample stands for the points it is nearest to, and
+# distance is 1-Lipschitz, so an edge sample is within EDGE_SAMPLE_MM / 2 of them and an
+# overprint sample within EDGE_SAMPLE_MM (1 / sqrt 2 + 1 / 2) (overprint_points). Two turns
+# whose scores differ by no more than twice this cannot be told apart by the scores.
+SCORE_BOUND_MM = EDGE_SAMPLE_MM / 2 + EDGE_SAMPLE_MM * (1 / math.sqrt(2) + 0.5)
+COVERAGE_BOUND_MM = EDGE_SAMPLE_MM / 2
+OVERPRINT_BOUND_MM = EDGE_SAMPLE_MM * (1 / math.sqrt(2) + 0.5)
+
+
+@dataclass(frozen=True)
+class Turn:
+    """One quarter turn: its alignment, its layers' metrics and its score.
+
+    score is the mean over layers of each layer's score. complete is False when the turn
+    was dropped early because its partial score already exceeded the best turn's by more
+    than 2 * SCORE_BOUND_MM; score is then a lower bound and layers is partial.
+    """
+    alignment: Alignment
+    layers: list[dict]
+    score: float
+    complete: bool
+
+
+@dataclass(frozen=True)
+class Analysis:
+    turns: list[Turn]              # complete turns by score (the best first), then dropped
+    layer_count: int               # Z_HEIGHT layers in the G-code
+    last_z: float                  # the highest Z_HEIGHT
+    last_height: float             # its LAYER_HEIGHT
+    model_top: float               # the model's highest z
+
+
+def analyse(text: str, stl: bytes | trimesh.Trimesh, plate: Plate, allowance_first_mm: float,
+            allowance_mm: float, flow: Flow | None = None) -> Analysis:
+    """Every quarter turn's metrics, the turns ordered by their two-sided score.
+
+    The placement is known: OrcaSlicer centres the model's bounding box on the plate
+    (measured: on layers above the first, the outer walls' box centre was within 0.004 mm of
+    the plate centre for Roadie and Oddie, and their models' box centres came out at
+    (128.0007, 128.0013) and (127.995, 128.002) on the A1's 256 mm plate). A fitted shift
+    could absorb a one-sided error, such as a long side printed short; the known one cannot.
+    Only the quarter turn is chosen (the bridge controls were turned 90 degrees), by a
+    score over all layers: the mean model-edge-to-plastic gap plus the mean distance of
+    plastic outside the model to the model. A wrong turn leaves edges unprinted and puts
+    plastic outside, even where a one-sided median of edge distances ties (a square with an
+    off-centre hole). Turns are measured in the order of their first layer's mean edge gap;
+    before each layer, a turn whose score so far plus that layer's mean edge gap (a lower
+    bound, since scores only grow) already exceeds the best complete turn's by more than
+    2 * SCORE_BOUND_MM is dropped, so a clearly wrong turn costs one layer's edge gaps. If
+    the slicer ever placed the part elsewhere, the gaps would grow and the checks would
+    FAIL: the safe direction.
+
+    The first layer is the lowest Z_HEIGHT; it gets allowance_first_mm and the others
+    allowance_mm. Raises UnsupportedGcode as parse_gcode does, and when the model has no
+    section at the first layer.
+    """
+    layers = parse_gcode(text, plate, flow)
+    mesh = load_mesh(stl)
+    bounds = np.asarray(mesh.bounds, dtype=np.float64)
+    zs = sorted(layers)
+    sections = [model_section(mesh, layers[z].mid_z) for z in zs]
+    if sections[0].is_empty:
+        raise UnsupportedGcode("the model has no section at the first layer")
+    printed = [footprint(layers[z].segments) for z in zs]
+    centre = (float(bounds[0, 0] + bounds[1, 0]) / 2, float(bounds[0, 1] + bounds[1, 1]) / 2)
+    n = len(zs)
+
+    def edge_mean(edges):
+        return 0.0 if edges is None else float(edges[2].mean())
+
+    firsts = []
+    for angle in QUARTER_TURNS:
+        alignment = Alignment(angle, centre, plate.centre)
+        edges = edge_gaps(sections[0], printed[0], alignment)
+        firsts.append((edge_mean(edges), angle, alignment, edges))
+    firsts.sort(key=lambda f: (f[0], f[1]))
+    complete, dropped = [], []
+    for _, _, alignment, first_edges in firsts:
+        done, total = [], 0.0
+        best = min((t.score for t in complete), default=None)
+        for i in range(n):
+            edges = first_edges if i == 0 else edge_gaps(sections[i], printed[i], alignment)
+            if best is not None and (total + edge_mean(edges)) / n > best + 2 * SCORE_BOUND_MM:
+                total += edge_mean(edges)
+                break
+            allowance = allowance_first_mm if i == 0 else allowance_mm
+            done.append({"z": zs[i], "allowance_mm": allowance,
+                         **layer_metrics(sections[i], printed[i], alignment, allowance,
+                                         edges)})
+            total += done[-1]["score"]
+        turn = Turn(alignment, done, total / n, len(done) == n)
+        (complete if turn.complete else dropped).append(turn)
+    complete.sort(key=lambda t: (t.score, t.alignment.angle))
+    return Analysis(complete + dropped, n, zs[-1], layers[zs[-1]].height,
+                    float(bounds[1, 2]))
 
 
 # --- F3 checks for tdmg slice ----------------------------------------------------------
 
 
-def analyse(text: str, stl: bytes | trimesh.Trimesh, plate: Plate, allowance_first_mm: float,
-            allowance_mm: float) -> list[tuple[Alignment, list[dict]]]:
-    """For each turn align returns (the best first), the alignment and every layer's
-    metrics, lowest layer first.
-
-    The first layer is the lowest Z_HEIGHT; it gets allowance_first_mm and the others
-    allowance_mm. Raises UnsupportedGcode as parse_gcode and align do.
-    """
-    layers = parse_gcode(text, plate)
-    mesh = load_mesh(stl)
-    bounds = np.asarray(mesh.bounds, dtype=np.float64)
-    zs = sorted(layers)
-    sections = [model_section(mesh, layers[z].mid_z) for z in zs]
-    printed = [footprint(layers[z].segments) for z in zs]
-    turns = align((bounds[0, 0], bounds[0, 1], bounds[1, 0], bounds[1, 1]), sections[0],
-                  printed[0], plate)
-    results = []
-    for alignment in turns:
-        out = []
-        for i, z in enumerate(zs):
-            allowance = allowance_first_mm if i == 0 else allowance_mm
-            m = layer_metrics(sections[i], printed[i], alignment, allowance)
-            out.append({"z": z, "allowance_mm": allowance, **m})
-        results.append((alignment, out))
-    return results
+@dataclass(frozen=True)
+class Setup:
+    """What the F3 checks need beyond the G-code and the STL, from the profiles and rules."""
+    plate: Plate
+    flow: Flow
+    tolerance_mm: float               # acceptance.dimension.tolerance
+    elephant_foot_mm: float           # the process profile's elefant_foot_compensation
+    allowed_layers: frozenset[int]    # the layer counts the model's thickness allows (F6)
 
 
 def _place(point) -> str:
     return "(" + ", ".join(f"{v:.2f}" for v in point) + ")"
 
 
-def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float,
-              elephant_foot_mm: float,
+def _unknown_all(reason: str, threshold: dict) -> list[CheckResult]:
+    return [CheckResult(CONNECTIVITY, "UNKNOWN", None, None, None, f"not measured: {reason}"),
+            CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                        f"not measured: {reason}"),
+            CheckResult(OVERPRINT, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                        f"not measured: {reason}")]
+
+
+def f3_checks(gcode: bytes | None, stl: bytes, setup: Setup,
               not_measured: str | None = None) -> tuple[list[CheckResult], dict]:
     """The three F3 checks (F3.printed_connectivity, F3.edge_coverage, F3.edge_overprint)
     and the record's "printed" entry.
@@ -756,33 +946,42 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
     - F3.printed_connectivity PASSes when on every layer the parts and holes of the
       footprint match those of the model section one to one; otherwise it FAILs, naming
       the layers and where the unmatched parts or holes are.
-    - F3.edge_coverage PASSes when every model-edge sample is within tolerance_mm
-      (acceptance.dimension.tolerance) of printed plastic, or within tolerance_mm plus
-      elephant_foot_mm (the profile's elefant_foot_compensation) on the first layer, where
-      the slicer shrinks the outline on purpose. Otherwise it FAILs, naming the largest gap.
-    - F3.edge_overprint is the reverse (Decision 2a): it PASSes when no printed plastic
-      lies farther than that same allowance outside the model region (overprint_points),
-      and otherwise FAILs, naming the largest overprint. Plastic on a layer where the model
-      has no section FAILs it.
-    All three are UNKNOWN, with the reason, when not_measured is given (the slicer failed), when
-    there is no G-code, when the G-code is unsupported, or when the analysis raises any
-    other error (an "analysis error", never a PASS).
+    - F3.edge_coverage measures the model-edge-to-plastic gap against the allowance:
+      setup.tolerance_mm (acceptance.dimension.tolerance), plus setup.elephant_foot_mm (the
+      profile's elefant_foot_compensation) on the first layer, where the slicer shrinks the
+      outline on purpose. It also FAILs when the G-code's own layer count is not one the
+      model's thickness allows (setup.allowed_layers, as F6.layer_count), or when the model
+      goes on more than half a layer above the last printed layer, naming the unprinted
+      heights.
+    - F3.edge_overprint is the reverse (Decision 2a): the distance of printed plastic
+      outside the model to the model region, against the same allowance. Plastic on a layer
+      where the model has no section FAILs it.
+    Coverage and overprint are judged with their sampling bounds: PASS only when the
+    sampled largest plus the bound (COVERAGE_BOUND_MM, OVERPRINT_BOUND_MM) is within the
+    allowance on every layer, FAIL when the sampled largest exceeds it on any layer, and
+    UNKNOWN in between ("within sampling uncertainty").
 
-    When align finds tied turns, each check is judged under every one and the worse
-    result is kept (FAIL over PASS, then the larger excess over the allowance or the more
-    mismatched layers); the record holds the layers under the turn coverage kept, and
-    alignment.tied_angles_deg lists the tied turns.
+    The turn with the lowest score is used (analyse). When another complete turn scores
+    within 2 * SCORE_BOUND_MM of it and gives a different status for any of the three
+    checks, the placement is ambiguous and all three are UNKNOWN; when such turns agree,
+    the best one's results stand. The record lists every turn's score.
+
+    All three are UNKNOWN, with the reason, when not_measured is given (the slicer
+    failed), when there is no G-code, when the G-code is unsupported, or when the analysis
+    raises any other error (an "analysis error", never a PASS).
     """
-    first_mm = tolerance_mm + elephant_foot_mm
+    tolerance_mm, first_mm = setup.tolerance_mm, setup.tolerance_mm + setup.elephant_foot_mm
     threshold = {"first_layer_mm": first_mm, "other_layers_mm": tolerance_mm}
     record = {"measured": False, "reason": None,
               "allowance_mm": {"first_layer": first_mm, "other_layers": tolerance_mm,
-                               "elefant_foot_compensation": elephant_foot_mm},
-              "edge_sample_mm": EDGE_SAMPLE_MM, "alignment": None, "layers": []}
+                               "elefant_foot_compensation": setup.elephant_foot_mm},
+              "edge_sample_mm": EDGE_SAMPLE_MM, "layer_count": None, "alignment": None,
+              "layers": []}
     reason = not_measured or (None if gcode else "no G-code was written")
     if reason is None:
         try:
-            results = analyse(gcode.decode("utf-8"), stl, plate, first_mm, tolerance_mm)
+            analysis = analyse(gcode.decode("utf-8"), stl, setup.plate, first_mm,
+                               tolerance_mm, setup.flow)
         except UnicodeDecodeError as err:
             reason = f"the G-code is not UTF-8 text: {err}"
         except UnsupportedGcode as err:
@@ -791,41 +990,59 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
             reason = f"analysis error: {type(err).__name__}: {err}"
     if reason is not None:
         record["reason"] = reason
-        return [CheckResult(CONNECTIVITY, "UNKNOWN", None, None, None, f"not measured: {reason}"),
-                CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
-                            f"not measured: {reason}"),
-                CheckResult(OVERPRINT, "UNKNOWN", None, threshold, TOLERANCE_RULE,
-                            f"not measured: {reason}")], record
-    judged = [(_connectivity(layers, a), _coverage(layers, a, threshold), a, layers,
-               _overprint(layers, a, threshold)) for a, layers in results]
-    connectivity = max((j[0] for j in judged), key=_badness)
-    overprint = max((j[4] for j in judged), key=_badness)
-    kept = max(judged, key=lambda j: _badness(j[1]))
-    coverage, alignment, layers = kept[1], kept[2], kept[3]
-    record.update(measured=True,
-                  alignment={**alignment.as_dict(),
-                             "tied_angles_deg": [a.angle for a, _ in results]},
+        return _unknown_all(reason, threshold), record
+    complete = [t for t in analysis.turns if t.complete]
+    best = complete[0]
+    tied = [t for t in complete if t.score - best.score <= 2 * SCORE_BOUND_MM]
+    judged = [(_connectivity(t.layers, t.alignment), _coverage(t.layers, t.alignment, threshold),
+               _overprint(t.layers, t.alignment, threshold)) for t in tied]
+    checks = list(judged[0])
+    record.update(measured=True, layer_count=analysis.layer_count,
+                  alignment={**best.alignment.as_dict(),
+                             "tied_angles_deg": [t.alignment.angle for t in tied],
+                             "scores": [{"angle_deg": t.alignment.angle, "score": t.score,
+                                         "complete": t.complete} for t in analysis.turns]},
                   layers=[{"z": m["z"], "max_gap_mm": m["max_gap_mm"],
                            "parts": [m["parts_model"], m["parts_printed"]],
                            "holes": [m["holes_model"], m["holes_printed"]],
                            "max_over_mm": m["max_over_mm"],
-                           "unmatched": len(m["unmatched"])} for m in layers])
-    return [connectivity, coverage, overprint], record
+                           "unmatched": len(m["unmatched"])} for m in best.layers])
+    statuses = {tuple(c.status for c in j) for j in judged}
+    if len(statuses) > 1:
+        detail = "; ".join(f"turn {t.alignment.angle} (score {t.score:.4f}): "
+                           + ", ".join(f"{c.id} {c.status}" for c in j)
+                           for t, j in zip(tied, judged, strict=True))
+        reason = ("placement ambiguous: these turns score within the scores' sampling bound "
+                  f"({2 * SCORE_BOUND_MM:.3f} mm) but give different verdicts: {detail}")
+        record["reason"] = reason
+        return _unknown_all(reason, threshold), record
+    short = _truncation(analysis, setup.allowed_layers, threshold)
+    if short is not None:
+        checks[1] = short
+    return checks, record
 
 
-def _badness(check: CheckResult) -> tuple:
-    """How bad a result is, for keeping the worse of tied turns (the first on equals)."""
-    rank = {"PASS": 0, "UNKNOWN": 1, "FAIL": 2}[check.status]
-    m = check.measured or {}
-    if check.id == COVERAGE:
-        detail = (len(m.get("nothing_printed_z", [])),
-                  (m["max_gap_mm"] - m["allowance_mm"]) if "max_gap_mm" in m else -math.inf)
-    elif check.id == OVERPRINT:
-        detail = (len(m.get("printed_without_model_z", [])),
-                  (m["max_over_mm"] - m["allowance_mm"]) if "max_over_mm" in m else -math.inf)
-    else:
-        detail = (m.get("layers_mismatched", 0), 0)
-    return (rank, *detail)
+def _truncation(analysis: Analysis, allowed: frozenset[int],
+                threshold: dict) -> CheckResult | None:
+    """F3.edge_coverage FAIL when the G-code stops short of the model (or goes beyond it)."""
+    n, last_z, top = analysis.layer_count, analysis.last_z, analysis.model_top
+    unprinted = top - last_z > analysis.last_height / 2 + _z_tolerance(top, last_z, 0.0)
+    if n in allowed and not unprinted:
+        return None
+    measured = {"layers_printed": n, "layers_allowed": sorted(allowed), "last_z_mm": last_z,
+                "model_top_mm": top}
+    why = [] if n in allowed else [f"the G-code has {n} layers, not one of {sorted(allowed)}"]
+    if unprinted:
+        why.append(f"the model from z = {last_z:g} to {top:g} mm is not printed")
+    return CheckResult(COVERAGE, "FAIL", measured, threshold, TOLERANCE_RULE,
+                       "; ".join(why) + ": the print stops short of the model. " + SCOPE)
+
+
+def _judged(layers, key, bound) -> tuple[str, list, list]:
+    """(status, layers over the allowance, layers within the sampling bound of it)."""
+    over = [m for m in layers if m[key] > m["allowance_mm"]]
+    near = [m for m in layers if m[key] + bound > m["allowance_mm"] >= m[key]]
+    return ("FAIL" if over else "UNKNOWN" if near else "PASS"), over, near
 
 
 def _connectivity(layers: list[dict], alignment: Alignment) -> CheckResult:
@@ -870,23 +1087,26 @@ def _coverage(layers: list[dict], alignment: Alignment, threshold: dict) -> Chec
         return CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
                            "not measured: the model has no section at any printed layer")
     worst = max(measured_layers, key=lambda m: m["max_gap_mm"] - m["allowance_mm"])
-    over = [m for m in measured_layers if m["max_gap_mm"] > m["allowance_mm"]]
+    status, over, near = _judged(measured_layers, "max_gap_mm", COVERAGE_BOUND_MM)
     measured = {"worst_z": worst["z"], "max_gap_mm": worst["max_gap_mm"],
                 "allowance_mm": worst["allowance_mm"], "at_bed_mm": worst["at_bed_mm"],
                 "at_model_mm": worst["at_model_mm"],
                 "share_over_allowance": worst["share_over_allowance"],
-                "layers_over": len(over), "angle_deg": alignment.angle}
+                "layers_over": len(over), "layers_within_sampling_bound": len(near),
+                "sampling_bound_mm": COVERAGE_BOUND_MM, "angle_deg": alignment.angle}
     how = (f"The largest distance from a model-edge sample (every {EDGE_SAMPLE_MM:g} mm; the "
-           f"true largest is at most {EDGE_SAMPLE_MM / 2:g} mm more) to printed plastic, "
+           f"true largest is at most {COVERAGE_BOUND_MM:g} mm more) to printed plastic, "
            "with the model's bounding box centred on the plate as the slicer places it, "
            "against the tolerance, plus the profile's elefant_foot_compensation on the "
            "first layer. ")
     summary = (f"The worst layer, z = {worst['z']:g} mm, leaves {worst['max_gap_mm']:.3f} mm "
                f"against {worst['allowance_mm']:g} mm, at bed {_place(worst['at_bed_mm'])}, "
                f"model {_place(worst['at_model_mm'])} mm"
-               + (f"; {len(over)} layer(s) are over. " if over else ". "))
-    return CheckResult(COVERAGE, "FAIL" if over else "PASS", measured, threshold,
-                       TOLERANCE_RULE, how + summary + SCOPE)
+               + (f"; {len(over)} layer(s) are over. " if over else
+                  f"; within sampling uncertainty on {len(near)} layer(s). " if near
+                  else ". "))
+    return CheckResult(COVERAGE, status, measured, threshold, TOLERANCE_RULE,
+                       how + summary + SCOPE)
 
 
 def _overprint(layers: list[dict], alignment: Alignment, threshold: dict) -> CheckResult:
@@ -903,21 +1123,24 @@ def _overprint(layers: list[dict], alignment: Alignment, threshold: dict) -> Che
         return CheckResult(OVERPRINT, "UNKNOWN", None, threshold, TOLERANCE_RULE,
                            "not measured: no layer prints where the model has a section")
     worst = max(measured_layers, key=lambda m: m["max_over_mm"] - m["allowance_mm"])
-    over = [m for m in measured_layers if m["max_over_mm"] > m["allowance_mm"]]
+    status, over, near = _judged(measured_layers, "max_over_mm", OVERPRINT_BOUND_MM)
     measured = {"worst_z": worst["z"], "max_over_mm": worst["max_over_mm"],
                 "allowance_mm": worst["allowance_mm"], "at_bed_mm": worst["over_at_bed_mm"],
                 "at_model_mm": worst["over_at_model_mm"], "layers_over": len(over),
-                "angle_deg": alignment.angle}
+                "layers_within_sampling_bound": len(near),
+                "sampling_bound_mm": OVERPRINT_BOUND_MM, "angle_deg": alignment.angle}
     how = (f"The largest distance from printed plastic outside the model to the model region "
            f"(sampled every {EDGE_SAMPLE_MM:g} mm on and inside that plastic; the true largest "
-           f"is at most {EDGE_SAMPLE_MM * (1 / math.sqrt(2) + 0.5):.2f} mm more), with the "
-           "model's bounding box centred on the plate, against the tolerance, plus the "
-           "profile's elefant_foot_compensation on the first layer. ")
+           f"is at most {OVERPRINT_BOUND_MM:.3f} mm more), with the model's bounding box "
+           "centred on the plate, against the tolerance, plus the profile's "
+           "elefant_foot_compensation on the first layer. ")
     where = ("" if worst["over_at_bed_mm"] is None else
              f", at bed {_place(worst['over_at_bed_mm'])}, model "
              f"{_place(worst['over_at_model_mm'])} mm")
     summary = (f"The worst layer, z = {worst['z']:g} mm, prints {worst['max_over_mm']:.3f} mm "
                f"outside against {worst['allowance_mm']:g} mm{where}"
-               + (f"; {len(over)} layer(s) are over. " if over else ". "))
-    return CheckResult(OVERPRINT, "FAIL" if over else "PASS", measured, threshold,
-                       TOLERANCE_RULE, how + summary + SCOPE)
+               + (f"; {len(over)} layer(s) are over. " if over else
+                  f"; within sampling uncertainty on {len(near)} layer(s). " if near
+                  else ". "))
+    return CheckResult(OVERPRINT, status, measured, threshold, TOLERANCE_RULE,
+                       how + summary + SCOPE)

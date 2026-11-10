@@ -11,7 +11,7 @@ import re
 import numpy as np
 import pytest
 import shapely
-from gcode_fixtures import START, WIDTH, fill, gcode, layer, path_moves, solid, walls
+from gcode_fixtures import FLOW, START, WIDTH, e_for, fill, gcode, layer, path_moves, solid, walls
 
 import tdmg.printed
 from tdmg.flat import extrude
@@ -22,6 +22,7 @@ from tdmg.printed import (
     QUARTER_TURNS,
     Alignment,
     Plate,
+    Setup,
     UnsupportedGcode,
     analyse,
     f3_checks,
@@ -40,7 +41,17 @@ def placed(geometry, model=None, angle=0):
     """geometry where the slicer puts it for this model: the model's bounding box centred
     on the plate, after a quarter turn about that centre."""
     x0, y0, x1, y1 = (model if model is not None else geometry).bounds
-    return Alignment(angle, ((x0 + x1) / 2, (y0 + y1) / 2), PLATE.centre, None).apply(geometry)
+    return Alignment(angle, ((x0 + x1) / 2, (y0 + y1) / 2), PLATE.centre).apply(geometry)
+
+
+def setup(layers=2):
+    """The A1 setup for a model of this many 0.2 mm layers."""
+    return Setup(PLATE, FLOW, 0.2, 0.075, frozenset({layers}))
+
+
+def stl_for(model, layers=2):
+    """The model extruded to this many 0.2 mm layers, as STL bytes."""
+    return extrude([model], 0.2 * layers).export(file_type="stl")
 
 
 def square(side=10.0):
@@ -55,21 +66,21 @@ def bridge(width):
 
 def measure(model, text, allowance=0.2):
     """The best turn's alignment and layers (ties are judged in f3_checks)."""
-    alignment, layers = analyse(text, extrude([model], 1.0), PLATE, allowance, allowance)[0]
-    return alignment, {m["z"]: m for m in layers}
+    turn = analyse(text, extrude([model], 1.0), PLATE, allowance, allowance).turns[0]
+    return turn.alignment, {m["z"]: m for m in turn.layers}
 
 
 def checks_for(model, printed_geometry, layers=(0.2, 0.4)):
     """f3_checks on G-code that prints printed_geometry, placed for model, on each layer."""
     body = solid(placed(printed_geometry, model))
-    stl = extrude([model], 1.0).export(file_type="stl")
-    return f3_checks(gcode([layer(z, body) for z in layers]).encode(), stl, PLATE, 0.2, 0.075)
+    stl = stl_for(model, len(layers))
+    return f3_checks(gcode([layer(z, body) for z in layers]).encode(), stl, setup(len(layers)))
 
 
 def checks_for_text(text, model=None):
     """f3_checks on this G-code text for model (a 10 mm square by default)."""
-    stl = extrude([model if model is not None else square()], 1.0).export(file_type="stl")
-    return f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    stl = stl_for(model if model is not None else square())
+    return f3_checks(text.encode(), stl, setup())
 
 
 def parse(text):
@@ -233,7 +244,7 @@ def test_unsupported_gcode_is_refused(text, message):
 def test_travel_arcs_are_followed_without_being_refused():
     # The real G-code lifts the nozzle with "G3 Z.6 I1.217 J0 P1" travel spirals.
     body = ("; FEATURE: Outer wall\n; LINE_WIDTH: 0.42\nG1 X0 Y0\nG3 Z.6 I1.217 J0 P1 F42000\n"
-            "G1 X1 Y0 E.1\n")
+            "G1 Z.2\nG1 X1 Y0 E.1\n")
     segs = parse(gcode([layer(0.2, body)]))[0.2].segments
     assert [(s.x0, s.y0, s.x1, s.y1) for s in segs] == [(0, 0, 1, 0)]
 
@@ -338,6 +349,11 @@ def test_an_unprinted_tip_on_a_long_body_gives_its_length_as_the_gap():
 ])
 def test_one_sided_shortfalls_fail_coverage(model, printed, gap):
     (connectivity, coverage, _), record = checks_for(model, printed)
+    if coverage.status == "UNKNOWN":
+        # The short hair leaves a bar that fits turned 180 degrees about as well, and
+        # that turn disagrees on overprint: not a PASS, and no turn chosen.
+        assert "placement ambiguous" in coverage.note and gap < 0.3
+        return
     assert coverage.status == "FAIL", coverage
     assert coverage.measured["worst_z"] == pytest.approx(0.4)
     # At least the shortfall; at a corner of a shortened box the bead's round end adds up
@@ -368,14 +384,18 @@ def test_a_filled_hole_and_a_bridged_slot_do_not_compensate():
     model = shapely.Polygon(slot.exterior.coords, [shapely.box(2, 2, 3, 3).exterior.coords])
     printed = shapely.box(0, 0, 10, 10).difference(shapely.box(4.5, 5, 5.5, 9.3))
     (connectivity, _, _), record = checks_for(model, printed)
-    assert connectivity.status == "FAIL"
+    # So wrong a print fits more than one turn about equally: FAIL or "placement ambiguous".
+    assert connectivity.status in ("FAIL", "UNKNOWN")
     assert record["layers"][1]["holes"] == [1, 1]
-    found = {u["what"]: u for u in connectivity.measured["unmatched"]}
+    _, metrics = measure(model, gcode([layer(z, solid(placed(printed, model)))
+                                       for z in (0.2, 0.4)]))
+    found = {u["what"]: u for u in metrics[0.4]["unmatched"]}
     assert set(found) == {"model hole", "printed hole"}
     assert found["model hole"]["at_model_mm"] == pytest.approx([2.5, 2.5], abs=0.5)
     assert 4.5 < found["printed hole"]["at_model_mm"][0] < 5.5
     assert 5 < found["printed hole"]["at_model_mm"][1] < 9.3
-    assert "model hole overlapping 0 at model" in connectivity.note
+    if connectivity.status == "FAIL":
+        assert "model hole overlapping 0 at model" in connectivity.note
 
 
 def test_voids_inside_the_model_are_not_holes():
@@ -410,8 +430,7 @@ def test_a_layer_that_prints_nothing_fails_coverage():
     model = square()
     body = solid(placed(model))
     text = gcode([layer(0.2, body), layer(0.4, ""), layer(0.6, body)])
-    stl = extrude([model], 1.0).export(file_type="stl")
-    checks, record = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    checks, record = f3_checks(text.encode(), stl_for(model, 3), setup(3))
     connectivity, coverage, _ = checks
     assert connectivity.status == "FAIL" and connectivity.measured["mismatched_z"] == [0.4]
     assert coverage.status == "FAIL"
@@ -439,8 +458,7 @@ def test_f3_checks_on_a_covered_square():
     (b"G28\nG1 X10 Y10\n", "no Z_HEIGHT"),
 ])
 def test_f3_checks_are_unknown_when_not_measurable(gcode_bytes, reason):
-    stl = extrude([square()], 1.0).export(file_type="stl")
-    checks, record = f3_checks(gcode_bytes, stl, PLATE, 0.2, 0.075)
+    checks, record = f3_checks(gcode_bytes, stl_for(square()), setup())
     assert [c.status for c in checks] == ["UNKNOWN"] * 3
     assert all(reason in c.note for c in checks)
     assert record["measured"] is False and reason in record["reason"]
@@ -450,8 +468,7 @@ def test_any_analysis_error_is_unknown(monkeypatch):
     def broken(*args, **kwargs):
         raise RuntimeError("boom")
     monkeypatch.setattr(tdmg.printed, "analyse", broken)
-    stl = extrude([square()], 1.0).export(file_type="stl")
-    checks, record = f3_checks(b"; Z_HEIGHT: 0.2\n", stl, PLATE, 0.2, 0.075)
+    checks, record = f3_checks(b"; Z_HEIGHT: 0.2\n", stl_for(square()), setup())
     assert [c.status for c in checks] == ["UNKNOWN"] * 3
     assert record["reason"] == "analysis error: RuntimeError: boom"
     assert all("analysis error: RuntimeError: boom" in c.note for c in checks)
@@ -481,7 +498,8 @@ def _square_text(extra: str) -> str:
 
 def test_a_stray_part_written_plainly_fails():
     # The control for the forms below: read, it is an extra printed part.
-    (connectivity, _, _), _ = checks_for_text(_square_text(STRAY + "G1 X205 Y200 E.2\n"))
+    (connectivity, _, _), _ = checks_for_text(_square_text(STRAY
+                                                            + f"G1 X205 Y200 {e_for(5)}\n"))
     assert connectivity.status == "FAIL"
 
 
@@ -525,21 +543,19 @@ def test_m_and_t_codes_are_ignored_except_the_extrusion_mode():
 # --- Rotation ties -----------------------------------------------------------------------
 
 @pytest.mark.parametrize("turn", [0, 180])
-def test_a_tie_between_turns_keeps_the_worse_result(turn):
-    # The review's bar: a 60 x 3 mm body with an unprinted hair at one end and a printed
-    # tab at the other. Turned 0 or 180 degrees the medians are within EDGE_SAMPLE_MM / 2,
-    # so the turn cannot be told apart. Under the wrong one the tab would land on the hair
-    # and hide it; both are measured and the worse is kept, which FAILs either way.
+def test_a_nearly_symmetric_bar_does_not_pass(turn):
+    # The earlier review's bar: a 60 x 3 mm body with an unprinted hair at one end and a
+    # printed tab at the other. Turned 0 or 180 degrees the two placements nearly fit
+    # alike; under the wrong one the tab would land on the hair and hide it. It must not
+    # PASS: it FAILs, or is UNKNOWN when the placements cannot be told apart.
     body = shapely.box(0, 0, 60, 3)
     tab = shapely.box(-0.18, 1.1, 0, 1.9)
     model = shapely.union_all([body, shapely.box(60, 1.35, 60.35, 1.65), tab])
     printed = shapely.union_all([body, tab])
-    stl = extrude([model], 1.0).export(file_type="stl")
     text = gcode([layer(z, solid(placed(printed, model, turn))) for z in (0.2, 0.4)])
-    (_, coverage, _), record = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
-    assert coverage.status == "FAIL"
-    assert coverage.measured["max_gap_mm"] >= 0.3
-    assert {0, 180} <= set(record["alignment"]["tied_angles_deg"])
+    (_, coverage, _), record = f3_checks(text.encode(), stl_for(model), setup())
+    assert coverage.status in ("FAIL", "UNKNOWN"), coverage
+    assert len(record["alignment"]["scores"]) == 4
 
 
 def test_a_clear_turn_has_no_tie():
@@ -597,22 +613,25 @@ def test_a_filled_small_hole_fails_overprint():
                 a = 5 - h / 2
                 model = shapely.Polygon(sq.exterior.coords, [
                     shapely.box(a, a + off, a + h, a + h + off).exterior.coords])
-                stl = extrude([model], 1.0).export(file_type="stl")
+                stl = stl_for(model)
                 body = walls(placed(sq, model)) + fill(placed(sq, model), spacing=spacing)
                 checks, _ = f3_checks(gcode([layer(z, body) for z in (0.2, 0.4)]).encode(),
-                                      stl, PLATE, 0.2, 0.075)
+                                      stl, setup())
                 if all(c.status == "PASS" for c in checks):
                     failed.append((h, spacing, off))
     assert failed == []
 
 
-@pytest.mark.parametrize(("outward", "status"), [(0.25, "FAIL"), (0.15, "PASS")])
+@pytest.mark.parametrize(("outward", "status"), [
+    (0.25, "FAIL"),
+    (0.17, "UNKNOWN"),        # 0.17 + the 0.060 mm sampling bound may exceed 0.2
+    (0.1, "PASS"),
+])
 def test_plastic_outside_the_model_on_an_upper_layer(outward, status):
     model = square()
     big = model.buffer(outward, join_style="mitre")
-    stl = extrude([model], 1.0).export(file_type="stl")
     text = gcode([layer(0.2, solid(placed(model))), layer(0.4, solid(placed(big, model)))])
-    (_, coverage, overprint), _ = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    (_, coverage, overprint), _ = f3_checks(text.encode(), stl_for(model), setup())
     assert coverage.status == "PASS"
     assert overprint.status == status
     assert overprint.measured["max_over_mm"] == pytest.approx(outward, abs=0.02)
@@ -621,19 +640,129 @@ def test_plastic_outside_the_model_on_an_upper_layer(outward, status):
 
 def test_the_first_layer_may_print_outside_by_the_elephant_foot_too():
     model = square()
-    big = model.buffer(0.25, join_style="mitre")
-    stl = extrude([model], 1.0).export(file_type="stl")
+    big = model.buffer(0.2, join_style="mitre")
     text = gcode([layer(0.2, solid(placed(big, model))), layer(0.4, solid(placed(model)))])
-    (_, _, overprint), _ = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
-    assert overprint.status == "PASS"                  # 0.25 is inside 0.2 + 0.075
+    (_, _, overprint), _ = f3_checks(text.encode(), stl_for(model), setup())
+    assert overprint.status == "PASS"         # 0.2 + 0.060 mm bound is inside 0.2 + 0.075
     assert overprint.measured["worst_z"] == pytest.approx(0.2)
 
 
 def test_plastic_where_the_model_has_no_section_fails_overprint():
     model = square()
     body = solid(placed(model))
-    stl = extrude([model], 0.4).export(file_type="stl")          # two layers of model
     text = gcode([layer(0.2, body), layer(0.4, body), layer(0.6, body)])
-    (_, _, overprint), _ = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    (_, _, overprint), _ = f3_checks(text.encode(), stl_for(model, 2), setup(3))
     assert overprint.status == "FAIL"
     assert overprint.measured["printed_without_model_z"] == [0.6]
+
+
+# --- The Codex review's scenarios (research/reviews/2026-11-10-thin-walls/review.txt) -------
+
+def hole_square():
+    """A 10 mm square with an off-centre 2 mm hole at (1, 4)-(3, 6) (Codex item 1)."""
+    sq = square()
+    return shapely.Polygon(sq.exterior.coords, [shapely.box(1, 4, 3, 6).exterior.coords])
+
+
+def test_an_off_centre_hole_printed_correctly_passes():
+    # Every turn's first-layer median edge distance is 0 here; the two-sided score over all
+    # layers tells the placements apart.
+    model = hole_square()
+    (connectivity, coverage, overprint), record = checks_for(model, model)
+    assert [connectivity.status, coverage.status, overprint.status] == ["PASS"] * 3
+    scores = {s["angle_deg"]: s["score"] for s in record["alignment"]["scores"]}
+    assert record["alignment"]["angle_deg"] == 0
+    assert record["alignment"]["tied_angles_deg"] == [0]
+    assert all(scores[a] > scores[0] for a in (90, 180, 270))
+
+
+def test_ambiguous_placements_with_different_verdicts_are_unknown(monkeypatch):
+    # Two turns scoring within the bound but judged differently: the placement cannot be
+    # chosen, so the verdict is not given. Forced by widening the score bound.
+    monkeypatch.setattr(tdmg.printed, "SCORE_BOUND_MM", 10.0)
+    model = hole_square()
+    checks, record = checks_for(model, model)
+    assert [c.status for c in checks] == ["UNKNOWN"] * 3
+    assert "placement ambiguous" in record["reason"]
+
+
+def test_ambiguous_placements_that_agree_keep_their_verdict():
+    # A plain square fits every turn alike, and every turn PASSes.
+    (connectivity, coverage, overprint), record = checks_for(square(), square())
+    assert [connectivity.status, coverage.status, overprint.status] == ["PASS"] * 3
+    assert sorted(record["alignment"]["tied_angles_deg"]) == [0, 90, 180, 270]
+
+
+def test_g_code_that_stops_short_of_the_model_fails_coverage():
+    # Codex item 2: the model is 5 layers; the G-code stops after layer 2.
+    model = square()
+    body = solid(placed(model))
+    text = gcode([layer(z, body) for z in (0.2, 0.4)])
+    (_, coverage, _), record = f3_checks(text.encode(), stl_for(model, 5), setup(5))
+    assert coverage.status == "FAIL"
+    assert coverage.measured["layers_printed"] == 2
+    assert "the G-code has 2 layers, not one of [5]" in coverage.note
+    assert "from z = 0.4 to 1 mm is not printed" in coverage.note
+    assert record["layer_count"] == 2
+
+
+@pytest.mark.parametrize(("text", "reason"), [
+    # Codex item 3: five nominal layers, all commanded at Z0.2.
+    (gcode([layer(0.2 * (i + 1), "G1 Z.2\n" + solid(placed(square()))) for i in range(5)]),
+     "commanded Z"),
+    # A logical offset with G92: the analysed footprint would not be the physical one.
+    (gcode([layer(0.2, solid(placed(square()))),
+            layer(0.4, "G1 X0 Y0\nG92 X100 Y100\n" + solid(placed(square())))]), "G92"),
+    # Codex item 4: hardly any plastic for full-width beads, or the flow set to nothing.
+    (re.sub(r"E[0-9]+\.[0-9]+", "E.000000000001",
+            gcode([layer(z, solid(placed(square()))) for z in (0.2, 0.4)])),
+     "extrusion amount"),
+    (gcode([layer(0.2, solid(placed(square()))),
+            layer(0.4, "M221 S0\n" + solid(placed(square())))]), "M221"),
+    (gcode([layer(0.2, solid(placed(square()))),
+            layer(0.4, "M200 D1.75\n" + solid(placed(square())))]), "M200"),
+    (gcode([layer(0.2, solid(placed(square()))),
+            layer(0.4, "M92 E400\n" + solid(placed(square())))]), "M92"),
+])
+def test_commands_that_change_what_is_printed_are_unknown(text, reason):
+    layers = text.count("; Z_HEIGHT:")
+    checks, record = f3_checks(text.encode(), stl_for(square(), layers), setup(layers))
+    assert [c.status for c in checks] == ["UNKNOWN"] * 3, record["reason"]
+    assert reason in record["reason"]
+
+
+def test_m221_s100_is_read():
+    body = solid(placed(square()))
+    checks, _ = f3_checks(gcode([layer(0.2, body), layer(0.4, "M221 S100\n" + body)]).encode(),
+                          stl_for(square()), setup())
+    assert [c.status for c in checks] == ["PASS"] * 3
+
+
+def test_the_extrusion_amount_follows_the_flow_model():
+    # 10 mm of 0.42 x 0.2 mm bead on 1.75 mm filament at flow 0.98: h (w - h (1 - pi/4)),
+    # over the filament's cross-section, times the flow ratio.
+    per_mm = 0.2 * (0.42 - 0.2 * (1 - math.pi / 4)) / (math.pi * 1.75 ** 2 / 4) * 0.98
+    assert FLOW.e_per_mm(0.42, 0.2, False) == pytest.approx(per_mm)
+    assert FLOW.e_per_mm(0.4, 0.4, True) == pytest.approx(
+        0.4 ** 2 * math.pi / 4 / (math.pi * 1.75 ** 2 / 4) * 0.98)
+    good = GOOD.replace("E.1", e_for(1.0))
+    parse_gcode(gcode([layer(0.2, good)]), PLATE, FLOW)
+    for factor in (0.9, 1.1):
+        bad = GOOD.replace("E.1", f"E{float(e_for(1.0)[1:]) * factor:.5f}")
+        with pytest.raises(UnsupportedGcode, match="extrusion amount"):
+            parse_gcode(gcode([layer(0.2, bad)]), PLATE, FLOW)
+
+
+def test_a_hole_within_sampling_uncertainty_does_not_pass():
+    # Codex item 5: a 0.44 mm hole centred at (5, 5.025) under 0.42 mm fill spaced 0.5 mm.
+    # The sampled overprint is under 0.2 mm, but plastic at the hole's centre is 0.22 mm
+    # from the model: within the sampling bound, so not a PASS.
+    sq = square()
+    model = shapely.Polygon(sq.exterior.coords,
+                            [shapely.box(4.78, 4.805, 5.22, 5.245).exterior.coords])
+    body = walls(placed(sq, model)) + fill(placed(sq, model), spacing=0.5)
+    (_, _, overprint), _ = f3_checks(gcode([layer(z, body) for z in (0.2, 0.4)]).encode(),
+                                     stl_for(model), setup())
+    assert overprint.status in ("UNKNOWN", "FAIL")
+    if overprint.status == "UNKNOWN":
+        assert "within sampling uncertainty" in overprint.note
