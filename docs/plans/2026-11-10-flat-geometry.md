@@ -20,7 +20,7 @@ keychain loop or base, 3MF output, and slicing come in later plans.
 that is manifold by construction), trimesh (STL I/O and mesh queries), Pillow and OpenCV
 (preview), pytest. All are core dependencies already.
 
-**Status:** written 2026-11-10; not started.
+**Status:** written and executed 2026-11-10 (Tasks 1–9); see "Execution notes".
 
 **Conventions for the implementer:**
 - Put imports in the top block (ruff E402). Keep lines ≤ 100 characters; ruff does not
@@ -420,3 +420,15 @@ expected size. That is a manual import check, not F6.
     blobs (from 251 s) and 27 s for a 4000 × 4000 noisy circle (from 41 s). Shapely's
     negative buffer dominates.
   - An input-size rule with evidence is deferred until a real input needs it.
+- **Tasks 6–8:**
+  - **Rasterising:** the outline preview tests pixel centres with shapely's exact
+    `contains_xy`, not `cv2.fillPoly`. That is exact for pixel-cell outlines.
+  - **Printer id:** it lives in `params` only.
+  - **Inputs:** non-numeric inputs are refused.
+  - **Gate FAIL:** a failing check still writes all files, carrying the verdict.
+  - **Exit codes:** `tdmg flat` exits 0 when no check failed, 1 when a check failed
+    (files written), and 2 on input errors (nothing written). The help text says exit 0
+    does not mean certified.
+- **Task 9:** see `research/verification/2026-11-10-flat-geometry/README.md`. Roadie and
+  Oddie at 60 × 3 mm each give one body, pass every F1, F2, F4 and F5 check, are NOT
+  CERTIFIED only through F3 and F6, and repeat byte for byte.

@@ -36,7 +36,7 @@ A shape made by tracing an outline from an image and extruding it straight up: k
 | Symptom | Cause | Check | Mitigation |
 |---|---|---|---|
 | Print is mirrored top to bottom | Image Y axis points down; model Y points up | Asymmetric test glyph | Explicit Y flip in S3 |
-| Shapes slightly thin, holes slightly big | OpenCV traces pixel centres (bias of `vectorize.opencv.contour_offset_px`) | Compare against a chosen reference outline: dimensions, holes, gaps, topology | Not yet decided. A +0.5 px buffer fixes area only; boundaries can stay 0.5 px off. Choose a reference outline and a tracing method by measurement first |
+| Shapes slightly thin, holes slightly big | OpenCV traces pixel centres (bias of `vectorize.opencv.contour_offset_px`) | Compare against a chosen reference outline: dimensions, holes, gaps, topology | `tdmg flat` avoids it: it does not trace pixel centres, but uses the exact pixel-cell outline (area equals the pixel count) |
 | Crash or a missing piece after cleanup | Repair returned several polygons, or a mix of polygons and lines | Diagonal-touch fixture | Handle every polygon part; report collapsed slivers |
 | Hair-thin strands, or specks that vanish | Features narrower than the nozzle | F3 minimum feature | Opening by `flat.sliver.opening_width`; island filter |
 | Wrong size | Units guessed from DPI (potrace assumes 72, OpenSCAD 96) | F2 target dimensions | Scale to one authoritative width in millimetres |
@@ -49,7 +49,7 @@ F1 (closed, manifold, oriented), F2 (target size, fits the bed), F3 (wall and fe
 
 ## Calibration needed
 
-None specific to flat geometry. The Phase 1 dimensional check, three caliper measurements, confirms scale and the half-pixel correction on your A1.
+None specific to flat geometry. The Phase 1 dimensional check, three caliper measurements, confirms scale and the pixel-cell outline on your A1.
 
 ## Evidence
 
@@ -59,7 +59,16 @@ None specific to flat geometry. The Phase 1 dimensional check, three caliper mea
 
 ## Open gaps
 
-- Which tracer gives the most accurate boundary on real images has not been measured.
+- **Decided (2026-11-10, `tdmg flat`):** the reference outline is the exact
+  pixel-cell outline of the mask. It is the union of the pixel squares, so it has no
+  half-pixel bias, and its staircase edge is one pixel high. OpenCV centre tracing is
+  not used.
+  - The transform is x_mm = (x_px − x0)·s and y_mm = (y1 − y_px)·s, with the mask's
+    bounding box at the origin.
+  - Whether a smoothed outline prints better is not measured.
 - The sliver and island rules are engineering hypotheses, not published rules.
-- How to correct the half-pixel bias is not decided; see the failure-modes table.
-- Nothing has been printed yet.
+- **Thin regions:** they are measured (F3) but have no pass/fail policy yet. Tapered
+  tips and staircase corners always produce some.
+- **Cleaning measurement:** the change cleaning makes is reported as a boundary-sampled
+  Hausdorff distance, with a derived upper bound.
+- **Not done:** nothing has been printed or sliced yet.

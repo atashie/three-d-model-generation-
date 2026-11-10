@@ -20,15 +20,29 @@ The full design is in [the plan, section 4](../PLAN.md#4-pipeline-stages-and-the
 
 ## What "printable" means
 
-The planned [input interpretation](input-interpretation.md) step checks which
-subject the user wants. Geometry checks do not determine that: a valid solid can
-still include an unwanted background. The interpretation interface is not yet implemented.
+The [input interpretation](input-interpretation.md) step (`tdmg select`) records which
+subject the user wants and shows it for review. Geometry checks do not determine that: a
+valid solid can still include an unwanted background.
+
+## What exists today
+
+- **`tdmg select`** covers S0 and S1, with explicit controls and no language
+  interpretation.
+- **`tdmg flat`** covers S2–S4 and S8 for flat (G1) shapes. It:
+  - outlines the mask exactly, transforms it to millimetres and removes unprintable
+    slivers;
+  - extrudes the shape and writes `model.stl`;
+  - gates the bytes it writes, with F1, F2, F3 (measured; UNKNOWN), F4, F5 and F6
+    (UNKNOWN).
+
+Its verdict is always NOT CERTIFIED for now. Exit code 0 means only that no check
+failed. There are no loops, bases, 3MF output or slicer runs yet.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 
 | Family | What it checks |
 |---|---|
-| F1 Format and topology | Closed, manifold, consistently oriented, positive volume (`format.3mf.edge_manifold`, `format.3mf.consistent_orientation`); self-intersection is a warning (`format.3mf.self_intersection_is_warning`) |
+| F1 Format and topology | Closed, manifold, consistently oriented, no pinched vertices, positive volume (`format.3mf.edge_manifold`, `format.3mf.consistent_orientation`, `gate.topology.vertex_manifold`); self-intersection is a warning (`format.3mf.self_intersection_is_warning`) |
 | F2 Scale and fit | Units, target size, fits the A1's 256 mm build volume, numbers in a safe range |
 | F3 Printability geometry | Thin walls, small features, overhangs, trapped supports, stability |
 | F4 Structure-specific | Joint clearances, body count, connector fit, color regions |
