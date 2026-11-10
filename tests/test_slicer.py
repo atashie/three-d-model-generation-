@@ -121,7 +121,8 @@ def test_pin_decoding_rules_and_their_sources():
     readme = (RECORD / "README.md").read_text(encoding="utf-8")
     assert "Windows exit codes are not truncated." in readme
     claude = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "exit codes reach a parent as the low 8 bits" in claude
+    assert "reaching a parent as the low 8 bits" in claude
+    assert "not been re-measured with OrcaSlicer 2.5.0" in claude
 
 
 APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
