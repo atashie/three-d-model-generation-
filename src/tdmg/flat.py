@@ -150,10 +150,15 @@ def to_model(outline, width_mm: float) -> tuple[shapely.Geometry, dict]:
         raise FlatError("no printable foreground")
     x0, y0, x1, y1 = (float(v) for v in outline.bounds)
     s = width_mm / (x1 - x0)
-    model = affinity.affine_transform(outline, [s, 0.0, 0.0, -s, -x0 * s, y1 * s])
     transform = {"scale_mm_per_px": s, "x0_px": x0, "y1_px": y1,
                  "mask_width_px": x1 - x0, "mask_height_px": y1 - y0}
-    return model, transform
+    return _apply_transform(outline, transform), transform
+
+
+def _apply_transform(outline, transform: dict) -> shapely.Geometry:
+    """outline (pixel units) in model mm, by a transform from to_model."""
+    s, x0, y1 = transform["scale_mm_per_px"], transform["x0_px"], transform["y1_px"]
+    return affinity.affine_transform(outline, [s, 0.0, 0.0, -s, -x0 * s, y1 * s])
 
 
 def _require_non_negative(name: str, value: float) -> float:
@@ -653,32 +658,91 @@ def _smooth_value(smooth_px) -> float | None:
     return value
 
 
-SMOOTHING_OFF = {"applied": False, "sigma_px": None, "method": None, "area_change_px2": None,
-                 "boundary_hausdorff_px": None, "parts_before": None, "parts_after": None}
+SMOOTHING_KEYS = ("applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
+                  "added_area_px2", "boundary_hausdorff_lower_bound_px",
+                  "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
+                  "lost_features", "added_features")
+SMOOTHING_OFF = {"applied": False} | {key: None for key in SMOOTHING_KEYS[1:]}
 
 
-def _outline(mask: np.ndarray, sigma: dict | None) -> tuple[shapely.Geometry, dict]:
-    """The outline to build from, in pixel-cell units, and the record's smoothing section.
-
-    sigma None keeps the exact pixel outline; the section is then SMOOTHING_OFF (applied
-    false, every other entry null). Otherwise the outline is smooth_outline(mask, sigma),
-    and the section measures it against the exact outline: the area change (px^2), the
-    sampled two-sided boundary distance (_sampled_hausdorff at HAUSDORFF_STEP_PX) and the
-    number of polygons before and after.
-    """
-    exact = mask_outline(mask)
-    if sigma is None:
-        return exact, dict(SMOOTHING_OFF)
+def _smoothed(mask: np.ndarray, sigma: dict) -> shapely.Geometry:
     try:
-        smooth = smooth_outline(mask, sigma["value"])
+        return smooth_outline(mask, sigma["value"])
     except SmoothingError as e:
         raise FlatError(f"smoothing failed: {e}") from None
-    return smooth, {"applied": True, "sigma_px": sigma, "method": SMOOTHING_METHOD,
-                    "area_change_px2": float(smooth.area - exact.area),
-                    "boundary_hausdorff_px": _sampled_hausdorff(exact, smooth,
-                                                                HAUSDORFF_STEP_PX),
-                    "parts_before": len(_polygons(exact)[0]),
-                    "parts_after": len(_polygons(smooth)[0])}
+
+
+def _features(region, opening_mm: float, min_island_mm2: float) -> dict:
+    """Pieces of region that survive the cleaning rules: open by opening_mm, keep >= island.
+
+    The same opening (round joins, QUAD_SEGS) and island limit as clean, so a piece counts
+    only if cleaning alone would have kept it as a part of its own size.
+    """
+    radius = opening_mm / 2
+    opened = region.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
+    areas = sorted((float(p.area) for p in _polygons(opened)[0] if p.area >= min_island_mm2),
+                   reverse=True)
+    return {"count": len(areas), "total_area_mm2": float(sum(areas)),
+            "largest_mm2": areas[:DROPPED_LISTED]}
+
+
+def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigma: dict,
+                      opening_mm: float, min_island_mm2: float) -> dict:
+    """The record's smoothing section: what smoothing changed against the exact outline.
+
+    exact and smooth are the outlines in pixel units; parts is the cleaned smoothed model.
+    - area_change_px2 is the net area change; removed_area_px2 (exact minus smooth) and
+      added_area_px2 (smooth minus exact) are the two directions, before cleaning.
+    - The exact outline goes through the same transform and the same clean (opening,
+      min_island, step) as the smoothed one. parts_exact_cleaned and
+      parts_smoothed_cleaned count the parts each gives.
+    - boundary_hausdorff_lower_bound_px is _sampled_hausdorff between the two cleaned
+      regions, sampled at hausdorff_sample_step_px (HAUSDORFF_STEP_PX) and converted to
+      pixels. It compares cleaned shapes, so specks that cleaning removes anyway do not
+      dominate it. It is a lower bound of the boundary distance, within step / 2 of it.
+      It is null if cleaning leaves nothing of the exact outline.
+    - lost_features are pieces of (cleaned exact - cleaned smooth) that survive the
+      cleaning rules (_features): features smoothing removed that cleaning alone would
+      have kept. added_features are the same for (cleaned smooth - cleaned exact).
+    """
+    s = transform["scale_mm_per_px"]
+    step_mm = HAUSDORFF_STEP_PX * s
+    try:
+        exact_parts, _ = clean(_apply_transform(exact, transform), opening_mm,
+                               min_island_mm2, step_mm)
+    except FlatError:                    # cleaning leaves nothing of the exact outline
+        exact_parts = []
+    exact_region = shapely.union_all(exact_parts)
+    smooth_region = shapely.union_all(parts)
+    hausdorff = (_sampled_hausdorff(exact_region, smooth_region, step_mm) / s
+                 if exact_parts else None)
+    return {"applied": True, "sigma_px": sigma, "method": SMOOTHING_METHOD,
+            "area_change_px2": float(smooth.area - exact.area),
+            "removed_area_px2": float(exact.difference(smooth).area),
+            "added_area_px2": float(smooth.difference(exact).area),
+            "boundary_hausdorff_lower_bound_px": hausdorff,
+            "hausdorff_sample_step_px": HAUSDORFF_STEP_PX,
+            "parts_exact_cleaned": len(exact_parts), "parts_smoothed_cleaned": len(parts),
+            "lost_features": _features(exact_region.difference(smooth_region), opening_mm,
+                                       min_island_mm2),
+            "added_features": _features(smooth_region.difference(exact_region), opening_mm,
+                                        min_island_mm2)}
+
+
+def _smoothing_warnings(smoothing: dict) -> list[str]:
+    """One warning per direction in which smoothing changed a feature cleaning would keep."""
+    warnings = []
+    for key, verb in (("lost_features", "removed"), ("added_features", "added")):
+        found = smoothing[key]
+        if found and found["count"]:
+            n = found["count"]
+            largest = ", ".join(f"{a:.3g}" for a in found["largest_mm2"])
+            warnings.append(
+                f"smoothing {verb} {n} feature{'' if n == 1 else 's'} that cleaning alone "
+                f"would keep ({found['total_area_mm2']:.3g} mm^2 in all; largest {largest} "
+                "mm^2); check outline.png, or use smooth_px 0 (--smooth-px 0) or a smaller "
+                "value")
+    return warnings
 
 
 def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1",
@@ -688,7 +752,9 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     smooth_px is the Gaussian sigma, in image pixels, of tdmg.smoothing.smooth_outline:
     None takes the default of rule flat.smooth.sigma_px, 0 keeps the exact pixel outline,
     and any other value must be finite and above 0. The record's smoothing section
-    measures what smoothing changed (see _outline).
+    measures what smoothing changed (see _smoothing_report). The record's warnings list
+    says when smoothing removed or added a feature that cleaning alone would keep; a
+    warning is not a gate check and does not change the verdict.
 
     Everything is built, encoded and gated in memory first, so a refused input writes
     nothing. An I/O failure while writing (a full disk, a failed rename) can leave an
@@ -725,10 +791,14 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
         sigma = {"value": float(rules[SMOOTH_RULE].default), "rule": SMOOTH_RULE}
     else:                              # an explicit value: no rule set it
         sigma = None if smooth_value == 0 else {"value": smooth_value, "rule": None}
-    outline, smoothing = _outline(mask, sigma)
+    exact = mask_outline(mask)
+    outline = exact if sigma is None else _smoothed(mask, sigma)
     model, transform = to_model(outline, width_mm)
     parts, cleaning = clean(model, opening["value"], min_island["value"],
                             HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
+    smoothing = (dict(SMOOTHING_OFF) if sigma is None else
+                 _smoothing_report(exact, outline, parts, transform, sigma,
+                                   opening["value"], min_island["value"]))
     stl = _encode_stl(extrude(parts, thickness_mm))
     kept = rasterise(parts, transform, mask.shape)
     files = {"model.stl": stl, "outline.png": png_bytes(_outline_image(mask, kept))}
@@ -748,7 +818,8 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
         "flat_id": hashlib.sha256(canonical_json(identity)).hexdigest(),
         "selection": {"selection_id": selection["selection_id"],
                       "mask_pixels_sha256": selection["mask_pixels_sha256"]},
-        "params": params, "smoothing": smoothing, "transform": transform,
+        "params": params, "smoothing": smoothing,
+        "warnings": _smoothing_warnings(smoothing), "transform": transform,
         "cleaning": cleaning,
         "mesh": _mesh_summary(gated),
         "checks": [c.as_dict() for c in checks],

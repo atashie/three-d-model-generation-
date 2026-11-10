@@ -160,15 +160,20 @@ def _check_line(check: dict) -> str:
 
 
 def _smoothing_line(record: dict) -> str:
-    """'smoothing off', or the sigma, its source, and how far the boundary moved in mm."""
+    """'smoothing off', or the sigma, its source, the sampled boundary change and the
+    area removed and added, in mm (ASCII only, so any console encoding can print it)."""
     smoothing = record["smoothing"]
     if not smoothing["applied"]:
         return "smoothing off"
     sigma = smoothing["sigma_px"]
     source = f"rule {sigma['rule']}" if sigma["rule"] else "set by --smooth-px"
-    moved = smoothing["boundary_hausdorff_px"] * record["transform"]["scale_mm_per_px"]
-    return (f"smoothing sigma {sigma['value']:g} px ({source}): boundary moved up to "
-            f"{moved:.3g} mm")
+    scale = record["transform"]["scale_mm_per_px"]
+    bound = smoothing["boundary_hausdorff_lower_bound_px"]
+    moved = "unknown" if bound is None else f"at least {bound * scale:.3g} mm (sampled)"
+    removed = smoothing["removed_area_px2"] * scale ** 2
+    added = smoothing["added_area_px2"] * scale ** 2
+    return (f"smoothing sigma {sigma['value']:g} px ({source}): boundary changed by {moved}, "
+            f"area -{removed:.3g}/+{added:.3g} mm^2")
 
 
 @app.command()
@@ -211,6 +216,8 @@ def flat(
         raise typer.Exit(2) from None
     typer.echo(f"verdict {rec['verdict']}")
     typer.echo(_smoothing_line(rec))
+    for warning in rec["warnings"]:
+        typer.echo(f"warning: {warning}", err=True)
     for c in rec["checks"]:
         if c["status"] != "PASS":
             typer.echo(_check_line(c))

@@ -24,7 +24,10 @@ x right and y down, with pixel (column c, row r) the cell [c, c + 1] x [r, r + 1
 contourpy puts padded array index i at a pixel centre; that is pixel i - PAD_PX, whose
 centre is at i - PAD_PX + 0.5, so the outline is translated by 0.5 - PAD_PX in x and y.
 
-Effects, on a scale of about sigma (the output shows them; tdmg flat measures them):
+Effects expected from the blur, on a scale of about sigma. tests/test_smoothing.py
+measures specks, notches, corners and the staircase on synthetic masks; merging and
+splitting are not measured there. tdmg flat records, per run, the area removed and added,
+a sampled boundary distance, part counts and features lost or added:
 - it removes boundary noise and specks smaller than about sigma, and fills small notches;
 - it rounds real corners;
 - it can merge parts closer than about sigma, or split parts joined by a neck thinner

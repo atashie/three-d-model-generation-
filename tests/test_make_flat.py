@@ -5,9 +5,11 @@ import shutil
 
 import numpy as np
 import pytest
+import shapely
 import trimesh
 from PIL import Image
 from selection_fixtures import BIRD_SEED, DISC_SEED, roadie_like
+from shapely import affinity
 
 import tdmg.flat
 from tdmg.checks import F1_CHECK_IDS, merge_exact, topology_checks
@@ -40,8 +42,14 @@ FILES = ("model.stl", "outline.png", "flat.json")
 # flat-1 (exact pixel outline) was 07270f3d5a676e08e221ecec991ed14fd02f9eda2eba8586d87ea17623c402e0.
 # Re-pinned for flat-2 (2026-11-10): smoothing on by default, and params.smoothing added.
 GOLDEN_FLAT_ID = "1d64c015d890492208b46c0e0ab6f6f6fbb45c3d20e7d19f1177b048028c2c6d"
-SMOOTHING_KEYS = {"applied", "sigma_px", "method", "area_change_px2", "boundary_hausdorff_px",
-                  "parts_before", "parts_after"}
+SMOOTHING_KEYS = {"applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
+                  "added_area_px2", "boundary_hausdorff_lower_bound_px",
+                  "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
+                  "lost_features", "added_features"}
+FEATURE_KEYS = {"count", "total_area_mm2", "largest_mm2"}
+# sha256 of model.stl for roadie_like at 60 x 3 mm, computed with flat-1 (commit b987845,
+# from git archive) on 2026-11-10. The off path (smooth_px=0) must still give these bytes.
+FLAT1_STL_SHA256 = "da1a172548660a8384fe26d4217f0352dc0cac4f0b2a3aaf4351e6fe786baf94"
 
 
 def write_roadie_selection(folder):
@@ -439,29 +447,58 @@ def test_default_run_smooths_with_the_rule_and_records_it(run):
     assert smoothing["applied"] is True
     assert smoothing["sigma_px"] == {"value": 2.5, "rule": "flat.smooth.sigma_px"}
     assert smoothing["method"] == METHOD
-    for key in ("area_change_px2", "boundary_hausdorff_px"):
+    for key in ("area_change_px2", "removed_area_px2", "added_area_px2",
+                "boundary_hausdorff_lower_bound_px"):
         assert isinstance(smoothing[key], float)
-    assert smoothing["boundary_hausdorff_px"] > 0
-    assert (smoothing["parts_before"], smoothing["parts_after"]) == (1, 1)
-    assert type(smoothing["parts_before"]) is int and type(smoothing["parts_after"]) is int
+    assert smoothing["boundary_hausdorff_lower_bound_px"] > 0
+    assert smoothing["hausdorff_sample_step_px"] == HAUSDORFF_STEP_PX
+    assert smoothing["removed_area_px2"] > 0 and smoothing["added_area_px2"] > 0
+    assert smoothing["area_change_px2"] == pytest.approx(
+        smoothing["added_area_px2"] - smoothing["removed_area_px2"], abs=1e-9)
+    counts = (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"])
+    assert counts == (1, 1) and all(type(n) is int for n in counts)
+    # roadie_like at 60 mm is 0.718 mm per pixel, so sigma 2.5 px is 1.8 mm, and smoothing
+    # moves the boundary at tips and concave corners by more than the 0.4 mm opening over
+    # more than min_island (0.64 mm^2). Measured: 4 lost pieces of 1.22 mm^2 (the ends of
+    # the two shoe ellipses, in mirror pairs) and 6 added pieces of 1.5-2.2 mm^2 (the
+    # concave corners where the legs meet the body and the shoes). The rule cannot tell
+    # this rounding from a lost feature, so roadie_like warns.
+    lost, added = smoothing["lost_features"], smoothing["added_features"]
+    assert set(lost) == set(added) == FEATURE_KEYS
+    assert (lost["count"], added["count"]) == (4, 6)
+    assert all(a >= 0.64 for a in lost["largest_mm2"] + added["largest_mm2"])
+    assert len(record["warnings"]) == 2
+    assert record["warnings"][0].startswith("smoothing removed 4 features that cleaning ")
+    assert record["warnings"][1].startswith("smoothing added 6 features that cleaning ")
 
 
 def test_smoothing_measurements_match_a_direct_computation(run, selection_dir):
     record, _ = run
     mask = png(selection_dir / "mask.png") == 255
     exact, smooth = mask_outline(mask), smooth_outline(mask, 2.5)
-    assert record["smoothing"]["area_change_px2"] == smooth.area - exact.area
-    assert record["smoothing"]["boundary_hausdorff_px"] == sampled_hausdorff(
-        exact, smooth, HAUSDORFF_STEP_PX)
-    assert record["transform"]["mask_width_px"] == smooth.bounds[2] - smooth.bounds[0]
+    smoothing = record["smoothing"]
+    assert smoothing["area_change_px2"] == smooth.area - exact.area
+    assert smoothing["removed_area_px2"] == exact.difference(smooth).area
+    assert smoothing["added_area_px2"] == smooth.difference(exact).area
+    t = record["transform"]
+    assert t["mask_width_px"] == smooth.bounds[2] - smooth.bounds[0]
+    # Both outlines go through the same transform and the same cleaning; the distance is
+    # between the cleaned regions, in mm, divided by the scale.
+    s = t["scale_mm_per_px"]
+    matrix = [s, 0.0, 0.0, -s, -t["x0_px"] * s, t["y1_px"] * s]
+    step = HAUSDORFF_STEP_PX * s
+    cleaned = [shapely.union_all(clean(affinity.affine_transform(g, matrix), 0.4,
+                                       (2.0 * 0.4) ** 2, step)[0]) for g in (exact, smooth)]
+    assert smoothing["boundary_hausdorff_lower_bound_px"] == sampled_hausdorff(
+        *cleaned, step) / s
 
 
 def test_off_run_records_a_fixed_shape(run_off):
     record, _ = run_off
-    assert record["smoothing"] == {"applied": False, "sigma_px": None, "method": None,
-                                   "area_change_px2": None, "boundary_hausdorff_px": None,
-                                   "parts_before": None, "parts_after": None}
+    assert record["smoothing"] == {"applied": False} | {
+        key: None for key in SMOOTHING_KEYS - {"applied"}}
     assert set(record["smoothing"]) == SMOOTHING_KEYS
+    assert record["warnings"] == []
     assert record["params"]["smoothing"] == {"applied": False}
 
 
@@ -487,6 +524,8 @@ def test_off_reproduces_the_exact_outline_path(run_off, selection_dir):
                             HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
     stl = tdmg.flat._encode_stl(extrude(parts, 3.0))
     assert (out / "model.stl").read_bytes() == stl
+    assert hashlib.sha256(stl).hexdigest() == FLAT1_STL_SHA256
+    assert record["outputs"]["model.stl"] == FLAT1_STL_SHA256
     assert record["transform"] == transform
     assert record["cleaning"] == json.loads(record_text({"c": cleaning}))["c"]
 
@@ -557,3 +596,48 @@ def test_smoothing_that_removes_everything_is_a_flat_error(tmp_path):
     with pytest.raises(FlatError, match="smoothing"):
         make_flat(tmp_path / "sel", 10.0, 2.0, tmp_path / "out")
     assert not (tmp_path / "out").exists()
+
+
+def body_and_stroke_selection(folder):
+    # A square body 40 px wide (columns 10-49) and, separately below it, a stroke
+    # 3 px high and 30 px long. At width 20 mm the 40 px wide outline gives 0.5 mm per
+    # pixel, so the stroke is 1.5 mm wide: wider than the 0.4 mm opening, and its 22.5 mm^2
+    # area is above min_island (0.64 mm^2), so cleaning alone keeps it. At sigma 2.5 px the
+    # stroke blurs to at most w_-1 + w_0 + w_1 (about 0.45) < 0.5 (tests/test_smoothing.py
+    # notation), so smoothing removes it.
+    rgba = np.zeros((70, 60, 4), np.uint8)
+    rgba[10:50, 10:50] = (230, 20, 20, 255)
+    rgba[60:63, 15:45] = (230, 20, 20, 255)
+    intake = Intake(rgba, "f" * 64, pixels_sha256(rgba), False, "x.png")
+    spec = SelectionSpec(instructions="", keep_at=((20, 20), (20, 61)))
+    write_selection(intake, select_subject(intake, spec), folder)
+    return folder
+
+
+def test_a_feature_lost_to_smoothing_is_warned_about(tmp_path):
+    sel = body_and_stroke_selection(tmp_path / "sel")
+    record = make_flat(sel, 20.0, 2.0, tmp_path / "out")
+    assert record["transform"]["scale_mm_per_px"] == pytest.approx(0.5, rel=1e-3)
+    smoothing = record["smoothing"]
+    assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (2, 1)
+    lost = smoothing["lost_features"]
+    assert set(lost) == FEATURE_KEYS
+    # The largest piece is the stroke: 30 x 3 px = 22.5 mm^2, a little less after the
+    # opening rounds its ends. The other four are the square's corners. Each loses at most
+    # the continuous-Gaussian corner area, 0.865 sigma^2 = 5.4 px^2 = 1.35 mm^2 at 0.25
+    # mm^2 per px^2 (tests/test_smoothing.py), and the four are equal by symmetry. At this
+    # scale a corner piece is wider than the opening and above min_island, so the rule
+    # counts corner rounding as a lost feature too.
+    assert lost["count"] == 5
+    stroke, *corners = lost["largest_mm2"]
+    assert 20.0 < stroke <= 22.5
+    assert all(0.64 <= c < 1.35 for c in corners)
+    assert max(corners) == pytest.approx(min(corners), rel=1e-6)
+    assert lost["total_area_mm2"] == pytest.approx(stroke + sum(corners), rel=1e-12)
+    assert smoothing["added_features"]["count"] == 0
+    assert len(record["warnings"]) == 1
+    assert record["warnings"][0].startswith("smoothing removed 5 features that cleaning alone "
+                                            "would keep")
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == sorted(FILES)
+    off = make_flat(sel, 20.0, 2.0, tmp_path / "off", smooth_px=0)
+    assert off["warnings"] == [] and off["smoothing"]["lost_features"] is None

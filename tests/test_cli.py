@@ -207,10 +207,15 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
     assert (f"{out / 'outline.png'} - open outline.png to check what smoothing and cleaning "
             "changed") in text
     assert f"wrote {out / 'flat.json'}" in text
-    moved = (record["smoothing"]["boundary_hausdorff_px"]
-             * record["transform"]["scale_mm_per_px"])
-    assert (f"smoothing sigma 2.5 px (rule flat.smooth.sigma_px): boundary moved up to "
-            f"{moved:.3g} mm\n") in text
+    smoothing, scale = record["smoothing"], record["transform"]["scale_mm_per_px"]
+    moved = smoothing["boundary_hausdorff_lower_bound_px"] * scale
+    removed = smoothing["removed_area_px2"] * scale ** 2
+    added = smoothing["added_area_px2"] * scale ** 2
+    assert (f"smoothing sigma 2.5 px (rule flat.smooth.sigma_px): boundary changed by at "
+            f"least {moved:.3g} mm (sampled), area -{removed:.3g}/+{added:.3g} mm^2\n") in text
+    # roadie_like warns (see tests/test_make_flat.py); warnings go to stderr, and exit is 0.
+    assert record["warnings"]
+    assert r.stderr == "".join(f"warning: {w}\n" for w in record["warnings"])
 
 
 def test_flat_without_width_is_a_usage_error(tmp_path):
@@ -325,7 +330,8 @@ def test_flat_explicit_smooth_px_is_used(tmp_path):
     assert r.exit_code == 0, r.output
     record = json.loads((out / "flat.json").read_bytes())
     assert record["smoothing"]["sigma_px"] == {"value": 1.5, "rule": None}
-    assert "smoothing sigma 1.5 px (set by --smooth-px): boundary moved up to " in r.stdout
+    assert ("smoothing sigma 1.5 px (set by --smooth-px): boundary changed by at least "
+            in r.stdout)
 
 
 @pytest.mark.parametrize("value", ["-1", "nan", "inf"])
@@ -336,3 +342,21 @@ def test_flat_bad_smooth_px_exits_2_and_writes_nothing(tmp_path, value):
     assert r.stderr.startswith("error: smooth_px")
     assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
     assert not out.exists()
+
+
+def test_flat_prints_smoothing_warnings_to_stderr_and_still_exits_0(tmp_path):
+    rgba = np.zeros((70, 60, 4), np.uint8)
+    rgba[10:50, 10:50] = (230, 20, 20, 255)
+    rgba[60:63, 15:45] = (230, 20, 20, 255)     # a 3 px stroke that smoothing removes
+    img = _img(tmp_path, rgba, "stroke.png")
+    sel = tmp_path / "sel"
+    r = runner.invoke(app, ["select", str(img), "--out", str(sel), "--keep-at", "20,20",
+                            "--keep-at", "20,61"])
+    assert r.exit_code == 0, r.output
+    out = tmp_path / "flat"
+    r = runner.invoke(app, ["flat", str(sel), "--width-mm", "20", "--thickness-mm", "2",
+                            "--out", str(out)])
+    assert r.exit_code == 0, r.output
+    record = json.loads((out / "flat.json").read_bytes())
+    assert len(record["warnings"]) == 1
+    assert r.stderr == f"warning: {record['warnings'][0]}\n"

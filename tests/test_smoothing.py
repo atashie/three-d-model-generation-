@@ -94,9 +94,10 @@ def test_corners_are_rounded_and_lose_the_predicted_area():
 
 
 def test_a_speck_next_to_a_body_is_removed():
-    # A lone pixel blurs to at most w_0^2 (about 0.025 at sigma 2.5) at its centre; the
-    # body 10 px away adds at most sum_{k>=10} w_k there. Both together stay below 0.5,
-    # so the speck has no 0.5 contour.
+    # A lone pixel blurs to at most w_0^2 (about 0.025 at sigma 2.5) at any pixel centre.
+    # The box checked (x 89-92) is interpolated from the centres of columns 88-92, at least
+    # 9 columns from the body's last column 79, so the body adds at most sum_{k>=9} w_k
+    # there. Both together stay below 0.5, so no 0.5 contour enters the box.
     w = kernel()
     assert w[0] ** 2 + sum(v for k, v in w.items() if k >= 9) < 0.5
     mask = square()
@@ -130,8 +131,10 @@ def test_a_diagonal_staircase_becomes_a_straight_line():
     # mask[r, c] = c < r. The map (c, r) -> (r, c + 1) takes the mask onto its complement,
     # and the isotropic blur commutes with it, so f(T p) = 1 - f(p). The pixel centres
     # (k, k) and (k, k + 1) are such a pair, so the 0.5 crossing on the grid edge between
-    # them is at its midpoint: every contour vertex lies on the line y = x + 0.5 (pixel-cell
-    # coordinates). In a window 80 px wide, away from the triangle's corners, the smoothed
+    # them is at its midpoint. The mask is also invariant under the translation (1, 1), so
+    # the field is too, and this holds at every k along the diagonal: every contour vertex
+    # on the edge lies on the line y = x + 0.5 (pixel-cell coordinates). In a window
+    # 80 px wide, away from the triangle's corners, the smoothed
     # boundary is that line, sqrt(2) * 80 long; the exact pixel outline is a staircase of
     # 80 + 80, about 41% longer.
     n = 200
