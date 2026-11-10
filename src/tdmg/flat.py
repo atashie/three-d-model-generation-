@@ -661,8 +661,11 @@ def _smooth_value(smooth_px) -> float | None:
 SMOOTHING_KEYS = ("applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
                   "added_area_px2", "boundary_hausdorff_lower_bound_px",
                   "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
-                  "lost_features", "added_features")
+                  "holes_exact_cleaned", "holes_smoothed_cleaned", "removed_regions",
+                  "added_regions")
 SMOOTHING_OFF = {"applied": False} | {key: None for key in SMOOTHING_KEYS[1:]}
+SMOOTHING_ADVICE = ("; check outline.png, or use smooth_px 0 (--smooth-px 0) or a smaller "
+                    "value")
 
 
 def _smoothed(mask: np.ndarray, sigma: dict) -> shapely.Geometry:
@@ -672,11 +675,13 @@ def _smoothed(mask: np.ndarray, sigma: dict) -> shapely.Geometry:
         raise FlatError(f"smoothing failed: {e}") from None
 
 
-def _features(region, opening_mm: float, min_island_mm2: float) -> dict:
+def _regions(region, opening_mm: float, min_island_mm2: float) -> dict:
     """Pieces of region that survive the cleaning rules: open by opening_mm, keep >= island.
 
-    The same opening (round joins, QUAD_SEGS) and island limit as clean, so a piece counts
-    only if cleaning alone would have kept it as a part of its own size.
+    The same opening (round joins, QUAD_SEGS) and island limit as clean. For information
+    only: besides features that smoothing removed or added, the pieces include corner and
+    tip rounding wherever smoothing moves the boundary by more than opening_mm over more
+    than min_island_mm2 (at a coarse scale, every sharp corner).
     """
     radius = opening_mm / 2
     opened = region.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
@@ -686,24 +691,66 @@ def _features(region, opening_mm: float, min_island_mm2: float) -> dict:
             "largest_mm2": areas[:DROPPED_LISTED]}
 
 
+def _holes(parts: list[Polygon]) -> int:
+    return sum(len(p.interiors) for p in parts)
+
+
+def _unmatched(parts: list[Polygon], others: list[Polygon]) -> list[Polygon]:
+    """The parts that intersect none of others."""
+    if not others:
+        return list(parts)
+    other = shapely.union_all(others)
+    shapely.prepare(other)
+    return [p for p in parts if not other.intersects(p)]
+
+
+def _topology_warnings(exact_parts: list[Polygon], parts: list[Polygon]) -> list[str]:
+    """Warnings for topology changes between the cleaned exact and cleaned smoothed parts.
+
+    They fire only when the part counts differ, when a part of one meets no part of the
+    other (it disappeared or appeared), or when the total number of holes differs. They
+    use no threshold. Limitation: smoothing can remove a thin appendage attached to a part
+    (a neck or tip narrower than about sigma) without changing the topology; that is not
+    warned about. Check removed_regions and outline.png for it.
+    """
+    warnings = []
+    a, b = len(exact_parts), len(parts)
+    if a != b:
+        change = "parts merged or disappeared" if b < a else "parts split or appeared"
+        warnings.append(f"smoothing changed the number of parts from {a} to {b} ({change})")
+    for found, verb in ((_unmatched(exact_parts, parts), "disappeared"),
+                        (_unmatched(parts, exact_parts), "appeared")):
+        if found:
+            n = len(found)
+            area = sum(p.area for p in found)
+            warnings.append(f"{n} part{'' if n == 1 else 's'} {verb} with smoothing "
+                            f"({area:.3g} mm^2 in all)")
+    a, b = _holes(exact_parts), _holes(parts)
+    if a != b:
+        change = "holes closed" if b < a else "holes opened"
+        warnings.append(f"smoothing changed the number of holes from {a} to {b} ({change})")
+    return [w + SMOOTHING_ADVICE for w in warnings]
+
+
 def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigma: dict,
-                      opening_mm: float, min_island_mm2: float) -> dict:
-    """The record's smoothing section: what smoothing changed against the exact outline.
+                      opening_mm: float, min_island_mm2: float) -> tuple[dict, list[str]]:
+    """The record's smoothing section and warnings: what smoothing changed.
 
     exact and smooth are the outlines in pixel units; parts is the cleaned smoothed model.
     - area_change_px2 is the net area change; removed_area_px2 (exact minus smooth) and
       added_area_px2 (smooth minus exact) are the two directions, before cleaning.
     - The exact outline goes through the same transform and the same clean (opening,
-      min_island, step) as the smoothed one. parts_exact_cleaned and
-      parts_smoothed_cleaned count the parts each gives.
+      min_island, step) as the smoothed one. parts_*_cleaned and holes_*_cleaned count
+      the parts and the holes (interior rings) each gives.
     - boundary_hausdorff_lower_bound_px is _sampled_hausdorff between the two cleaned
       regions, sampled at hausdorff_sample_step_px (HAUSDORFF_STEP_PX) and converted to
       pixels. It compares cleaned shapes, so specks that cleaning removes anyway do not
       dominate it. It is a lower bound of the boundary distance, within step / 2 of it.
       It is null if cleaning leaves nothing of the exact outline.
-    - lost_features are pieces of (cleaned exact - cleaned smooth) that survive the
-      cleaning rules (_features): features smoothing removed that cleaning alone would
-      have kept. added_features are the same for (cleaned smooth - cleaned exact).
+    - removed_regions and added_regions (_regions) are the pieces of (cleaned exact -
+      cleaned smooth) and (cleaned smooth - cleaned exact) that survive the cleaning
+      rules. They are information only and include corner and tip rounding.
+    - The warnings are topology changes only (_topology_warnings).
     """
     s = transform["scale_mm_per_px"]
     step_mm = HAUSDORFF_STEP_PX * s
@@ -716,33 +763,20 @@ def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigm
     smooth_region = shapely.union_all(parts)
     hausdorff = (_sampled_hausdorff(exact_region, smooth_region, step_mm) / s
                  if exact_parts else None)
-    return {"applied": True, "sigma_px": sigma, "method": SMOOTHING_METHOD,
-            "area_change_px2": float(smooth.area - exact.area),
-            "removed_area_px2": float(exact.difference(smooth).area),
-            "added_area_px2": float(smooth.difference(exact).area),
-            "boundary_hausdorff_lower_bound_px": hausdorff,
-            "hausdorff_sample_step_px": HAUSDORFF_STEP_PX,
-            "parts_exact_cleaned": len(exact_parts), "parts_smoothed_cleaned": len(parts),
-            "lost_features": _features(exact_region.difference(smooth_region), opening_mm,
-                                       min_island_mm2),
-            "added_features": _features(smooth_region.difference(exact_region), opening_mm,
-                                        min_island_mm2)}
-
-
-def _smoothing_warnings(smoothing: dict) -> list[str]:
-    """One warning per direction in which smoothing changed a feature cleaning would keep."""
-    warnings = []
-    for key, verb in (("lost_features", "removed"), ("added_features", "added")):
-        found = smoothing[key]
-        if found and found["count"]:
-            n = found["count"]
-            largest = ", ".join(f"{a:.3g}" for a in found["largest_mm2"])
-            warnings.append(
-                f"smoothing {verb} {n} feature{'' if n == 1 else 's'} that cleaning alone "
-                f"would keep ({found['total_area_mm2']:.3g} mm^2 in all; largest {largest} "
-                "mm^2); check outline.png, or use smooth_px 0 (--smooth-px 0) or a smaller "
-                "value")
-    return warnings
+    section = {"applied": True, "sigma_px": sigma, "method": SMOOTHING_METHOD,
+               "area_change_px2": float(smooth.area - exact.area),
+               "removed_area_px2": float(exact.difference(smooth).area),
+               "added_area_px2": float(smooth.difference(exact).area),
+               "boundary_hausdorff_lower_bound_px": hausdorff,
+               "hausdorff_sample_step_px": HAUSDORFF_STEP_PX,
+               "parts_exact_cleaned": len(exact_parts), "parts_smoothed_cleaned": len(parts),
+               "holes_exact_cleaned": _holes(exact_parts),
+               "holes_smoothed_cleaned": _holes(parts),
+               "removed_regions": _regions(exact_region.difference(smooth_region),
+                                           opening_mm, min_island_mm2),
+               "added_regions": _regions(smooth_region.difference(exact_region),
+                                         opening_mm, min_island_mm2)}
+    return section, _topology_warnings(exact_parts, parts)
 
 
 def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1",
@@ -753,7 +787,9 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     None takes the default of rule flat.smooth.sigma_px, 0 keeps the exact pixel outline,
     and any other value must be finite and above 0. The record's smoothing section
     measures what smoothing changed (see _smoothing_report). The record's warnings list
-    says when smoothing removed or added a feature that cleaning alone would keep; a
+    says when smoothing changed the topology of the cleaned geometry: the number of
+    parts, a part disappearing or appearing, or the number of holes. A thin attached
+    appendage that smoothing removes is not warned about (see _topology_warnings). A
     warning is not a gate check and does not change the verdict.
 
     Everything is built, encoded and gated in memory first, so a refused input writes
@@ -796,9 +832,11 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     model, transform = to_model(outline, width_mm)
     parts, cleaning = clean(model, opening["value"], min_island["value"],
                             HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
-    smoothing = (dict(SMOOTHING_OFF) if sigma is None else
-                 _smoothing_report(exact, outline, parts, transform, sigma,
-                                   opening["value"], min_island["value"]))
+    if sigma is None:
+        smoothing, warnings = dict(SMOOTHING_OFF), []
+    else:
+        smoothing, warnings = _smoothing_report(exact, outline, parts, transform, sigma,
+                                                opening["value"], min_island["value"])
     stl = _encode_stl(extrude(parts, thickness_mm))
     kept = rasterise(parts, transform, mask.shape)
     files = {"model.stl": stl, "outline.png": png_bytes(_outline_image(mask, kept))}
@@ -819,7 +857,7 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
         "selection": {"selection_id": selection["selection_id"],
                       "mask_pixels_sha256": selection["mask_pixels_sha256"]},
         "params": params, "smoothing": smoothing,
-        "warnings": _smoothing_warnings(smoothing), "transform": transform,
+        "warnings": warnings, "transform": transform,
         "cleaning": cleaning,
         "mesh": _mesh_summary(gated),
         "checks": [c.as_dict() for c in checks],

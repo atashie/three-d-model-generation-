@@ -213,9 +213,7 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
     added = smoothing["added_area_px2"] * scale ** 2
     assert (f"smoothing sigma 2.5 px (rule flat.smooth.sigma_px): boundary changed by at "
             f"least {moved:.3g} mm (sampled), area -{removed:.3g}/+{added:.3g} mm^2\n") in text
-    # roadie_like warns (see tests/test_make_flat.py); warnings go to stderr, and exit is 0.
-    assert record["warnings"]
-    assert r.stderr == "".join(f"warning: {w}\n" for w in record["warnings"])
+    assert record["warnings"] == [] and r.stderr == ""
 
 
 def test_flat_without_width_is_a_usage_error(tmp_path):
@@ -358,5 +356,5 @@ def test_flat_prints_smoothing_warnings_to_stderr_and_still_exits_0(tmp_path):
                             "--out", str(out)])
     assert r.exit_code == 0, r.output
     record = json.loads((out / "flat.json").read_bytes())
-    assert len(record["warnings"]) == 1
-    assert r.stderr == f"warning: {record['warnings'][0]}\n"
+    assert len(record["warnings"]) == 2                 # the part count, and the stroke
+    assert r.stderr == "".join(f"warning: {w}\n" for w in record["warnings"])

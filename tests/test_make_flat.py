@@ -45,8 +45,10 @@ GOLDEN_FLAT_ID = "1d64c015d890492208b46c0e0ab6f6f6fbb45c3d20e7d19f1177b048028c2c
 SMOOTHING_KEYS = {"applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
                   "added_area_px2", "boundary_hausdorff_lower_bound_px",
                   "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
-                  "lost_features", "added_features"}
-FEATURE_KEYS = {"count", "total_area_mm2", "largest_mm2"}
+                  "holes_exact_cleaned", "holes_smoothed_cleaned", "removed_regions",
+                  "added_regions"}
+REGION_KEYS = {"count", "total_area_mm2", "largest_mm2"}
+ADVICE = "; check outline.png, or use smooth_px 0 (--smooth-px 0) or a smaller value"
 # sha256 of model.stl for roadie_like at 60 x 3 mm, computed with flat-1 (commit b987845,
 # from git archive) on 2026-11-10. The off path (smooth_px=0) must still give these bytes.
 FLAT1_STL_SHA256 = "da1a172548660a8384fe26d4217f0352dc0cac4f0b2a3aaf4351e6fe786baf94"
@@ -457,19 +459,19 @@ def test_default_run_smooths_with_the_rule_and_records_it(run):
         smoothing["added_area_px2"] - smoothing["removed_area_px2"], abs=1e-9)
     counts = (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"])
     assert counts == (1, 1) and all(type(n) is int for n in counts)
+    holes = (smoothing["holes_exact_cleaned"], smoothing["holes_smoothed_cleaned"])
+    assert holes == (0, 0) and all(type(n) is int for n in holes)
     # roadie_like at 60 mm is 0.718 mm per pixel, so sigma 2.5 px is 1.8 mm, and smoothing
     # moves the boundary at tips and concave corners by more than the 0.4 mm opening over
-    # more than min_island (0.64 mm^2). Measured: 4 lost pieces of 1.22 mm^2 (the ends of
-    # the two shoe ellipses, in mirror pairs) and 6 added pieces of 1.5-2.2 mm^2 (the
-    # concave corners where the legs meet the body and the shoes). The rule cannot tell
-    # this rounding from a lost feature, so roadie_like warns.
-    lost, added = smoothing["lost_features"], smoothing["added_features"]
-    assert set(lost) == set(added) == FEATURE_KEYS
-    assert (lost["count"], added["count"]) == (4, 6)
-    assert all(a >= 0.64 for a in lost["largest_mm2"] + added["largest_mm2"])
-    assert len(record["warnings"]) == 2
-    assert record["warnings"][0].startswith("smoothing removed 4 features that cleaning ")
-    assert record["warnings"][1].startswith("smoothing added 6 features that cleaning ")
+    # more than min_island (0.64 mm^2). Measured: 4 removed regions of 1.22 mm^2 (the ends
+    # of the two shoe ellipses, in mirror pairs) and 6 added regions of 1.5-2.2 mm^2 (the
+    # concave corners where the legs meet the body and the shoes). They are rounding, and
+    # are recorded for information only. The topology is unchanged, so nothing warns.
+    removed, added = smoothing["removed_regions"], smoothing["added_regions"]
+    assert set(removed) == set(added) == REGION_KEYS
+    assert (removed["count"], added["count"]) == (4, 6)
+    assert all(a >= 0.64 for a in removed["largest_mm2"] + added["largest_mm2"])
+    assert record["warnings"] == []
 
 
 def test_smoothing_measurements_match_a_direct_computation(run, selection_dir):
@@ -614,30 +616,78 @@ def body_and_stroke_selection(folder):
     return folder
 
 
-def test_a_feature_lost_to_smoothing_is_warned_about(tmp_path):
+def test_a_part_that_disappears_with_smoothing_is_warned_about(tmp_path):
     sel = body_and_stroke_selection(tmp_path / "sel")
     record = make_flat(sel, 20.0, 2.0, tmp_path / "out")
     assert record["transform"]["scale_mm_per_px"] == pytest.approx(0.5, rel=1e-3)
     smoothing = record["smoothing"]
     assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (2, 1)
-    lost = smoothing["lost_features"]
-    assert set(lost) == FEATURE_KEYS
+    lost = smoothing["removed_regions"]
+    assert set(lost) == REGION_KEYS
     # The largest piece is the stroke: 30 x 3 px = 22.5 mm^2, a little less after the
     # opening rounds its ends. The other four are the square's corners. Each loses at most
     # the continuous-Gaussian corner area, 0.865 sigma^2 = 5.4 px^2 = 1.35 mm^2 at 0.25
     # mm^2 per px^2 (tests/test_smoothing.py), and the four are equal by symmetry. At this
-    # scale a corner piece is wider than the opening and above min_island, so the rule
-    # counts corner rounding as a lost feature too.
+    # scale a corner piece is wider than the opening and above min_island, so the removed
+    # regions include corner rounding, not only the lost stroke.
     assert lost["count"] == 5
     stroke, *corners = lost["largest_mm2"]
     assert 20.0 < stroke <= 22.5
     assert all(0.64 <= c < 1.35 for c in corners)
     assert max(corners) == pytest.approx(min(corners), rel=1e-6)
     assert lost["total_area_mm2"] == pytest.approx(stroke + sum(corners), rel=1e-12)
-    assert smoothing["added_features"]["count"] == 0
-    assert len(record["warnings"]) == 1
-    assert record["warnings"][0].startswith("smoothing removed 5 features that cleaning alone "
-                                            "would keep")
+    assert smoothing["added_regions"]["count"] == 0
+    # The stroke's exact part meets no smoothed part, so it disappeared; the part count
+    # changes too. The corner rounding does not warn.
+    assert record["warnings"] == [
+        "smoothing changed the number of parts from 2 to 1 (parts merged or disappeared)"
+        + ADVICE,
+        f"1 part disappeared with smoothing ({lost['largest_mm2'][0]:.3g} mm^2 in all)"
+        + ADVICE]
     assert sorted(p.name for p in (tmp_path / "out").iterdir()) == sorted(FILES)
     off = make_flat(sel, 20.0, 2.0, tmp_path / "off", smooth_px=0)
-    assert off["warnings"] == [] and off["smoothing"]["lost_features"] is None
+    assert off["warnings"] == [] and off["smoothing"]["removed_regions"] is None
+
+
+def selection_from(rgba, folder, keep_at):
+    intake = Intake(rgba, "f" * 64, pixels_sha256(rgba), False, "x.png")
+    write_selection(intake, select_subject(intake, SelectionSpec(instructions="",
+                                                                 keep_at=keep_at)),
+                    folder)
+    return folder
+
+
+def test_a_hole_that_smoothing_closes_is_warned_about(tmp_path):
+    # A 40 px square with a 3 x 3 px hole in its middle, at 0.5 mm per pixel (20 mm wide).
+    # Cleaning (an opening) only removes material, so the exact part keeps its 1.5 mm hole.
+    # After the blur, every point of the hole is at least 1 - (w_0 + 2 w_1)^2 (about 0.79,
+    # tests/test_smoothing.py notation: the hole's weight is at most the full 3 x 3 sum),
+    # above 0.5, so the hole fills.
+    rgba = np.zeros((60, 60, 4), np.uint8)
+    rgba[10:50, 10:50] = (230, 20, 20, 255)
+    rgba[29:32, 29:32] = 0
+    sel = selection_from(rgba, tmp_path / "sel", ((15, 15),))
+    record = make_flat(sel, 20.0, 2.0, tmp_path / "out")
+    smoothing = record["smoothing"]
+    assert (smoothing["holes_exact_cleaned"], smoothing["holes_smoothed_cleaned"]) == (1, 0)
+    assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (1, 1)
+    assert record["warnings"] == [
+        "smoothing changed the number of holes from 1 to 0 (holes closed)" + ADVICE]
+
+
+def test_parts_that_smoothing_merges_are_warned_about(tmp_path):
+    # Two 20 x 40 px rectangles side by side with a gap one pixel wide (column 30), 41 px in
+    # all at 20.5 mm: 0.5 mm per pixel, so the gap is 0.5 mm and cleaning keeps two parts.
+    # In the gap the two edges each give (1 - w_0) / 2, 1 - w_0 (about 0.84) together,
+    # above 0.5, so the blur joins them away from the ends of the gap.
+    rgba = np.zeros((60, 61, 4), np.uint8)
+    rgba[10:50, 10:30] = (230, 20, 20, 255)
+    rgba[10:50, 31:51] = (230, 20, 20, 255)
+    sel = selection_from(rgba, tmp_path / "sel", ((15, 15), (45, 15)))
+    record = make_flat(sel, 20.5, 2.0, tmp_path / "out")
+    assert record["transform"]["scale_mm_per_px"] == pytest.approx(0.5, rel=1e-3)
+    smoothing = record["smoothing"]
+    assert (smoothing["parts_exact_cleaned"], smoothing["parts_smoothed_cleaned"]) == (2, 1)
+    assert record["warnings"] == [
+        "smoothing changed the number of parts from 2 to 1 (parts merged or disappeared)"
+        + ADVICE]
