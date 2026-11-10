@@ -20,6 +20,8 @@ from selection_fixtures import (
 
 from tdmg.rules import load_rules
 from tdmg.selection import (
+    CHECKER_SHADES,
+    REMOVED_TINT,
     Intake,
     SelectionError,
     SelectionSpec,
@@ -28,6 +30,7 @@ from tdmg.selection import (
     pixels_sha256,
     select_from_mask,
     select_subject,
+    write_selection,
 )
 
 
@@ -457,3 +460,129 @@ def test_load_mask_refuses_transparency(tmp_path, make):
 def test_load_mask_accepts_opaque_rgba(tmp_path):
     m = load_mask(_rgba_mask(tmp_path, 255), (4, 4))
     assert m[:2].all() and not m[2:].any()
+
+
+SPEC = SelectionSpec(instructions="Use only the bird.", remove_at=(DISC_SEED,),
+                     keep_at=(BIRD_SEED,))
+
+
+def _run(tmp_path, name, spec=SPEC):
+    sel = select_subject(_intake(roadie_like()), spec)
+    return write_selection(_intake(roadie_like()), sel, tmp_path / name)
+
+
+def test_outputs_and_record(tmp_path):
+    rec = _run(tmp_path, "a")
+    out = tmp_path / "a"
+    assert sorted(p.name for p in out.iterdir()) == [
+        "cutout.png", "mask.png", "preview.png", "selection.json"]
+    mask = np.asarray(Image.open(out / "mask.png"))
+    assert set(np.unique(mask)) <= {0, 255}
+    cut = np.asarray(Image.open(out / "cutout.png"))
+    assert (cut[mask == 0] == 0).all() and (cut[mask == 255][:, 3] == 255).all()
+    on_disk = json.loads((out / "selection.json").read_text(encoding="utf-8"))
+    assert on_disk == rec
+    assert rec["input"]["name"] == "x.png" and "path" not in rec["input"]
+    assert rec["interpretation"]["machine_interpreted"] is False
+    assert set(rec["outputs"]) == {"mask.png", "cutout.png", "preview.png"}
+
+
+def test_cutout_keeps_original_pixels_where_selected(tmp_path):
+    _run(tmp_path, "a")
+    cut = np.asarray(Image.open(tmp_path / "a" / "cutout.png"))
+    assert (cut[BIRD_SEED[1], BIRD_SEED[0]] == roadie_like()[BIRD_SEED[1], BIRD_SEED[0]]).all()
+
+
+def test_record_file_is_canonical_json_with_lf_endings(tmp_path):
+    _run(tmp_path, "a")
+    raw = (tmp_path / "a" / "selection.json").read_bytes()
+    assert b"\r" not in raw
+    text = raw.decode("utf-8")
+    assert text == json.dumps(json.loads(text), indent=2, sort_keys=True,
+                              ensure_ascii=False) + "\n"
+
+
+def test_record_has_no_absolute_paths_or_timestamps(tmp_path):
+    rec = _run(tmp_path, "a")
+    text = (tmp_path / "a" / "selection.json").read_text(encoding="utf-8")
+    assert tmp_path.name not in text and "\\\\" not in text and ":/" not in text
+
+    def keys(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                yield k
+                yield from keys(v)
+        elif isinstance(obj, list):
+            for v in obj:
+                yield from keys(v)
+
+    assert not [k for k in keys(rec) if "time" in k or "date" in k]
+
+
+def test_replay_is_byte_identical_and_changes_invalidate(tmp_path):
+    a, b = _run(tmp_path, "a"), _run(tmp_path, "b")
+    assert a == b
+    for name in ("mask.png", "cutout.png", "preview.png", "selection.json"):
+        assert (tmp_path / "a" / name).read_bytes() == (tmp_path / "b" / name).read_bytes()
+    tol = _run(tmp_path, "c", SPEC.model_copy(update={"color_tolerance": 12.0}))
+    text = _run(tmp_path, "d", SPEC.model_copy(update={"instructions": "the bird"}))
+    assert len({a["selection_id"], tol["selection_id"], text["selection_id"]}) == 3
+    assert text["mask_pixels_sha256"] == a["mask_pixels_sha256"]
+
+
+def test_provenance_is_part_of_the_selection_id(tmp_path):
+    default = load_rules()["perception.flood.color_tolerance"].default
+    a = _run(tmp_path, "a")
+    b = _run(tmp_path, "b", SPEC.model_copy(update={"color_tolerance": float(default)}))
+    assert a["mask_pixels_sha256"] == b["mask_pixels_sha256"]
+    assert a["selection_id"] != b["selection_id"]
+
+
+def test_refuses_to_overwrite(tmp_path):
+    _run(tmp_path, "a")
+    before = {p.name: p.read_bytes() for p in (tmp_path / "a").iterdir()}
+    with pytest.raises(SelectionError, match="not empty"):
+        _run(tmp_path, "a")
+    assert {p.name: p.read_bytes() for p in (tmp_path / "a").iterdir()} == before
+
+
+def test_refuses_a_file_as_output_folder(tmp_path):
+    (tmp_path / "a").write_text("x")
+    with pytest.raises(SelectionError, match="not a folder"):
+        _run(tmp_path, "a")
+
+
+def test_writes_into_an_existing_empty_folder(tmp_path):
+    (tmp_path / "a").mkdir()
+    _run(tmp_path, "a")
+    assert (tmp_path / "a" / "selection.json").is_file()
+
+
+def test_preview_shows_original_and_result_side_by_side(tmp_path):
+    _run(tmp_path, "a")
+    img = roadie_like()
+    prev = np.asarray(Image.open(tmp_path / "a" / "preview.png"))
+    h, w = img.shape[:2]
+    assert prev.shape == (h, 2 * w, 3)
+    left, right = prev[:, :w], prev[:, w:]
+    bx, by = BIRD_SEED
+    assert (right[by, bx] == img[by, bx, :3]).all() and (left[by, bx] == img[by, bx, :3]).all()
+    dx, dy = DISC_SEED
+    blend = np.rint(0.5 * np.array(DISC) + 0.5 * REMOVED_TINT).astype(np.uint8)
+    assert (right[dy, dx] == blend).all() and (left[dy, dx] == DISC).all()
+    assert img[0, 0, 3] == 0
+    assert (left[0, 0] == CHECKER_SHADES[1]).all() and (right[0, 0] == CHECKER_SHADES[1]).all()
+
+
+def test_mask_mode_record_carries_the_mask_hash(tmp_path):
+    intake = _intake(roadie_like())
+    m1 = np.zeros((200, 200), bool)
+    m1[60:100, 65:135] = True
+    m2 = m1.copy()
+    m2[60, 65] = False
+    spec = SelectionSpec(instructions="just the body")
+    r1 = write_selection(intake, select_from_mask(intake, m1, spec), tmp_path / "a")
+    r2 = write_selection(intake, select_from_mask(intake, m2, spec), tmp_path / "b")
+    assert r1["controls"]["user_mask_sha256"] == pixels_sha256(m1)
+    assert r1["controls"]["source"] == "user_mask"
+    assert r1["selection_id"] != r2["selection_id"]

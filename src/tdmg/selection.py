@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 from pydantic_core import PydanticCustomError
 
+from tdmg import __version__
 from tdmg.rules import load_rules
 
 ORIENTATION_TAG = 0x0112   # EXIF Orientation; 1 means "as stored"
@@ -34,6 +36,11 @@ UNSUPPORTED_MODES = frozenset({"I;16", "I;16B", "I;16L", "I", "F"})
 ALGORITHM_VERSION = "selection-1"
 ALPHA_RULE = "perception.alpha.min_opaque"
 TOLERANCE_RULE = "perception.flood.color_tolerance"
+RECORD_SCHEMA = "tdmg.selection/1"
+# Preview display only; these are not thresholds.
+CHECKER_CELL_PX = 8
+CHECKER_SHADES = (200, 235)
+REMOVED_TINT = np.array([255, 0, 255])
 NOT_INTERPRETED = ("instructions recorded verbatim but not machine-interpreted; "
                    "no control or mask applied them")
 
@@ -267,3 +274,82 @@ def select_from_mask(intake: Intake, mask: np.ndarray, spec: SelectionSpec) -> S
                      steps=[{"op": "user_mask", "selected_px": int(mask.sum())}],
                      result=_result(mask, warnings),
                      interpretation={"text": spec.instructions, "machine_interpreted": False})
+
+
+def _checker(h: int, w: int) -> np.ndarray:
+    """H x W x 3 float checkerboard; the top-left cell uses CHECKER_SHADES[1]."""
+    yy, xx = np.indices((h, w))
+    cell = ((yy // CHECKER_CELL_PX + xx // CHECKER_CELL_PX) % 2).astype(bool)
+    shade = np.where(cell, CHECKER_SHADES[0], CHECKER_SHADES[1]).astype(np.float64)
+    return np.repeat(shade[..., None], 3, axis=-1)
+
+
+def _over(rgba: np.ndarray, under: np.ndarray) -> np.ndarray:
+    a = rgba[..., 3:4] / 255.0
+    return rgba[..., :3] * a + under * (1 - a)
+
+
+def _preview(rgba: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Left: the original over a checkerboard. Right: the result. Kept pixels show their
+    original colour, removed visible pixels (alpha > 0) are blended 50/50 with magenta, and
+    transparent ones show the checkerboard."""
+    h, w = mask.shape
+    bg = _checker(h, w)
+    left = _over(rgba.astype(np.float64), bg)
+    right = bg.copy()
+    right[mask] = rgba[..., :3][mask]
+    removed = ~mask & (rgba[..., 3] > 0)
+    right[removed] = 0.5 * left[removed] + 0.5 * REMOVED_TINT
+    return np.rint(np.concatenate([left, right], axis=1)).astype(np.uint8)
+
+
+def _canonical(obj) -> bytes:
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                      allow_nan=False).encode("utf-8")
+
+
+def _write_png(arr: np.ndarray, path: Path) -> str:
+    Image.fromarray(arr).save(path, format="PNG")    # mode inferred: L, RGB or RGBA
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict:
+    """Write mask.png, cutout.png, preview.png and selection.json into a new or empty folder.
+
+    The files are written one after another, not atomically: if writing fails part way, a
+    partial folder remains. The record holds no absolute paths and no timestamps.
+    """
+    out = Path(out_dir)
+    if out.exists() and not out.is_dir():
+        raise SelectionError(f"output path {out} is a file, not a folder; choose a new one")
+    if out.exists() and any(out.iterdir()):
+        raise SelectionError(f"output folder {out} is not empty; choose a new one")
+    out.mkdir(parents=True, exist_ok=True)
+    mask8 = np.where(sel.mask, 255, 0).astype(np.uint8)
+    cutout = np.where(sel.mask[..., None], intake.rgba, 0).astype(np.uint8)
+    cutout[..., 3] = mask8
+    outputs = {"mask.png": _write_png(mask8, out / "mask.png"),
+               "cutout.png": _write_png(cutout, out / "cutout.png"),
+               "preview.png": _write_png(_preview(intake.rgba, sel.mask), out / "preview.png")}
+    h, w = sel.mask.shape
+    # Provenance is deliberately part of the identity: a value given explicitly and the same
+    # value taken from the rule default ({"rule": None} vs {"rule": id}) give different ids.
+    # In mask mode the controls carry user_mask_sha256, so the mask is part of the id too.
+    identity = {"algorithm": ALGORITHM_VERSION, "input_pixels_sha256": intake.pixels_sha256,
+                "controls": sel.controls, "instructions": sel.interpretation["text"]}
+    record = {
+        "schema": RECORD_SCHEMA, "tdmg_version": __version__, "algorithm": ALGORITHM_VERSION,
+        "selection_id": hashlib.sha256(_canonical(identity)).hexdigest(),
+        "input": {"name": intake.source_name, "file_sha256": intake.file_sha256,
+                  "pixels_sha256": intake.pixels_sha256, "width": w, "height": h,
+                  "exif_transposed": intake.exif_transposed},
+        "interpretation": sel.interpretation, "controls": sel.controls, "steps": sel.steps,
+        "result": sel.result, "mask_pixels_sha256": pixels_sha256(sel.mask),
+        "outputs": outputs,
+        "review": "Open preview.png and confirm the subject before generating geometry.",
+    }
+    text = json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False,
+                      allow_nan=False) + "\n"
+    # Bytes, not write_text: in text mode Windows would turn "\n" into "\r\n".
+    (out / "selection.json").write_bytes(text.encode("utf-8"))
+    return record
