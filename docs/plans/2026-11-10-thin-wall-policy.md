@@ -22,8 +22,8 @@ step on 2026-11-10. The evidence is `research/verification/2026-11-10-thin-walls
 - **The first layer:** it is deliberately shrunk by `elefant_foot_compensation`
   (0.075 mm), which gives gaps of up to 0.24 mm there.
 
-**Status:** written 2026-11-10; not started. Waiting for the owner's approval of the
-proposed rule (Decision 2).
+**Status:** written 2026-11-10. The owner approved the rule in Decision 2 on
+2026-11-10 ("I approve this rule"). Not started.
 
 ## Decisions
 
