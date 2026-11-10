@@ -32,6 +32,7 @@ and model hashes; these are not core dependencies or changes to `uv.lock`.
 | build123d | 0.13.0 | Apache-2.0 | parametric CAD | tested | |
 | cadquery-ocp-novtk | 8.0.1.1.0 | Apache-2.0 (wrapper) | OpenCASCADE kernel for build123d | tested | **The kernel itself is LGPL-2.1 with a special exception.** Used as an unmodified pip dependency |
 | vtracer | 0.6.15 | MIT | raster-to-vector tracing | imported | |
+| contourpy | 1.4.0 | BSD-3-Clause | iso-contours for outline smoothing (`tdmg.smoothing`) | not checked on M5 | Added 2026-11-10; imported and measured on the PC (research/verification/2026-11-10-outline-smoothing) |
 | pillow | 13.0.0 | MIT-CMU | image loading | imported | |
 | pydantic | 2.14.3 | MIT | rule and profile schemas | tested | |
 | typer | 0.28.0 | MIT | CLI | tested | |

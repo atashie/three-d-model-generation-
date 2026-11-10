@@ -15,7 +15,7 @@
 
 - id: flat.sliver.opening_width
   kind: hypothesis
-  summary: Shrink then regrow each shape by half this width to delete slivers no nozzle can print.
+  summary: Shrink then regrow each shape by half this width to delete slivers narrower than it (an opening).
   unit: mm
   default: 0.4
   range: [0.4, 0.5]
@@ -47,3 +47,17 @@
       provenance: unverified
       validation: untested
       claim: Research team's inference so slicers produce solid walls.
+
+- id: flat.smooth.sigma_px
+  kind: hypothesis
+  summary: Gaussian blur (in image pixels) applied to the binary mask before taking its 0.5 iso-contour, to smooth jagged outlines of soft or low-resolution images.
+  unit: px
+  default: 2.5
+  applies_to: {geometry: [G1]}
+  evidence:
+    - ref: research/verification/2026-11-10-outline-smoothing/README.md
+      locator: "candidate A at σ 2.5 px gave the smoothest, most cartoon-like outline"
+      provenance: primary
+      validation: untested
+      claim: Compared by eye on two crops of one owner image (Roadie) against 1.5 px and three other methods; area change -0.43%. Software comparison on one image; as a hypothesis the rule stays untested.
+  notes: Set in pixels because the jaggedness comes from image resolution and compression, not print size. Rounds real corners and can merge or split features on a scale of about sigma. 0 (no smoothing) is chosen by not calling the smoother (tdmg flat --smooth-px 0).

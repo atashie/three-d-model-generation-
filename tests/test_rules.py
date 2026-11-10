@@ -38,3 +38,8 @@ def test_clearance_rules_never_scale_with_the_model():
     for r in RULES.values():
         if ".clearance" in r.id or r.id.startswith("joint."):
             assert r.scales_with_model is False, r.id
+
+
+def test_smoothing_rule_exists_with_its_unit_and_default():
+    rule = RULES["flat.smooth.sigma_px"]
+    assert (rule.unit, rule.default, rule.kind) == ("px", 2.5, "hypothesis")

@@ -44,8 +44,9 @@ Every number the pipeline uses. *Provenance / validation* shows the strongest ev
 | Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
 |---|---|---|---|---|---|---|---|---|
 | `flat.island.min_square_side` | Drop traced islands whose area is below (this many nozzle widths)^2. | 2 |  | x_nozzle | hypothesis | unverified / untested | G1 | Minimum area = (value * nozzle_diameter)^2, so 0.64 mm^2 for a 0.4 mm nozzle. |
-| `flat.sliver.opening_width` | Shrink then regrow each shape by half this width to delete slivers no nozzle can print. | 0.4 | 0.4–0.5 | mm | hypothesis | unverified / untested | G1 |  |
+| `flat.sliver.opening_width` | Shrink then regrow each shape by half this width to delete slivers narrower than it (an opening). | 0.4 | 0.4–0.5 | mm | hypothesis | unverified / untested | G1 |  |
 | `template.cookie_cutter.wall` | Cutter blade wall thickness used as the default by open cookie-cutter generators. | 0.8 |  | mm | hypothesis | primary / untested | G1 | A software default, not a printing result. fdm.wall.min_thickness (0.9 mm) takes precedence, so recipes use the larger of the two. Geometry only: no food-contact safety claim (docs/PLAN.md section 9b). |
+| `flat.smooth.sigma_px` | Gaussian blur (in image pixels) applied to the binary mask before taking its 0.5 iso-contour, to smooth jagged outlines of soft or low-resolution images. | 2.5 |  | px | hypothesis | primary / untested | G1 | Set in pixels because the jaggedness comes from image resolution and compression, not print size. Rounds real corners and can merge or split features on a scale of about sigma. 0 (no smoothing) is chosen by not calling the smoother (tdmg flat --smooth-px 0). |
 
 ## `rules/geometry-relief.yaml`
 

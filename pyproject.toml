@@ -24,6 +24,7 @@ dependencies = [
     "pydantic>=2",
     "typer",
     "pyyaml",
+    "contourpy>=1.4.0",
 ]
 
 [project.optional-dependencies]

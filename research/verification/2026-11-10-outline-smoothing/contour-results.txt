@@ -1,0 +1,6 @@
+contourpy 1.4.0
+upsample4  0.19s traced 53 MiB area 74731.2 px2 perim 4357.0 valid True parts 1 verts 10295
+contourpy  0.01s traced 19 MiB area 74730.8 px2 perim 3399.1 valid True parts 1 verts 4359
+hausdorff upsample vs contourpy (px): 0.187
+mask area px 74768
+4000px contourpy: 0.26s traced 444 MiB parts 1 valid True

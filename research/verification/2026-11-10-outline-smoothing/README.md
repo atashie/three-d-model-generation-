@@ -43,3 +43,27 @@ from the owner's image.
 - **Printing:** no print or slicer preview compared the candidates.
 - **Choice of σ:** the values describe this image's noise; nothing shows they are right
   for other images.
+
+## How to trace the smoothed field: contourpy against 4× upsampling
+
+The run used `contour_proto.py` → `contour-results.txt`, with
+`uv run --with contourpy` (contourpy 1.4.0, BSD-3-Clause) and σ = 2.5 px on the same
+Roadie mask.
+
+| Method | Time | Traced peak | Area (px²) | Perimeter (px) | Vertices |
+|---|---:|---:|---:|---:|---:|
+| Upsample 4×, threshold 0.5, pixel-cell outline | 0.19 s | 53 MiB | 74,731.2 | 4,357.0 | 10,295 |
+| contourpy filled iso-contour at 0.5 | 0.01 s | 19 MiB | 74,730.8 | 3,399.1 | 4,359 |
+
+- **Agreement:** the two outlines agree to within 0.187 px (sampled two-sided
+  Hausdorff), which is the upsample's quarter-pixel staircase. The mask area is
+  74,768 px.
+- **Smoothness:** contourpy gives a smooth outline with no staircase, hence the shorter
+  perimeter.
+- **Cost:** it needs no upsampled array.
+- **Large input:** a synthetic 4000 × 4000 disc with 0.2% random pixel flips took
+  about 0.26–0.27 s (two runs) and 444 MiB of traced memory, and gave one valid part.
+- **Coordinates:** contourpy treats array index i as a pixel centre. The script pads
+  the field with one zero pixel and then subtracts 0.5 px. That maps padded index i to
+  the pixel-cell coordinate of pixel i − 1, whose centre is at (i − 1) + 0.5, which is
+  the convention `tdmg.flat` uses.
