@@ -38,10 +38,10 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
-Latest local validation (2026-11-10, Windows PC, after outline smoothing): **546 tests
+Latest local validation (2026-11-10, Windows PC, after outline smoothing): **550 tests
 passed**, both plain and with `CI=true GITHUB_ACTIONS=true`. `ruff check .` and the
-generated-doc check also passed. The last confirmed CI run was green for `a9e20b9`
-(run 42854443030); the smoothing commits are checked after pushing. Cross-machine byte
+generated-doc check also passed. CI passed on all three OSes for `60e1688`, which
+includes smoothing (run 42863637999, verified 2026-11-10). Cross-machine byte
 equality of smoothed STLs is unmeasured: OpenCV's blur may vary between CPUs.
 
 ## Next steps, in order
