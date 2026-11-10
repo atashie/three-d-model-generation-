@@ -658,7 +658,7 @@ def test_selections_are_frozen():
 def test_environment_is_recorded_but_not_part_of_the_id(tmp_path, monkeypatch):
     a = _run(tmp_path, "a")
     assert set(a["environment"]) == {"python", "numpy", "pillow", "opencv", "zlib"}
-    monkeypatch.setattr(selection_module, "_environment", lambda: {"python": "0.0"})
+    monkeypatch.setattr(selection_module, "environment", lambda: {"python": "0.0"})
     b = _run(tmp_path, "b")
     assert b["environment"] == {"python": "0.0"}
     assert b["selection_id"] == a["selection_id"]
@@ -721,14 +721,14 @@ def test_intake_pixels_are_read_only(tmp_path):
 def test_a_concurrent_writer_is_detected_at_the_first_file(tmp_path, monkeypatch):
     out = tmp_path / "a"
     out.mkdir()
-    real = selection_module._png_bytes
+    real = selection_module.png_bytes
 
     def racing(arr):                              # another run starts writing after our check
         if not (out / "mask.png").exists():
             (out / "mask.png").write_bytes(b"other run")
         return real(arr)
 
-    monkeypatch.setattr(selection_module, "_png_bytes", racing)
+    monkeypatch.setattr(selection_module, "png_bytes", racing)
     with pytest.raises(SelectionError, match="another run is writing"):
         _run(tmp_path, "a")
     assert [p.name for p in out.iterdir()] == ["mask.png"]
@@ -737,13 +737,13 @@ def test_a_concurrent_writer_is_detected_at_the_first_file(tmp_path, monkeypatch
 
 def test_a_concurrently_created_folder_is_detected(tmp_path, monkeypatch):
     out = tmp_path / "a"
-    real = selection_module._png_bytes
+    real = selection_module.png_bytes
 
     def racing(arr):
         out.mkdir(exist_ok=True)
         return real(arr)
 
-    monkeypatch.setattr(selection_module, "_png_bytes", racing)
+    monkeypatch.setattr(selection_module, "png_bytes", racing)
     with pytest.raises(SelectionError, match="another run is writing"):
         _run(tmp_path, "a")
     assert list(out.iterdir()) == []

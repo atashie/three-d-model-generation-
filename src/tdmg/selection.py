@@ -17,20 +17,24 @@ import hashlib
 import io
 import json
 import math
-import os
-import platform
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
 import numpy as np
-import PIL
-from PIL import Image, ImageOps, UnidentifiedImageError, features
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 from pydantic_core import PydanticCustomError
 
 from tdmg import __version__
+from tdmg.records import (
+    RecordError,
+    canonical_json,
+    check_output_dir,
+    environment,
+    png_bytes,
+    write_outputs,
+)
 from tdmg.rules import load_rules
 
 ORIENTATION_TAG = 0x0112   # EXIF Orientation; 1 means "as stored"
@@ -368,45 +372,26 @@ def _preview(rgba: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return out
 
 
-def _canonical(obj) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-                      allow_nan=False).encode("utf-8")
-
-
-def _png_bytes(arr: np.ndarray) -> bytes:
-    buf = io.BytesIO()
-    Image.fromarray(arr).save(buf, format="PNG")    # mode inferred: L, RGB or RGBA
-    return buf.getvalue()
-
-
-def _environment() -> dict:
-    return {"python": platform.python_version(), "numpy": np.__version__,
-            "pillow": PIL.__version__, "opencv": cv2.__version__,
-            "zlib": features.version("zlib")}
-
-
 def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict:
     """Write mask.png, cutout.png, preview.png and selection.json into a new or empty folder.
 
     Everything is built and encoded in memory first, so a refused selection writes nothing.
-    The PNGs are then written, and selection.json last, through a temporary name and an
-    atomic rename. The folder as a whole is not atomic: a folder without selection.json is
-    incomplete and must not be used. The record holds no absolute paths and no timestamps.
+    The PNGs are then written, and selection.json last, by tdmg.records.write_outputs. The
+    folder as a whole is not atomic: a folder without selection.json is incomplete and must
+    not be used. The record holds no absolute paths and no timestamps.
     """
-    out = Path(out_dir)
-    create_folder = not out.exists()
-    if out.exists() and not out.is_dir():
-        raise SelectionError(f"output path {out} is a file, not a folder; choose a new one")
-    if out.exists() and any(out.iterdir()):
-        raise SelectionError(f"output folder {out} is not empty; choose a new one")
+    try:
+        create_folder = check_output_dir(out_dir)
+    except RecordError as e:
+        raise SelectionError(str(e)) from None
     if sel.input_pixels_sha256 != intake.pixels_sha256:
         raise SelectionError("this selection was made from a different image than the one "
                              "given; select again from this image")
     mask8 = np.where(sel.mask, 255, 0).astype(np.uint8)
     cutout = np.where(sel.mask[..., None], intake.rgba, 0).astype(np.uint8)
     cutout[..., 3] = mask8
-    pngs = {"mask.png": _png_bytes(mask8), "cutout.png": _png_bytes(cutout),
-            "preview.png": _png_bytes(_preview(intake.rgba, sel.mask))}
+    pngs = {"mask.png": png_bytes(mask8), "cutout.png": png_bytes(cutout),
+            "preview.png": png_bytes(_preview(intake.rgba, sel.mask))}
     h, w = sel.mask.shape
     # Provenance is deliberately part of the identity: a value given explicitly and the same
     # value taken from the rule default ({"rule": None} vs {"rule": id}) give different ids.
@@ -420,7 +405,7 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
         record = {
             "schema": RECORD_SCHEMA, "tdmg_version": __version__,
             "algorithm": ALGORITHM_VERSION,
-            "selection_id": hashlib.sha256(_canonical(identity)).hexdigest(),
+            "selection_id": hashlib.sha256(canonical_json(identity)).hexdigest(),
             "input": {"name": intake.source_name, "file_sha256": intake.file_sha256,
                       "pixels_sha256": intake.pixels_sha256, "width": w, "height": h,
                       "exif_transposed": intake.exif_transposed},
@@ -431,7 +416,7 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
             # the Pillow and zlib versions. The environment is not part of selection_id.
             "mask_pixels_sha256": pixels_sha256(sel.mask),
             "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in pngs.items()},
-            "environment": _environment(),
+            "environment": environment(),
             "review": "Open preview.png and confirm the subject before generating geometry.",
         }
         text = json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False,
@@ -440,26 +425,8 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
     except UnicodeEncodeError as e:
         raise SelectionError(f"instructions or input name cannot be stored as UTF-8: "
                              f"{e.reason} at position {e.start}") from None
-    busy = f"another run is writing to {out}; choose a new folder"
-    if create_folder:
-        # Decided at the check above: a folder that has appeared since is another run's.
-        try:
-            out.mkdir(parents=True, exist_ok=False)
-        except FileExistsError:
-            if out.is_dir():
-                raise SelectionError(busy) from None
-            raise                        # e.g. a parent is a file: a plain OS error
     try:
-        # Exclusive create: a second writer fails at its first PNG instead of overwriting.
-        for name, png in pngs.items():
-            with open(out / name, "xb") as f:
-                f.write(png)
-    except FileExistsError:
-        raise SelectionError(busy) from None
-    with tempfile.NamedTemporaryFile(dir=out, delete=False, prefix=".selection-",
-                                     suffix=".tmp") as f:
-        f.write(data)
-    # os.replace overwrites on Windows too, but two writers cannot both get here: the second
-    # one has already failed on its first "xb" PNG above.
-    os.replace(f.name, out / "selection.json")
+        write_outputs(out_dir, pngs, "selection.json", data, create_folder=create_folder)
+    except RecordError as e:
+        raise SelectionError(str(e)) from None
     return record
