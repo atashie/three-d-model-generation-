@@ -1,0 +1,10 @@
+{
+  "exit_code": 0,
+  "timed_out": false,
+  "total_process_seconds": 35.79525829991326,
+  "peak_working_set_bytes": 4132651008,
+  "peak_commit_bytes": 6732431360,
+  "system_swap_start_bytes": 87699456,
+  "system_swap_peak_bytes": 87699456,
+  "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+}

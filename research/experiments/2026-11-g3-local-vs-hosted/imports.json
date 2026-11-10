@@ -1,0 +1,26 @@
+[
+  {
+    "module": "torch",
+    "exit_code": 0,
+    "stdout": "2.6.0+cpu\n",
+    "stderr": ""
+  },
+  {
+    "module": "onnxruntime",
+    "exit_code": 0,
+    "stdout": "1.20.1\n",
+    "stderr": ""
+  },
+  {
+    "module": "rembg",
+    "exit_code": 0,
+    "stdout": "2.0.61\n",
+    "stderr": ""
+  },
+  {
+    "module": "transformers",
+    "exit_code": 0,
+    "stdout": "4.35.0\n",
+    "stderr": "C:\\Users\\arikt\\documents\\github\\three-d-model-generation-\\artifacts\\triposr-py311\\Lib\\site-packages\\transformers\\utils\\generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.\n  _torch_pytree._register_pytree_node(\n"
+  }
+]

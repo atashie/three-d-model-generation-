@@ -1,0 +1,305 @@
+[
+  {
+    "input": "chair.png",
+    "wall_to_mesh_seconds": 33.53562229988165,
+    "pre_export": {
+      "watertight": false,
+      "winding_consistent": true
+    },
+    "triangles": 84160,
+    "vertices": 42166,
+    "output_bytes": 4550760,
+    "output_sha256": "d1883f5e36edde577d23f7057d3bca7ea07a500404848659724ed77762b3c883",
+    "watertight": false,
+    "edge_manifold": false,
+    "vertex_manifold": false,
+    "bad_vertices": 351,
+    "duplicate_faces": 0,
+    "zero_area_faces": 0,
+    "winding_consistent": true,
+    "bodies": 1,
+    "volume": 0.06451891126641277,
+    "body_volumes": [
+      0.06451891055678824
+    ],
+    "finite": true,
+    "units": "model coordinates; not millimeters",
+    "repaired": false,
+    "worker_peak_working_set_bytes": 3823570944,
+    "worker_peak_commit_bytes": 6420160512,
+    "repeat": {
+      "second_run": "chair-3",
+      "seconds": 33.18781839986332,
+      "byte_identical": false,
+      "canonical_vertices_exact": true,
+      "canonical_faces_exact": true,
+      "max_sorted_vertex_distance": 0.0
+    },
+    "resources": [
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 35.25689500011504,
+        "peak_working_set_bytes": 3824066560,
+        "peak_commit_bytes": 6416265216,
+        "system_swap_start_bytes": 87699456,
+        "system_swap_peak_bytes": 87699456,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      },
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 34.83377000014298,
+        "peak_working_set_bytes": 3809009664,
+        "peak_commit_bytes": 6403751936,
+        "system_swap_start_bytes": 87699456,
+        "system_swap_peak_bytes": 87699456,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      }
+    ]
+  },
+  {
+    "input": "hamburger.png",
+    "wall_to_mesh_seconds": 34.15710620000027,
+    "pre_export": {
+      "watertight": false,
+      "winding_consistent": true
+    },
+    "triangles": 111172,
+    "vertices": 55728,
+    "output_bytes": 6045938,
+    "output_sha256": "defcdbd9b595a90a1075d1efa94378ffe1f8a53810900eefb85ee23204dfa8e5",
+    "watertight": false,
+    "edge_manifold": false,
+    "vertex_manifold": false,
+    "bad_vertices": 528,
+    "duplicate_faces": 0,
+    "zero_area_faces": 0,
+    "winding_consistent": true,
+    "bodies": 8,
+    "volume": 0.08196139912788286,
+    "body_volumes": [
+      0.08189848642594719,
+      6.148423684088491e-05,
+      2.0702711680377086e-09,
+      4.2731462634802565e-07,
+      -1.2342348757107368e-09,
+      1.0019507336288921e-06,
+      -9.278444106222421e-11,
+      -8.897526256630739e-10
+    ],
+    "finite": true,
+    "units": "model coordinates; not millimeters",
+    "repaired": false,
+    "worker_peak_working_set_bytes": 3823652864,
+    "worker_peak_commit_bytes": 6420307968,
+    "repeat": {
+      "second_run": "hamburger-2",
+      "seconds": 34.06697320006788,
+      "byte_identical": false,
+      "canonical_vertices_exact": true,
+      "canonical_faces_exact": true,
+      "max_sorted_vertex_distance": 0.0
+    },
+    "resources": [
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 36.32062860019505,
+        "peak_working_set_bytes": 3811778560,
+        "peak_commit_bytes": 6405996544,
+        "system_swap_start_bytes": 87699456,
+        "system_swap_peak_bytes": 87699456,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      },
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 36.284900000086054,
+        "peak_working_set_bytes": 3809038336,
+        "peak_commit_bytes": 6401966080,
+        "system_swap_start_bytes": 87699456,
+        "system_swap_peak_bytes": 87699456,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      }
+    ]
+  },
+  {
+    "input": "teapot.png",
+    "wall_to_mesh_seconds": 34.323028800077736,
+    "pre_export": {
+      "watertight": false,
+      "winding_consistent": true
+    },
+    "triangles": 80712,
+    "vertices": 40416,
+    "output_bytes": 4357568,
+    "output_sha256": "ea33b3aaf86b9e1b29d072dbbbc2586fd6365a8352a1b1a1ce207dce08398af6",
+    "watertight": false,
+    "edge_manifold": false,
+    "vertex_manifold": false,
+    "bad_vertices": 240,
+    "duplicate_faces": 0,
+    "zero_area_faces": 0,
+    "winding_consistent": true,
+    "bodies": 1,
+    "volume": 0.09352862189327162,
+    "body_volumes": [
+      0.09352862183437011
+    ],
+    "finite": true,
+    "units": "model coordinates; not millimeters",
+    "repaired": false,
+    "worker_peak_working_set_bytes": 4322521088,
+    "worker_peak_commit_bytes": 6982074368,
+    "repeat": {
+      "second_run": "teapot-2",
+      "seconds": 34.99431740003638,
+      "byte_identical": false,
+      "canonical_vertices_exact": true,
+      "canonical_faces_exact": true,
+      "max_sorted_vertex_distance": 0.0
+    },
+    "resources": [
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 35.79525829991326,
+        "peak_working_set_bytes": 4132651008,
+        "peak_commit_bytes": 6732431360,
+        "system_swap_start_bytes": 87699456,
+        "system_swap_peak_bytes": 87699456,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      },
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 36.8139824999962,
+        "peak_working_set_bytes": 4296273920,
+        "peak_commit_bytes": 6974849024,
+        "system_swap_start_bytes": 87699456,
+        "system_swap_peak_bytes": 87699456,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      }
+    ]
+  },
+  {
+    "input": "oddie.png",
+    "wall_to_mesh_seconds": 32.622649900149554,
+    "pre_export": {
+      "watertight": false,
+      "winding_consistent": true
+    },
+    "triangles": 57800,
+    "vertices": 28969,
+    "output_bytes": 3105641,
+    "output_sha256": "f43252bf49eaaaa16665cd2a106c3186363e67004c178fa365ebed1a0af65841",
+    "watertight": false,
+    "edge_manifold": false,
+    "vertex_manifold": false,
+    "bad_vertices": 268,
+    "duplicate_faces": 0,
+    "zero_area_faces": 0,
+    "winding_consistent": true,
+    "bodies": 1,
+    "volume": 0.029153728873330502,
+    "body_volumes": [
+      0.029153728879547734
+    ],
+    "finite": true,
+    "units": "model coordinates; not millimeters",
+    "repaired": false,
+    "worker_peak_working_set_bytes": 3845058560,
+    "worker_peak_commit_bytes": 6447636480,
+    "repeat": {
+      "second_run": "oddie-2",
+      "seconds": 32.28455079998821,
+      "byte_identical": false,
+      "canonical_vertices_exact": true,
+      "canonical_faces_exact": true,
+      "max_sorted_vertex_distance": 0.0
+    },
+    "resources": [
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 34.29531820002012,
+        "peak_working_set_bytes": 3815567360,
+        "peak_commit_bytes": 6409224192,
+        "system_swap_start_bytes": 75911168,
+        "system_swap_peak_bytes": 75911168,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      },
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 33.738911600084975,
+        "peak_working_set_bytes": 3822141440,
+        "peak_commit_bytes": 6413787136,
+        "system_swap_start_bytes": 75911168,
+        "system_swap_peak_bytes": 75911168,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      }
+    ]
+  },
+  {
+    "input": "roadie.png",
+    "wall_to_mesh_seconds": 32.66224440000951,
+    "pre_export": {
+      "watertight": false,
+      "winding_consistent": true
+    },
+    "triangles": 189800,
+    "vertices": 95050,
+    "output_bytes": 10334920,
+    "output_sha256": "5172b0e37fe1edde94b7bca94d1da05764b39ff3ad9e80c6c53e586e9d43f523",
+    "watertight": false,
+    "edge_manifold": false,
+    "vertex_manifold": false,
+    "bad_vertices": 595,
+    "duplicate_faces": 0,
+    "zero_area_faces": 1,
+    "winding_consistent": true,
+    "bodies": 2,
+    "volume": 0.4658128232251682,
+    "body_volumes": [
+      0.46581282336243124,
+      0.0
+    ],
+    "finite": true,
+    "units": "model coordinates; not millimeters",
+    "repaired": false,
+    "worker_peak_working_set_bytes": 3835793408,
+    "worker_peak_commit_bytes": 6438060032,
+    "repeat": {
+      "second_run": "roadie-2",
+      "seconds": 32.1454302999191,
+      "byte_identical": false,
+      "canonical_vertices_exact": true,
+      "canonical_faces_exact": true,
+      "max_sorted_vertex_distance": 0.0
+    },
+    "resources": [
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 35.28718529990874,
+        "peak_working_set_bytes": 3829166080,
+        "peak_commit_bytes": 6420643840,
+        "system_swap_start_bytes": 75911168,
+        "system_swap_peak_bytes": 75911168,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      },
+      {
+        "exit_code": 0,
+        "timed_out": false,
+        "total_process_seconds": 34.84472410008311,
+        "peak_working_set_bytes": 3814711296,
+        "peak_commit_bytes": 6407598080,
+        "system_swap_start_bytes": 75911168,
+        "system_swap_peak_bytes": 75911168,
+        "memory_method": "Process-tree working set/private bytes sampled every 0.5s; worker lifetime peaks in mesh metrics; system swap is global"
+      }
+    ]
+  }
+]

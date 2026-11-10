@@ -1,0 +1,2 @@
+high-res  pixel_area= 59392  raw_contour=  58798.0 (-1.00%)  buffered+0.5px=  59495.6 (+0.17%)
+low-res   pixel_area=   596  raw_contour=    536.0 (-10.07%)  buffered+0.5px=    607.6 (+1.95%)

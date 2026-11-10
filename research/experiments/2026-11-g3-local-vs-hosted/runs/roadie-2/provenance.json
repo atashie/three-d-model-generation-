@@ -1,0 +1,126 @@
+{
+  "preparation": {
+    "inputs": [
+      {
+        "path": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\TripoSR\\examples\\chair.png",
+        "sha256": "2503c12a74419d91a4c6c9f1affc48fee6e2b8b9091956ca6211e91ada57b5bf",
+        "bytes": 114705
+      },
+      {
+        "path": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\TripoSR\\examples\\hamburger.png",
+        "sha256": "2f16cb1f2bb932ae643cd4acc09bb6ecb51c84eca32dd5a7c71ea4980b40b51a",
+        "bytes": 125172
+      },
+      {
+        "path": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\TripoSR\\examples\\teapot.png",
+        "sha256": "66b0b8f7dd759e97d20665999885e0548f96c95dadee6bf9762ccd877c596b8c",
+        "bytes": 275764
+      },
+      {
+        "path": "C:\\Users\\arikt\\Downloads\\three-d-test\\oddie.png",
+        "sha256": "4ad83094356479b717d68813d911e8e7883880399365f40e44228cdd4ffe8ebd",
+        "bytes": 150499
+      },
+      {
+        "path": "C:\\Users\\arikt\\Downloads\\three-d-test\\roadie.png",
+        "sha256": "ed33495f5fa84f7cb818268fbac75391c8d8163aaec1422c271ac9af9b5673bf",
+        "bytes": 241999
+      }
+    ],
+    "model": "stabilityai/TripoSR",
+    "revision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+    "code_commit": "107cefdc244c39106fa830359024f6a2f1c78871",
+    "seed": 0,
+    "timeout_seconds": 1800,
+    "files": [
+      {
+        "name": "config.yaml",
+        "sha256": "74ca708ce086bf68e97709ea6b3d91f14717921c04691e84043f0eb8fcc68e62",
+        "bytes": 987
+      },
+      {
+        "name": "model.ckpt",
+        "sha256": "429e2c6b22a0923967459de24d67f05962b235f79cde6b032aa7ed2ffcd970ee",
+        "bytes": 1677246742
+      }
+    ]
+  },
+  "auxiliary": [
+    {
+      "path": "artifacts\\triposr-data\\rembg\\u2net.onnx",
+      "sha256": "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491",
+      "bytes": 175997641
+    },
+    {
+      "path": "C:\\Users\\arikt\\.cache\\huggingface\\hub\\models--facebook--dino-vitb16\\snapshots\\f205d5d8e640a89a2b8ef0369670dfc37cc07fc2\\config.json",
+      "sha256": "b87c0270b97db085fd82cf114a761fd0f62ae7914fbd407c752a2260646b689c",
+      "bytes": 454
+    }
+  ],
+  "runner_sha256": "4db20eadd25c9434b096f802bae0e2f14e28f31685cdc102c26068bf15b79a62",
+  "packages": {
+    "antlr4-python3-runtime": "4.9.3",
+    "attrs": "26.1.0",
+    "certifi": "2026.10.23",
+    "charset-normalizer": "3.5.2",
+    "cmake": "4.4.4",
+    "colorama": "0.4.6",
+    "coloredlogs": "15.0.1",
+    "einops": "0.7.0",
+    "filelock": "4.2.4",
+    "flatbuffers": "25.12.19",
+    "fsspec": "2026.9.0",
+    "huggingface-hub": "0.17.3",
+    "humanfriendly": "10.0",
+    "idna": "3.20",
+    "ImageIO": "2.38.1",
+    "Jinja2": "3.1.6",
+    "jsonschema": "4.26.0",
+    "jsonschema-specifications": "2025.9.1",
+    "lazy-loader": "0.6",
+    "llvmlite": "0.50.0",
+    "MarkupSafe": "3.0.3",
+    "mpmath": "1.3.0",
+    "networkx": "3.6.1",
+    "ninja": "1.13.2",
+    "numba": "0.68.1",
+    "numpy": "1.26.4",
+    "omegaconf": "2.3.0",
+    "onnxruntime": "1.20.1",
+    "opencv-python-headless": "4.11.0.86",
+    "packaging": "26.3",
+    "pathspec": "1.1.1",
+    "Pillow": "10.1.0",
+    "platformdirs": "4.14.5",
+    "pooch": "1.9.0",
+    "protobuf": "7.36.2",
+    "psutil": "7.2.2",
+    "pybind11": "3.1.0",
+    "PyMatting": "1.1.16",
+    "pyreadline3": "3.5.6",
+    "PyYAML": "6.0.3",
+    "referencing": "0.37.0",
+    "regex": "2026.11.9",
+    "rembg": "2.0.61",
+    "requests": "2.34.2",
+    "rpds-py": "2026.9.1",
+    "safetensors": "0.8.0",
+    "scikit_build_core": "1.1.2",
+    "scikit-image": "0.26.0",
+    "scipy": "1.17.1",
+    "sympy": "1.13.1",
+    "tifffile": "2026.3.3",
+    "tokenizers": "0.14.1",
+    "torch": "2.6.0+cpu",
+    "torchmcubes": "0.1.0",
+    "tqdm": "4.70.1",
+    "transformers": "4.35.0",
+    "trimesh": "4.0.5",
+    "typing_extensions": "4.16.0",
+    "urllib3": "2.8.0"
+  },
+  "threads": 16,
+  "resolution": 256,
+  "chunk_size": 8192,
+  "foreground_ratio": 0.85
+}

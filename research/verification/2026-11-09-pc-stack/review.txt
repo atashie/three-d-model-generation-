@@ -1,0 +1,5 @@
+- **Medium — Import timeouts discard verification results.** [check_optional.py:11](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-09-pc-stack/check_optional.py:11) does not catch `TimeoutExpired`. Either subprocess timeout aborts the harness before its final JSON write, skipping remaining checks and leaving an old results file unchanged. Record timeouts and persist completed results.
+
+- **Low — The handoff status contradicts the changes.** [docs/STATUS.md:22](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:22) still says the PC’s OS/CPU are unknown, nothing is verified, and Windows CI is absent. It also omits the newly recorded optional-package failures and preflight blockers.
+
+The saved test/import logs support the reported results; both existing 3MF hashes match, and the installed wheel independently loaded 26 rules and the A1 profile outside the checkout. No Windows path defect or experiment-protocol violation was identified. Hosted CI remains unverified; the sandbox blocked a local Git Bash check. No files were modified or installations run.

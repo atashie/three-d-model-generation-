@@ -1,0 +1,19 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.1, pytest-9.2.0, pluggy-1.7.0
+rootdir: C:\Users\arikt\documents\github\three-d-model-generation-
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.16.0, hypothesis-6.170.15, platformdirs-4.14.5
+collected 133 items
+
+tests\test_cli.py ...                                                    [  2%]
+tests\test_doclint.py .......                                            [  7%]
+tests\test_docs.py ......................................                [ 36%]
+tests\test_environment.py ...                                            [ 38%]
+tests\test_profiles.py ..                                                [ 39%]
+tests\test_recipes.py ...                                                [ 42%]
+tests\test_rules.py .................................................... [ 81%]
+..                                                                       [ 82%]
+tests\test_schema.py .......................                             [100%]
+
+============================ 133 passed in 31.13s =============================

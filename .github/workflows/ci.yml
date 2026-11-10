@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         # macos-15 is Apple Silicon (arm64), the same architecture as the target Mac.
-        os: [macos-15, ubuntu-latest]
+        os: [macos-15, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -29,8 +29,13 @@ jobs:
         run: |
           uv build --wheel
           uv venv "$RUNNER_TEMP/wheeltest" --python 3.13
-          uv pip install --python "$RUNNER_TEMP/wheeltest/bin/python" dist/*.whl
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            wheel_python="$RUNNER_TEMP/wheeltest/Scripts/python.exe"
+          else
+            wheel_python="$RUNNER_TEMP/wheeltest/bin/python"
+          fi
+          uv pip install --python "$wheel_python" dist/*.whl
           cd "$RUNNER_TEMP"
-          n=$("$RUNNER_TEMP/wheeltest/bin/tdmg" rules | wc -l)
+          n=$("$wheel_python" -m tdmg.cli rules | wc -l)
           echo "rules found by the installed package: $n"
           test "$n" -ge 15

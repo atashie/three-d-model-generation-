@@ -1,0 +1,7 @@
+{
+  "expected_sha256": "429e2c6b22a0923967459de24d67f05962b235f79cde6b032aa7ed2ffcd970ee",
+  "sha256_matches": true,
+  "restricted_load": true,
+  "tensor_count": 549,
+  "all_values_tensors": true
+}

@@ -1,0 +1,5 @@
+1. **Component extraction can repair geometry.** `mesh.split(only_watertight=False)` uses Trimesh’s default submesh repair behavior, which can fill small holes. Consequently, `body_volumes` may describe modified components while `repaired=False` claims otherwise. Pass `repair=False` explicitly.
+
+2. **Manifold labels conflate manifoldness with closedness.** `counts == 2` rejects boundary edges, and the vertex-link check accepts only cycles. A valid manifold surface with boundary has path-shaped links at boundary vertices. Either support these cases or rename the fields to indicate *closed* manifold tests.
+
+3. **Volumes lack validity and sign context.** `b.volume` is a signed integral; open components can produce misleading values, and inward-facing closed components produce negative values despite consistent winding. Report these as signed volumes and include per-component closure and winding status, or omit volume when its geometric interpretation is unsupported.

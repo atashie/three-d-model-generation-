@@ -1,0 +1,68 @@
+[
+  {
+    "module": "pymeshlab",
+    "exit_code": 3221225477,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "module": "open3d",
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import open3d; print('imported open3d')\n    ^^^^^^^^^^^^^\n  File \"C:\\Users\\arikt\\documents\\github\\three-d-model-generation-\\artifacts\\pc-optional\\Lib\\site-packages\\open3d\\__init__.py\", line 79, in <module>\n    from open3d.pybind import (\n    ...<8 lines>...\n    )\nImportError: DLL load failed while importing pybind: A dynamic link library (DLL) initialization routine failed.\n"
+  },
+  {
+    "module": "rembg",
+    "exit_code": 3221225477,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "module": "onnxruntime",
+    "exit_code": 3221225477,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "module": "bpy",
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import bpy; print('imported bpy')\n    ^^^^^^^^^^\nImportError: DLL load failed while importing bpy: A dynamic link library (DLL) initialization routine failed.\n"
+  },
+  {
+    "module": "orca123d",
+    "exit_code": 0,
+    "stdout": "imported orca123d\n",
+    "stderr": ""
+  },
+  {
+    "module": "meshlib.mrmeshpy",
+    "exit_code": 0,
+    "stdout": "imported meshlib.mrmeshpy\n",
+    "stderr": ""
+  },
+  {
+    "module": "pymeshfix",
+    "exit_code": 0,
+    "stdout": "imported pymeshfix\n",
+    "stderr": ""
+  },
+  {
+    "module": "igl",
+    "exit_code": 0,
+    "stdout": "imported igl\n",
+    "stderr": ""
+  },
+  {
+    "module": "point_cloud_utils",
+    "exit_code": 0,
+    "stdout": "imported point_cloud_utils\n",
+    "stderr": ""
+  },
+  {
+    "script": "opt_import_smoke.py",
+    "exit_code": 3221225477,
+    "stdout": "",
+    "stderr": ""
+  }
+]

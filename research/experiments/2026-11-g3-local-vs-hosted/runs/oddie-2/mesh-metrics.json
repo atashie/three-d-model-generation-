@@ -1,0 +1,29 @@
+{
+  "input": "oddie.png",
+  "wall_to_mesh_seconds": 32.28455079998821,
+  "pre_export": {
+    "watertight": false,
+    "winding_consistent": true
+  },
+  "triangles": 57800,
+  "vertices": 28969,
+  "output_bytes": 3105645,
+  "output_sha256": "a2fdf140abb327c1be3c4cee07fd40e005e648ce9651505f79e4d0ecc7578554",
+  "watertight": false,
+  "edge_manifold": false,
+  "vertex_manifold": false,
+  "bad_vertices": 268,
+  "duplicate_faces": 0,
+  "zero_area_faces": 0,
+  "winding_consistent": true,
+  "bodies": 1,
+  "volume": 0.0291537288733305,
+  "body_volumes": [
+    0.02915372887954773
+  ],
+  "finite": true,
+  "units": "model coordinates; not millimeters",
+  "repaired": false,
+  "worker_peak_working_set_bytes": 3844759552,
+  "worker_peak_commit_bytes": 6446874624
+}

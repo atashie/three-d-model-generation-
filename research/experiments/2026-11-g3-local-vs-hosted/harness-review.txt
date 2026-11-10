@@ -1,0 +1,7 @@
+- **The 1800-second cap is approximate.** The deadline is checked after memory sampling, followed by a 0.5-second sleep. Execution can exceed 1800 seconds, and termination plus the unbounded `process.wait()` can extend total time further.
+
+- **Timeout cleanup has an exit race.** A process can exit after `poll()` but before `watched.children()` or a child’s `kill()`. Those calls are outside the `NoSuchProcess` handler; an exception can abort cleanup and prevent `resources.json` from being written.
+
+- **Duplicate faces can pass the topology checks.** Two identical triangles with opposite winding give every edge incidence two. Their vertex links contain parallel edges, which your degree/connectivity test accepts as cycles. Explicitly reject duplicate faces and degenerate triangles before interpreting these predicates as manifold validation.
+
+- **Reproducibility covers only the input image.** The harness neither verifies nor records hashes for the config, model checkpoint, background-removal weights, or upstream code, and records no dependency versions. Fixed NumPy/PyTorch seeds cannot establish that separate runs used the same computation; capture and verify these dependencies alongside the input hash.

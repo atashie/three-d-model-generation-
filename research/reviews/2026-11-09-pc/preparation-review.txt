@@ -1,0 +1,3 @@
+- **Cached files can be attributed to the wrong revision.** The script fetches the current Hugging Face revision but reuses any existing `config.yaml` and `model.ckpt`. Thus `preparation.json` can claim a revision those files did not come from, and the config could differ from the verified checkpoint’s revision. Cache under the revision or verify both files against that revision before recording it.
+
+- **`code_commit` does not fully identify the source used.** `git rev-parse HEAD` succeeds even with local modifications, so different source trees can produce the same recorded commit. For reproducibility, require a clean working tree or record its modifications alongside the commit.

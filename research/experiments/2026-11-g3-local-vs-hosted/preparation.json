@@ -1,0 +1,46 @@
+{
+  "inputs": [
+    {
+      "path": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\TripoSR\\examples\\chair.png",
+      "sha256": "2503c12a74419d91a4c6c9f1affc48fee6e2b8b9091956ca6211e91ada57b5bf",
+      "bytes": 114705
+    },
+    {
+      "path": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\TripoSR\\examples\\hamburger.png",
+      "sha256": "2f16cb1f2bb932ae643cd4acc09bb6ecb51c84eca32dd5a7c71ea4980b40b51a",
+      "bytes": 125172
+    },
+    {
+      "path": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\TripoSR\\examples\\teapot.png",
+      "sha256": "66b0b8f7dd759e97d20665999885e0548f96c95dadee6bf9762ccd877c596b8c",
+      "bytes": 275764
+    },
+    {
+      "path": "C:\\Users\\arikt\\Downloads\\three-d-test\\oddie.png",
+      "sha256": "4ad83094356479b717d68813d911e8e7883880399365f40e44228cdd4ffe8ebd",
+      "bytes": 150499
+    },
+    {
+      "path": "C:\\Users\\arikt\\Downloads\\three-d-test\\roadie.png",
+      "sha256": "ed33495f5fa84f7cb818268fbac75391c8d8163aaec1422c271ac9af9b5673bf",
+      "bytes": 241999
+    }
+  ],
+  "model": "stabilityai/TripoSR",
+  "revision": "5b521936b01fbe1890f6f9baed0254ab6351c04a",
+  "code_commit": "107cefdc244c39106fa830359024f6a2f1c78871",
+  "seed": 0,
+  "timeout_seconds": 1800,
+  "files": [
+    {
+      "name": "config.yaml",
+      "sha256": "74ca708ce086bf68e97709ea6b3d91f14717921c04691e84043f0eb8fcc68e62",
+      "bytes": 987
+    },
+    {
+      "name": "model.ckpt",
+      "sha256": "429e2c6b22a0923967459de24d67f05962b235f79cde6b032aa7ed2ffcd970ee",
+      "bytes": 1677246742
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+Loading model
+C:\Users\arikt\documents\github\three-d-model-generation-\artifacts\triposr-py311\Lib\site-packages\transformers\utils\generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+C:\Users\arikt\documents\github\three-d-model-generation-\artifacts\triposr-py311\Lib\site-packages\transformers\utils\generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Preparing input
+Generating triplane
+Extracting mesh at resolution 256
+Mesh written in 34.16 seconds
+{"input": "hamburger.png", "wall_to_mesh_seconds": 34.15710620000027, "pre_export": {"watertight": false, "winding_consistent": true}, "triangles": 111172, "vertices": 55728, "output_bytes": 6045938, "output_sha256": "defcdbd9b595a90a1075d1efa94378ffe1f8a53810900eefb85ee23204dfa8e5", "watertight": false, "edge_manifold": false, "vertex_manifold": false, "bad_vertices": 528, "duplicate_faces": 0, "zero_area_faces": 0, "winding_consistent": true, "bodies": 8, "volume": 0.08196139912788286, "body_volumes": [0.08189848642594719, 6.148423684088491e-05, 2.0702711680377086e-09, 4.2731462634802565e-07, -1.2342348757107368e-09, 1.0019507336288921e-06, -9.278444106222421e-11, -8.897526256630739e-10], "finite": true, "units": "model coordinates; not millimeters", "repaired": false, "worker_peak_working_set_bytes": 3823652864, "worker_peak_commit_bytes": 6420307968}

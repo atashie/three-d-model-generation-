@@ -1,0 +1,29 @@
+{
+  "input": "teapot.png",
+  "wall_to_mesh_seconds": 34.99431740003638,
+  "pre_export": {
+    "watertight": false,
+    "winding_consistent": true
+  },
+  "triangles": 80712,
+  "vertices": 40416,
+  "output_bytes": 4357517,
+  "output_sha256": "593183935e2f559e1fee18f56c7000c33f0c63838d0ccec7532d659421313078",
+  "watertight": false,
+  "edge_manifold": false,
+  "vertex_manifold": false,
+  "bad_vertices": 240,
+  "duplicate_faces": 0,
+  "zero_area_faces": 0,
+  "winding_consistent": true,
+  "bodies": 1,
+  "volume": 0.09352862189327162,
+  "body_volumes": [
+    0.09352862183437011
+  ],
+  "finite": true,
+  "units": "model coordinates; not millimeters",
+  "repaired": false,
+  "worker_peak_working_set_bytes": 4319940608,
+  "worker_peak_commit_bytes": 6981242880
+}

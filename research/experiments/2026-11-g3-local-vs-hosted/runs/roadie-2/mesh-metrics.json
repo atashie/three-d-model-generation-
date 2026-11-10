@@ -1,0 +1,30 @@
+{
+  "input": "roadie.png",
+  "wall_to_mesh_seconds": 32.1454302999191,
+  "pre_export": {
+    "watertight": false,
+    "winding_consistent": true
+  },
+  "triangles": 189800,
+  "vertices": 95050,
+  "output_bytes": 10335034,
+  "output_sha256": "f273a7e78177fcce08d07500b190ccfb687637d7eac58a979e9afe2d50ac477e",
+  "watertight": false,
+  "edge_manifold": false,
+  "vertex_manifold": false,
+  "bad_vertices": 595,
+  "duplicate_faces": 0,
+  "zero_area_faces": 1,
+  "winding_consistent": true,
+  "bodies": 2,
+  "volume": 0.46581282322516815,
+  "body_volumes": [
+    0.4658128233624313,
+    0.0
+  ],
+  "finite": true,
+  "units": "model coordinates; not millimeters",
+  "repaired": false,
+  "worker_peak_working_set_bytes": 3835822080,
+  "worker_peak_commit_bytes": 6437625856
+}

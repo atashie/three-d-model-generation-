@@ -1,0 +1,20 @@
+n_polys_after_speck_filter         1
+area_mm2                           918.72
+area_expected_mm2                  927.75
+area_rel_err                       0.0097
+ring_has_hole                      True
+trimesh_watertight                 True
+trimesh_winding_consistent         True
+trimesh_volume_positive            True
+volume_mm3                         2756.2
+euler_number                       0
+bounds_mm                          [37.5, 37.5, 3.0]
+manifold3d_status                  Error.NoError
+manifold3d_volume                  2756.2
+manifold3d_genus                   1
+stl_bytes_identical_across_runs    True
+lib3mf_readback                    [('base', 12, True), ('ring', 2400, True)]
+trimesh_3mf_geoms                  2
+build123d_tag_watertight           True
+build123d_tag_volume               2341.1
+build123d_tag_volume_expected      2341.1

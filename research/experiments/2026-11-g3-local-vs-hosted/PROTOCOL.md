@@ -1,6 +1,18 @@
 # Experiment protocol: photo-to-3D, local vs hosted
 
-**Status:** planned, not run. Written 2026-11-09 after the owner approved a measured test.
+**Current status (2026-11-09):** TripoSR CPU trial completed on Windows; see
+`RESULTS-PC.md`. Owner-supplied MakerLab exports were inspected separately; see
+`MAKERLAB-RESULTS.md`. No hosted API comparison was run. Original protocol below
+is retained as the preregistered plan; its historical machine/prerequisite notes
+are superseded by the results and `docs/STATUS.md`.
+
+**Executed deviations:** owner accepted 30 minutes/model on the i9-12900K PC;
+supplied two cartoons rather than physical-object photos; approved the official
+PyTorch checkpoint and reviewed compiler/source builds. Selected three demo inputs
+and hashed all five. CPU runs used Python 3.11.15 in isolation. Model outputs were
+not printed, and repairability remains unproven.
+
+**Original protocol:** written 2026-11-09 after the owner approved a measured test.
 
 **Update 2026-11-09:** the test machine is now the owner's **PC: 64 GB RAM, no discrete GPU**. The OS has not been confirmed. That changes the candidates:
 - **Drop out on a PC:** the Mac-only routes, which are AssetFurnace's Hunyuan3D-MLX, trellis-mac, and anything needing Metal or Xcode.

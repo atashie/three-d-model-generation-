@@ -1,0 +1,108 @@
+[
+  {
+    "name": "oddie.stl",
+    "sha256": "4aab7772a236bda3828f62c695bc16d7678d493f5c7516e35c8c8ae86f943b35",
+    "bytes": 9739084,
+    "triangles": 194780,
+    "vertices": 97392,
+    "watertight": true,
+    "closed_edge_manifold": true,
+    "boundary_edges": 0,
+    "overfull_edges": 0,
+    "closed_vertex_manifold": true,
+    "invalid_vertex_links": 0,
+    "winding_consistent": true,
+    "duplicate_faces": 0,
+    "zero_area_faces": 0,
+    "bodies": 2,
+    "components": [
+      {
+        "signed_volume": 45177.41966066902,
+        "watertight": true,
+        "winding_consistent": true,
+        "triangles": 187380,
+        "extents": [
+          88.44019317626953,
+          39.18108558654785,
+          100.0
+        ]
+      },
+      {
+        "signed_volume": 970.6494412495364,
+        "watertight": true,
+        "winding_consistent": true,
+        "triangles": 7400,
+        "extents": [
+          14.359936714172363,
+          11.665260314941406,
+          17.026439666748047
+        ]
+      }
+    ],
+    "extents": [
+      88.44019317626953,
+      41.77136993408203,
+      100.0
+    ],
+    "units": "unspecified by STL",
+    "finite": true,
+    "repaired": false,
+    "certification": "NOT CERTIFIED: geometry inspection only",
+    "generator": null,
+    "generation_seconds": null,
+    "credits": null
+  },
+  {
+    "name": "roadie.stl",
+    "sha256": "fbbd7aff54c7fa9c09365e4820a9a17bc47ef9f54433fd336a84537880b58472",
+    "bytes": 6039584,
+    "triangles": 120790,
+    "vertices": 60397,
+    "watertight": true,
+    "closed_edge_manifold": true,
+    "boundary_edges": 0,
+    "overfull_edges": 0,
+    "closed_vertex_manifold": true,
+    "invalid_vertex_links": 0,
+    "winding_consistent": true,
+    "duplicate_faces": 0,
+    "zero_area_faces": 0,
+    "bodies": 2,
+    "components": [
+      {
+        "signed_volume": 5352.825356418435,
+        "watertight": true,
+        "winding_consistent": true,
+        "triangles": 91626,
+        "extents": [
+          75.8289566040039,
+          7.271209239959717,
+          61.751747131347656
+        ]
+      },
+      {
+        "signed_volume": 4167.103702915977,
+        "watertight": true,
+        "winding_consistent": true,
+        "triangles": 29164,
+        "extents": [
+          100.0,
+          3.9867432713508606,
+          99.98670196533203
+        ]
+      }
+    ],
+    "extents": [
+      100.0,
+      7.271209239959717,
+      99.98670196533203
+    ],
+    "units": "unspecified by STL",
+    "finite": true,
+    "repaired": false,
+    "certification": "NOT CERTIFIED: geometry inspection only",
+    "generator": null,
+    "generation_seconds": null,
+    "credits": null
+  }
+]

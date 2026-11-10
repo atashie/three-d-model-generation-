@@ -1,0 +1,10 @@
+Loading model
+C:\Users\arikt\documents\github\three-d-model-generation-\artifacts\triposr-py311\Lib\site-packages\transformers\utils\generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+C:\Users\arikt\documents\github\three-d-model-generation-\artifacts\triposr-py311\Lib\site-packages\transformers\utils\generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+Preparing input
+Generating triplane
+Extracting mesh at resolution 256
+Mesh written in 32.66 seconds
+{"input": "roadie.png", "wall_to_mesh_seconds": 32.66224440000951, "pre_export": {"watertight": false, "winding_consistent": true}, "triangles": 189800, "vertices": 95050, "output_bytes": 10334920, "output_sha256": "5172b0e37fe1edde94b7bca94d1da05764b39ff3ad9e80c6c53e586e9d43f523", "watertight": false, "edge_manifold": false, "vertex_manifold": false, "bad_vertices": 595, "duplicate_faces": 0, "zero_area_faces": 1, "winding_consistent": true, "bodies": 2, "volume": 0.4658128232251682, "body_volumes": [0.46581282336243124, 0.0], "finite": true, "units": "model coordinates; not millimeters", "repaired": false, "worker_peak_working_set_bytes": 3835793408, "worker_peak_commit_bytes": 6438060032}

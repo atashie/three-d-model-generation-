@@ -1,0 +1,19 @@
+{
+  "source": "C:\\Users\\arikt\\Downloads\\three-d-test\\makersLabModels\\roadie.stl",
+  "output": "C:\\Users\\arikt\\Documents\\GitHub\\three-d-model-generation-\\artifacts\\makerlab\\roadie-bird-only.stl",
+  "triangles": 91626,
+  "sha256": "c8698a94fb22001958fe24e6aac4f05afde505ae05ed8bc6b293baea09f66ada",
+  "selected_triangles_unchanged": true,
+  "watertight": true,
+  "winding_consistent": true,
+  "volume": 5352.825356418435,
+  "bodies": 1,
+  "extents": [
+    75.8289566040039,
+    7.271209239959717,
+    61.751747131347656
+  ],
+  "units": "unspecified by STL",
+  "operation": "Removed disconnected frame; no scaling, smoothing, hole filling or new geometry",
+  "certification": "NOT CERTIFIED: slicing, thickness and physical scale unverified"
+}

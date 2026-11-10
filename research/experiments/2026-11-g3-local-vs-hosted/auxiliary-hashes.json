@@ -1,0 +1,12 @@
+[
+  {
+    "path": "artifacts\\triposr-data\\rembg\\u2net.onnx",
+    "sha256": "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491",
+    "bytes": 175997641
+  },
+  {
+    "path": "C:\\Users\\arikt\\.cache\\huggingface\\hub\\models--facebook--dino-vitb16\\snapshots\\f205d5d8e640a89a2b8ef0369670dfc37cc07fc2\\config.json",
+    "sha256": "b87c0270b97db085fd82cf114a761fd0f62ae7914fbd407c752a2260646b689c",
+    "bytes": 454
+  }
+]
