@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import hashlib
 import io
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from tdmg.rules import load_rules
 
@@ -35,7 +36,7 @@ TOLERANCE_RULE = "perception.flood.color_tolerance"
 NOT_INTERPRETED = ("instructions recorded verbatim but not machine-interpreted; "
                    "no control or mask applied them")
 
-Point = tuple[int, int]
+Point = tuple[StrictInt, StrictInt]
 
 
 class SelectionError(ValueError):
@@ -102,8 +103,8 @@ def load_image(path: str | Path) -> Intake:
 class SelectionSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     instructions: str | None = None
-    alpha_min: int | None = Field(default=None, ge=1, le=255)
-    color_tolerance: float | None = Field(default=None, ge=0)
+    alpha_min: int | None = None                 # range checked against the rule in _resolve
+    color_tolerance: float | None = Field(default=None, allow_inf_nan=False)
     remove_at: tuple[Point, ...] = ()
     keep_at: tuple[Point, ...] = ()
 
@@ -117,16 +118,21 @@ class Selection:
     interpretation: dict
 
 
+def _pick(rules: dict, field: str, value, rule_id: str, cast) -> dict:
+    """The explicit value, or the rule's default, checked against the rule's range."""
+    chosen = {"value": cast(value), "rule": None} if value is not None else         {"value": cast(rules[rule_id].default), "rule": rule_id}
+    v = chosen["value"]
+    lo, hi = rules[rule_id].range
+    if not math.isfinite(v) or not lo <= v <= hi:
+        raise SelectionError(f"{field} {v:g} is outside {rule_id} range [{lo:g}, {hi:g}]")
+    return chosen
+
+
 def _resolve(spec: SelectionSpec) -> dict:
     rules = load_rules()
-
-    def pick(value, rule_id, cast):
-        if value is not None:
-            return {"value": cast(value), "rule": None}
-        return {"value": cast(rules[rule_id].default), "rule": rule_id}
-
-    return {"alpha_min": pick(spec.alpha_min, ALPHA_RULE, int),
-            "color_tolerance": pick(spec.color_tolerance, TOLERANCE_RULE, float),
+    return {"alpha_min": _pick(rules, "alpha_min", spec.alpha_min, ALPHA_RULE, int),
+            "color_tolerance": _pick(rules, "color_tolerance", spec.color_tolerance,
+                                     TOLERANCE_RULE, float),
             "remove_at": [list(p) for p in spec.remove_at],
             "keep_at": [list(p) for p in spec.keep_at]}
 
@@ -185,11 +191,14 @@ def select_subject(intake: Intake, spec: SelectionSpec) -> Selection:
         steps.append({"op": "remove_at", "point": [x, y], "seed_rgb": seed.tolist(),
                       "removed_px": int(region.sum())})
     if spec.keep_at:
+        if len(set(spec.keep_at)) != len(spec.keep_at):
+            dup = next(p for i, p in enumerate(spec.keep_at) if p in spec.keep_at[:i])
+            raise SelectionError(f"duplicate keep_at point {dup[0]},{dup[1]}")
         n, lab = cv2.connectedComponents(mask.astype(np.uint8), connectivity=8)
         labels = sorted({int(lab[y, x]) for x, y in
                          (_selected_point(mask, p, "keep_at") for p in spec.keep_at)})
         mask = np.isin(lab, labels)
-        steps.append({"op": "keep_at", "points": controls["keep_at"], "pieces_before": n - 1,
+        steps.append({"op": "keep_at", "points": [list(p) for p in spec.keep_at], "pieces_before": n - 1,
                       "pieces_kept": len(labels), "selected_px": int(mask.sum())})
     warnings = []
     if spec.instructions and not (spec.remove_at or spec.keep_at):
@@ -210,6 +219,8 @@ def load_mask(path: str | Path, shape: tuple[int, int]) -> np.ndarray:
         if im.getexif().get(ORIENTATION_TAG, 1) in TRANSPOSING_ORIENTATIONS:
             raise SelectionError("mask has an EXIF rotation tag; save it without one so it "
                                  "matches the image's displayed orientation")
+        if im.has_transparency_data and (np.asarray(im.convert("RGBA"))[..., 3] != 255).any():
+            raise SelectionError("mask has transparent pixels; use an opaque black/white image")
         arr = np.asarray(im.convert("L"))
     if arr.shape != tuple(shape):
         raise SelectionError(f"mask size {arr.shape[1]}x{arr.shape[0]} does not match image "
@@ -222,12 +233,14 @@ def load_mask(path: str | Path, shape: tuple[int, int]) -> np.ndarray:
 def select_from_mask(intake: Intake, mask: np.ndarray, spec: SelectionSpec) -> Selection:
     if spec.remove_at or spec.keep_at:
         raise SelectionError("use either --mask or --remove-at/--keep-at, not both")
+    if spec.color_tolerance is not None:
+        raise SelectionError("--tolerance has no effect with --mask")
     shape = intake.rgba.shape[:2]
     if mask.dtype != np.bool_ or mask.shape != shape:
         raise SelectionError(f"mask must be a {shape[1]}x{shape[0]} boolean array; got "
                              f"shape {mask.shape} and dtype {mask.dtype}")
-    controls = _resolve(spec)
-    controls.update(source="user_mask", user_mask_sha256=pixels_sha256(mask))
+    controls = {"alpha_min": _pick(load_rules(), "alpha_min", spec.alpha_min, ALPHA_RULE, int),
+                "source": "user_mask", "user_mask_sha256": pixels_sha256(mask)}
     warnings = []
     transparent = int((mask & (intake.rgba[..., 3] < controls["alpha_min"]["value"])).sum())
     if transparent:

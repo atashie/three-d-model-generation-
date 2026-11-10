@@ -1,6 +1,9 @@
+import json
+
 import numpy as np
 import pytest
 from PIL import Image
+from pydantic import ValidationError
 from selection_fixtures import (
     BIRD_SEED,
     DARK_LINE,
@@ -231,14 +234,75 @@ def test_holes_are_counted():
     assert sel.result["holes_px"] == [25]
 
 
-@pytest.mark.parametrize("spec", [
-    SelectionSpec(remove_at=((500, 5),)),                      # outside the image
-    SelectionSpec(remove_at=((0, 0),)),                        # transparent pixel
-    SelectionSpec(remove_at=((30, 100),), keep_at=((30, 100),)),  # keep a removed pixel
-])
-def test_unusable_points_raise(spec):
-    with pytest.raises(SelectionError):
+@pytest.mark.parametrize("spec, message", [
+    (SelectionSpec(remove_at=((500, 5),)), "remove_at point 500,5 is outside the 200x200"),
+    (SelectionSpec(remove_at=((0, 0),)), "remove_at point 0,0 is not in the current selection"),
+    (SelectionSpec(remove_at=((30, 100),), keep_at=((30, 100),)),
+     "keep_at point 30,100 is not in the current selection"),
+    (SelectionSpec(remove_at=((30, 100), (30, 100))),
+     "remove_at point 30,100 is not in the current selection"),
+    (SelectionSpec(keep_at=((100, 80), (100, 80))), "duplicate keep_at point 100,80"),
+], ids=["outside", "transparent", "keep-removed", "duplicate-remove", "duplicate-keep"])
+def test_unusable_points_raise(spec, message):
+    with pytest.raises(SelectionError, match=message):
         select_subject(_intake(roadie_like()), spec)
+
+
+@pytest.mark.parametrize("point", [(1.5, 2), (True, 2), ("3", 2)], ids=["float", "bool", "str"])
+def test_points_must_be_integers(point):
+    with pytest.raises(ValidationError):
+        SelectionSpec(keep_at=(point,))
+
+
+@pytest.mark.parametrize("spec, message", [
+    (SelectionSpec(alpha_min=0),
+     r"alpha_min 0 is outside perception\.alpha\.min_opaque range \[1, 255\]"),
+    (SelectionSpec(alpha_min=256),
+     r"alpha_min 256 is outside perception\.alpha\.min_opaque range \[1, 255\]"),
+    (SelectionSpec(color_tolerance=-1),
+     r"color_tolerance -1 is outside perception\.flood\.color_tolerance range \[0, 441\.7\]"),
+    (SelectionSpec(color_tolerance=500),
+     r"color_tolerance 500 is outside perception\.flood\.color_tolerance range"),
+], ids=["alpha-0", "alpha-256", "tolerance-negative", "tolerance-500"])
+def test_controls_outside_the_rule_range_raise(spec, message):
+    with pytest.raises(SelectionError, match=message):
+        select_subject(_intake(roadie_like()), spec)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_non_finite_tolerance_is_refused_at_construction(value):
+    with pytest.raises(ValidationError):
+        SelectionSpec(color_tolerance=value)
+
+
+def test_range_edges_are_accepted():
+    for spec in (SelectionSpec(alpha_min=1), SelectionSpec(alpha_min=255),
+                 SelectionSpec(color_tolerance=0), SelectionSpec(color_tolerance=441.7)):
+        select_subject(_intake(roadie_like()), spec)
+
+
+def test_tolerance_zero_removes_only_the_exact_colour():
+    img = roadie_like()
+    sel = select_subject(_intake(img), SelectionSpec(remove_at=(DISC_SEED,), color_tolerance=0))
+    removed = (img[..., 3] >= 128) & ~sel.mask
+    assert (img[removed][:, :3] == DISC).all()
+    exact = (img[..., :3] == DISC).all(axis=-1) & (img[..., 3] == 255)
+    assert sel.steps[1]["removed_px"] == removed.sum() == exact.sum()
+    assert _m(sel, BIRD_SEED) and _m(sel, RING_POINT)
+
+
+def test_keep_step_does_not_share_the_controls_list():
+    sel = select_subject(_intake(roadie_like()),
+                         SelectionSpec(remove_at=(DISC_SEED,), keep_at=(BIRD_SEED,)))
+    assert sel.steps[-1]["points"] == sel.controls["keep_at"]
+    assert sel.steps[-1]["points"] is not sel.controls["keep_at"]
+
+
+def test_selection_is_deterministic_in_process():
+    spec = SelectionSpec(remove_at=(DISC_SEED,), keep_at=(BIRD_SEED,), instructions="bird")
+    a, b = (select_subject(_intake(roadie_like()), spec) for _ in range(2))
+    assert np.array_equal(a.mask, b.mask)
+    assert (a.controls, a.steps, a.result, a.interpretation) ==            (b.controls, b.steps, b.result, b.interpretation)
 
 
 def _mask_file(tmp_path, arr, name="m.png"):
@@ -305,3 +369,59 @@ def test_load_mask_accepts_orientation_one(tmp_path):
 def test_select_from_mask_validates_its_array(mask):
     with pytest.raises(SelectionError, match="mask"):
         select_from_mask(_intake(roadie_like()), mask, SelectionSpec())
+
+
+def test_records_are_strict_json(tmp_path):
+    m = np.zeros((200, 200), np.uint8)
+    m[60:100, 65:135] = 255
+    sels = [select_subject(_intake(roadie_like()),
+                           SelectionSpec(remove_at=(DISC_SEED,), keep_at=(BIRD_SEED,))),
+            select_from_mask(_intake(roadie_like()),
+                             load_mask(_mask_file(tmp_path, m), (200, 200)), SelectionSpec())]
+    for sel in sels:
+        record = {"controls": sel.controls, "steps": sel.steps, "result": sel.result,
+                  "interpretation": sel.interpretation}
+        assert json.loads(json.dumps(record, allow_nan=False)) == record
+
+
+def test_mask_mode_records_only_the_controls_it_uses(tmp_path):
+    mask = np.zeros((200, 200), bool)
+    sel = select_from_mask(_intake(roadie_like()), mask, SelectionSpec())
+    assert set(sel.controls) == {"alpha_min", "source", "user_mask_sha256"}
+    with pytest.raises(SelectionError, match="--tolerance has no effect with --mask"):
+        select_from_mask(_intake(roadie_like()), mask, SelectionSpec(color_tolerance=30))
+
+
+def _rgba_mask(tmp_path, alpha):
+    a = np.zeros((4, 4, 4), np.uint8)
+    a[:2, ..., :3] = 255                 # top half white
+    a[..., 3] = 255
+    a[0, 0, 3] = alpha
+    return _mask_file(tmp_path, a, f"rgba{alpha}.png")
+
+
+def _p_mask_with_transparency(tmp_path):
+    im = Image.new("P", (4, 4), 0)
+    im.putpalette([0, 0, 0, 255, 255, 255] + [0] * 762)
+    im.putpixel((1, 1), 1)
+    p = tmp_path / "pt.png"
+    im.save(p, transparency=1)
+    return p
+
+
+def _la_mask(tmp_path):
+    p = tmp_path / "la.png"
+    Image.new("LA", (4, 4), (255, 0)).save(p)
+    return p
+
+
+@pytest.mark.parametrize("make", [lambda t: _rgba_mask(t, 0), _p_mask_with_transparency,
+                                  _la_mask], ids=["RGBA", "P-transparency", "LA"])
+def test_load_mask_refuses_transparency(tmp_path, make):
+    with pytest.raises(SelectionError, match="mask has transparent pixels"):
+        load_mask(make(tmp_path), (4, 4))
+
+
+def test_load_mask_accepts_opaque_rgba(tmp_path):
+    m = load_mask(_rgba_mask(tmp_path, 255), (4, 4))
+    assert m[:2].all() and not m[2:].any()
