@@ -41,8 +41,7 @@ CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel
 Latest local validation (2026-11-10, Windows PC, after `tdmg flat`): **468 tests
 passed**, both plain and with `CI=true GITHUB_ACTIONS=true`. `ruff check .` and the
 generated-doc check also passed. The last confirmed CI run was green on all three
-OSes for `f5c83ae` (run 42835658505); the `tdmg flat` commits are checked after
-pushing.
+OSes for `a9e20b9`, which includes `tdmg flat` (run 42854443030, verified 2026-11-10).
 
 ## Next steps, in order
 
