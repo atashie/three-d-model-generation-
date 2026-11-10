@@ -37,7 +37,7 @@ wheels), OpenCV `GaussianBlur`, and Shapely.
 - Every commit ends with the trailer.
 - Work test-first, never weaken an assertion, and run both test environments.
 
-**Status:** written 2026-11-10; not started.
+**Status:** written and executed 2026-11-10; see "Execution notes".
 
 ## Decisions
 
@@ -153,3 +153,25 @@ Commit.
 - Choosing σ automatically per image.
 - Smoothing for other recipes (relief, R4).
 - An F3 policy, and slicer integration.
+
+## Execution notes
+
+- **Task 1** was done by the controller: contourpy 1.4.0 was added, along with the rule
+  `flat.smooth.sigma_px`. The sliver rule's summary no longer claims impossibility.
+- **Pad before blurring.** Tasks 2 and 3 pad the mask before blurring, the reverse of
+  the prototype's order. Padding afterwards put an exact zero next to a border pixel,
+  which moved an image-border edge 0.36 px inward. The reviewer confirmed this by
+  measurement.
+- **Record semantics after review:**
+  - the area change is two-way (removed and added, as well as the net);
+  - part and hole counts are compared after cleaning on both paths;
+  - the boundary distance is a sampled lower bound, measured between the cleaned
+    geometries.
+- **Warnings.** The first warning design flagged ordinary corner rounding. Warnings now
+  fire only on topology changes: parts merged, split, disappeared or appeared, or holes
+  closed or opened. Changed regions are recorded as information. A thin attached
+  appendage removed without a topology change is not warned about. This is documented.
+- **Off path:** with smoothing off, `tdmg flat` reproduces the flat-1 STL byte for byte,
+  and a test pins its sha256.
+- **Task 4:** see the smoothing record. Roadie and Oddie at 60 × 3 mm each give one body,
+  no warnings, and repeat byte for byte.

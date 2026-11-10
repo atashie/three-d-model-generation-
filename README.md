@@ -28,6 +28,7 @@ uv run tdmg rules                         # list the design rules
 uv run tdmg recipes                       # list the print recipes
 uv run tdmg select IMAGE --out DIR ...    # select the subject; writes a preview to check
 uv run tdmg flat SEL_DIR --width-mm W --thickness-mm T --out DIR   # flat solid + gate
+                                          # (outline smoothed by default; --smooth-px 0 = exact)
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

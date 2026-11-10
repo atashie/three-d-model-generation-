@@ -67,3 +67,23 @@ Roadie mask.
   the field with one zero pixel and then subtracts 0.5 px. That maps padded index i to
   the pixel-cell coordinate of pixel i − 1, whose centre is at (i − 1) + 0.5, which is
   the convention `tdmg.flat` uses.
+
+## Implementation run on the owner's selections (Task 4, commit `7f3ad54`)
+
+The command was `uv run tdmg flat artifacts/selection-runs/<sel> --width-mm 60
+--thickness-mm 3 --out artifacts/flat-runs/<sel>-60x3-s3`, with the default
+`flat.smooth.sigma_px` of 2.5. Both runs exited 0, wrote no warnings and returned NOT
+CERTIFIED (F3 and F6 UNKNOWN).
+
+| Selection | Extents (mm) | Triangles | Boundary change (sampled lower bound) | Area removed / added | Parts, holes (exact → smoothed, after cleaning) |
+|---|---|---:|---:|---|---|
+| roadie-tol30 | 59.97 × 49.40 × 3 | 31,200 | ≥ 0.356 mm | 7.73 / 7.35 mm² | 1 → 1, 0 → 0 |
+| oddie | 59.99 × 65.87 × 3 | 29,212 | ≥ 0.149 mm | 2.56 / 2.52 mm² | 1 → 1, 0 → 0 |
+
+- **Repeatability:** the `model.stl` files are byte-identical to the earlier smoothed
+  runs (`-s1`, `-s2`), which were themselves byte-identical to each other.
+  - roadie sha256 `3d5d260194d75bc048d31e5deb7319a612a86e82700396ac78e515233ef6d653`
+  - oddie sha256 `8cc3ca1bbbc787f73296f7dace5e4f928a6de4fbdbd9e24686e96280ec4b160c`
+- **What `outline.png` showed:** the changes sit at the spike tips and leaf tips, which
+  are shortened by a few pixels, and in narrow crevices, which are slightly filled.
+- **Owner's verdict on the smoothed edges in Bambu Studio:** pending.
