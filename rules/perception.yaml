@@ -11,8 +11,8 @@
       locator: "Oddie is one 8-connected piece at every alpha cutoff tested"
       provenance: primary
       validation: untested
-      claim: On Oddie, the five cutoffs tested (1, 64, 128, 192 and 255) all give one piece; area changes by 2.2% between 1 and 255. 128 counts a pixel when it is at least half covered. Measured in software on one image; not a general result.
-  notes: Adjustable with --alpha-min. It matters only for images with partly transparent pixels.
+      claim: On Oddie, the five cutoffs tested (1, 64, 128, 192 and 255) all give one piece; area changes by 2.2% between 1 and 255. This image does not discriminate between cutoffs, so it shows insensitivity, not support for 128 in particular. 128 is the half-coverage convention. Software measurement on one image (see ref); as a hypothesis, the rule itself stays untested.
+  notes: Adjustable with --alpha-min. It matters only for images with partly transparent pixels. The range is the full 8-bit domain above zero, not a tested band.
 
 - id: perception.flood.color_tolerance
   kind: hypothesis
@@ -25,5 +25,5 @@
       locator: "At tolerances 20, 30 and 40 the bird stays one piece; at 60 it splits."
       provenance: primary
       validation: untested
-      claim: On Roadie, removing the disc from one seed left the bird as one piece at 20, 30 and 40 and split it at 60. 30 is the middle of the range that worked. Measured in software on one image; not a general result.
-  notes: Adjustable with --tolerance. Lower values keep more of an anti-aliased fringe, and higher values can cut thin dark lines. Check the preview.
+      claim: On Roadie, removing the disc from one seed left the bird as one piece at 20, 30 and 40 and split it at 60. 30 is the middle of the range that worked. Software measurement on one image (see ref); as a hypothesis, the rule itself stays untested.
+  notes: Adjustable with --tolerance. On Roadie, lower values kept more of the dark fringe around the bird, and 60 split the bird into several pieces. Check the preview. The range is the full domain, 0 to 255 times the square root of 3 (441.67) rounded up, not a tested band.

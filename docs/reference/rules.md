@@ -57,8 +57,8 @@ Every number the pipeline uses. *Provenance / validation* shows the strongest ev
 
 | Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
 |---|---|---|---|---|---|---|---|---|
-| `perception.alpha.min_opaque` | A pixel counts as opaque image content if its 8-bit alpha is at least this. | 128 | 1–255 | alpha8 | hypothesis | primary / untested | all | Adjustable with --alpha-min. It matters only for images with partly transparent pixels. |
-| `perception.flood.color_tolerance` | Euclidean distance in 8-bit RGB within which a pixel joins the colour region grown from a --remove-at point. | 30 | 0–441.7 | rgb8_distance | hypothesis | primary / untested | all | Adjustable with --tolerance. Lower values keep more of an anti-aliased fringe, and higher values can cut thin dark lines. Check the preview. |
+| `perception.alpha.min_opaque` | A pixel counts as opaque image content if its 8-bit alpha is at least this. | 128 | 1–255 | alpha8 | hypothesis | primary / untested | all | Adjustable with --alpha-min. It matters only for images with partly transparent pixels. The range is the full 8-bit domain above zero, not a tested band. |
+| `perception.flood.color_tolerance` | Euclidean distance in 8-bit RGB within which a pixel joins the colour region grown from a --remove-at point. | 30 | 0–441.7 | rgb8_distance | hypothesis | primary / untested | all | Adjustable with --tolerance. On Roadie, lower values kept more of the dark fringe around the bird, and 60 split the bird into several pieces. Check the preview. The range is the full domain, 0 to 255 times the square root of 3 (441.67) rounded up, not a tested band. |
 
 ## `rules/tools.yaml`
 

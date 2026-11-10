@@ -26,9 +26,12 @@ def test_hypotheses_are_not_presented_as_validated(rule_id):
         assert all(e.validation == "untested" for e in r.evidence), rule_id
 
 
-def test_selection_rules_exist_with_their_units():
-    assert RULES["perception.alpha.min_opaque"].unit == "alpha8"
-    assert RULES["perception.flood.color_tolerance"].unit == "rgb8_distance"
+def test_selection_rules_exist_with_their_units_and_defaults():
+    # Defaults pinned so a silent change is caught; the evidence README backs these values.
+    alpha = RULES["perception.alpha.min_opaque"]
+    tol = RULES["perception.flood.color_tolerance"]
+    assert (alpha.unit, alpha.default, alpha.range) == ("alpha8", 128, (1, 255))
+    assert (tol.unit, tol.default, tol.range) == ("rgb8_distance", 30, (0, 441.7))
 
 
 def test_clearance_rules_never_scale_with_the_model():
