@@ -21,7 +21,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic_core import PydanticCustomError
 
 from tdmg.rules import load_rules
 
@@ -103,10 +104,18 @@ def load_image(path: str | Path) -> Intake:
 class SelectionSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     instructions: str | None = None
-    alpha_min: int | None = None                 # range checked against the rule in _resolve
+    alpha_min: StrictInt | None = None           # range checked against the rule in _pick
     color_tolerance: float | None = Field(default=None, allow_inf_nan=False)
     remove_at: tuple[Point, ...] = ()
     keep_at: tuple[Point, ...] = ()
+
+    @field_validator("color_tolerance", mode="before")
+    @classmethod
+    def _no_bool_tolerance(cls, v):
+        if isinstance(v, bool):
+            raise PydanticCustomError("bool_tolerance",
+                                      "color_tolerance must be a number, not a boolean")
+        return v
 
 
 @dataclass
@@ -120,7 +129,10 @@ class Selection:
 
 def _pick(rules: dict, field: str, value, rule_id: str, cast) -> dict:
     """The explicit value, or the rule's default, checked against the rule's range."""
-    chosen = {"value": cast(value), "rule": None} if value is not None else         {"value": cast(rules[rule_id].default), "rule": rule_id}
+    if value is not None:
+        chosen = {"value": cast(value), "rule": None}
+    else:
+        chosen = {"value": cast(rules[rule_id].default), "rule": rule_id}
     v = chosen["value"]
     lo, hi = rules[rule_id].range
     if not math.isfinite(v) or not lo <= v <= hi:
@@ -129,12 +141,17 @@ def _pick(rules: dict, field: str, value, rule_id: str, cast) -> dict:
 
 
 def _resolve(spec: SelectionSpec) -> dict:
+    """Controls that select_subject uses. color_tolerance appears only with remove_at seeds."""
+    if spec.color_tolerance is not None and not spec.remove_at:
+        raise SelectionError("color_tolerance has no effect without remove_at")
     rules = load_rules()
-    return {"alpha_min": _pick(rules, "alpha_min", spec.alpha_min, ALPHA_RULE, int),
-            "color_tolerance": _pick(rules, "color_tolerance", spec.color_tolerance,
-                                     TOLERANCE_RULE, float),
-            "remove_at": [list(p) for p in spec.remove_at],
-            "keep_at": [list(p) for p in spec.keep_at]}
+    controls = {"alpha_min": _pick(rules, "alpha_min", spec.alpha_min, ALPHA_RULE, int)}
+    if spec.remove_at:
+        controls["color_tolerance"] = _pick(rules, "color_tolerance", spec.color_tolerance,
+                                            TOLERANCE_RULE, float)
+    controls["remove_at"] = [list(p) for p in spec.remove_at]
+    controls["keep_at"] = [list(p) for p in spec.keep_at]
+    return controls
 
 
 def _selected_point(mask: np.ndarray, p: Point, what: str) -> tuple[int, int]:
@@ -180,8 +197,8 @@ def select_subject(intake: Intake, spec: SelectionSpec) -> Selection:
     rgb = intake.rgba[..., :3].astype(np.int32)
     mask = intake.rgba[..., 3] >= controls["alpha_min"]["value"]
     steps = [{"op": "alpha", "selected_px": int(mask.sum())}]
-    tol2 = controls["color_tolerance"]["value"] ** 2
     for p in spec.remove_at:
+        tol2 = controls["color_tolerance"]["value"] ** 2
         x, y = _selected_point(mask, p, "remove_at")
         seed = rgb[y, x]
         near = mask & (((rgb - seed) ** 2).sum(axis=-1) <= tol2)
@@ -198,8 +215,9 @@ def select_subject(intake: Intake, spec: SelectionSpec) -> Selection:
         labels = sorted({int(lab[y, x]) for x, y in
                          (_selected_point(mask, p, "keep_at") for p in spec.keep_at)})
         mask = np.isin(lab, labels)
-        steps.append({"op": "keep_at", "points": [list(p) for p in spec.keep_at], "pieces_before": n - 1,
-                      "pieces_kept": len(labels), "selected_px": int(mask.sum())})
+        steps.append({"op": "keep_at", "points": [list(p) for p in spec.keep_at],
+                      "pieces_before": n - 1, "pieces_kept": len(labels),
+                      "selected_px": int(mask.sum())})
     warnings = []
     if spec.instructions and not (spec.remove_at or spec.keep_at):
         warnings.append(NOT_INTERPRETED)

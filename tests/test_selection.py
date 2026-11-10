@@ -192,15 +192,45 @@ def test_frame_is_kept_when_not_removed():
     assert _m(sel, DISC_SEED) and sel.result["status"] == "multiple_pieces"
 
 
+TOL_RULE = "perception.flood.color_tolerance"
+
+
 def test_defaults_come_from_the_rules_registry():
     rules = load_rules()
-    sel = select_subject(_intake(roadie_like()), SelectionSpec())
+    sel = select_subject(_intake(roadie_like()), SelectionSpec(remove_at=(DISC_SEED,)))
     c = sel.controls
     assert c["alpha_min"] == {"value": rules["perception.alpha.min_opaque"].default,
                               "rule": "perception.alpha.min_opaque"}
-    assert c["color_tolerance"]["rule"] == "perception.flood.color_tolerance"
-    explicit = select_subject(_intake(roadie_like()), SelectionSpec(color_tolerance=12))
+    assert c["color_tolerance"] == {"value": float(rules[TOL_RULE].default), "rule": TOL_RULE}
+    explicit = select_subject(_intake(roadie_like()),
+                              SelectionSpec(remove_at=(DISC_SEED,), color_tolerance=12))
     assert explicit.controls["color_tolerance"] == {"value": 12.0, "rule": None}
+
+
+def test_tolerance_is_recorded_only_when_seeds_use_it():
+    for spec in (SelectionSpec(), SelectionSpec(keep_at=(BIRD_SEED,))):
+        sel = select_subject(_intake(roadie_like()), spec)
+        assert "color_tolerance" not in sel.controls
+        assert sel.controls["alpha_min"]["rule"] == "perception.alpha.min_opaque"
+
+
+def test_explicit_tolerance_without_seeds_raises():
+    with pytest.raises(SelectionError, match="color_tolerance has no effect without remove_at"):
+        select_subject(_intake(roadie_like()), SelectionSpec(color_tolerance=12))
+
+
+@pytest.mark.parametrize("kwargs", [{"alpha_min": True}, {"alpha_min": 128.0},
+                                    {"alpha_min": "128"}, {"color_tolerance": True},
+                                    {"color_tolerance": False}],
+                         ids=["alpha-bool", "alpha-float", "alpha-str", "tol-true", "tol-false"])
+def test_controls_reject_non_numbers_and_bools(kwargs):
+    with pytest.raises(ValidationError):
+        SelectionSpec(**kwargs)
+
+
+def test_tolerance_accepts_ints_and_floats():
+    assert SelectionSpec(color_tolerance=12).color_tolerance == 12.0
+    assert SelectionSpec(color_tolerance=12.5).color_tolerance == 12.5
 
 
 def test_soft_edges_keep_the_thin_stroke():
@@ -259,9 +289,9 @@ def test_points_must_be_integers(point):
      r"alpha_min 0 is outside perception\.alpha\.min_opaque range \[1, 255\]"),
     (SelectionSpec(alpha_min=256),
      r"alpha_min 256 is outside perception\.alpha\.min_opaque range \[1, 255\]"),
-    (SelectionSpec(color_tolerance=-1),
+    (SelectionSpec(remove_at=(DISC_SEED,), color_tolerance=-1),
      r"color_tolerance -1 is outside perception\.flood\.color_tolerance range \[0, 441\.7\]"),
-    (SelectionSpec(color_tolerance=500),
+    (SelectionSpec(remove_at=(DISC_SEED,), color_tolerance=500),
      r"color_tolerance 500 is outside perception\.flood\.color_tolerance range"),
 ], ids=["alpha-0", "alpha-256", "tolerance-negative", "tolerance-500"])
 def test_controls_outside_the_rule_range_raise(spec, message):
@@ -277,7 +307,8 @@ def test_non_finite_tolerance_is_refused_at_construction(value):
 
 def test_range_edges_are_accepted():
     for spec in (SelectionSpec(alpha_min=1), SelectionSpec(alpha_min=255),
-                 SelectionSpec(color_tolerance=0), SelectionSpec(color_tolerance=441.7)):
+                 SelectionSpec(remove_at=(DISC_SEED,), color_tolerance=0),
+                 SelectionSpec(remove_at=(DISC_SEED,), color_tolerance=441.7)):
         select_subject(_intake(roadie_like()), spec)
 
 
@@ -302,7 +333,8 @@ def test_selection_is_deterministic_in_process():
     spec = SelectionSpec(remove_at=(DISC_SEED,), keep_at=(BIRD_SEED,), instructions="bird")
     a, b = (select_subject(_intake(roadie_like()), spec) for _ in range(2))
     assert np.array_equal(a.mask, b.mask)
-    assert (a.controls, a.steps, a.result, a.interpretation) ==            (b.controls, b.steps, b.result, b.interpretation)
+    assert a.controls == b.controls and a.steps == b.steps
+    assert a.result == b.result and a.interpretation == b.interpretation
 
 
 def _mask_file(tmp_path, arr, name="m.png"):
