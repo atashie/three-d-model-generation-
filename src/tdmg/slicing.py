@@ -49,7 +49,13 @@ from tdmg import __version__
 from tdmg.checks import CheckResult, verdict
 from tdmg.flat import FLAT_REQUIRED_CHECKS, STL_COORD_RTOL, flat_identity
 from tdmg.flat import RECORD_SCHEMA as FLAT_SCHEMA
-from tdmg.printed import ELEPHANT_FOOT_KEY, F3_SLICE_CHECK_IDS, TOLERANCE_RULE, f3_checks
+from tdmg.printed import (
+    ELEPHANT_FOOT_KEY,
+    F3_SLICE_CHECK_IDS,
+    TOLERANCE_RULE,
+    f3_checks,
+    plate_from_profile,
+)
 from tdmg.records import (
     RecordError,
     canonical_json,
@@ -81,7 +87,8 @@ RECORD_SCHEMA = "tdmg.slice/1"
 # slice-2 (2026-11-10): F3.printed_connectivity and F3.edge_coverage, measured from the
 # G-code, are required, and F3.thin_regions is information only; the record has "printed".
 # The verdict for the same request can differ from slice-1's, so slice_id changes with it.
-# slice-1 required F3.thin_regions, which is always UNKNOWN.
+# slice-1 required F3.thin_regions, which is always UNKNOWN. The method and constants of
+# tdmg.printed are part of this version: bump it when they change.
 SLICE_ALGORITHM_VERSION = "slice-2"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
@@ -303,7 +310,10 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     hash of the flat.json bytes, which pins the inherited checks; the pinned slicer
     (version, exe and library hashes as verified, the pinned app-tree hash and whether this
     run verified it, app_tree_verified, so a skipped check gives a different id); the three
-    profile hashes; and the command template. The timeout is not part of it: it can stop a run
+    profile hashes; the command template; and the F3 inputs that set the verdict, the
+    tolerance rule's value and the profile's elefant_foot_compensation (the plate centre
+    comes from the machine profile, whose hash is already there). The timeout is not part
+    of it: it can stop a run
     but does not change what a completed run writes, so a timed-out and a completed run
     of the same request share a slice_id. The platform and the environment are recorded
     beside it, not in it. The F3 measurements of the G-code ("printed") are outputs, like
@@ -328,6 +338,11 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         process = json.loads(profile_data["process"])
     except ValueError as err:
         raise SlicerError(f"cannot read {slicer.profiles['process']}: {err}") from None
+    try:
+        plate = plate_from_profile(json.loads(profile_data["machine"]))
+    except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
+        raise SlicerError(f"cannot read the plate from {slicer.profiles['machine']}: "
+                          f"{err}") from None
     thickness = float(flat["params"]["thickness_mm"])
     z_min, z_max = stl_z_range(stl)
     allowed = allowed_layer_counts(stl, process)
@@ -350,7 +365,7 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         gcode = ((run.out_dir / GCODE_NAME).read_bytes()
                  if (run.out_dir / GCODE_NAME).is_file() else None)
         exited = next(c for c in f6 if c.id == "F6.slicer_exit").status == "PASS"
-        f3, printed = f3_checks(gcode, stl, tolerance, elephant,
+        f3, printed = f3_checks(gcode, stl, plate, tolerance, elephant,
                                 None if exited else "the slicer failed (F6.slicer_exit)")
         checks = f3 + f6
         quarantined = any(c.status == "FAIL" for c in previous + checks
@@ -381,7 +396,9 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
                 "slicer": slicer_identity,
                 "profiles": {k: v["sha256"] for k, v in verified["profiles"].items()},
                 "flat_record_sha256": flat_record_sha256,
-                "command": COMMAND_TEMPLATE}
+                "command": COMMAND_TEMPLATE,
+                "f3": {"tolerance": {"rule": TOLERANCE_RULE, "value_mm": tolerance},
+                       "elefant_foot_compensation_mm": elephant}}
     gcode_name = next((n for n in (GCODE_NAME, FAILED_GCODE_NAME) if n in files), None)
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,

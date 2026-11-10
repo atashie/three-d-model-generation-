@@ -25,6 +25,7 @@ from test_selection import _intake
 from typer.testing import CliRunner
 
 import tdmg.flat
+import tdmg.printed
 import tdmg.slicing
 from tdmg.cli import app
 from tdmg.flat import flat_identity, make_flat
@@ -51,8 +52,10 @@ PIN = load_pin()
 # and research/verification/2026-11-10-thin-walls/slicer-settings.txt).
 PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2",
            "elefant_foot_compensation": "0.075"}
-FILES = {"machine.json": b"{}", "process.json": json.dumps(PROCESS).encode(),
-         "filament.json": b"{}"}
+# The machine key make_slice reads: the A1's plate (profiles-flat/machine.json).
+MACHINE = {"printable_area": ["0x0", "256x0", "256x256", "0x256"]}
+FILES = {"machine.json": json.dumps(MACHINE).encode(),
+         "process.json": json.dumps(PROCESS).encode(), "filament.json": b"{}"}
 APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
 F6_IDS = ["F6.slicer_exit", "F6.gcode_present", "F6.layer_count", "F6.single_object",
           "F6.portability"]
@@ -195,7 +198,9 @@ def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
                            "app_tree_verified": True},
                 "profiles": {k: p.sha256 for k, p in pin.profiles.flat.items()},
                 "flat_record_sha256": record["links"]["flat_record_sha256"],
-                "command": record["command"]}
+                "command": record["command"],
+                "f3": {"tolerance": {"rule": "acceptance.dimension.tolerance", "value_mm": 0.2},
+                       "elefant_foot_compensation_mm": 0.075}}
     assert record["slice_id"] == _sha(canonical_json(identity))
 
 
@@ -467,7 +472,7 @@ def test_a_bad_timeout_is_refused(flat_dir, fake, tmp_path, value):
 
 # --- F3 from the printed footprint (tdmg.printed) -----------------------------------------
 
-BED_SHIFT = (100.0, 100.0)          # where the synthetic G-code puts the model on the bed
+PLATE_CENTRE = (128.0, 128.0)       # the A1 plate's centre, from MACHINE
 
 
 @pytest.fixture(scope="module")
@@ -484,8 +489,11 @@ def square_flat(tmp_path_factory):
 
 
 def _bed_section(flat_dir):
+    """The model's section where the slicer puts it: its bounding box on the plate centre."""
     section = model_section((flat_dir / "model.stl").read_bytes(), 0.1)
-    return affinity.translate(section, *BED_SHIFT)
+    x0, y0, x1, y1 = section.bounds
+    return affinity.translate(section, PLATE_CENTRE[0] - (x0 + x1) / 2,
+                              PLATE_CENTRE[1] - (y0 + y1) / 2)
 
 
 def _square_gcode(flat_dir, first=None, upper=None):
@@ -524,13 +532,24 @@ def test_a_covered_square_passes_both_f3_checks(square_flat, fake, tmp_path):
     assert [lay["z"] for lay in printed["layers"]] == pytest.approx(
         [0.2 * (i + 1) for i in range(15)])
     assert all(lay["parts"] == [1, 1] and lay["holes"] == [0, 0] for lay in printed["layers"])
-    assert set(printed["layers"][0]) == {"z", "max_gap_mm", "parts", "holes"}
+    assert set(printed["layers"][0]) == {"z", "max_gap_mm", "parts", "holes", "unmatched"}
+    assert all(lay["unmatched"] == 0 for lay in printed["layers"])
+    assert printed["alignment"]["plate_centre_mm"] == list(PLATE_CENTRE)
     assert printed["alignment"]["angle_deg"] == coverage["measured"]["angle_deg"]
     assert printed["alignment"]["median_edge_mm"] < 0.01
     assert printed["allowance_mm"] == {"first_layer": pytest.approx(0.275),
                                        "other_layers": 0.2, "elefant_foot_compensation": 0.075}
     assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == ("plate_1.gcode", False)
     assert json.loads((out / "slice.json").read_bytes()) == record
+
+
+def _to_bed(record, point):
+    """A model point in bed mm, by the record's alignment."""
+    a = record["printed"]["alignment"]
+    moved = affinity.translate(affinity.rotate(shapely.Point(point), a["angle_deg"],
+                                               origin=tuple(a["model_bbox_centre_mm"])),
+                               *a["shift_mm"])
+    return [moved.x, moved.y]
 
 
 def _split(flat_dir):
@@ -551,7 +570,9 @@ def test_a_split_print_fails_connectivity_and_is_quarantined(square_flat, fake, 
     assert (m["layers"], m["layers_mismatched"], m["first_z"]) == (15, 14, pytest.approx(0.4))
     assert (m["parts_model"], m["parts_printed"], m["holes_model"], m["holes_printed"]) == (
         1, 2, 0, 0)
-    assert m["largest_gap_at_bed_mm"][0] == pytest.approx(cx, abs=0.5)
+    assert [(u["what"], u["overlaps"]) for u in m["unmatched"]] == [("model part", 2)]
+    assert _to_bed(record, m["largest_gap_at_model_mm"])[0] == pytest.approx(cx, abs=0.5)
+    assert "model part overlapping 2 at model" in c["note"]
     assert "z = 0.4 mm" in c["note"] and "2 printed part(s)" in c["note"]
     assert "F3.printed_connectivity FAIL" in record["certification"]
     assert sorted(p.name for p in out.iterdir()) == [
@@ -585,10 +606,7 @@ def test_an_unprinted_corner_fails_coverage_only(square_flat, fake, tmp_path):
     assert m["worst_z"] > 0.3                    # one of the 14 identical upper layers
     assert m["at_bed_mm"][0] > x1 - 2 and m["at_bed_mm"][1] > y1 - 2
     # The model point is the bed point under the recorded alignment.
-    a = record["printed"]["alignment"]
-    moved = affinity.translate(affinity.rotate(shapely.Point(m["at_model_mm"]), a["angle_deg"],
-                                               origin=tuple(a["centre_mm"])), *a["shift_mm"])
-    assert [moved.x, moved.y] == pytest.approx(m["at_bed_mm"], abs=1e-9)
+    assert _to_bed(record, m["at_model_mm"]) == pytest.approx(m["at_bed_mm"], abs=1e-9)
     assert record["gcode"]["quarantined"] is True
 
 
@@ -643,12 +661,11 @@ def test_the_printed_analysis_is_not_part_of_slice_id(square_flat, fake, tmp_pat
     assert a["slice_id"] == b["slice_id"]          # an output, not part of the request
 
 
-def _with_process(fake, monkeypatch, process: dict) -> None:
-    """Replace the fake install's process profile, and its hash in the fake pin."""
-    data = json.dumps(process).encode()
-    (fake.root / "profiles-flat" / "process.json").write_bytes(data)
+def _with_profile(fake, monkeypatch, kind: str, data: bytes) -> None:
+    """Replace one of the fake install's profiles, and its hash in the fake pin."""
+    (fake.root / "profiles-flat" / f"{kind}.json").write_bytes(data)
     flat = dict(fake.pin.profiles.flat)
-    flat["process"] = flat["process"].model_copy(update={"sha256": _sha(data)})
+    flat[kind] = flat[kind].model_copy(update={"sha256": _sha(data)})
     pin = fake.pin.model_copy(update={"profiles": fake.pin.profiles.model_copy(
         update={"flat": flat})})
     monkeypatch.setattr(tdmg.slicing, "load_pin", lambda: pin)
@@ -661,10 +678,47 @@ def test_a_bad_elefant_foot_compensation_is_refused(flat_dir, fake, tmp_path, mo
     process = {k: v for k, v in PROCESS.items() if k != "elefant_foot_compensation"}
     if value is not None:
         process["elefant_foot_compensation"] = value
-    _with_process(fake, monkeypatch, process)
+    _with_profile(fake, monkeypatch, "process", json.dumps(process).encode())
     with pytest.raises(SlicerError, match="elefant_foot_compensation"):
         make_slice(flat_dir, tmp_path / "slice", root)
     assert not (tmp_path / "slice").exists()
+
+
+@pytest.mark.parametrize("data", [b"{}", b"[]", b"not json",
+                                  json.dumps({"printable_area": ["0x0"]}).encode()])
+def test_a_machine_profile_without_a_plate_is_refused(flat_dir, fake, tmp_path, monkeypatch,
+                                                      data):
+    root = fake()
+    _with_profile(fake, monkeypatch, "machine", data)
+    with pytest.raises(SlicerError, match="plate"):
+        make_slice(flat_dir, tmp_path / "slice", root)
+    assert not (tmp_path / "slice").exists()
+
+
+def test_an_analysis_error_is_unknown_and_the_outputs_are_written(square_flat, fake, tmp_path,
+                                                                  monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(tdmg.printed, "analyse", broken)
+    out = tmp_path / "slice"
+    record = make_slice(square_flat, out, fake(gcode_text=_square_gcode(square_flat)))
+    for cid in F3_IDS:
+        check = by_id(record)[cid]
+        assert check["status"] == "UNKNOWN"
+        assert "analysis error: RuntimeError: boom" in check["note"]
+    assert sorted(p.name for p in out.iterdir()) == [
+        "plate_1.gcode", "plate_1.statistics.json", "slice.json"]
+
+
+def test_the_tolerance_used_is_part_of_slice_id(flat_dir, fake, tmp_path, monkeypatch):
+    root = fake()
+    a = make_slice(flat_dir, tmp_path / "a", root)
+    rules = load_rules()
+    wider = rules["acceptance.dimension.tolerance"].model_copy(update={"default": 0.3})
+    monkeypatch.setattr(tdmg.slicing, "load_rules",
+                        lambda: {**rules, "acceptance.dimension.tolerance": wider})
+    b = make_slice(flat_dir, tmp_path / "b", root)
+    assert a["slice_id"] != b["slice_id"]
 
 
 def test_the_required_checks_swap_thin_regions_for_the_printed_checks():
