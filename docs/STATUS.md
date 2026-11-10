@@ -10,7 +10,7 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 |---|---|
 | Research | Landscape report (v2.1) and seven historical source notes; Windows/TripoSR/MakerLab results in `research/experiments/2026-11-g3-local-vs-hosted/`. Independent reviews in `research/reviews/2026-11-09-codex/` and `research/reviews/2026-11-09-pc/` |
 | Plan | `docs/PLAN.md` v2.1 adds plain-language image interpretation and a reviewable subject mask. The owner's decisions are in its section 13 |
-| Phase 0 (foundations) | **Original Mac/Linux baseline done.** Package `tdmg`, 26 rules with checked citations, A1 printer profile and docs. Windows extension passes local checks; hosted CI acceptance is pending |
+| Phase 0 (foundations) | **Baseline and Windows extension verified.** Package `tdmg`, 26 rules with checked citations, A1 printer profile and docs. Local checks and hosted CI pass on Windows, macOS and Linux |
 | Phase 1 (R1 flat single-color) | Not started |
 | Photo-to-3D backend (needed for R4) | TripoSR CPU test completed: ten measured runs, 32–35 seconds/model, 3.55–4.00 GiB peak working set. Repeated geometry matches exactly after sorting; OBJ bytes differ. All raw meshes fail topology checks; Roadie's background dominates its shape. See `research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md`. No backend chosen |
 
@@ -21,7 +21,7 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 | M5 MacBook | Apple M5, arm64, 16 GB, macOS 26.3, no CUDA | Python 3.13 stack installed and functionally tested (`research/verification/2026-11-08-stack-smoke/`); all tests; wheel build and install |
 | PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, 133 tests, lint, docs, wheel installation and geometry smoke checks passed. Optional import failures recorded in `research/verification/2026-11-09-pc-stack/README.md` |
 
-CI now includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. The new GitHub Windows run has not yet been verified.
+CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
 Latest local pre-commit validation (2026-11-09): `uv sync --locked`, **135 tests
 passed**, `ruff check .`, generated-doc check and `git diff --check` passed.
@@ -74,13 +74,12 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Immediate user instruction:** finish documentation, commit and push this session,
-  then prepare for compaction. Do not start a new experiment or choose the next
+- **Immediate user instruction:** documentation and experiment records committed
+  and pushed (`c93f82a`, `cc331ad`); compaction handoff prepared. Do not start a new experiment or choose the next
   implementation step; discuss that with the owner after the handoff.
-- **Release follow-up:** check the GitHub Actions run for the pushed commit,
-  especially the new Windows job. Resolve any locked-install, lint, docs, test or
-  wheel-smoke failure before marking the Windows extension accepted. A local pass
-  is not a hosted CI pass.
+- **Release verification:** all three GitHub Actions jobs passed for `cc331ad`
+  (run linked above), including the new Windows job. Windows core acceptance is
+  complete; optional-package failures and experimental backend limits still apply.
 - **Start next session:** read `CLAUDE.md`, this page, then `docs/PLAN.md` and
   `docs/guide/input-interpretation.md`. The pipeline/CLI currently has foundations
   only; no production image-generation command or language interpreter exists.
