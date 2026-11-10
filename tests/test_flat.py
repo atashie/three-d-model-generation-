@@ -717,3 +717,17 @@ def test_verdict_is_not_certified_even_for_a_perfect_part():
     passed = [r if r.status == "PASS" else CheckResult(r.id, "PASS", r.measured, r.threshold,
                                                        r.rule) for r in results]
     assert verdict(passed, FLAT_REQUIRED_CHECKS) == "PRINTABLE"
+
+
+@pytest.mark.parametrize("bad", ["abc", None, True, [1.0]])
+def test_non_numeric_parameters_are_flat_errors(bad):
+    with pytest.raises(FlatError, match="thickness_mm"):
+        extrude([shapely.box(0, 0, 1, 1)], bad)
+    with pytest.raises(FlatError, match="width_mm"):
+        to_model(shapely.box(0, 0, 1, 1), bad)
+    with pytest.raises(FlatError, match="opening_mm"):
+        clean(shapely.box(0, 0, 5, 5), bad, MIN_ISLAND, STEP)
+    with pytest.raises(FlatError, match="min_island_mm2"):
+        clean(shapely.box(0, 0, 5, 5), OPENING, bad, STEP)
+    with pytest.raises(FlatError, match="min_width_mm"):
+        thin_regions([shapely.box(0, 0, 5, 5)], bad)

@@ -108,8 +108,18 @@ def mask_outline(mask: np.ndarray) -> shapely.Geometry:
     return shapely.simplify(shapely.union_all(boxes), 0)
 
 
+def _number(name: str, value) -> float:
+    """value as a float; bools, strings and other non-numbers raise FlatError."""
+    if isinstance(value, bool):
+        raise FlatError(f"{name} must be a number, got {value!r}")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise FlatError(f"{name} must be a number, got {value!r}") from None
+
+
 def _require_positive(name: str, value: float) -> float:
-    value = float(value)
+    value = _number(name, value)
     if not math.isfinite(value) or value <= 0:
         raise FlatError(f"{name} must be a finite number above 0, got {value}")
     return value
@@ -133,7 +143,7 @@ def to_model(outline, width_mm: float) -> tuple[shapely.Geometry, dict]:
 
 
 def _require_non_negative(name: str, value: float) -> float:
-    value = float(value)
+    value = _number(name, value)
     if not math.isfinite(value) or value < 0:
         raise FlatError(f"{name} must be a finite number of at least 0, got {value}")
     return value
@@ -426,9 +436,10 @@ def rasterise(parts: list[Polygon], transform: dict, shape: tuple[int, int]) -> 
 
     Pixel (col, row) is the cell [col, col + 1) x [row, row + 1) in pixel units; it counts
     as kept when its centre (col + 0.5, row + 0.5), mapped to model mm by to_model's
-    transform, is strictly inside a part. The test is shapely's exact point-in-polygon
-    predicate, so no edge-fill convention is involved: a part bounded by pixel-cell edges
-    rasterises to exactly its cells, because every centre is half a pixel from the edges.
+    transform, is inside a part (shapely's contains_xy, an exact point-in-polygon test),
+    so no edge-fill convention is involved. A centre lies half a pixel from every cell
+    edge, so a part bounded by pixel-cell edges rasterises to exactly its cells, and
+    rounding in the inverse transform cannot move a centre across such an edge.
     """
     h, w = shape
     kept = np.zeros((h, w), bool)
@@ -512,13 +523,12 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     Everything is built, encoded and gated in memory first, so a refused run writes
     nothing. The gate judges the STL bytes that are written: they are parsed back, merged
     exactly, and checked. flat_id is a SHA-256 of the canonical JSON of the algorithm,
-    the mask's pixel hash, the parameters (with the rules that set them) and the printer;
-    the environment is not part of it. The output file hashes are integrity hashes,
-    valid within this environment only.
+    the mask's pixel hash and the parameters (with the printer id and the rules that set
+    them); the environment is not part of it. flat_id identifies the geometry, so check
+    thresholds (build volume, triangle limit, wall width) do not enter it; each check
+    records its own threshold. The output file hashes are integrity hashes, valid within
+    this environment only.
     """
-    for name, value in (("width_mm", width_mm), ("thickness_mm", thickness_mm)):
-        if isinstance(value, bool):
-            raise FlatError(f"{name} must be a number, got {value!r}")
     width_mm = _require_positive("width_mm", width_mm)
     thickness_mm = _require_positive("thickness_mm", thickness_mm)
     selection, mask = _read_selection(Path(selection_dir))
@@ -551,7 +561,7 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
               "opening_mm": opening, "min_island_mm2": min_island}
     identity = {"algorithm": FLAT_ALGORITHM_VERSION,
                 "mask_pixels_sha256": selection["mask_pixels_sha256"],
-                "params": params, "printer": profile.id}
+                "params": params}
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": FLAT_ALGORITHM_VERSION,

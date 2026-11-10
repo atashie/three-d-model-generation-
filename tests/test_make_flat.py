@@ -23,12 +23,14 @@ from tdmg.flat import (
     rasterise,
     to_model,
 )
-from tdmg.records import record_text
+from tdmg.records import canonical_json, record_text
+from tdmg.rules import load_rules
 from tdmg.selection import Intake, SelectionSpec, pixels_sha256, select_subject, write_selection
 
 SPEC = SelectionSpec(instructions="Use only the bird.", remove_at=(DISC_SEED,),
                      keep_at=(BIRD_SEED,))
 FILES = ("model.stl", "outline.png", "flat.json")
+GOLDEN_FLAT_ID = "07270f3d5a676e08e221ecec991ed14fd02f9eda2eba8586d87ea17623c402e0"
 
 
 def write_roadie_selection(folder):
@@ -236,7 +238,9 @@ def test_unparsable_selection_json_is_refused(selection_dir, tmp_path):
 
 @pytest.mark.parametrize("width, thickness", [(0.0, 3.0), (-1.0, 3.0), (float("inf"), 3.0),
                                               (float("nan"), 3.0), (60.0, 0.0),
-                                              (60.0, float("nan")), (True, 3.0)])
+                                              (60.0, float("nan")), (True, 3.0),
+                                              ("abc", 3.0), (None, 3.0), (60.0, True),
+                                              (60.0, "abc"), (60.0, None)])
 def test_bad_size_is_refused_and_nothing_written(selection_dir, tmp_path, width, thickness):
     with pytest.raises(FlatError, match="width_mm|thickness_mm"):
         make_flat(selection_dir, width, thickness, tmp_path / "out")
@@ -273,6 +277,30 @@ def test_repeat_runs_are_byte_identical_and_thickness_changes_the_id(run, select
 def test_golden_flat_id(run):
     # Pinned for roadie_like at 60 x 3 mm on bambu-a1. If a deliberate change to the flat
     # algorithm or its parameters moves this, bump FLAT_ALGORITHM_VERSION and re-pin.
+    # The second assertion tells the two causes apart: if it holds but the pin fails, the
+    # inputs (fixture, rules, profile) changed; if it fails, the identity's definition did.
     record, _ = run
-    assert record["flat_id"] == (
-        "3b5c21531b0781d4fd620e958cf6f8a6405694c54b9ed50949e60e9b95a11e5d")
+    identity = {"algorithm": record["algorithm"],
+                "mask_pixels_sha256": record["selection"]["mask_pixels_sha256"],
+                "params": record["params"]}
+    assert record["flat_id"] == hashlib.sha256(canonical_json(identity)).hexdigest()
+    assert record["flat_id"] == GOLDEN_FLAT_ID
+
+
+def tiny_triangle_limit(monkeypatch, limit=4):
+    rules = load_rules()
+    rule_id = "slicer.orca.max_triangles_per_plate"
+    rules[rule_id] = rules[rule_id].model_copy(update={"default": limit})
+    monkeypatch.setattr("tdmg.flat.load_rules", lambda: rules)
+
+
+def test_a_gate_fail_still_writes_every_file_with_the_verdict(selection_dir, tmp_path,
+                                                               monkeypatch):
+    tiny_triangle_limit(monkeypatch)
+    out = tmp_path / "out"
+    record = make_flat(selection_dir, 60.0, 3.0, out)
+    f5 = by_id(record)["F5.triangles"]
+    assert (f5["status"], f5["threshold"]) == ("FAIL", 4)
+    assert record["verdict"] == "NOT CERTIFIED"
+    assert sorted(p.name for p in out.iterdir()) == sorted(FILES)
+    assert json.loads((out / "flat.json").read_bytes()) == record
