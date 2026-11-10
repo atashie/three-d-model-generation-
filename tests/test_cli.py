@@ -197,7 +197,8 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
     assert (f"F3.thin_regions UNKNOWN - measured area_mm2={measured['area_mm2']:.4g}, "
             f"min_width_mm=0.9, pieces={measured['pieces']}; threshold 0.9: "
             "tapered tips always appear") in text
-    assert "F6.slicer UNKNOWN: no slicer integration yet" in text
+    assert ("F6.slicer UNKNOWN: not measured here: tdmg slice runs the pinned slicer and "
+            "the F6 checks") in text
     assert "F1." not in text                        # passing checks are not listed
     x, y, z = record["mesh"]["extents_mm"]
     assert f"{x:.2f} x {y:.2f} x {z:.2f} mm" in text

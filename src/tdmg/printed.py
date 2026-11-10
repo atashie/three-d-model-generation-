@@ -749,9 +749,10 @@ def _place(point) -> str:
 def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float,
               elephant_foot_mm: float,
               not_measured: str | None = None) -> tuple[list[CheckResult], dict]:
-    """F3.printed_connectivity and F3.edge_coverage, and the record's "printed" entry.
+    """The three F3 checks (F3.printed_connectivity, F3.edge_coverage, F3.edge_overprint)
+    and the record's "printed" entry.
 
-    The rule (the plan, Decision 2):
+    The rules (the plan, Decisions 2 and 2a):
     - F3.printed_connectivity PASSes when on every layer the parts and holes of the
       footprint match those of the model section one to one; otherwise it FAILs, naming
       the layers and where the unmatched parts or holes are.
@@ -763,7 +764,7 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
       lies farther than that same allowance outside the model region (overprint_points),
       and otherwise FAILs, naming the largest overprint. Plastic on a layer where the model
       has no section FAILs it.
-    Both are UNKNOWN, with the reason, when not_measured is given (the slicer failed), when
+    All three are UNKNOWN, with the reason, when not_measured is given (the slicer failed), when
     there is no G-code, when the G-code is unsupported, or when the analysis raises any
     other error (an "analysis error", never a PASS).
 

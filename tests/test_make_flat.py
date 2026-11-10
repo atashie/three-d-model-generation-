@@ -145,8 +145,10 @@ def test_roadie_record_contents(run, selection_dir):
         "model, removed by smoothing (flat.smooth.sigma_px, when on) or by the cleaning "
         "rules (flat.sliver.opening_width, flat.island.min_square_side); blue is outside "
         "the mask but in the model, added by smoothing. All three rules are untested "
-        "hypotheses. Smoothing and cleaning both round convex corners. The verdict stays "
-        "NOT CERTIFIED until F3 policy and slicer checks exist.")
+        "hypotheses. Smoothing and cleaning both round convex corners. The verdict here "
+        "stays NOT CERTIFIED: F3.thin_regions and F6.slicer are UNKNOWN until tdmg slice "
+        "measures F3 from the G-code (F3.printed_connectivity, F3.edge_coverage, "
+        "F3.edge_overprint) and runs the F6 checks.")
 
 
 def test_roadie_files_exist_and_record_is_canonical_with_lf(run):

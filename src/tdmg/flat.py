@@ -86,10 +86,15 @@ REVIEW = ("Open outline.png: grey is in the mask and kept; red is in the mask bu
           f"the model, removed by smoothing ({SMOOTH_RULE}, when on) or by the cleaning "
           f"rules ({OPENING_RULE}, {ISLAND_RULE}); blue is outside the mask but in the "
           "model, added by smoothing. All three rules are untested hypotheses. Smoothing "
-          "and cleaning both round convex corners. The verdict stays NOT CERTIFIED until "
-          "F3 policy and slicer checks exist.")
-# Every check the flat gate needs. F3 and F6 are UNKNOWN until their policy and slicer
-# integration exist, so the verdict is NOT CERTIFIED for now.
+          "and cleaning both round convex corners. The verdict here stays NOT CERTIFIED: "
+          "F3.thin_regions and F6.slicer are UNKNOWN until tdmg slice measures F3 from the "
+          "G-code (F3.printed_connectivity, F3.edge_coverage, F3.edge_overprint) and runs "
+          "the F6 checks.")
+# Every check the flat gate needs. Flat cannot measure F3.thin_regions or F6.slicer, so both
+# stay UNKNOWN and flat alone is always NOT CERTIFIED. tdmg slice inherits these checks,
+# replaces F6.slicer with its F6 checks, and judges F3 from the G-code with
+# F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint (F3.thin_regions is
+# information only there).
 FLAT_REQUIRED_CHECKS = F1_CHECK_IDS | {"F2.fits_build_volume", "F2.target_width",
                                        "F2.export_matches_geometry", "F3.thin_regions",
                                        "F4.body_count", "F5.triangles", "F6.slicer"}
@@ -405,8 +410,9 @@ def thin_region_check(parts: list[Polygon], rules: dict) -> CheckResult:
     threshold = rules[THIN_RULE].default
     return CheckResult("F3.thin_regions", "UNKNOWN", thin_regions(parts, threshold),
                        threshold, THIN_RULE,
-                       "tapered tips always appear; pass/fail policy pending research on "
-                       "slicer handling of narrow features")
+                       "tapered tips always appear; information only: tdmg slice judges "
+                       "thin features from the G-code with F3.printed_connectivity, "
+                       "F3.edge_coverage and F3.edge_overprint")
 
 
 def _signed_volume(mesh: trimesh.Trimesh) -> float:
@@ -518,8 +524,10 @@ def triangle_check(mesh: trimesh.Trimesh, rules: dict) -> CheckResult:
 
 
 def slicer_check() -> CheckResult:
-    """F6.slicer: UNKNOWN until a slicer is installed and wrapped."""
-    return CheckResult("F6.slicer", "UNKNOWN", None, None, None, "no slicer integration yet")
+    """F6.slicer: always UNKNOWN in flat; tdmg slice replaces it with its F6 checks."""
+    return CheckResult("F6.slicer", "UNKNOWN", None, None, None,
+                       "not measured here: tdmg slice runs the pinned slicer and the F6 "
+                       "checks")
 
 
 def flat_checks(mesh: trimesh.Trimesh, parts: list[Polygon], transform: dict,

@@ -612,8 +612,9 @@ def test_f3_thin_regions_is_unknown_with_the_measurement():
     assert check.rule == "fdm.wall.min_thickness"
     assert check.threshold == load_rules()["fdm.wall.min_thickness"].default == 0.9
     assert check.measured == thin_regions(parts, 0.9)
-    assert check.note == ("tapered tips always appear; pass/fail policy pending research on "
-                          "slicer handling of narrow features")
+    assert check.note == ("tapered tips always appear; information only: tdmg slice judges "
+                          "thin features from the G-code with F3.printed_connectivity, "
+                          "F3.edge_coverage and F3.edge_overprint")
 
 
 def test_f2_fits_build_volume_passes_and_fails():
@@ -690,8 +691,9 @@ def test_f5_triangles_pass_and_fail_with_a_tiny_limit():
 
 def test_f6_slicer_is_always_unknown():
     check = slicer_check()
-    assert (check.id, check.status, check.note) == ("F6.slicer", "UNKNOWN",
-                                                   "no slicer integration yet")
+    assert (check.id, check.status, check.note) == (
+        "F6.slicer", "UNKNOWN",
+        "not measured here: tdmg slice runs the pinned slicer and the F6 checks")
 
 
 def test_required_checks_are_f1_to_f6():

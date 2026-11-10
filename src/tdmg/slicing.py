@@ -9,8 +9,9 @@ research/verification/2026-11-10-orcaslicer-windows/ (README and its addendum):
   (allowed_layer_counts).
 
 F3 is measured from the G-code (tdmg.printed; docs/plans/2026-11-10-thin-wall-policy.md,
-Decision 2, approved by the owner): F3.printed_connectivity and F3.edge_coverage are
-required, and the flat record's F3.thin_regions is kept as information only.
+Decisions 2 and 2a, approved by the owner): F3.printed_connectivity, F3.edge_coverage and
+F3.edge_overprint are required, and the flat record's F3.thin_regions is kept as
+information only.
 
 Any required check that FAILs quarantines the G-code: it is written as
 plate_1.gcode.failed, never as plate_1.gcode. By default the whole app tree is verified
@@ -84,11 +85,14 @@ from tdmg.slicer import (
 )
 
 RECORD_SCHEMA = "tdmg.slice/1"
-# slice-2 (2026-11-10): F3.printed_connectivity and F3.edge_coverage, measured from the
-# G-code, are required, and F3.thin_regions is information only; the record has "printed".
-# The verdict for the same request can differ from slice-1's, so slice_id changes with it.
-# slice-1 required F3.thin_regions, which is always UNKNOWN. The method and constants of
-# tdmg.printed are part of this version: bump it when they change.
+# slice-2 (2026-11-10): F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint,
+# measured from the G-code by tdmg.printed, are required, and F3.thin_regions is
+# information only; the record has "printed", and slice_id's identity adds the F3
+# tolerance and elefant_foot_compensation values. slice-1 required F3.thin_regions, which
+# is always UNKNOWN, so the verdict for the same request can differ and slice_id changes.
+# All F3 work so far is one unpushed slice-2 (nothing after commit fdb6e67 was pushed), so
+# no slice-2 record exists with an earlier F3 method. The method and constants of
+# tdmg.printed are part of this version: bump it when they change after a push.
 SLICE_ALGORITHM_VERSION = "slice-2"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
@@ -98,8 +102,9 @@ SLICE_REQUIRED_EXTRA = frozenset({"F6.slicer_exit", "F6.gcode_present", "F6.laye
 THIN_REGIONS = "F3.thin_regions"
 SLICE_REQUIRED_CHECKS = ((FLAT_REQUIRED_CHECKS - {"F6.slicer", THIN_REGIONS})
                          | set(F3_SLICE_CHECK_IDS) | SLICE_REQUIRED_EXTRA)
-THIN_REGIONS_NOTE = ("information only in tdmg slice: F3.printed_connectivity and "
-                     "F3.edge_coverage judge thin features from the G-code")
+THIN_REGIONS_NOTE = ("information only in tdmg slice: F3.printed_connectivity, "
+                     "F3.edge_coverage and F3.edge_overprint judge thin features from the "
+                     "G-code")
 STATUSES = ("PASS", "FAIL", "UNKNOWN")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 # The command as recorded: placeholders, so the record holds no path from this machine.
@@ -111,12 +116,13 @@ REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or B
           "Studio's) and check the layers and the first layer. Time and weight are the "
           "slicer's estimates for the A1 0.20 mm Standard and PLA Basic profiles, not "
           "measurements. When any required check FAILs, the G-code is kept as "
-          f"{FAILED_GCODE_NAME}; do not print it. F3.printed_connectivity and "
-          "F3.edge_coverage compare what the G-code prints with the model, layer by layer "
-          "(printed records the layers); they model each line as a bead of its stated width "
-          "and do not judge strength. Every check of flat.json and of this run is required, "
-          "except F3.thin_regions, which is information only. While F6.portability has no "
-          "second slicer (PrusaSlicer), it stays UNKNOWN and the verdict is NOT CERTIFIED.")
+          f"{FAILED_GCODE_NAME}; do not print it. F3.printed_connectivity, "
+          "F3.edge_coverage and F3.edge_overprint compare what the G-code prints with the "
+          "model, layer by layer (printed records the layers); they model each line as a "
+          "bead of its stated width and do not judge strength. Every check of flat.json and "
+          "of this run is required, except F3.thin_regions, which is information only. "
+          "While F6.portability has no second slicer (PrusaSlicer), it stays UNKNOWN and the "
+          "verdict is NOT CERTIFIED.")
 
 
 def slicer_command(slicer: Slicer) -> list[str]:
