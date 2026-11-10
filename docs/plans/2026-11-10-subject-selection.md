@@ -17,7 +17,9 @@ in code. The owner's real images are checked only locally.
 **Tech Stack:** Python 3.13, numpy, OpenCV (`connectedComponents`), Pillow (EXIF
 orientation, PNG I/O), pydantic, Typer, pytest. All are already core dependencies.
 
-**Status:** written 2026-11-10; not started.
+**Status:** written and executed 2026-11-10; see "Execution notes" at the end. The code
+and `rules/perception.yaml` are the source of truth; the code blocks below are the
+original plan and differ from them where the notes say.
 
 **Conventions for the implementer:**
 - Each task's code shows new imports next to the code that needs them. Move them into
@@ -129,6 +131,7 @@ Create `rules/perception.yaml`:
       locator: "Oddie is one 8-connected piece at every alpha cutoff tested"
       provenance: primary
       validation: untested
+      # Superseded: the committed claim says only five cutoffs were tested (see notes).
       claim: On Oddie, cutoffs 1 to 255 all give one piece and change its area by 2.2%. 128 counts a pixel when it is at least half covered. Measured in software on one image; not a general result.
   notes: Adjustable with --alpha-min. It matters only for images with partly transparent pixels.
 
@@ -1056,3 +1059,33 @@ that CI passes on all three operating systems before calling the work verified.
   rule is added with evidence.
 - Joining multiple pieces. `multiple_pieces` is reported, and R1 decides what to do with
   it.
+
+## Execution notes (2026-11-10)
+
+Each task was implemented test-first by a subagent, then given a spec-compliance
+review and a code-quality review. Every finding was verified before it was applied.
+Changes from the plan text above:
+
+- **Rule claims:** the alpha claim overstated the evidence. Only five cutoffs (1, 64,
+  128, 192, 255) were tested. Both claims now say they are software measurements on one
+  image, and the rules stay `untested` as hypotheses. The notes say the ranges are the
+  full domains, not tested bands.
+- **Control ranges:** these are checked against the rule ranges read from the registry,
+  not repeated as constants. Points and `alpha_min` are strict integers. A tolerance
+  given without `--remove-at` is refused, and it is recorded only when a flood uses it.
+  Duplicate keep points are refused.
+- **Intake refusals:** intake refuses 16-bit greyscale or float images, multi-frame
+  files, and unreadable, truncated or oversized files. Masks must be opaque, strictly
+  black and white, and carry no EXIF rotation.
+- **Preview:** the plan's `_checker` returned an H × W × 1 array, which crashed the
+  preview. The preview now uses integer arithmetic. At 4000 × 4000 pixels, its peak
+  memory fell from about 2.6 GB to about 0.35 GB in review measurements.
+- **Write order:** outputs are encoded in memory and the record is built before
+  anything is written. PNGs are created exclusively, and `selection.json` is written
+  last, so a folder without it is incomplete.
+- **Provenance:** `Selection` is bound to its input's pixel hash. Its mask is
+  read-only, and the record is built from a snapshot. The record also lists the
+  library versions, outside the identity. A golden test pins `selection_id` for the
+  synthetic fixture.
+- **Independent review:** a Codex review is recorded in
+  `research/reviews/2026-11-10-selection/`.

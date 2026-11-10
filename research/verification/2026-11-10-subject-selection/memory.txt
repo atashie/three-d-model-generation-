@@ -1,0 +1,3 @@
+select_subject: 0.70 s, traced peak 565 MiB
+status one_piece selected_px 1257025
+write_selection: 1.56 s, traced peak 429 MiB

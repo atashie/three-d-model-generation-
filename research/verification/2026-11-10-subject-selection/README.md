@@ -113,3 +113,20 @@ The keep-point `470,470` is a red body pixel, RGB (249, 5, 7).
   tolerance 30. Oddie is selected correctly.
 
 This verifies subject selection only. No tracing, geometry, slicing or printing was done.
+
+## Memory and time at 4000 × 4000, 2026-11-10
+
+`measure_memory.py` → `memory.txt`, run at commit `33cbb52` on the same PC. The input is
+a synthetic image: a disc plus an ellipse "subject". The run uses one `--remove-at` and
+one `--keep-at`, and each stage was measured once.
+
+| Stage | Time | Traced peak |
+|---|---:|---:|
+| `select_subject` | 0.70 s | 565 MiB |
+| `write_selection` | 1.56 s | 429 MiB |
+
+tracemalloc traces allocations made through Python's allocator, which include numpy
+arrays. OpenCV and zlib internal buffers are not counted, so the true process peaks are
+higher. The 2.6 GB preview peak quoted in the plan's execution notes came from a review
+agent's earlier tracemalloc run, before the integer preview. That run is not
+reproducible from this record.

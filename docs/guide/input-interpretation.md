@@ -70,10 +70,17 @@ conversion formula.
    the Roadie exclusion must affect its input pixels or mask. **Not built.**
    `cutout.png` is the prepared image to send.
 5. Preserve the original image and text, the resolved selection, preparation
-   settings, mask, preview, prepared image and hashes in the run record. **Done.**
-   The cache identity (`selection_id`) covers the algorithm version, input pixels,
-   controls, user mask and instructions, so changed instructions or masks get a new
-   identity. `mask_pixels_sha256` identifies the mask alone.
+   settings, mask, preview, prepared image and hashes in the run record. **Partly
+   done.**
+   - **Recorded:** the instructions, resolved controls, mask, preview and prepared
+     image (`cutout.png`), plus their hashes.
+   - **Not copied:** the original image. The run records only its name and hashes, so
+     replaying a run needs the source image, and a moved or lost source can be
+     detected but not recovered.
+   - **Identity:** the cache identity (`selection_id`) covers the algorithm version,
+     input pixels, controls, user mask and instructions. Changed instructions or
+     masks therefore get a new identity. `mask_pixels_sha256` identifies the mask
+     alone.
 
 ## Implementation boundary
 
@@ -122,9 +129,11 @@ thin, disconnected or unsupported geometry. Both need inspection.
 
 ## Known limits
 
-- **Memory:** in review measurements at 4000 × 4000 pixels, peak memory was about
-  0.6 GB for the selection and 0.5 GB for writing the outputs. Larger photos have not
-  been measured.
+- **Memory:** on a synthetic 4000 × 4000 image, selection peaked at 565 MiB and
+  writing the outputs at 429 MiB. These are numpy allocations traced by tracemalloc;
+  OpenCV and zlib buffers are not counted. See `measure_memory.py` and `memory.txt` in
+  `research/verification/2026-11-10-subject-selection/`. Larger photos have not been
+  measured.
 - **Rare decoder errors:** some malformed files raise Pillow's own error messages
   instead of a `tdmg` error.
 - **Error naming:** error messages name the library fields (`alpha_min`) rather than

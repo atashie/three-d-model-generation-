@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-10: subject-selection implementation plan written (next steps, item 4); nothing implemented yet. Previous update 2026-11-09, after inspecting owner-supplied MakerLab STLs. Both pass the measured closed-topology tests but contain two bodies. Roadie's unwanted frame was removed in a separate derived STL. Plain-language subject interpretation added to the plan; implementation pending. Backend choice remains open.
+**Last updated:** 2026-11-10. Phase 1 has started. Subject selection (`tdmg select`, stages S0/S1) is implemented, reviewed, and run on the owner's images. The owner confirmed the Roadie and Oddie selections. Tracing and geometry (the rest of R1) are not started. The R4 backend choice remains open.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
 
@@ -8,10 +8,10 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 | Area | State |
 |---|---|
-| Research | Landscape report (v2.1) and seven historical source notes; Windows/TripoSR/MakerLab results in `research/experiments/2026-11-g3-local-vs-hosted/`. Independent reviews in `research/reviews/2026-11-09-codex/` and `research/reviews/2026-11-09-pc/` |
+| Research | Landscape report (v2.1) and seven historical source notes; Windows/TripoSR/MakerLab results in `research/experiments/2026-11-g3-local-vs-hosted/`. Independent reviews in `research/reviews/2026-11-09-codex/`, `research/reviews/2026-11-09-pc/` and `research/reviews/2026-11-10-selection/` |
 | Plan | `docs/PLAN.md` v2.1 adds plain-language image interpretation and a reviewable subject mask. The owner's decisions are in its section 13 |
-| Phase 0 (foundations) | **Baseline and Windows extension verified.** Package `tdmg`, 26 rules with checked citations, A1 printer profile and docs. Local checks and hosted CI pass on Windows, macOS and Linux |
-| Phase 1 (R1 flat single-color) | Not started |
+| Phase 0 (foundations) | **Baseline and Windows extension verified.** Package `tdmg`, 26 rules with checked citations (28 since Phase 1), A1 printer profile and docs. Local checks and hosted CI pass on Windows, macOS and Linux |
+| Phase 1 (R1 flat single-color) | **Started.** `tdmg select` (S0 intake and S1 subject selection) is implemented and tested. It ran on both owner images, and the owner confirmed the results. See `docs/guide/input-interpretation.md` and `research/verification/2026-11-10-subject-selection/`. Not started: tracing, extrusion, gates, slicing. |
 | Photo-to-3D backend (needed for R4) | TripoSR CPU test completed: ten measured runs, 32–35 seconds/model, 3.55–4.00 GiB peak working set. Repeated geometry matches exactly after sorting; OBJ bytes differ. All raw meshes fail topology checks; Roadie's background dominates its shape. See `research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md`. No backend chosen |
 
 ## Machines
@@ -23,8 +23,9 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
-Latest local pre-commit validation (2026-11-09): `uv sync --locked`, **135 tests
-passed**, `ruff check .`, generated-doc check and `git diff --check` passed.
+Latest local validation (2026-11-10, Windows PC): **251 tests passed**, `ruff check .`
+and the generated-doc check passed. CI has not yet run on the 2026-11-10 commits; they
+are pushed only with the owner's go-ahead.
 Earlier 133-test counts below are the original stack-verification record.
 
 ## Next steps, in order
@@ -42,15 +43,21 @@ Earlier 133-test counts below are the original stack-verification record.
 3. **Next: discuss local results and continue the option walk-through:**
    - option 4, renting a GPU: owner agrees it is unnecessary for now. Current-price walkthrough is in `research/experiments/2026-11-g3-local-vs-hosted/OPTION-4-GPU-RENTAL.md`. No spending or uploads.
    - option 5, Bambu MakerLab: owner supplied `Downloads/three-d-test/makersLabModels/oddie.stl` and `roadie.stl`. Both pass measured closed-topology tests, each has two bodies. Engine/cost/settings unknown; no slicing or printing verified. See `research/experiments/2026-11-g3-local-vs-hosted/MAKERLAB-RESULTS.md`. Derived `artifacts/makerlab/roadie-bird-only.stl` omits the disconnected frame and preserves the bird exactly; it remains a flat-backed relief.
-   - Owner requirement: accept plain-language interpretation such as "keep the roadrunner bird, ignore the grey background" before generation. Planned S0/S1 selection and cutout preview documented in `docs/guide/input-interpretation.md`; no interpreter implemented yet.
+   - Owner requirement: accept plain-language interpretation such as "keep the roadrunner bird, ignore the grey background" before generation. **Explicit selection is implemented as `tdmg select`** (text recorded verbatim; points or a mask apply it). `cutout.png` is the prepared input for any generator, including MakerLab. No language interpreter exists.
    - Await owner's assessment of whether Oddie's shape is worth refining; topology repairability is not yet measured.
 
    Then help the owner choose the R4 backend under their decision rule: a cheap standard service, around $1 per model, beats a homemade pipeline if it does everything we need.
 4. **Phase 1, R1 vertical slice,** as in `docs/PLAN.md` section 11. Its first test fixtures are the prototype defects listed in `research/verification/2026-11-08-stack-smoke/README.md` section 5.
-   - **2026-11-10: owner chose to start Phase 1 with subject selection (S0/S1).** The plan is `docs/plans/2026-11-10-subject-selection.md`, and it is not yet implemented. It adds `tdmg select`, where the user's words are recorded verbatim and code applies explicit `--remove-at`/`--keep-at` points or a corrected mask. Measurements behind its design are in `research/verification/2026-11-10-subject-selection/`:
-     - Roadie's disc is opaque, so its transparency does not isolate the bird.
-     - Removing the disc from one seed point, then keeping the bird piece, leaves one 74,768 px bird at tolerance 30.
-     - Oddie is one piece at every alpha cutoff.
+   - **2026-11-10: subject selection (S0/S1) is done.** The plan, `docs/plans/2026-11-10-subject-selection.md`, is executed, with execution notes. The command:
+     - `tdmg select IMAGE --out DIR [--instructions TEXT] [--remove-at X,Y]... [--keep-at X,Y]... [--tolerance T] [--alpha-min A] [--mask FILE]`.
+     - It writes `mask.png`, `cutout.png`, `preview.png` and `selection.json` (with hashes, `selection_id`, library versions, and `machine_interpreted: false`).
+   - Results on the owner's images (in the git-ignored `artifacts/selection-runs/`):
+     - Roadie at tolerance 30 gives one 74,768 px bird.
+     - Oddie, from its own transparency, gives one 298,172 px piece.
+     - The counts equal the planning measurements, and a repeated run was byte-identical.
+     - The owner confirmed both selections.
+   - **Reviews:** each task had a spec review and a code-quality review; then an independent Codex review found 7 issues. All were verified and fixed; see `research/reviews/2026-11-10-selection/README.md`.
+   - **Next R1 step, not started:** trace `mask.png` into outlines (using rule `vectorize.opencv.contour_offset_px`), then normalize, extrude, base and loop, write STL/3MF, run the final gate and slice in Orca. Write a plan for it first. OrcaSlicer is not yet installed or verified on the PC.
    - Owner images are not committed until their rights are confirmed; the tests use synthetic look-alikes.
 
 ## Open questions for the owner
@@ -75,19 +82,20 @@ The full list is in `docs/PLAN.md` section 13.
 - **Roadmap order:** R1 → R2 → R3 → R4. A command-line tool and Python library first.
 - **Photo-to-3D:** local is preferred. Hosted models are fine to try, and most work will be simple objects.
 - **GPU rental:** unnecessary for now, per owner.
-- **Interpretation:** user wants plain-language subject/exclusion instructions; keep Roadie's bird and ignore its grey background. Planned, not implemented. No change to default no-LLM runtime policy.
+- **Interpretation:** user wants plain-language subject/exclusion instructions; keep Roadie's bird and ignore its grey background. Implemented as explicit selection (`tdmg select`): text is recorded verbatim, and points or a mask apply it. No change to default no-LLM runtime policy.
+- **First R1 step:** subject selection first (2026-11-10). Interpretation via explicit controls was accepted; a phrase grammar or opt-in LLM can come later.
 
 ## Compaction handoff
 
-- **Immediate user instruction:** documentation and experiment records committed
-  and pushed (`c93f82a`, `cc331ad`); compaction handoff prepared. Do not start a new experiment or choose the next
-  implementation step; discuss that with the owner after the handoff.
-- **Release verification:** all three GitHub Actions jobs passed for `cc331ad`
-  (run linked above), including the new Windows job. Windows core acceptance is
-  complete; optional-package failures and experimental backend limits still apply.
+- **Latest session (2026-11-10):** the owner chose to start Phase 1 with subject
+  selection. It was planned, implemented by subagents with two reviews per task,
+  reviewed by Codex, and run on the owner's images, and the owner accepted the result.
+  Commits are local on `main`; pushing needs the owner's go-ahead.
+- **Release verification:** all three GitHub Actions jobs passed for `cc331ad`. The
+  2026-11-10 commits have not yet been through CI.
 - **Start next session:** read `CLAUDE.md`, this page, then `docs/PLAN.md` and
-  `docs/guide/input-interpretation.md`. The pipeline/CLI currently has foundations
-  only; no production image-generation command or language interpreter exists.
+  `docs/guide/input-interpretation.md`. The CLI has `select`; there is no tracing,
+  geometry or generation command yet, and no language interpreter.
 - **Evidence:** read `RESULTS-PC.md` and `MAKERLAB-RESULTS.md` in the experiment
   directory. Local TripoSR: fast, repeatable geometry, invalid raw topology.
   MakerLab: both supplied meshes pass measured closed-topology checks but each
