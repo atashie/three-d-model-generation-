@@ -19,6 +19,7 @@ import math
 import numpy as np
 import shapely
 from shapely import affinity
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
 QUAD_SEGS = 8  # Buffer arcs per quarter circle. Chord error is r*(1-cos(pi/32)), about
                # 0.001 mm at r = 0.2 mm, far below a layer. An approximation setting.
@@ -68,3 +69,67 @@ def to_model(outline, width_mm: float) -> tuple[shapely.Geometry, dict]:
     transform = {"scale_mm_per_px": s, "x0_px": x0, "y1_px": y1,
                  "mask_width_px": x1 - x0, "mask_height_px": y1 - y0}
     return model, transform
+
+
+def _require_non_negative(name: str, value: float) -> float:
+    value = float(value)
+    if not math.isfinite(value) or value < 0:
+        raise FlatError(f"{name} must be a finite number of at least 0, got {value}")
+    return value
+
+
+def _polygons(geom) -> tuple[list[Polygon], int]:
+    """Polygons in geom, read recursively, and the count of non-polygonal parts skipped."""
+    if geom.is_empty:
+        return [], 0
+    if isinstance(geom, Polygon):
+        return [geom], 0
+    if isinstance(geom, (MultiPolygon, GeometryCollection)):
+        found, skipped = [], 0
+        for sub in geom.geoms:
+            polys, n = _polygons(sub)
+            found.extend(polys)
+            skipped += n
+        return found, skipped
+    return [], 1
+
+
+def _order_key(part: Polygon) -> tuple:
+    return (-part.area, part.bounds)
+
+
+def clean(geom_mm, opening_mm: float, min_island_mm2: float) -> tuple[list[Polygon], dict]:
+    """Open by opening_mm (round joins, QUAD_SEGS); split into polygons; drop small parts.
+
+    Returns the parts, largest first, and a report {opening_mm, min_island_mm2,
+    area_before_mm2, area_after_mm2, removed_area_mm2, hausdorff_mm, dropped_islands}.
+    Lines and points in the input are not printable area; if any appear they are
+    skipped and counted as ignored_non_polygonal.
+    """
+    opening_mm = _require_non_negative("opening_mm", opening_mm)
+    min_island_mm2 = _require_non_negative("min_island_mm2", min_island_mm2)
+    polys, skipped = _polygons(geom_mm)
+    before = shapely.union_all(polys)
+    radius = opening_mm / 2
+    opened = before.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
+    candidates, _ = _polygons(opened)
+    candidates.sort(key=_order_key)
+    parts = [p for p in candidates if p.area >= min_island_mm2]
+    dropped = sorted((float(p.area) for p in candidates if p.area < min_island_mm2),
+                     reverse=True)
+    after = shapely.union_all(parts)
+    area_before = float(before.area)
+    area_after = float(sum(p.area for p in parts))
+    report = {"opening_mm": opening_mm, "min_island_mm2": min_island_mm2,
+              "area_before_mm2": area_before, "area_after_mm2": area_after,
+              "removed_area_mm2": area_before - area_after,
+              "hausdorff_mm": (None if after.is_empty
+                               else float(shapely.hausdorff_distance(before, after))),
+              "dropped_islands": dropped}
+    if skipped:
+        report["ignored_non_polygonal"] = skipped
+    if not parts:
+        raise FlatError("nothing printable remains after cleaning (removed "
+                        f"{report['removed_area_mm2']:.6g} mm^2 of "
+                        f"{area_before:.6g} mm^2)")
+    return parts, report
