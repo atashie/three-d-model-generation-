@@ -114,6 +114,10 @@ def select(
     except SelectionError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
+    except OSError as e:              # unreadable input, unwritable output, disk full ...
+        where = f": {e.filename}" if e.filename else ""
+        typer.echo(f"error: {e.strerror or e}{where}", err=True)
+        raise typer.Exit(2) from None
     r = rec["result"]
     typer.echo(f"status {r['status']}: {r['selected_px']} px in {len(r['pieces_px'])} piece(s), "
                f"{len(r['holes_px'])} hole(s)")

@@ -1,3 +1,4 @@
+import dataclasses
 import json
 
 import numpy as np
@@ -18,13 +19,17 @@ from selection_fixtures import (
     two_subjects,
 )
 
+import tdmg.selection as selection_module
 from tdmg.rules import load_rules
 from tdmg.selection import (
+    CHECKER_CELL_PX,
     CHECKER_SHADES,
     REMOVED_TINT,
     Intake,
     SelectionError,
     SelectionSpec,
+    _preview,
+    _result,
     load_image,
     load_mask,
     pixels_sha256,
@@ -466,6 +471,11 @@ SPEC = SelectionSpec(instructions="Use only the bird.", remove_at=(DISC_SEED,),
                      keep_at=(BIRD_SEED,))
 
 
+def _png(path):
+    with Image.open(path) as im:
+        return np.asarray(im).copy()
+
+
 def _run(tmp_path, name, spec=SPEC):
     sel = select_subject(_intake(roadie_like()), spec)
     return write_selection(_intake(roadie_like()), sel, tmp_path / name)
@@ -476,9 +486,9 @@ def test_outputs_and_record(tmp_path):
     out = tmp_path / "a"
     assert sorted(p.name for p in out.iterdir()) == [
         "cutout.png", "mask.png", "preview.png", "selection.json"]
-    mask = np.asarray(Image.open(out / "mask.png"))
+    mask = _png(out / "mask.png")
     assert set(np.unique(mask)) <= {0, 255}
-    cut = np.asarray(Image.open(out / "cutout.png"))
+    cut = _png(out / "cutout.png")
     assert (cut[mask == 0] == 0).all() and (cut[mask == 255][:, 3] == 255).all()
     on_disk = json.loads((out / "selection.json").read_text(encoding="utf-8"))
     assert on_disk == rec
@@ -489,7 +499,7 @@ def test_outputs_and_record(tmp_path):
 
 def test_cutout_keeps_original_pixels_where_selected(tmp_path):
     _run(tmp_path, "a")
-    cut = np.asarray(Image.open(tmp_path / "a" / "cutout.png"))
+    cut = _png(tmp_path / "a" / "cutout.png")
     assert (cut[BIRD_SEED[1], BIRD_SEED[0]] == roadie_like()[BIRD_SEED[1], BIRD_SEED[0]]).all()
 
 
@@ -561,17 +571,35 @@ def test_writes_into_an_existing_empty_folder(tmp_path):
 def test_preview_shows_original_and_result_side_by_side(tmp_path):
     _run(tmp_path, "a")
     img = roadie_like()
-    prev = np.asarray(Image.open(tmp_path / "a" / "preview.png"))
+    prev = _png(tmp_path / "a" / "preview.png")
     h, w = img.shape[:2]
     assert prev.shape == (h, 2 * w, 3)
     left, right = prev[:, :w], prev[:, w:]
     bx, by = BIRD_SEED
     assert (right[by, bx] == img[by, bx, :3]).all() and (left[by, bx] == img[by, bx, :3]).all()
     dx, dy = DISC_SEED
-    blend = np.rint(0.5 * np.array(DISC) + 0.5 * REMOVED_TINT).astype(np.uint8)
+    blend = (np.array(DISC) + REMOVED_TINT + 1) // 2           # (156, 23, 148)
     assert (right[dy, dx] == blend).all() and (left[dy, dx] == DISC).all()
     assert img[0, 0, 3] == 0
     assert (left[0, 0] == CHECKER_SHADES[1]).all() and (right[0, 0] == CHECKER_SHADES[1]).all()
+
+
+def test_preview_of_semi_transparent_pixels_uses_integer_compositing():
+    rgba = np.array([[[255, 0, 0, 128], [255, 0, 0, 128]]], np.uint8)
+    prev = _preview(rgba, np.array([[True, False]]))
+    bg = CHECKER_SHADES[1]
+    over = (np.array([255, 0, 0]) * 128 + bg * 127 + 127) // 255     # (245, 117, 117)
+    assert prev.dtype == np.uint8 and prev.shape == (1, 4, 3)
+    assert (prev[0, 0] == over).all() and (prev[0, 1] == over).all()
+    assert (prev[0, 2] == (255, 0, 0)).all()                         # kept: opaque, as in cutout
+    assert (prev[0, 3] == (over + REMOVED_TINT + 1) // 2).all()      # removed: 50/50 tint
+
+
+def test_checker_alternates_cells():
+    prev = _preview(np.zeros((1, CHECKER_CELL_PX * 2, 4), np.uint8),
+                    np.zeros((1, CHECKER_CELL_PX * 2), bool))
+    assert (prev[0, 0] == CHECKER_SHADES[1]).all()
+    assert (prev[0, CHECKER_CELL_PX] == CHECKER_SHADES[0]).all()
 
 
 def test_mask_mode_record_carries_the_mask_hash(tmp_path):
@@ -586,3 +614,69 @@ def test_mask_mode_record_carries_the_mask_hash(tmp_path):
     assert r1["controls"]["user_mask_sha256"] == pixels_sha256(m1)
     assert r1["controls"]["source"] == "user_mask"
     assert r1["selection_id"] != r2["selection_id"]
+
+
+def test_golden_selection_id_and_mask_hash(tmp_path):
+    # If this changes, bump ALGORITHM_VERSION or RECORD_SCHEMA deliberately and record why.
+    rec = _run(tmp_path, "a")
+    assert rec["selection_id"] == (
+        "cba5b8f6d4024379ad112ea712b4143195e8119a1cc85a7ca806cd1f18013b99")
+    assert rec["mask_pixels_sha256"] == (
+        "77a35a4fb711d8c04d5ad06339add6cdf1943e439278ad4a0d5d8cc7d6688e4f")
+
+
+def test_unencodable_instructions_write_nothing(tmp_path):
+    spec = SPEC.model_copy(update={"instructions": "a\udcff"})
+    with pytest.raises(SelectionError, match="instructions"):
+        _run(tmp_path, "a", spec)
+    assert not (tmp_path / "a").exists()
+
+
+def test_selection_from_another_image_is_refused(tmp_path):
+    sel = select_subject(_intake(roadie_like()), SPEC)
+    other = roadie_like()
+    other[0, 0] = (1, 2, 3, 4)
+    with pytest.raises(SelectionError, match="different image"):
+        write_selection(_intake(other), sel, tmp_path / "a")
+    assert not (tmp_path / "a").exists()
+
+
+def test_selections_are_frozen():
+    sel = select_subject(_intake(roadie_like()), SPEC)
+    assert sel.input_pixels_sha256 == pixels_sha256(roadie_like())
+    with pytest.raises(ValueError, match="read-only"):
+        sel.mask[0, 0] = True
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        sel.mask = np.zeros((200, 200), bool)
+    m = np.ones((200, 200), bool)
+    from_mask = select_from_mask(_intake(roadie_like()), m, SelectionSpec())
+    m[0, 0] = False                                  # the caller's array stays independent
+    assert from_mask.mask[0, 0] and not from_mask.mask.flags.writeable
+    assert from_mask.input_pixels_sha256 == pixels_sha256(roadie_like())
+
+
+def test_environment_is_recorded_but_not_part_of_the_id(tmp_path, monkeypatch):
+    a = _run(tmp_path, "a")
+    assert set(a["environment"]) == {"python", "numpy", "pillow", "opencv", "zlib"}
+    monkeypatch.setattr(selection_module, "_environment", lambda: {"python": "0.0"})
+    b = _run(tmp_path, "b")
+    assert b["environment"] == {"python": "0.0"}
+    assert b["selection_id"] == a["selection_id"]
+
+
+def test_empty_selection_warns():
+    sel = select_subject(_intake(empty()), SelectionSpec())
+    assert "nothing selected" in sel.result["warnings"]
+
+
+def test_result_does_not_change_its_warnings_argument():
+    warnings = []
+    mask = np.zeros((5, 5), bool)
+    mask[0, 0] = mask[4, 4] = True
+    res = _result(mask, warnings)
+    assert warnings == [] and len(res["warnings"]) == 1
+
+
+def test_no_temporary_record_is_left_behind(tmp_path):
+    _run(tmp_path, "a")
+    assert not [p for p in (tmp_path / "a").iterdir() if p.name.startswith(".")]

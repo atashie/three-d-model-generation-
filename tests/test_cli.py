@@ -50,7 +50,18 @@ def test_select_writes_a_reviewable_selection(tmp_path):
     assert rec["selection_id"] in result.output
     assert rec["input"]["name"] == "roadie_like.png"
     assert rec["interpretation"]["text"] == "Use only the bird."
-    assert np.asarray(Image.open(out / "mask.png")).max() == 255
+    with Image.open(out / "mask.png") as im:
+        assert np.asarray(im).max() == 255
+
+
+def test_select_reports_os_errors_without_a_traceback(tmp_path):
+    img = _img(tmp_path, roadie_like())
+    (tmp_path / "file.txt").write_text("not a folder")
+    out = tmp_path / "file.txt" / "sel"
+    r = runner.invoke(app, ["select", str(img), "--out", str(out)])
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and "file.txt" in r.stderr
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
 
 
 def test_select_rejects_bad_points(tmp_path):
