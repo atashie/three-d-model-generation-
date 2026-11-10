@@ -2,11 +2,30 @@
 
 import hashlib
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 from tdmg.paths import REPO_ROOT
-from tdmg.slicer import PIN_ID, SlicerError, load_pin, verify_install
+from tdmg.slicer import (
+    GCODE_NAME,
+    PIN_ID,
+    STATS_NAME,
+    SlicerError,
+    decode_exit,
+    expected_layers,
+    f6_checks,
+    gcode_hashes,
+    load_pin,
+    locate,
+    parse_statistics,
+    platform_key,
+    run_slicer,
+    slicer_args,
+    verify_install,
+)
 
 RECORD = REPO_ROOT / "research" / "verification" / "2026-11-10-orcaslicer-windows"
 PIN = load_pin()
@@ -125,3 +144,293 @@ def test_verify_install_refuses_a_missing_file(tmp_path):
     (folder / pin.profiles.folder / "filament.json").unlink()
     with pytest.raises(SlicerError, match="filament.json.*missing"):
         verify_install(folder, pin)
+
+
+# --- Locating the slicer ----------------------------------------------------------------
+
+def test_locate_needs_a_folder(monkeypatch):
+    monkeypatch.delenv("TDMG_ORCASLICER_DIR", raising=False)
+    with pytest.raises(SlicerError, match="--slicer-dir.*TDMG_ORCASLICER_DIR.*setup_orcaslicer"):
+        locate(None)
+
+
+def test_locate_from_the_argument_or_the_environment(tmp_path, monkeypatch):
+    pin = _pin_for(b"exe", FILES)
+    folder = _fake_install(tmp_path, pin)
+    monkeypatch.delenv("TDMG_ORCASLICER_DIR", raising=False)
+    found = locate(folder, pin)
+    assert found.exe == folder / "app" / "orca-slicer.exe"
+    assert found.profiles == {k: folder / "profiles-flat" / f"{k}.json"
+                              for k in ("machine", "process", "filament")}
+    assert found.verified["exe_sha256"] == pin.exe.sha256
+    monkeypatch.setenv("TDMG_ORCASLICER_DIR", str(folder))
+    assert locate(None, pin) == found
+
+
+def test_locate_refuses_a_hash_mismatch(tmp_path, monkeypatch):
+    pin = _pin_for(b"exe", FILES)
+    folder = _fake_install(tmp_path, pin, exe=b"a different build")
+    monkeypatch.setenv("TDMG_ORCASLICER_DIR", str(folder))
+    with pytest.raises(SlicerError, match="does not match the pin"):
+        locate(None, pin)
+
+
+def test_locate_refuses_a_folder_that_does_not_exist(tmp_path):
+    with pytest.raises(SlicerError, match="not a folder"):
+        locate(tmp_path / "nowhere")
+
+
+# --- Exit codes -------------------------------------------------------------------------
+
+def test_decode_exit_windows_is_unsigned_32_bit():
+    # The three nonzero codes measured on Windows (research record, results.txt).
+    for raw, signed, name in ((4294967246, -50, "CLI_NO_SUITABLE_OBJECTS"),
+                              (4294967290, -6, "CLI_DATA_FILE_ERROR"),
+                              (4294967293, -3, "CLI_FILE_NOTFOUND"), (0, 0, "CLI_SUCCESS")):
+        got = decode_exit(raw, "windows")
+        assert (got["raw"], got["signed"], got["name"]) == (raw, signed, name)
+        assert got["decoding"] == {"platform": "windows", "rule": "unsigned32",
+                                   "status": "measured",
+                                   "source": PIN.decoding["windows"].source}
+
+
+def test_decode_exit_posix_is_low_8_bits_and_assumed():
+    # CLAUDE.md (M5 notes): -50 -> 206, -51 -> 205, -59 -> 197.
+    for raw, signed, name in ((206, -50, "CLI_NO_SUITABLE_OBJECTS"),
+                              (205, -51, "CLI_VALIDATE_ERROR"),
+                              (197, -59, "CLI_TRIANGLE_COUNT_EXCEEDS_LIMIT")):
+        got = decode_exit(raw, "posix")
+        assert (got["raw"], got["signed"], got["name"]) == (raw, signed, name)
+        assert (got["decoding"]["rule"], got["decoding"]["status"]) == ("low8", "assumed")
+
+
+def test_decode_exit_unknown_codes_signals_and_bad_values():
+    assert decode_exit(2**32 - 30, "windows") == {
+        "raw": 2**32 - 30, "signed": -30, "name": None,
+        "decoding": decode_exit(0, "windows")["decoding"]}
+    assert decode_exit(2**32 - 100, "windows")["name"] == "CLI_SLICING_ERROR"
+    killed = decode_exit(-9, "posix")
+    assert (killed["signed"], killed["name"]) == (None, "killed by signal 9")
+    for raw, plat in ((2**32, "windows"), (-1, "windows"), (256, "posix")):
+        with pytest.raises(SlicerError, match="out of range"):
+            decode_exit(raw, plat)
+    with pytest.raises(SlicerError, match="platform"):
+        decode_exit(0, "amiga")
+    assert platform_key() == ("windows" if sys.platform == "win32" else "posix")
+
+
+# --- Layers and statistics ----------------------------------------------------------------
+
+# The two keys and their values in the flattened A1 process profile
+# (artifacts/tools/orcaslicer-2.5.0/profiles-flat/process.json, read 2026-11-10):
+# "layer_height": "0.2", "initial_layer_print_height": "0.2". Hard-coded because CI does
+# not have the file; test_expected_layers_with_the_local_profile reads it when present.
+A1_PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2"}
+LOCAL_PROCESS = (REPO_ROOT / "artifacts" / "tools" / "orcaslicer-2.5.0" / "profiles-flat"
+                 / "process.json")
+
+
+def test_expected_layers_for_the_a1_profile():
+    # The 20 mm cube sliced into 100 layers and the 3 mm models into 15 (research record).
+    assert expected_layers(20, A1_PROCESS) == 100
+    assert expected_layers(3, A1_PROCESS) == 15
+    assert expected_layers(0.2, A1_PROCESS) == 1
+    assert expected_layers(3, {"layer_height": "0.1", "initial_layer_print_height": "0.3"}) == 28
+
+
+@pytest.mark.skipif(not LOCAL_PROCESS.is_file(), reason="no local OrcaSlicer install")
+def test_expected_layers_with_the_local_profile():
+    process = json.loads(LOCAL_PROCESS.read_text(encoding="utf-8"))
+    assert {k: process[k] for k in A1_PROCESS} == A1_PROCESS
+    assert expected_layers(20, process) == 100
+
+
+def test_expected_layers_refuses_bad_input():
+    with pytest.raises(SlicerError, match="layer_height"):
+        expected_layers(3, {"initial_layer_print_height": "0.2"})
+    with pytest.raises(SlicerError, match="positive"):
+        expected_layers(3, {"layer_height": "0", "initial_layer_print_height": "0.2"})
+    with pytest.raises(SlicerError, match="thinner than the first layer"):
+        expected_layers(0.1, A1_PROCESS)
+
+
+def _stats(path, layers=100, objects=1, units=None):
+    data = {"generator": "OrcaSlicer 2.5.0",
+            "units": units or {"time": "s", "length": "mm", "volume": "mm3", "weight": "g"},
+            "summary": {"time": 766.104, "layer_count": layers, "volume": 2957.692,
+                        "weight": 3.7267},
+            "objects": [{"name": f"o{i}"} for i in range(objects)]}
+    path.write_bytes(json.dumps(data).encode())
+    return path
+
+
+def test_parse_statistics(tmp_path):
+    got = parse_statistics(_stats(tmp_path / STATS_NAME, objects=2))
+    assert got == {"generator": "OrcaSlicer 2.5.0", "layer_count": 100, "time_s": 766.104,
+                   "volume_mm3": 2957.692, "weight_g": 3.7267, "objects": ["o0", "o1"]}
+
+
+def test_parse_statistics_refuses_other_units_or_a_bad_file(tmp_path):
+    with pytest.raises(SlicerError, match="units"):
+        parse_statistics(_stats(tmp_path / "a.json", units={"time": "min"}))
+    (tmp_path / "b.json").write_bytes(b"{not json")
+    with pytest.raises(SlicerError, match="b.json"):
+        parse_statistics(tmp_path / "b.json")
+    units = {"time": "s", "length": "mm", "volume": "mm3", "weight": "g"}
+    (tmp_path / "c.json").write_bytes(json.dumps({"units": units, "summary": {}}).encode())
+    with pytest.raises(SlicerError, match="layer_count"):
+        parse_statistics(tmp_path / "c.json")
+
+
+# --- Running the (fake) slicer --------------------------------------------------------
+
+FAKE = [sys.executable, str(REPO_ROOT / "tests" / "fake_orca.py")]
+
+
+def _setup_run(tmp_path, **control):
+    for kind in ("machine", "process", "filament"):
+        (tmp_path / f"{kind}.json").write_bytes(b"{}")
+    profiles = {k: tmp_path / f"{k}.json" for k in ("machine", "process", "filament")}
+    stl = tmp_path / "model.stl"
+    stl.write_bytes(b"solid x\nendsolid x\n")
+    (tmp_path / "model.fake.json").write_bytes(json.dumps(control).encode())
+    work = tmp_path / "work"
+    work.mkdir()
+    return stl, profiles, work
+
+
+def _run(tmp_path, timeout=60, **control):
+    stl, profiles, work = _setup_run(tmp_path, **control)
+    run = run_slicer(FAKE, stl, profiles, work, timeout)
+    return run, f6_checks(run, expected=100)
+
+
+def _by_id(checks):
+    return {c.id: c for c in checks}
+
+
+def test_slicer_args_are_the_measured_form():
+    p = {k: Path(f"/p/{k}.json") for k in ("machine", "process", "filament")}
+    assert slicer_args(Path("/m.stl"), p, Path("/w/out"), Path("/w/slicer.log")) == [
+        str(Path("/m.stl")), "--load-settings",
+        f"{p['machine']};{p['process']}", "--load-filaments", str(p["filament"]),
+        "--slice", "0", "--outputdir", str(Path("/w/out")), "--export-statistics",
+        "--logfile", str(Path("/w/slicer.log"))]
+
+
+def test_success_passes_every_measured_f6_check(tmp_path):
+    run, (checks, stats) = _run(tmp_path)
+    assert run.returncode == 0 and not run.timed_out
+    assert run.args[:len(FAKE)] == FAKE
+    assert sorted(p.name for p in run.out_dir.iterdir()) == [GCODE_NAME, STATS_NAME]
+    status = {c.id: c.status for c in checks}
+    assert status == {"F6.slicer_exit": "PASS", "F6.gcode_present": "PASS",
+                      "F6.layer_count": "PASS", "F6.single_object": "PASS",
+                      "F6.portability": "UNKNOWN"}
+    by = _by_id(checks)
+    assert by["F6.layer_count"].measured == 100 and by["F6.layer_count"].threshold == 100
+    assert by["F6.slicer_exit"].measured["name"] == "CLI_SUCCESS"
+    assert "PrusaSlicer" in by["F6.portability"].note
+    assert stats["layer_count"] == 100 and stats["objects"] == ["m0"]
+
+
+def test_a_nonzero_exit_is_decoded_on_this_platform(tmp_path):
+    run, (checks, stats) = _run(tmp_path, exit=-50, gcode=False, stats=False, log=True)
+    # sys.exit(-50) reaches the parent as the platform's encoding of -50.
+    assert run.returncode == (2**32 - 50 if platform_key() == "windows" else 206)
+    by = _by_id(checks)
+    assert by["F6.slicer_exit"].status == "FAIL"
+    assert by["F6.slicer_exit"].measured["signed"] == -50
+    assert "CLI_NO_SUITABLE_OBJECTS" in by["F6.slicer_exit"].note
+    assert by["F6.gcode_present"].status == "FAIL"
+    # Nothing to measure after a failed slice: not a second failure, just unknown.
+    assert by["F6.layer_count"].status == "UNKNOWN"
+    assert by["F6.single_object"].status == "UNKNOWN"
+    assert stats is None and run.log_path.is_file()
+
+
+def test_missing_gcode_fails(tmp_path):
+    _, (checks, _) = _run(tmp_path, gcode=False)
+    by = _by_id(checks)
+    assert by["F6.slicer_exit"].status == "PASS"
+    assert by["F6.gcode_present"].status == "FAIL"
+    assert by["F6.gcode_present"].measured == {"file": GCODE_NAME, "bytes": None}
+
+
+def test_missing_statistics_after_a_clean_exit_fail(tmp_path):
+    _, (checks, stats) = _run(tmp_path, stats=False)
+    by = _by_id(checks)
+    assert by["F6.layer_count"].status == "FAIL" and by["F6.single_object"].status == "FAIL"
+    assert "statistics" in by["F6.layer_count"].note and stats is None
+
+
+def test_a_truncated_print_fails_the_layer_count(tmp_path):
+    # The open-mesh cube: exit 0, both files, but 10 layers instead of 100.
+    _, (checks, _) = _run(tmp_path, layers=10)
+    by = _by_id(checks)
+    assert by["F6.slicer_exit"].status == "PASS"
+    assert by["F6.layer_count"].status == "FAIL"
+    assert (by["F6.layer_count"].measured, by["F6.layer_count"].threshold) == (10, 100)
+
+
+def test_two_objects_fail_single_object(tmp_path):
+    _, (checks, _) = _run(tmp_path, objects=2)
+    by = _by_id(checks)
+    assert by["F6.single_object"].status == "FAIL"
+    assert by["F6.single_object"].measured == 2
+
+
+def test_a_slow_slicer_is_stopped_at_the_timeout(tmp_path):
+    run, (checks, stats) = _run(tmp_path, timeout=0.5, sleep=30)
+    assert run.timed_out and run.returncode is None
+    by = _by_id(checks)
+    assert by["F6.slicer_exit"].status == "FAIL"
+    assert by["F6.slicer_exit"].rule == "slicer.orca.timeout_s"
+    assert "0.5 s" in by["F6.slicer_exit"].note
+    assert by["F6.layer_count"].status == "UNKNOWN" and stats is None
+
+
+def test_the_fake_refuses_another_argument_form(tmp_path):
+    # The fake checks the form, so the tests above prove run_slicer used the measured one.
+    stl, _, _ = _setup_run(tmp_path)
+    r = subprocess.run([*FAKE, str(stl), "--slice", "0"], check=False)
+    assert decode_exit(r.returncode, platform_key())["signed"] == -2
+
+
+def test_run_slicer_refuses_a_missing_program(tmp_path):
+    stl, profiles, work = _setup_run(tmp_path)
+    with pytest.raises(SlicerError, match="cannot start"):
+        run_slicer([str(tmp_path / "no-such.exe")], stl, profiles, work, 10)
+
+
+def test_run_slicer_needs_an_empty_work_folder(tmp_path):
+    stl, profiles, work = _setup_run(tmp_path)
+    (work / "stale").write_bytes(b"")
+    with pytest.raises(SlicerError, match="empty"):
+        run_slicer(FAKE, stl, profiles, work, 10)
+
+
+# --- G-code hash ------------------------------------------------------------------------
+
+def test_gcode_hash_ignores_only_the_generated_line():
+    a = b"; HEADER_BLOCK_START\n; generated by OrcaSlicer 2.5.0 on 2026-11-10 at 12:46:23\nG28\n"
+    b = b"; HEADER_BLOCK_START\n; generated by OrcaSlicer 2.5.0 on 2026-11-11 at 08:00:00\nG28\n"
+    ha, hb = gcode_hashes(a), gcode_hashes(b)
+    assert ha["sha256"] != hb["sha256"]
+    assert ha["normalised_sha256"] == hb["normalised_sha256"]
+    assert ha["normalised_lines"] == 1
+    assert ha["normalised_sha256"] == hashlib.sha256(b"; HEADER_BLOCK_START\n\nG28\n").hexdigest()
+    # Any other change still changes the normalised hash.
+    c = a.replace(b"G28", b"G29")
+    assert gcode_hashes(c)["normalised_sha256"] != ha["normalised_sha256"]
+    # Only the first such line is blanked, and a file without one is hashed as it is.
+    twice = a + b"; generated by X at Y\n"
+    assert gcode_hashes(twice)["normalised_lines"] == 1
+    assert gcode_hashes(twice)["normalised_sha256"] != ha["normalised_sha256"]
+    plain = gcode_hashes(b"G28\n")
+    assert plain["normalised_lines"] == 0 and plain["normalised_sha256"] == plain["sha256"]
+
+
+def test_gcode_hash_keeps_crlf_line_ends():
+    a = b"; generated by OrcaSlicer 2.5.0 on d at t\r\nG28\r\n"
+    assert gcode_hashes(a)["normalised_sha256"] == hashlib.sha256(b"\r\nG28\r\n").hexdigest()
