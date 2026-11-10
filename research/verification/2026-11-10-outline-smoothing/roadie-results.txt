@@ -1,0 +1,8 @@
+scale 0.1002 mm/px; base perimeter 495.2 mm area 750.2
+current (opening 0.4)    area    741.3 (-1.19%)  perimeter   377.7 mm  vertices   9289  hausdorff_vs_mask 0.533 mm  parts 1
+A blur s=1.5px           area    747.3 (-0.38%)  perimeter   350.6 mm  vertices  16751  hausdorff_vs_mask 0.472 mm  parts 1
+A blur s=2.5px           area    746.9 (-0.43%)  perimeter   342.0 mm  vertices  16505  hausdorff_vs_mask 0.572 mm  parts 1
+C morph r=0.25mm         area    758.5 (+1.11%)  perimeter   354.6 mm  vertices  10415  hausdorff_vs_mask 0.575 mm  parts 1
+C morph r=0.4mm          area    759.7 (+1.27%)  perimeter   335.2 mm  vertices   6850  hausdorff_vs_mask 1.409 mm  parts 1
+D DP0.1+Chaikin          area    738.8 (-1.52%)  perimeter   347.8 mm  vertices   3289  hausdorff_vs_mask 0.585 mm  parts 1
+sheet (2160, 1096)
