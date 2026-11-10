@@ -99,8 +99,11 @@ that is manifold by construction), trimesh (STL I/O and mesh queries), Pillow an
     printer id}.
   - `selection` {selection_id, mask_pixels_sha256};
   - `transform` {scale_mm_per_px, x0_px, y1_px};
-  - `cleaning` {opening_mm, min_island_mm2, area_before_mm2, area_after_mm2,
-    removed_area_mm2, hausdorff_mm, dropped_islands: [areas]};
+  - `cleaning`: the `clean` report, as amended after review (see "Execution notes"):
+    {opening_mm, min_island_mm2, area_before_mm2, area_after_mm2, removed_area_mm2,
+    boundary_hausdorff_mm, hausdorff_sample_step_mm, hausdorff_upper_bound_mm,
+    dropped_islands {count, total_area_mm2, largest_mm2}, vanished_parts {count,
+    total_area_mm2}, ignored_non_polygonal};
   - `mesh` {triangles, bodies, volume_mm3, extents_mm};
   - `checks` [...] and `verdict`;
   - `outputs` (sha256 of each file), `environment`, and a review sentence.
@@ -244,11 +247,11 @@ def to_model(outline, width_mm: float) -> tuple[shapely.Geometry, dict]:
 **Files:** extend `src/tdmg/flat.py` and `tests/test_flat.py`.
 
 ```python
-def clean(geom_mm, opening_mm: float, min_island_mm2: float) -> tuple[list[Polygon], dict]:
+def clean(geom_mm, opening_mm, min_island_mm2, sample_step_mm) -> tuple[list[Polygon], dict]:
     """Open by opening_mm (round joins, QUAD_SEGS); split into polygons; drop small parts.
 
-    Returns the parts, largest first, and a report {opening_mm, min_island_mm2,
-    area_before_mm2, area_after_mm2, removed_area_mm2, hausdorff_mm, dropped_islands}.
+    Returns the parts, largest first, and the report described in the behaviour contract
+    (original plan: a single hausdorff_mm and a dropped_islands list; see Execution notes).
     """
 ```
 
@@ -393,3 +396,27 @@ expected size. That is a manual import check, not F6.
 - Outline smoothing.
 - A cookie-cutter variant.
 - Physical prints and caliper checks.
+
+## Execution notes
+
+- **Tasks 3–5, quality review (2026-11-10):**
+  - **The Hausdorff measurement was wrong.** GEOS `hausdorff_distance` without
+    densifying checks only vertices. On a bar joining two blobs it reported 0.083 mm
+    where the true value is 1.63 mm. This was reproduced.
+  - **Replacement:** a two-sided distance sampled on the boundaries at a quarter-pixel
+    step, `boundary_hausdorff_mm`. It is a lower bound, accurate to within half a step.
+  - **Upper bound:** `hausdorff_upper_bound_mm` adds half a step, plus the larger of
+    opening/2 and the radius of the largest dropped island, plus the buffer chord
+    error. A dropped island can be fatter than opening/2; the review gave a measured
+    counterexample to the narrower bound.
+  - **Other changes:**
+    - islands that the opening erased entirely are reported as `vanished_parts`;
+    - the report has a fixed key set;
+    - `opening_mm` must be above 0, because corner separation depends on it;
+    - masks must be bool or 0/255 integers.
+- **Speed: accepted as a known limit, with no size rule yet.**
+  - On the owner's masks, cleaning takes a fraction of a second.
+  - On synthetic stress masks, after the fixes, `clean` took 26 s for 1000 × 1000 random
+    blobs (from 251 s) and 27 s for a 4000 × 4000 noisy circle (from 41 s). Shapely's
+    negative buffer dominates.
+  - An input-size rule with evidence is deferred until a real input needs it.
