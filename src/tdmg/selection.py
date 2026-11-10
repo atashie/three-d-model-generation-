@@ -21,6 +21,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 ORIENTATION_TAG = 0x0112   # EXIF Orientation; 1 means "as stored"
+TRANSPOSING_ORIENTATIONS = range(2, 9)   # ImageOps.exif_transpose leaves other values untouched
 
 
 class SelectionError(ValueError):
@@ -51,5 +52,6 @@ def load_image(path: str | Path) -> Intake:
         oriented = ImageOps.exif_transpose(im)
         rgba = np.asarray(oriented.convert("RGBA")).copy()
     return Intake(rgba=rgba, file_sha256=hashlib.sha256(data).hexdigest(),
-                  pixels_sha256=pixels_sha256(rgba), exif_transposed=orientation != 1,
+                  pixels_sha256=pixels_sha256(rgba),
+                  exif_transposed=orientation in TRANSPOSING_ORIENTATIONS,
                   source_name=path.name)

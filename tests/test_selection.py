@@ -52,3 +52,11 @@ def test_load_image_applies_exif_orientation(tmp_path):
     p = _save(tmp_path, np.zeros((10, 20, 4), np.uint8), exif=exif)
     a = load_image(p)
     assert a.rgba.shape[:2] == (20, 10) and a.exif_transposed is True
+
+
+def test_load_image_ignores_out_of_range_orientation(tmp_path):
+    exif = Image.Exif()
+    exif[0x0112] = 9                       # not a valid Orientation; Pillow does not transpose
+    p = _save(tmp_path, np.zeros((10, 20, 4), np.uint8), exif=exif)
+    a = load_image(p)
+    assert a.rgba.shape[:2] == (10, 20) and a.exif_transposed is False
