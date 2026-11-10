@@ -119,6 +119,15 @@ push and CI not done). See "Execution notes".
 - **Known limits:** printed-over holes of 0.4 mm or less cannot be told apart at 0.2 mm;
   sharp corners are strict; strength is not judged.
 - **Task 4 (2026-11-10, in part):** the docs and `docs/STATUS.md` describe the three
-  F3 checks (documentation audit commit). Not done: an independent Codex review of
-  `src/tdmg/printed.py` (none is recorded in `research/reviews/`), the push, and CI.
-  The commits from `70806d2` onward are local only.
+  F3 checks (documentation audit commit). The Codex review followed (below). The push and
+  CI check come after it.
+- **Codex critical review** (`research/reviews/2026-11-10-thin-walls/`). Seven findings,
+  all confirmed and fixed (`313cdbc`, `a5e3e73`, now `slice-3`):
+  - two-sided rotation scoring, with ambiguity giving UNKNOWN;
+  - truncation detection;
+  - commanded Z and G92 handling;
+  - an extrusion-amount check against OrcaSlicer's flow model;
+  - sampling bounds in acceptance;
+  - the version bump;
+  - controls run through `tdmg slice`.
+- **Task 3 is now evidenced through `tdmg slice`** (`controls-slice.txt`).

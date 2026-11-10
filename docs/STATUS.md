@@ -35,21 +35,20 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 | M5 MacBook | Apple M5, arm64, 16 GB, macOS 26.3, no CUDA | Python 3.13 stack installed and functionally tested (`research/verification/2026-11-08-stack-smoke/`); all tests; wheel build and install. OrcaSlicer is not installed, so `tdmg slice` has not run a real slicer here |
 | PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, tests, lint, docs, wheel installation and geometry smoke checks passed. Optional import failures recorded in `research/verification/2026-11-09-pc-stack/README.md`. The pinned OrcaSlicer 2.5.0 is installed in `artifacts/tools/orcaslicer-2.5.0/` and run by `tdmg slice` |
 
-CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. `origin/main` is at `0cf75c9`. **The F3 work (commits from `70806d2` onward, and this audit) is local only: not pushed and not CI-verified.**
+CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. `origin/main` is at `0cf75c9`. The F3 work, the documentation audit and the F3 Codex review fixes (commits from `70806d2` onward) are being pushed; check CI before calling them verified.
 
-Latest local validation (2026-11-10, Windows PC, after the F3 policy and the documentation
-audit): `uv run pytest -q` gave **814 passed and 1 skipped**. The skipped test is the
-real-slicer test, which runs only when `TDMG_ORCASLICER_DIR` is set; it passed on its own
+Latest local validation (2026-11-10, Windows PC, after the F3 Codex review fixes, `slice-3`):
+`uv run pytest -q` gave **833 passed and 1 skipped**, both plain and with
+`CI=true GITHUB_ACTIONS=true`. The skipped test is the real-slicer test, which passed on its own
 with `TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 uv run pytest -m slicer`.
-`uv run ruff check .` and `uv run python scripts/gen_docs.py` passed.
+`uv run ruff check .` and `uv run python scripts/gen_docs.py --check` passed.
 
 ## Next steps, in order
 
 1. **F6 portability with PrusaSlicer.** It is the last blocker to PRINTABLE for the
    owner's Roadie and Oddie. Pin and hash-verify PrusaSlicer 2.9.7 as was done for
    OrcaSlicer, measure its CLI on Windows first, and record it in
-   `research/verification/`. Still owed from the thin-wall plan (Task 4): a Codex
-   review of `src/tdmg/printed.py` and the F3 checks, then push and confirm CI.
+   `research/verification/`.
 2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
 3. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
@@ -151,11 +150,14 @@ The full list is in `docs/PLAN.md` section 13.
     `tdmg flat`, outline smoothing and `tdmg slice`. Each had subagent spec and quality
     reviews and a Codex review. The A1 profiles are flattened from the pinned v2.5.0
     source and kept out of the repo (AGPL).
-  - **Built locally, not pushed:** the F3 thin-wall policy (`src/tdmg/printed.py`; three
-    required F3 checks in `tdmg slice`) and this documentation audit. No Codex review
-    of the F3 code is recorded yet.
-  - **Pushing:** the owner said "push, then proceed" for this line of work. Push after
-    the F3 Codex findings are handled, then confirm that CI passes.
+  - **F3 thin-wall policy** (`src/tdmg/printed.py`; three required F3 checks in `tdmg
+    slice`, `slice-3`). It had subagent reviews, a documentation audit and a Codex critical
+    review; all seven Codex findings were fixed
+    (`research/reviews/2026-11-10-thin-walls/`).
+  - **Known costs and limits:** slices take about 10–14 s. Nearly symmetric parts can be
+    "placement ambiguous" (UNKNOWN).
+  - **Pushing:** the owner said "push, then proceed" for this line of work. After
+    pushing, confirm that CI passes.
 - **Start next session:** read `CLAUDE.md`, this page, `docs/PLAN.md`, then the plans in
   `docs/plans/` (the latest is the thin-wall policy).
   - The CLI has `select`, `flat` and `slice`. It has no 3MF, loop or base, second

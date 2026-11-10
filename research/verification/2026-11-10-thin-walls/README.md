@@ -126,3 +126,28 @@ above:
 - **What is not judged:** strength is not judged.
 - **Scope:** the checks hold only for the pinned OrcaSlicer 2.5.0 A1 profile and its
   model-feature list. Overhang wall and Bridge give UNKNOWN until they are seen.
+
+## Addendum 2: after the Codex critical review (commits `313cdbc`, `a5e3e73`; `slice-3`)
+
+See `research/reviews/2026-11-10-thin-walls/README.md` for the findings and how each was
+handled.
+
+- **Method changes:**
+  - placement among the quarter-turns is now chosen by a two-sided score over all
+    layers;
+  - G-code truncation is detected;
+  - commanded Z is tracked, and G92 may set only E;
+  - each segment's extrusion amount is checked against OrcaSlicer's flow model;
+  - acceptance includes the sampling bounds (0.025 mm for coverage, 0.060 mm for
+    overprint).
+- **Extrusion amount:** written E against OrcaSlicer's flow prediction has median 1.0000,
+  and 0.978–1.021 over 99.8% of 58,344 segments in the 16 real G-code files. All of them
+  pass the tolerance derived from the printed precision.
+- **Controls through `tdmg slice`** (`controls_slice.py` → `controls-slice.txt`):
+  - bridges of 0.15 and 0.3 mm FAIL connectivity on all 15 layers;
+  - the 0.45 mm bridge FAILs on the first layer only;
+  - bridges of 0.6 and 1.0 mm PASS all three checks;
+  - hair and spike cases FAIL coverage, with gaps equal to their lengths.
+- **Owner models (`slice-3`):** Roadie and Oddie still PASS all three checks at 0°, with
+  no tie. The gaps are unchanged: 0.231 / 0.027 mm and 0.222 / 0.037 mm. Slices take
+  9.8 s and 14.2 s.
