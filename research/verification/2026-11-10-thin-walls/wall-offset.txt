@@ -1,0 +1,1 @@
+z=1.6 outer-wall centreline to model edge: median 0.2098 mm, p5 0.1991, p95 0.2203; inside model 100.0%

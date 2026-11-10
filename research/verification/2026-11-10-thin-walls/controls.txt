@@ -1,0 +1,20 @@
+== bridge width 0.15 mm: slicer returncode 0
+alignment: rotation 90 deg, first-layer median edge distance 0.075 mm
+z=0.20 max_edge_to_plastic_mm=2.488 at_bed=(128.1,128.0) share_over_0.2mm=10.67% parts_model=1 parts_printed=2 min_width_mm=0.500
+z=3.00 max_edge_to_plastic_mm=2.491 at_bed=(127.9,128.0) share_over_0.2mm=10.17% parts_model=1 parts_printed=2 min_width_mm=0.420
+== bridge width 0.3 mm: slicer returncode 0
+alignment: rotation 90 deg, first-layer median edge distance 0.075 mm
+z=0.20 max_edge_to_plastic_mm=2.482 at_bed=(128.2,128.0) share_over_0.2mm=10.83% parts_model=1 parts_printed=2 min_width_mm=0.500
+z=3.00 max_edge_to_plastic_mm=2.491 at_bed=(127.8,128.0) share_over_0.2mm=10.22% parts_model=1 parts_printed=2 min_width_mm=0.420
+== bridge width 0.45 mm: slicer returncode 0
+alignment: rotation 90 deg, first-layer median edge distance 0.075 mm
+z=0.20 max_edge_to_plastic_mm=2.479 at_bed=(128.2,128.0) share_over_0.2mm=10.85% parts_model=1 parts_printed=2 min_width_mm=0.500
+z=3.00 max_edge_to_plastic_mm=0.087 at_bed=(133.0,130.5) share_over_0.2mm=0.00% parts_model=1 parts_printed=1 min_width_mm=0.420
+== bridge width 0.6 mm: slicer returncode 0
+alignment: rotation 90 deg, first-layer median edge distance 0.075 mm
+z=0.20 max_edge_to_plastic_mm=0.210 at_bed=(123.0,125.5) share_over_0.2mm=0.50% parts_model=1 parts_printed=1 min_width_mm=0.500
+z=3.00 max_edge_to_plastic_mm=0.087 at_bed=(133.0,130.5) share_over_0.2mm=0.00% parts_model=1 parts_printed=1 min_width_mm=0.420
+== bridge width 1.0 mm: slicer returncode 0
+alignment: rotation 90 deg, first-layer median edge distance 0.075 mm
+z=0.20 max_edge_to_plastic_mm=0.210 at_bed=(123.0,125.5) share_over_0.2mm=0.51% parts_model=1 parts_printed=1 min_width_mm=0.500
+z=3.00 max_edge_to_plastic_mm=0.087 at_bed=(133.0,130.5) share_over_0.2mm=0.00% parts_model=1 parts_printed=1 min_width_mm=0.188
