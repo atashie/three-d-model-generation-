@@ -33,6 +33,7 @@ from tdmg.records import (
     check_output_dir,
     environment,
     png_bytes,
+    record_text,
     write_outputs,
 )
 from tdmg.rules import load_rules
@@ -419,9 +420,7 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
             "environment": environment(),
             "review": "Open preview.png and confirm the subject before generating geometry.",
         }
-        text = json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False,
-                          allow_nan=False) + "\n"
-        data = text.encode("utf-8")      # bytes, so Windows cannot turn "\n" into "\r\n"
+        data = record_text(record)
     except UnicodeEncodeError as e:
         raise SelectionError(f"instructions or input name cannot be stored as UTF-8: "
                              f"{e.reason} at position {e.start}") from None

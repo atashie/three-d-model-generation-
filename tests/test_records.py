@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -11,6 +12,7 @@ from tdmg.records import (
     check_output_dir,
     environment,
     png_bytes,
+    record_text,
     write_outputs,
 )
 
@@ -100,3 +102,48 @@ def test_a_concurrently_created_folder_is_detected(tmp_path):
     with pytest.raises(RecordError, match="another run is writing"):
         write_outputs(out, FILES, "rec.json", RECORD, create_folder=create)
     assert list(out.iterdir()) == []
+
+
+BAD_NAMES = ["../x", "a/b", "a\\b", "", ".", "..", str(Path.cwd().anchor) + "x"]
+
+
+@pytest.mark.parametrize("bad", BAD_NAMES)
+@pytest.mark.parametrize("where", ["file", "record"])
+def test_unsafe_names_are_refused_before_the_folder_is_created(tmp_path, bad, where):
+    out = tmp_path / "a"
+    files = {**FILES, bad: b"x"} if where == "file" else FILES
+    record = bad if where == "record" else "rec.json"
+    with pytest.raises(RecordError, match="name"):
+        write_outputs(out, files, record, RECORD)
+    assert not out.exists()
+
+
+def test_a_record_name_that_is_also_a_file_name_is_refused(tmp_path):
+    out = tmp_path / "a"
+    with pytest.raises(RecordError, match="a.png"):
+        write_outputs(out, FILES, "a.png", RECORD)
+    assert not out.exists()
+
+
+def test_a_failed_rename_leaves_no_temporary_file(tmp_path, monkeypatch):
+    out = tmp_path / "a"
+
+    def failing(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(records_module.os, "replace", failing)
+    with pytest.raises(OSError, match="disk full"):
+        write_outputs(out, FILES, "rec.json", RECORD)
+    assert sorted(p.name for p in out.iterdir()) == sorted(FILES)
+
+
+def test_record_text_is_indented_sorted_utf8_with_one_newline():
+    data = record_text({"b": "\u00e9", "a": [1]})
+    assert data == '{\n  "a": [\n    1\n  ],\n  "b": "\u00e9"\n}\n'.encode()
+
+
+def test_record_text_refuses_nan_and_unencodable_text():
+    with pytest.raises(ValueError):
+        record_text({"x": float("inf")})
+    with pytest.raises(UnicodeEncodeError):
+        record_text({"x": "\ud800"})
