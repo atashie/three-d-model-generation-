@@ -1,0 +1,1 @@
+python 3.13.1 opencv 5.0.0 pillow 13.0.0 numpy 2.5.4

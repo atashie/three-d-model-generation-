@@ -1,0 +1,9 @@
+seed colour [57, 46, 40]
+tol 20: removed 338781; fg components 1343; largest areas [77526, 36, 30, 28, 27, 27]; small(<50px) 1342; disc-coloured px kept (enclosed) 297
+tol 30: removed 343264; fg components 1165; largest areas [74768, 21, 18, 18, 18, 18]; small(<50px) 1164; disc-coloured px kept (enclosed) 473
+tol 40: removed 345552; fg components 1101; largest areas [72915, 27, 20, 18, 17, 16]; small(<50px) 1100; disc-coloured px kept (enclosed) 756
+   comp bbox (108, 170, 596, 491) area 72915
+   comp bbox (412, 563, 11, 10) area 27
+   comp bbox (704, 507, 2, 13) area 20
+   comp bbox (769, 410, 1, 18) area 18
+tol 60: removed 350442; fg components 1109; largest areas [48100, 8323, 6323, 2488, 1514, 776]; small(<50px) 1102; disc-coloured px kept (enclosed) 806

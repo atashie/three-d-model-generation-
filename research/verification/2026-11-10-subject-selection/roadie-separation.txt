@@ -1,0 +1,11 @@
+disc-like pixel counts by distance from (57,46,40):
+  <= 5: 316312
+  <= 10: 328285
+  <= 20: 339078
+  <= 30: 343737
+  <= 40: 346308
+  <= 60: 351248
+components of far-from-disc pixels (largest 8): [(287, 47664), (611, 8124), (669, 6150), (687, 2488), (634, 1514), (699, 776), (672, 720), (291, 18)]
+fringe pixels: 9937 distance-to-disc percentiles 10/50/90/99: [ 8.4 27.7 54.2 68. ]
+very dark (sum<60) opaque pixels: 871
+disc spread (far from bird) distance percentiles 50/99/99.9: [ 0.  26.1 55.4]

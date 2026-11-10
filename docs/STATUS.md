@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-09, after inspecting owner-supplied MakerLab STLs. Both pass the measured closed-topology tests but contain two bodies. Roadie's unwanted frame was removed in a separate derived STL. Plain-language subject interpretation added to the plan; implementation pending. Backend choice remains open.
+**Last updated:** 2026-11-10: subject-selection implementation plan written (next steps, item 4); nothing implemented yet. Previous update 2026-11-09, after inspecting owner-supplied MakerLab STLs. Both pass the measured closed-topology tests but contain two bodies. Roadie's unwanted frame was removed in a separate derived STL. Plain-language subject interpretation added to the plan; implementation pending. Backend choice remains open.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
 
@@ -47,6 +47,11 @@ Earlier 133-test counts below are the original stack-verification record.
 
    Then help the owner choose the R4 backend under their decision rule: a cheap standard service, around $1 per model, beats a homemade pipeline if it does everything we need.
 4. **Phase 1, R1 vertical slice,** as in `docs/PLAN.md` section 11. Its first test fixtures are the prototype defects listed in `research/verification/2026-11-08-stack-smoke/README.md` section 5.
+   - **2026-11-10: owner chose to start Phase 1 with subject selection (S0/S1).** The plan is `docs/plans/2026-11-10-subject-selection.md`, and it is not yet implemented. It adds `tdmg select`, where the user's words are recorded verbatim and code applies explicit `--remove-at`/`--keep-at` points or a corrected mask. Measurements behind its design are in `research/verification/2026-11-10-subject-selection/`:
+     - Roadie's disc is opaque, so its transparency does not isolate the bird.
+     - Removing the disc from one seed point, then keeping the bird piece, leaves one 74,768 px bird at tolerance 30.
+     - Oddie is one piece at every alpha cutoff.
+   - Owner images are not committed until their rights are confirmed; the tests use synthetic look-alikes.
 
 ## Open questions for the owner
 

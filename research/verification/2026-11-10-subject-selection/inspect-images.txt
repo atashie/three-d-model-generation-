@@ -1,0 +1,16 @@
+C:/Users/arikt/Downloads/three-d-test/roadie.png RGBA (836, 792) (95.9866, 95.9866)
+ alpha unique count 2 transparent frac 0.365 opaque frac 0.635 partial frac 0.0
+ top opaque colors (quantized 16): [((np.uint8(48), np.uint8(32), np.uint8(32)), 0.758), ((np.uint8(240), np.uint8(0), np.uint8(0)), 0.06), ((np.uint8(240), np.uint8(240), np.uint8(240)), 0.03), ((np.uint8(48), np.uint8(48), np.uint8(32)), 0.025), ((np.uint8(240), np.uint8(240), np.uint8(0)), 0.013), ((np.uint8(48), np.uint8(48), np.uint8(48)), 0.012), ((np.uint8(64), np.uint8(48), np.uint8(48)), 0.008), ((np.uint8(224), np.uint8(0), np.uint8(0)), 0.005)]
+   center (418, 396) [57, 46, 40, 255]
+   corner (0, 0) [0, 0, 0, 0]
+   edge-mid-top (418, 0) [0, 0, 0, 0]
+   near-top-in (418, 63) [57, 46, 40, 255]
+   left-in (66, 396) [57, 46, 40, 255]
+C:/Users/arikt/Downloads/three-d-test/oddie.png RGBA (1024, 1013) (95.9866, 95.9866)
+ alpha unique count 256 transparent frac 0.709 opaque frac 0.284 partial frac 0.006
+ top opaque colors (quantized 16): [((np.uint8(32), np.uint8(80), np.uint8(16)), 0.34), ((np.uint8(80), np.uint8(112), np.uint8(144)), 0.24), ((np.uint8(64), np.uint8(160), np.uint8(48)), 0.232), ((np.uint8(48), np.uint8(80), np.uint8(96)), 0.086), ((np.uint8(0), np.uint8(0), np.uint8(0)), 0.037), ((np.uint8(240), np.uint8(96), np.uint8(96)), 0.013), ((np.uint8(160), np.uint8(0), np.uint8(0)), 0.004), ((np.uint8(0), np.uint8(16), np.uint8(0)), 0.003)]
+   center (512, 506) [37, 86, 27, 255]
+   corner (0, 0) [0, 0, 0, 0]
+   edge-mid-top (512, 0) [0, 0, 0, 0]
+   near-top-in (512, 81) [0, 0, 0, 0]
+   left-in (81, 506) [0, 0, 0, 0]

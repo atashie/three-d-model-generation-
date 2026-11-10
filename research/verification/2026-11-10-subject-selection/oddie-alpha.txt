@@ -1,0 +1,5 @@
+alpha>= 1 px 301447 components 1 largest [301447]
+alpha>= 64 px 299222 components 1 largest [299222]
+alpha>= 128 px 298172 components 1 largest [298172]
+alpha>= 192 px 297077 components 1 largest [297077]
+alpha>= 255 px 294898 components 1 largest [294898]
