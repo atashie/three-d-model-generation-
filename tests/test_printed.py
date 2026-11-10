@@ -206,7 +206,12 @@ GOOD = "; FEATURE: Outer wall\n; LINE_WIDTH: 0.42\nG1 X100 Y100\nG1 X101 Y100 E.
     (gcode([layer(0.2, GOOD + "G2 X101.1 Y100 I10000000 J0 E.1\n")]), "arc"),  # once a hang
     (gcode([layer(0.2, GOOD + "G2 X101 Y100 I300 J0 E.1\n")]), "arc"),     # beyond the bound
     # Layers: a repeated Z_HEIGHT, or one with no LAYER_HEIGHT even if it prints nothing.
-    (gcode([layer(0.2, GOOD), layer(0.2, GOOD, height=0.1)]), "repeats"),
+    (gcode([layer(0.2, GOOD), layer(0.2, GOOD, height=0.1)]), "does not increase"),
+    # Z oddities: out of order, a gap, a first layer that is not its own height.
+    (START + layer(0.4, GOOD) + layer(0.2, GOOD), "does not increase"),
+    (START + layer(0.2, GOOD) + layer(0.6, GOOD), "a gap or an overlap"),
+    (START + layer(0.3, GOOD), "a gap or an overlap"),
+    (START + layer(0.2, GOOD) + layer(0.4, GOOD, height=0.1), "a gap or an overlap"),
     (START + layer(0.2, GOOD) + "; CHANGE_LAYER\n; Z_HEIGHT: 0.4\n" + layer(0.6, GOOD),
      "0.4 have no LAYER_HEIGHT"),
     (START + "; LAYER_HEIGHT: 0.2\n; Z_HEIGHT: 0.2\n" + GOOD, "LAYER_HEIGHT"),
@@ -332,7 +337,7 @@ def test_an_unprinted_tip_on_a_long_body_gives_its_length_as_the_gap():
      shapely.box(0, 0, 60, 3), 10.0),
 ])
 def test_one_sided_shortfalls_fail_coverage(model, printed, gap):
-    (connectivity, coverage), record = checks_for(model, printed)
+    (connectivity, coverage, _), record = checks_for(model, printed)
     assert coverage.status == "FAIL", coverage
     assert coverage.measured["worst_z"] == pytest.approx(0.4)
     # At least the shortfall; at a corner of a shortened box the bead's round end adds up
@@ -362,7 +367,7 @@ def test_a_filled_hole_and_a_bridged_slot_do_not_compensate():
     slot = shapely.box(0, 0, 10, 10).difference(shapely.box(4.5, 5, 5.5, 10.1))
     model = shapely.Polygon(slot.exterior.coords, [shapely.box(2, 2, 3, 3).exterior.coords])
     printed = shapely.box(0, 0, 10, 10).difference(shapely.box(4.5, 5, 5.5, 9.3))
-    (connectivity, _), record = checks_for(model, printed)
+    (connectivity, _, _), record = checks_for(model, printed)
     assert connectivity.status == "FAIL"
     assert record["layers"][1]["holes"] == [1, 1]
     found = {u["what"]: u for u in connectivity.measured["unmatched"]}
@@ -407,18 +412,18 @@ def test_a_layer_that_prints_nothing_fails_coverage():
     text = gcode([layer(0.2, body), layer(0.4, ""), layer(0.6, body)])
     stl = extrude([model], 1.0).export(file_type="stl")
     checks, record = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
-    connectivity, coverage = checks
+    connectivity, coverage, _ = checks
     assert connectivity.status == "FAIL" and connectivity.measured["mismatched_z"] == [0.4]
     assert coverage.status == "FAIL"
     assert coverage.measured["nothing_printed_z"] == [0.4]
     assert "0.4" in coverage.note and "print nothing" in coverage.note
     assert record["layers"][1] == {"z": 0.4, "max_gap_mm": None, "parts": [1, 0],
-                                   "holes": [0, 0], "unmatched": 1}
+                                   "holes": [0, 0], "unmatched": 1, "max_over_mm": None}
     json.dumps(record, allow_nan=False)                       # strict JSON
 
 
 def test_f3_checks_on_a_covered_square():
-    (connectivity, coverage), record = checks_for(square(), square())
+    (connectivity, coverage, _), record = checks_for(square(), square())
     assert [connectivity.status, coverage.status] == ["PASS", "PASS"]
     assert coverage.threshold == {"first_layer_mm": pytest.approx(0.275),
                                   "other_layers_mm": 0.2}
@@ -436,7 +441,7 @@ def test_f3_checks_on_a_covered_square():
 def test_f3_checks_are_unknown_when_not_measurable(gcode_bytes, reason):
     stl = extrude([square()], 1.0).export(file_type="stl")
     checks, record = f3_checks(gcode_bytes, stl, PLATE, 0.2, 0.075)
-    assert [c.status for c in checks] == ["UNKNOWN", "UNKNOWN"]
+    assert [c.status for c in checks] == ["UNKNOWN"] * 3
     assert all(reason in c.note for c in checks)
     assert record["measured"] is False and reason in record["reason"]
 
@@ -447,7 +452,7 @@ def test_any_analysis_error_is_unknown(monkeypatch):
     monkeypatch.setattr(tdmg.printed, "analyse", broken)
     stl = extrude([square()], 1.0).export(file_type="stl")
     checks, record = f3_checks(b"; Z_HEIGHT: 0.2\n", stl, PLATE, 0.2, 0.075)
-    assert [c.status for c in checks] == ["UNKNOWN", "UNKNOWN"]
+    assert [c.status for c in checks] == ["UNKNOWN"] * 3
     assert record["reason"] == "analysis error: RuntimeError: boom"
     assert all("analysis error: RuntimeError: boom" in c.note for c in checks)
 
@@ -476,7 +481,7 @@ def _square_text(extra: str) -> str:
 
 def test_a_stray_part_written_plainly_fails():
     # The control for the forms below: read, it is an extra printed part.
-    (connectivity, _), _ = checks_for_text(_square_text(STRAY + "G1 X205 Y200 E.2\n"))
+    (connectivity, _, _), _ = checks_for_text(_square_text(STRAY + "G1 X205 Y200 E.2\n"))
     assert connectivity.status == "FAIL"
 
 
@@ -497,22 +502,22 @@ def test_a_stray_part_written_plainly_fails():
     ("plain text\n", "'plain'"),
 ])
 def test_forms_this_parser_does_not_read_are_unknown(extra, reason):
-    (connectivity, coverage), record = checks_for_text(_square_text(extra))
-    assert [connectivity.status, coverage.status] == ["UNKNOWN", "UNKNOWN"], record["reason"]
+    (connectivity, coverage, _), record = checks_for_text(_square_text(extra))
+    assert [connectivity.status, coverage.status] == ["UNKNOWN"] * 2, record["reason"]
     assert re.search(reason, record["reason"]), record["reason"]
 
 
 def test_custom_at_the_start_and_end_is_still_excluded():
     # gcode() writes a Custom purge before the first layer and a Custom move after the last.
-    (connectivity, coverage), _ = checks_for_text(_square_text(""))
+    (connectivity, coverage, _), _ = checks_for_text(_square_text(""))
     assert [connectivity.status, coverage.status] == ["PASS", "PASS"]
 
 
 def test_m_and_t_codes_are_ignored_except_the_extrusion_mode():
     extra = "M204 S6000\nM73 P3 R7\nM622.1 S1\nT255\nM1002 judge_flag g29_before_print_flag\n"
-    (connectivity, coverage), _ = checks_for_text(_square_text(extra))
+    (connectivity, coverage, _), _ = checks_for_text(_square_text(extra))
     assert [connectivity.status, coverage.status] == ["PASS", "PASS"]
-    (connectivity, _), record = checks_for_text(_square_text("M82\n" + STRAY
+    (connectivity, _, _), record = checks_for_text(_square_text("M82\n" + STRAY
                                                              + "G1 X205 Y200 E.2\n"))
     assert connectivity.status == "UNKNOWN" and "absolute extrusion" in record["reason"]
 
@@ -531,7 +536,7 @@ def test_a_tie_between_turns_keeps_the_worse_result(turn):
     printed = shapely.union_all([body, tab])
     stl = extrude([model], 1.0).export(file_type="stl")
     text = gcode([layer(z, solid(placed(printed, model, turn))) for z in (0.2, 0.4)])
-    (_, coverage), record = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    (_, coverage, _), record = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
     assert coverage.status == "FAIL"
     assert coverage.measured["max_gap_mm"] >= 0.3
     assert {0, 180} <= set(record["alignment"]["tied_angles_deg"])
@@ -539,6 +544,96 @@ def test_a_tie_between_turns_keeps_the_worse_result(turn):
 
 def test_a_clear_turn_has_no_tie():
     model = l_shape()
-    (_, coverage), record = checks_for(model, model)
+    (_, coverage, _), record = checks_for(model, model)
     assert record["alignment"]["tied_angles_deg"] == [0]
     assert coverage.status == "PASS"
+
+
+
+# --- Z ------------------------------------------------------------------------------------
+
+def test_a_feature_height_does_not_change_the_layer():
+    # OrcaSlicer writes "; LAYER_HEIGHT: 0.4" before bridge lines inside a 0.2 mm layer.
+    body = (GOOD + "; FEATURE: Internal Bridge\n; LINE_WIDTH: 0.4\n; LAYER_HEIGHT: 0.4\n"
+            "G1 X102 Y100 E.1\n")
+    layers = parse(gcode([layer(0.2, GOOD), layer(0.4, body), layer(0.6, GOOD)]))
+    assert [lay.height for lay in layers.values()] == [0.2, 0.2, 0.2]
+
+
+def test_the_z_tolerance_is_the_printed_precision():
+    # %g with six significant digits: 3 is exact to 5e-6, 0.2 and 2.8 to 5e-7 and 5e-6.
+    assert tdmg.printed._z_tolerance(3.0, 2.8, 0.2) < 1e-4
+    text = START + "".join(layer(round(0.2 * (i + 1), 6), GOOD) for i in range(150))
+    assert len(parse(text)) == 150                       # 30 mm of 0.2 mm layers
+
+
+# --- F3.edge_overprint ------------------------------------------------------------------
+
+def test_a_hole_printed_too_small_fails_overprint():
+    # A 2 mm hole printed as a 1 mm hole: matched one to one, edges covered, but plastic
+    # 0.5 mm inside the hole.
+    sq = square()
+    model = shapely.Polygon(sq.exterior.coords, [shapely.box(4, 4, 6, 6).exterior.coords])
+    printed = shapely.Polygon(sq.exterior.coords, [shapely.box(4.5, 4.5, 5.5, 5.5)
+                                                   .exterior.coords])
+    (connectivity, coverage, overprint), record = checks_for(model, printed)
+    assert (connectivity.status, coverage.status) == ("PASS", "PASS")
+    assert overprint.status == "FAIL"
+    assert overprint.measured["max_over_mm"] == pytest.approx(0.5, abs=0.07)
+    assert overprint.measured["at_model_mm"][0] == pytest.approx(5, abs=1.1)
+    assert overprint.rule == "acceptance.dimension.tolerance"
+    assert record["layers"][1]["max_over_mm"] == pytest.approx(0.5, abs=0.07)
+
+
+def test_a_filled_small_hole_fails_overprint():
+    # The review's cases: a small hole (0.5-0.8 mm) printed over by fill, with a void of
+    # the fill overlapping the hole so the holes still match. The plastic inside the hole
+    # is up to half its width from the model.
+    sq = square()
+    failed = []
+    for h in (0.5, 0.6, 0.8):
+        for spacing in (0.5, 0.55, 0.6, 0.65):
+            for off in (0.0, 0.1, 0.2, 0.3):
+                a = 5 - h / 2
+                model = shapely.Polygon(sq.exterior.coords, [
+                    shapely.box(a, a + off, a + h, a + h + off).exterior.coords])
+                stl = extrude([model], 1.0).export(file_type="stl")
+                body = walls(placed(sq, model)) + fill(placed(sq, model), spacing=spacing)
+                checks, _ = f3_checks(gcode([layer(z, body) for z in (0.2, 0.4)]).encode(),
+                                      stl, PLATE, 0.2, 0.075)
+                if all(c.status == "PASS" for c in checks):
+                    failed.append((h, spacing, off))
+    assert failed == []
+
+
+@pytest.mark.parametrize(("outward", "status"), [(0.25, "FAIL"), (0.15, "PASS")])
+def test_plastic_outside_the_model_on_an_upper_layer(outward, status):
+    model = square()
+    big = model.buffer(outward, join_style="mitre")
+    stl = extrude([model], 1.0).export(file_type="stl")
+    text = gcode([layer(0.2, solid(placed(model))), layer(0.4, solid(placed(big, model)))])
+    (_, coverage, overprint), _ = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    assert coverage.status == "PASS"
+    assert overprint.status == status
+    assert overprint.measured["max_over_mm"] == pytest.approx(outward, abs=0.02)
+    assert overprint.measured["worst_z"] == pytest.approx(0.4)
+
+
+def test_the_first_layer_may_print_outside_by_the_elephant_foot_too():
+    model = square()
+    big = model.buffer(0.25, join_style="mitre")
+    stl = extrude([model], 1.0).export(file_type="stl")
+    text = gcode([layer(0.2, solid(placed(big, model))), layer(0.4, solid(placed(model)))])
+    (_, _, overprint), _ = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    assert overprint.status == "PASS"                  # 0.25 is inside 0.2 + 0.075
+    assert overprint.measured["worst_z"] == pytest.approx(0.2)
+
+
+def test_plastic_where_the_model_has_no_section_fails_overprint():
+    model = square()
+    body = solid(placed(model))
+    stl = extrude([model], 0.4).export(file_type="stl")          # two layers of model
+    text = gcode([layer(0.2, body), layer(0.4, body), layer(0.6, body)])
+    (_, _, overprint), _ = f3_checks(text.encode(), stl, PLATE, 0.2, 0.075)
+    assert overprint.status == "FAIL"
+    assert overprint.measured["printed_without_model_z"] == [0.6]

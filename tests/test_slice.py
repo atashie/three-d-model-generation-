@@ -59,7 +59,7 @@ FILES = {"machine.json": json.dumps(MACHINE).encode(),
 APP = {"orca-slicer.exe": b"exe", "OrcaSlicer.dll": b"dll", "resources/x.txt": b"x"}
 F6_IDS = ["F6.slicer_exit", "F6.gcode_present", "F6.layer_count", "F6.single_object",
           "F6.portability"]
-F3_IDS = ["F3.printed_connectivity", "F3.edge_coverage"]
+F3_IDS = ["F3.printed_connectivity", "F3.edge_coverage", "F3.edge_overprint"]
 RECORD_KEYS = {"schema", "tdmg_version", "algorithm", "slice_id", "links", "params", "slicer",
                "command", "exit", "stats", "checks", "verdict", "certification", "gcode",
                "stderr_tail", "log_written", "outputs", "environment", "review",
@@ -162,8 +162,8 @@ def test_record_contents(flat_dir, fake, tmp_path):
     assert record["exit"]["timed_out"] is False
     assert record["stats"]["layer_count"] == 15
     ids = [c["id"] for c in record["checks"]]
-    assert "F6.slicer" not in ids and ids[-5:] == F6_IDS and ids[-7:-5] == F3_IDS
-    assert ids[:-7] == [c["id"] for c in flat["checks"] if c["id"] != "F6.slicer"]
+    assert "F6.slicer" not in ids and ids[-5:] == F6_IDS and ids[-8:-5] == F3_IDS
+    assert ids[:-8] == [c["id"] for c in flat["checks"] if c["id"] != "F6.slicer"]
     assert {c["id"]: c["status"] for c in record["checks"][-5:]} == {
         "F6.slicer_exit": "PASS", "F6.gcode_present": "PASS", "F6.layer_count": "PASS",
         "F6.single_object": "PASS", "F6.portability": "UNKNOWN"}
@@ -171,7 +171,8 @@ def test_record_contents(flat_dir, fake, tmp_path):
     # The reason is derived from the required checks that are not PASS, in check order.
     # The fake's default G-code has no layer comments, so the F3 checks cannot measure it.
     assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
-                                        "F3.edge_coverage UNKNOWN, F6.portability UNKNOWN")
+                                        "F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN, "
+                                        "F6.portability UNKNOWN")
     assert "no Z_HEIGHT" in by_id(record)["F3.edge_coverage"]["note"]
     assert record["printed"]["measured"] is False
     assert record["environment"]["platform"] == platform.platform()
@@ -298,7 +299,7 @@ def test_a_failed_slice_writes_the_record_and_fails(flat_dir, fake, tmp_path):
     assert record["stderr_tail"].endswith("No object is fully inside")
     assert record["certification"].startswith(
         "NOT CERTIFIED: F3.printed_connectivity UNKNOWN, F3.edge_coverage UNKNOWN, "
-        "F6.slicer_exit FAIL, F6.gcode_present FAIL")
+        "F3.edge_overprint UNKNOWN, F6.slicer_exit FAIL, F6.gcode_present FAIL")
     # Like the real slicer, the fake writes a log when it fails.
     assert record["log_written"] is True
     assert sorted(p.name for p in out.iterdir()) == ["slice.json", "slicer.log"]
@@ -532,7 +533,9 @@ def test_a_covered_square_passes_both_f3_checks(square_flat, fake, tmp_path):
     assert [lay["z"] for lay in printed["layers"]] == pytest.approx(
         [0.2 * (i + 1) for i in range(15)])
     assert all(lay["parts"] == [1, 1] and lay["holes"] == [0, 0] for lay in printed["layers"])
-    assert set(printed["layers"][0]) == {"z", "max_gap_mm", "parts", "holes", "unmatched"}
+    assert set(printed["layers"][0]) == {"z", "max_gap_mm", "parts", "holes", "unmatched",
+                                         "max_over_mm"}
+    assert checks["F3.edge_overprint"]["status"] == "PASS"
     assert all(lay["unmatched"] == 0 for lay in printed["layers"])
     assert printed["alignment"]["plate_centre_mm"] == list(PLATE_CENTRE)
     assert printed["alignment"]["angle_deg"] == coverage["measured"]["angle_deg"]
@@ -642,7 +645,8 @@ def test_unsupported_gcode_leaves_f3_unknown(square_flat, fake, tmp_path):
     assert record["printed"]["measured"] is False
     assert "absolute extrusion" in record["printed"]["reason"]
     assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
-                                       "F3.edge_coverage UNKNOWN, F6.portability UNKNOWN")
+                                       "F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN, "
+                                       "F6.portability UNKNOWN")
     assert record["gcode"]["quarantined"] is False          # UNKNOWN is not a FAIL
 
 
@@ -747,7 +751,8 @@ def test_cli_exit_0_prints_the_summary(flat_dir, fake, tmp_path):
     record = json.loads((out / "slice.json").read_bytes())
     text = r.stdout
     assert text.startswith("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
-                           "F3.edge_coverage UNKNOWN, F6.portability UNKNOWN\n")
+                           "F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN, "
+                           "F6.portability UNKNOWN\n")
     assert "do not print" not in text
     assert "slicer exit 0 (CLI_SUCCESS)" in text
     assert "15 layers, 766.1 s, 3.727 g (slicer estimates)" in text
@@ -855,8 +860,9 @@ def test_roadie_slices_with_the_real_slicer(tmp_path):
     assert record["stats"]["layer_count"] == 15
     assert record["slicer"]["exe_sha256"] == PIN.exe.sha256
     checks = by_id(record)
-    f3 = [checks["F3.printed_connectivity"], checks["F3.edge_coverage"]]
-    assert [c["status"] for c in f3] == ["PASS", "PASS"], f3
+    f3 = [checks["F3.printed_connectivity"], checks["F3.edge_coverage"],
+          checks["F3.edge_overprint"]]
+    assert [c["status"] for c in f3] == ["PASS"] * 3, f3
     assert record["printed"]["measured"] is True and len(record["printed"]["layers"]) == 15
     assert record["gcode"]["quarantined"] is False
     assert record["slicer"]["app_tree_verified"] is True

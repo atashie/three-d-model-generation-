@@ -15,8 +15,9 @@ does not understand instead of skipping it:
   a quarter turn.
 - layer_metrics: per layer, the largest distance from the model's edge to printed plastic,
   and whether the parts and holes of the print match those of the model one to one.
-- f3_checks: F3.printed_connectivity and F3.edge_coverage for tdmg slice, by the rule the
-  owner approved (docs/plans/2026-11-10-thin-wall-policy.md, Decision 2).
+- f3_checks: F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint for tdmg
+  slice, by the rules the owner approved (docs/plans/2026-11-10-thin-wall-policy.md,
+  Decisions 2 and 2a).
 
 Holes: a region the footprint encloses but does not print is a hole of the print only if
 it is not inside the model section. Sparse infill leaves many such voids inside the model,
@@ -89,7 +90,15 @@ COMMAND = re.compile(r"(?:G|T)(?:0|[1-9][0-9]*)|M(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"
 WORD = re.compile(r"([A-Z])(-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))")
 CONNECTIVITY = "F3.printed_connectivity"
 COVERAGE = "F3.edge_coverage"
-F3_SLICE_CHECK_IDS = (CONNECTIVITY, COVERAGE)
+OVERPRINT = "F3.edge_overprint"
+F3_SLICE_CHECK_IDS = (CONNECTIVITY, COVERAGE, OVERPRINT)
+# Z_HEIGHT and LAYER_HEIGHT are written with C's %g, six significant digits (OrcaSlicer's
+# GCode::process_layer, main branch, read 2026-11-10: sprintf "; Z_HEIGHT: %g" of print_z,
+# and the height as a float: print_z on the first layer, else float(print_z) minus the
+# previous layer's z kept as a float). So a printed value v is within half a unit of its
+# sixth significant digit, and the float height within (|z| + |z_prev| + |h|) * 2^-24 of
+# the exact difference. Z_SIG_DIGITS is that format's precision, not a threshold.
+Z_SIG_DIGITS = 6
 TOLERANCE_RULE = "acceptance.dimension.tolerance"
 ELEPHANT_FOOT_KEY = "elefant_foot_compensation"      # OrcaSlicer's spelling
 PRINTABLE_AREA_KEY = "printable_area"
@@ -252,8 +261,13 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
     MODEL_FEATURES; from an unknown position; as an arc in the R form, with a P (turns)
     word, with neither I nor J, or reaching beyond plate.within_bound. Anywhere, for a word
     that is not a finite number, a position beyond plate.within_bound, and G20 (inches).
-    And for G-code with no Z_HEIGHT layer, a Z_HEIGHT that repeats, or a layer that has no
-    LAYER_HEIGHT by the end, even if it prints nothing.
+    And for G-code with no Z_HEIGHT layer, a layer that has no LAYER_HEIGHT by the end
+    (even if it prints nothing), Z_HEIGHT values that do not strictly increase in file
+    order, a first layer whose Z is not its LAYER_HEIGHT, or a layer whose Z is not the
+    previous Z plus its LAYER_HEIGHT, within the precision those numbers are written with
+    (_z_tolerance). A layer's height is the first LAYER_HEIGHT after its Z_HEIGHT, as
+    OrcaSlicer writes it; later LAYER_HEIGHT lines in the layer are the bead heights of
+    single features (a bridge is written 0.4 mm high) and do not change the layer.
 
     Every line that is not a comment must start with a command matching COMMAND, and a
     G-command must be in G_COMMANDS; anything else is refused, never skipped. M- and
@@ -278,17 +292,19 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
         if line.startswith(";"):
             tag = line[1:].lstrip()
             if tag.startswith("Z_HEIGHT:"):
-                z = _comment_value(tag, lineno)
-                if z in layers:
-                    raise UnsupportedGcode(f"line {lineno}: Z_HEIGHT {z:g} repeats an "
-                                           "earlier layer")
+                new_z = _comment_value(tag, lineno)
+                if z is not None and not new_z > z:
+                    raise UnsupportedGcode(f"line {lineno}: Z_HEIGHT {new_z:g} does not "
+                                           f"increase on the previous {z:g}")
+                z = new_z
                 layers[z] = Layer(z, math.nan, [])
             elif tag.startswith("LAYER_HEIGHT:") and z is not None:
                 height = _comment_value(tag, lineno)
                 if not height > 0:
                     raise UnsupportedGcode(f"line {lineno}: layer height {height} is not "
                                            "positive")
-                layers[z] = Layer(z, height, layers[z].segments)
+                if math.isnan(layers[z].height):          # the layer's, not a feature's
+                    layers[z] = Layer(z, height, layers[z].segments)
             elif tag.startswith("LINE_WIDTH:"):
                 width = _comment_value(tag, lineno)
             elif tag.startswith("FEATURE:"):
@@ -360,7 +376,33 @@ def parse_gcode(text: str, plate: Plate) -> dict[float, Layer]:
     if unknown:
         raise UnsupportedGcode(f"layer(s) {', '.join(f'{z:g}' for z in unknown)} have no "
                                "LAYER_HEIGHT")
+    previous = 0.0
+    for z, lay in layers.items():                        # file order, increasing
+        if abs(z - previous - lay.height) > _z_tolerance(z, previous, lay.height):
+            raise UnsupportedGcode(f"layer {z:g}: Z is not the previous Z ({previous:g}) "
+                                   f"plus its LAYER_HEIGHT ({lay.height:g}): a gap or an "
+                                   "overlap in the layers")
+        previous = z
     return layers
+
+
+def _half_digit(v: float) -> float:
+    """Half a unit in the last digit %g writes for v (Z_SIG_DIGITS significant digits)."""
+    if v == 0:
+        return 0.0
+    return 0.5 * 10.0 ** (math.floor(math.log10(abs(v))) - (Z_SIG_DIGITS - 1))
+
+
+def _z_tolerance(z: float, previous: float, height: float) -> float:
+    """How far z - previous - height may be from 0 from how the three were written.
+
+    The %g rounding of each of the three numbers, plus the float rounding of the height
+    (see Z_SIG_DIGITS), doubled for the float64 arithmetic here, as flat's STL_COORD_RTOL
+    does. For a 0.2 mm layer near z = 3 mm it is about 1e-6 mm: a numerical bound, far
+    below any layer height, so a missing or doubled layer cannot pass.
+    """
+    rounding = _half_digit(z) + _half_digit(previous) + _half_digit(height)
+    return 2 * (rounding + (abs(z) + abs(previous) + abs(height)) * 2.0 ** -24)
 
 
 def _check_bound(where, x, y, plate: Plate) -> None:
@@ -596,6 +638,34 @@ def match(model_items: list, printed_items: list, kind: str,
     return out
 
 
+def overprint_points(printed, model_bed, spacing: float = EDGE_SAMPLE_MM) -> np.ndarray:
+    """Samples of the plastic printed outside the model: the boundary of printed minus the
+    model every spacing, and a grid at spacing inside it.
+
+    The boundary of the footprint alone is not enough: plastic that fills a hole of the
+    model has its farthest point inside, away from any edge. Any point of the region is
+    within spacing / sqrt 2 of a grid node; if that node is outside the region, the point
+    is within that of the region's boundary, which is sampled every spacing. With distance
+    1-Lipschitz, the true largest overprint is at most the sampled largest plus
+    spacing * (1 / sqrt 2 + 1 / 2), 0.06 mm.
+    """
+    outside = printed if model_bed.is_empty else printed.difference(model_bed)
+    parts = _polygons(outside)
+    if not parts:
+        return np.empty((0, 2))
+    region = shapely.union_all(parts)
+    edge = _edge_points(region, spacing)
+    x0, y0, x1, y1 = region.bounds
+    xs = np.arange(math.ceil(x0 / spacing), math.floor(x1 / spacing) + 1) * spacing
+    ys = np.arange(math.ceil(y0 / spacing), math.floor(y1 / spacing) + 1) * spacing
+    gx, gy = np.meshgrid(xs, ys)
+    grid = np.column_stack([gx.ravel(), gy.ravel()])
+    if len(grid):
+        shapely.prepare(region)
+        grid = grid[shapely.contains_xy(region, grid[:, 0], grid[:, 1])]
+    return np.vstack([edge, grid]) if len(grid) else edge
+
+
 def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -> dict:
     """One layer: the largest model-edge-to-plastic gap, where it is, and parts and holes.
 
@@ -605,6 +675,9 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
     samples whose gap exceeds allowance_mm. With no section, or with nothing printed where
     there is one (nothing_printed, an infinite gap), the gap entries are None. unmatched
     lists the parts and holes of the model and of the print not matched one to one.
+    max_over_mm is the largest distance from printed plastic to the model region
+    (overprint_points), with where it is; plastic printed where the model has no section
+    is printed_without_model, and the overprint entries are then None.
     """
     model_bed = alignment.apply(section)
     model_parts, printed_parts = _polygons(model_bed), _polygons(printed)
@@ -615,7 +688,18 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float) -
            "parts_model": len(model_parts), "parts_printed": len(printed_parts),
            "holes_model": len(model_holes), "holes_printed": len(holes),
            "unmatched": (match(model_parts, printed_parts, "part", alignment)
-                         + match(model_holes, holes, "hole", alignment))}
+                         + match(model_holes, holes, "hole", alignment)),
+           "printed_without_model": model_bed.is_empty and not printed.is_empty,
+           "max_over_mm": None, "over_at_bed_mm": None, "over_at_model_mm": None}
+    if not printed.is_empty and not model_bed.is_empty:
+        over = overprint_points(printed, model_bed)
+        if len(over):
+            d = gaps(over, model_bed)
+            j = int(np.argmax(d))
+            out.update(max_over_mm=float(d[j]), over_at_bed_mm=[float(v) for v in over[j]],
+                       over_at_model_mm=[float(v) for v in alignment.to_model(over[j:j + 1])[0]])
+        else:
+            out["max_over_mm"] = 0.0
     if model_bed.is_empty or printed.is_empty:
         return out
     model_pts = _edge_points(section)
@@ -675,6 +759,10 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
       (acceptance.dimension.tolerance) of printed plastic, or within tolerance_mm plus
       elephant_foot_mm (the profile's elefant_foot_compensation) on the first layer, where
       the slicer shrinks the outline on purpose. Otherwise it FAILs, naming the largest gap.
+    - F3.edge_overprint is the reverse (Decision 2a): it PASSes when no printed plastic
+      lies farther than that same allowance outside the model region (overprint_points),
+      and otherwise FAILs, naming the largest overprint. Plastic on a layer where the model
+      has no section FAILs it.
     Both are UNKNOWN, with the reason, when not_measured is given (the slicer failed), when
     there is no G-code, when the G-code is unsupported, or when the analysis raises any
     other error (an "analysis error", never a PASS).
@@ -704,10 +792,13 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
         record["reason"] = reason
         return [CheckResult(CONNECTIVITY, "UNKNOWN", None, None, None, f"not measured: {reason}"),
                 CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                            f"not measured: {reason}"),
+                CheckResult(OVERPRINT, "UNKNOWN", None, threshold, TOLERANCE_RULE,
                             f"not measured: {reason}")], record
-    judged = [(_connectivity(layers, a), _coverage(layers, a, threshold), a, layers)
-              for a, layers in results]
+    judged = [(_connectivity(layers, a), _coverage(layers, a, threshold), a, layers,
+               _overprint(layers, a, threshold)) for a, layers in results]
     connectivity = max((j[0] for j in judged), key=_badness)
+    overprint = max((j[4] for j in judged), key=_badness)
     kept = max(judged, key=lambda j: _badness(j[1]))
     coverage, alignment, layers = kept[1], kept[2], kept[3]
     record.update(measured=True,
@@ -716,8 +807,9 @@ def f3_checks(gcode: bytes | None, stl: bytes, plate: Plate, tolerance_mm: float
                   layers=[{"z": m["z"], "max_gap_mm": m["max_gap_mm"],
                            "parts": [m["parts_model"], m["parts_printed"]],
                            "holes": [m["holes_model"], m["holes_printed"]],
+                           "max_over_mm": m["max_over_mm"],
                            "unmatched": len(m["unmatched"])} for m in layers])
-    return [connectivity, coverage], record
+    return [connectivity, coverage, overprint], record
 
 
 def _badness(check: CheckResult) -> tuple:
@@ -727,6 +819,9 @@ def _badness(check: CheckResult) -> tuple:
     if check.id == COVERAGE:
         detail = (len(m.get("nothing_printed_z", [])),
                   (m["max_gap_mm"] - m["allowance_mm"]) if "max_gap_mm" in m else -math.inf)
+    elif check.id == OVERPRINT:
+        detail = (len(m.get("printed_without_model_z", [])),
+                  (m["max_over_mm"] - m["allowance_mm"]) if "max_over_mm" in m else -math.inf)
     else:
         detail = (m.get("layers_mismatched", 0), 0)
     return (rank, *detail)
@@ -790,4 +885,38 @@ def _coverage(layers: list[dict], alignment: Alignment, threshold: dict) -> Chec
                f"model {_place(worst['at_model_mm'])} mm"
                + (f"; {len(over)} layer(s) are over. " if over else ". "))
     return CheckResult(COVERAGE, "FAIL" if over else "PASS", measured, threshold,
+                       TOLERANCE_RULE, how + summary + SCOPE)
+
+
+def _overprint(layers: list[dict], alignment: Alignment, threshold: dict) -> CheckResult:
+    without = [m["z"] for m in layers if m["printed_without_model"]]
+    if without:
+        return CheckResult(
+            OVERPRINT, "FAIL", {"printed_without_model_z": without,
+                                "angle_deg": alignment.angle},
+            threshold, TOLERANCE_RULE,
+            f"{len(without)} layer(s), the first at z = {without[0]:g} mm, print where the "
+            "model has no section. " + SCOPE)
+    measured_layers = [m for m in layers if m["max_over_mm"] is not None]
+    if not measured_layers:
+        return CheckResult(OVERPRINT, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                           "not measured: no layer prints where the model has a section")
+    worst = max(measured_layers, key=lambda m: m["max_over_mm"] - m["allowance_mm"])
+    over = [m for m in measured_layers if m["max_over_mm"] > m["allowance_mm"]]
+    measured = {"worst_z": worst["z"], "max_over_mm": worst["max_over_mm"],
+                "allowance_mm": worst["allowance_mm"], "at_bed_mm": worst["over_at_bed_mm"],
+                "at_model_mm": worst["over_at_model_mm"], "layers_over": len(over),
+                "angle_deg": alignment.angle}
+    how = (f"The largest distance from printed plastic outside the model to the model region "
+           f"(sampled every {EDGE_SAMPLE_MM:g} mm on and inside that plastic; the true largest "
+           f"is at most {EDGE_SAMPLE_MM * (1 / math.sqrt(2) + 0.5):.2f} mm more), with the "
+           "model's bounding box centred on the plate, against the tolerance, plus the "
+           "profile's elefant_foot_compensation on the first layer. ")
+    where = ("" if worst["over_at_bed_mm"] is None else
+             f", at bed {_place(worst['over_at_bed_mm'])}, model "
+             f"{_place(worst['over_at_model_mm'])} mm")
+    summary = (f"The worst layer, z = {worst['z']:g} mm, prints {worst['max_over_mm']:.3f} mm "
+               f"outside against {worst['allowance_mm']:g} mm{where}"
+               + (f"; {len(over)} layer(s) are over. " if over else ". "))
+    return CheckResult(OVERPRINT, "FAIL" if over else "PASS", measured, threshold,
                        TOLERANCE_RULE, how + summary + SCOPE)
