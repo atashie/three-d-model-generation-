@@ -30,6 +30,7 @@ from shapely import affinity
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
 from tdmg import __version__
+from tdmg._masks import binary_cells
 from tdmg.checks import F1_CHECK_IDS, CheckResult, merge_exact, topology_checks, verdict
 from tdmg.profiles import PrinterProfile, load_printer, printer_ids
 from tdmg.records import (
@@ -51,7 +52,6 @@ HAUSDORFF_STEP_PX = 0.25  # Boundary sampling step for the measured change, in p
                           # A measurement resolution, not a threshold: the caller passes
                           # HAUSDORFF_STEP_PX * scale_mm_per_px as clean's sample_step_mm.
 DROPPED_LISTED = 10  # Display only: how many dropped-island areas the report lists.
-MASK_ON = 255  # Integer masks hold 0 and 255, as mask.png does (selection.load_mask).
 THIN_LISTED = 5  # Display only: how many thin-region pieces the F3 measurement lists.
 DISPLAY_DECIMALS = 3  # Display rounding of listed thin-region areas and centroids (mm).
 # F2.target_width compares scale x mask width, both float64, with the requested width. The
@@ -90,16 +90,7 @@ class FlatError(ValueError):
 
 
 def _cells(mask: np.ndarray) -> np.ndarray:
-    mask = np.asarray(mask)
-    if mask.ndim != 2:
-        raise FlatError(f"mask must be two-dimensional, got shape {mask.shape}")
-    if mask.dtype == np.bool_:
-        return mask
-    if np.issubdtype(mask.dtype, np.integer):
-        if not np.isin(mask, (0, MASK_ON)).all():
-            raise FlatError(f"an integer mask must hold only 0 and {MASK_ON}")
-        return mask == MASK_ON
-    raise FlatError(f"mask must be bool or integer (0 and {MASK_ON}), got {mask.dtype}")
+    return binary_cells(mask, FlatError)
 
 
 def mask_outline(mask: np.ndarray) -> shapely.Geometry:
