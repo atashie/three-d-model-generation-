@@ -1,6 +1,10 @@
 import io
 import json
 import math
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -11,7 +15,17 @@ from hypothesis import strategies as st
 from selection_fixtures import RED, WHITE, roadie_like
 
 from tdmg.checks import merge_exact, topology_checks
-from tdmg.flat import QUAD_SEGS, FlatError, clean, extrude, mask_outline, to_model
+from tdmg.flat import (
+    DROPPED_LISTED,
+    HAUSDORFF_STEP_PX,
+    QUAD_SEGS,
+    FlatError,
+    clean,
+    extrude,
+    mask_outline,
+    sampled_hausdorff,
+    to_model,
+)
 
 
 def polygons(geom) -> list:
@@ -111,6 +125,14 @@ def test_to_model_refuses_empty_outline():
 
 OPENING = 0.4
 MIN_ISLAND = 0.64  # (2.0 x 0.4 mm)^2, the rule defaults with the A1 nozzle
+STEP = 0.01        # Hausdorff sampling step for hand-made geometry, in mm
+REPORT_KEYS = {"opening_mm", "min_island_mm2", "area_before_mm2", "area_after_mm2",
+               "removed_area_mm2", "hausdorff_mm", "hausdorff_sample_step_mm",
+               "dropped_islands", "vanished_parts", "ignored_non_polygonal"}
+
+
+def run_clean(geom, opening=OPENING, island=MIN_ISLAND, step=STEP):
+    return clean(geom, opening, island, step)
 
 
 def coords(part) -> set:
@@ -120,18 +142,18 @@ def coords(part) -> set:
 def test_squares_touching_at_a_corner_become_two_parts_without_shared_coordinates():
     touching = shapely.union_all([shapely.box(0, 0, 5, 5), shapely.box(5, 5, 10, 10)])
     assert isinstance(touching, shapely.MultiPolygon)
-    parts, report = clean(touching, OPENING, MIN_ISLAND)
+    parts, report = run_clean(touching)
     assert len(parts) == 2
     assert all(isinstance(p, shapely.Polygon) and p.is_valid for p in parts)
     assert not coords(parts[0]) & coords(parts[1])
     assert parts[0].distance(parts[1]) > 0
-    assert report["dropped_islands"] == []
+    assert report["dropped_islands"] == {"count": 0, "total_area_mm2": 0.0, "largest_mm2": []}
 
 
 def test_thin_hair_is_removed():
     square = shapely.box(0, 0, 5, 5)
     hair = shapely.box(5, 2.4, 9, 2.6)  # 0.2 mm wide, 4 mm long
-    parts, report = clean(shapely.union_all([square, hair]), OPENING, MIN_ISLAND)
+    parts, report = run_clean(shapely.union_all([square, hair]))
     assert len(parts) == 1
     # Opening keeps a stub at the hair's root: the eroded square bulges to where the
     # root corners are r = 0.2 away, x = 5 - sqrt(0.2^2 - 0.1^2), and regrows by r.
@@ -145,60 +167,126 @@ def test_thin_hair_is_removed():
     assert report["removed_area_mm2"] >= hair.area - 1e-9
     assert report["area_before_mm2"] == pytest.approx(square.area + hair.area)
     assert report["area_after_mm2"] == pytest.approx(parts[0].area)
-    # The farthest removed points are the hair's tip corners.
+    # The farthest removed points are the hair's tip corners, which are sample points.
     tip = max(parts[0].distance(shapely.Point(9, y)) for y in (2.4, 2.6))
     assert 3.9 < tip < 4.0
     assert report["hausdorff_mm"] == pytest.approx(tip, abs=1e-9)
+
+
+def bridged_blobs() -> np.ndarray:
+    """Two 40 px squares joined by a 1 x 30 px bar."""
+    mask = np.zeros((60, 130), bool)
+    mask[10:50, 10:50] = True
+    mask[10:50, 80:120] = True
+    mask[30, 50:80] = True
+    return mask
+
+
+def test_hausdorff_sees_a_removed_bar_between_vertices():
+    outline = mask_outline(bridged_blobs())
+    before, transform = to_model(outline, 11.0)  # 110 px wide: 0.1 mm per pixel
+    step = HAUSDORFF_STEP_PX * transform["scale_mm_per_px"]
+    parts, report = clean(before, OPENING, MIN_ISLAND, step)
+    after = shapely.union_all(parts)
+    assert len(parts) == 2
+    assert shapely.hausdorff_distance(before, after) < 0.2  # GEOS checks vertices only
+    dense = shapely.hausdorff_distance(before, after, densify=0.002)
+    assert dense > 1.4  # the bar's middle is 1.5 mm from either square
+    assert report["hausdorff_sample_step_mm"] == step
+    assert report["hausdorff_mm"] <= dense + 1e-9
+    assert report["hausdorff_mm"] == pytest.approx(dense, abs=step)
+    assert report["hausdorff_mm"] == pytest.approx(1.5, abs=step)
+
+
+def test_sampled_hausdorff_is_symmetric_and_zero_for_equal_regions():
+    a, b = shapely.box(0, 0, 4, 4), shapely.box(0, 0, 4, 6)
+    assert sampled_hausdorff(a, a, 0.1) == 0.0
+    assert sampled_hausdorff(a, b, 0.1) == sampled_hausdorff(b, a, 0.1) == 2.0
 
 
 def test_specks_below_min_island_are_dropped_and_reported():
     body = shapely.box(0, 0, 5, 5)
     speck = shapely.box(10, 0, 10.7, 0.7)     # 0.49 mm^2: survives opening, below 0.64
     island = shapely.box(10, 3, 11, 4)        # 1 mm^2 before opening
-    parts, report = clean(shapely.union_all([body, speck, island]), OPENING, MIN_ISLAND)
+    parts, report = run_clean(shapely.union_all([body, speck, island]))
     assert len(parts) == 2
     assert parts[0].area > parts[1].area
     assert parts[1].within(island)
-    assert len(report["dropped_islands"]) == 1
-    assert 0 < report["dropped_islands"][0] < MIN_ISLAND
-    assert report["dropped_islands"][0] == pytest.approx(speck.buffer(-0.2).buffer(
-        0.2, quad_segs=QUAD_SEGS).area)
+    expected = speck.buffer(-0.2).buffer(0.2, quad_segs=QUAD_SEGS).area
+    dropped = report["dropped_islands"]
+    assert dropped["count"] == 1
+    assert dropped["largest_mm2"] == [pytest.approx(expected)]
+    assert dropped["total_area_mm2"] == pytest.approx(expected)
+    assert 0 < expected < MIN_ISLAND
+    assert report["vanished_parts"] == {"count": 0, "total_area_mm2": 0.0}
 
 
-def test_dropped_islands_are_listed_largest_first():
-    specks = [shapely.box(10 * i, 20, 10 * i + side, 20 + side)
-              for i, side in enumerate([0.5, 0.7, 0.6])]
-    geom = shapely.union_all([shapely.box(0, 0, 5, 5), *specks])
-    _, report = clean(geom, OPENING, MIN_ISLAND)
-    assert len(report["dropped_islands"]) == 3
-    assert report["dropped_islands"] == sorted(report["dropped_islands"], reverse=True)
+def test_dropped_islands_count_all_and_list_the_largest_first():
+    sides = [0.5, 0.7, 0.6, 0.45, 0.55, 0.65, 0.5, 0.6, 0.7, 0.5, 0.62, 0.48]
+    specks = [shapely.box(10 * i, 20, 10 * i + side, 20 + side) for i, side in enumerate(sides)]
+    _, report = run_clean(shapely.union_all([shapely.box(0, 0, 5, 5), *specks]))
+    dropped = report["dropped_islands"]
+    opened = [s.buffer(-0.2).buffer(0.2, quad_segs=QUAD_SEGS).area for s in specks]
+    assert dropped["count"] == len(sides) > DROPPED_LISTED
+    assert dropped["total_area_mm2"] == pytest.approx(sum(opened))
+    assert dropped["largest_mm2"] == pytest.approx(sorted(opened, reverse=True)[:DROPPED_LISTED])
+    assert len(dropped["largest_mm2"]) == DROPPED_LISTED
 
 
-def test_report_numbers_are_plain_floats_or_none():
-    geom = shapely.union_all([shapely.box(0, 0, 5, 5), shapely.box(10, 0, 10.7, 0.7)])
-    _, report = clean(geom, OPENING, MIN_ISLAND)
-    assert set(report) == {"opening_mm", "min_island_mm2", "area_before_mm2",
-                           "area_after_mm2", "removed_area_mm2", "hausdorff_mm",
-                           "dropped_islands"}
-    for key, value in report.items():
-        if key == "dropped_islands":
-            assert value and all(type(v) is float for v in value)
-        else:
-            assert type(value) is float, key
-    json.dumps(report, allow_nan=False)
+def test_parts_erased_by_the_opening_are_reported_as_vanished():
+    mask = np.zeros((100, 100), bool)
+    mask[10:50, 10:50] = True                  # 4 x 4 mm body at 0.1 mm per pixel
+    specks = [(y, x) for y in range(60, 100, 4) for x in range(60, 100, 8)]
+    for y, x in specks:
+        mask[y, x] = True                      # 0.1 mm specks vanish in a 0.4 mm opening
+    mask[99, 0] = mask[0, 99] = True           # two more; they set the width to 100 px
+    model, transform = to_model(mask_outline(mask), 10.0)
+    assert transform["scale_mm_per_px"] == pytest.approx(0.1)
+    parts, report = clean(model, OPENING, MIN_ISLAND, 0.025)
+    assert len(parts) == 1
+    assert report["vanished_parts"]["count"] == len(specks) + 2
+    assert report["vanished_parts"]["total_area_mm2"] == pytest.approx(
+        (len(specks) + 2) * 0.01)
+    assert report["dropped_islands"]["count"] == 0
+
+
+def test_report_has_a_fixed_key_set_and_plain_types():
+    for geom in (shapely.box(0, 0, 5, 5),
+                 shapely.union_all([shapely.box(0, 0, 5, 5), shapely.box(10, 0, 10.7, 0.7)])):
+        _, report = run_clean(geom)
+        assert set(report) == REPORT_KEYS
+        assert set(report["dropped_islands"]) == {"count", "total_area_mm2", "largest_mm2"}
+        assert set(report["vanished_parts"]) == {"count", "total_area_mm2"}
+        for key in REPORT_KEYS - {"dropped_islands", "vanished_parts", "ignored_non_polygonal"}:
+            assert type(report[key]) is float, key
+        assert type(report["ignored_non_polygonal"]) is int
+        for group in ("dropped_islands", "vanished_parts"):
+            assert type(report[group]["count"]) is int
+            assert type(report[group]["total_area_mm2"]) is float
+        assert all(type(v) is float for v in report["dropped_islands"]["largest_mm2"])
+        json.dumps(report, allow_nan=False)
+        assert report["ignored_non_polygonal"] == 0
 
 
 def test_parts_are_ordered_by_area_then_bounds():
     # Two equal squares: the tie is broken by bounds, whatever the input order.
     a, b, big = shapely.box(20, 0, 23, 3), shapely.box(0, 10, 3, 13), shapely.box(0, 0, 8, 8)
     for order in ([a, b, big], [big, b, a], [b, big, a]):
-        parts, _ = clean(shapely.MultiPolygon(order), OPENING, MIN_ISLAND)
+        parts, _ = run_clean(shapely.MultiPolygon(order))
         assert [p.bounds for p in parts] == [
             pytest.approx(big.bounds), pytest.approx(b.bounds), pytest.approx(a.bounds)]
-    first = clean(shapely.MultiPolygon([a, b, big]), OPENING, MIN_ISLAND)
-    again = clean(shapely.MultiPolygon([a, b, big]), OPENING, MIN_ISLAND)
+    first = run_clean(shapely.MultiPolygon([a, b, big]))
+    again = run_clean(shapely.MultiPolygon([a, b, big]))
     assert [p.wkb for p in first[0]] == [p.wkb for p in again[0]]
     assert first[1] == again[1]
+
+
+def test_invalid_input_is_unioned_first():
+    overlapping = shapely.MultiPolygon([shapely.box(0, 0, 5, 5), shapely.box(3, 0, 8, 5)])
+    assert not overlapping.is_valid
+    parts, report = run_clean(overlapping)
+    assert len(parts) == 1
+    assert report["area_before_mm2"] == pytest.approx(40.0)
 
 
 def test_geometry_collection_is_read_recursively_and_lines_are_counted():
@@ -207,21 +295,22 @@ def test_geometry_collection_is_read_recursively_and_lines_are_counted():
         shapely.GeometryCollection([shapely.box(10, 0, 15, 5), shapely.LineString([(0, 9),
                                                                                    (9, 9)])]),
         shapely.Point(20, 20)])
-    parts, report = clean(nested, OPENING, MIN_ISLAND)
+    parts, report = run_clean(nested)
     assert len(parts) == 2
     assert report["ignored_non_polygonal"] == 2
 
 
 def test_nothing_left_raises_with_removed_area():
     with pytest.raises(FlatError, match=r"nothing printable remains after cleaning.*0\.25"):
-        clean(shapely.box(0, 0, 0.5, 0.5).buffer(0), 2.0, MIN_ISLAND)
+        run_clean(shapely.box(0, 0, 0.5, 0.5).buffer(0), opening=2.0)
 
 
-@pytest.mark.parametrize("opening, island", [(-0.1, 0.64), (math.nan, 0.64), (0.4, -1.0),
-                                             (0.4, math.inf)])
-def test_bad_cleaning_parameters_raise(opening, island):
+@pytest.mark.parametrize("opening, island, step", [
+    (0.0, 0.64, STEP), (-0.1, 0.64, STEP), (math.nan, 0.64, STEP), (0.4, -1.0, STEP),
+    (0.4, math.inf, STEP), (0.4, 0.64, 0.0), (0.4, 0.64, -1.0), (0.4, 0.64, math.nan)])
+def test_bad_cleaning_parameters_raise(opening, island, step):
     with pytest.raises(FlatError):
-        clean(shapely.box(0, 0, 5, 5), opening, island)
+        clean(shapely.box(0, 0, 5, 5), opening, island, step)
 
 
 # --- Task 5: extrusion --------------------------------------------------------------
@@ -277,7 +366,7 @@ def test_extrusion_spans_zero_to_thickness():
 
 def test_repeated_extrusion_is_identical():
     parts, _ = clean(shapely.union_all([shapely.box(0, 0, 5, 5), shapely.Point(8, 2).buffer(
-        1.5)]), OPENING, MIN_ISLAND)
+        1.5)]), OPENING, MIN_ISLAND, STEP)
     first, second = extrude(parts, 2.0), extrude(parts, 2.0)
     assert np.array_equal(first.vertices, second.vertices)
     assert np.array_equal(first.faces, second.faces)
@@ -308,7 +397,8 @@ def test_full_chain_on_a_bird_like_mask_passes_f1_after_stl_round_trip():
     assert outline.area == int(mask.sum())
     model, transform = to_model(outline, 60.0)
     assert transform["scale_mm_per_px"] == 60.0 / transform["mask_width_px"]
-    parts, report = clean(model, OPENING, MIN_ISLAND)
+    step = HAUSDORFF_STEP_PX * transform["scale_mm_per_px"]
+    parts, report = clean(model, OPENING, MIN_ISLAND, step)
     assert report["removed_area_mm2"] > 0          # the 1 px ring cannot survive opening
     mesh = extrude(parts, 3.0)
     assert set(statuses(mesh).values()) == {"PASS"}
@@ -317,3 +407,101 @@ def test_full_chain_on_a_bird_like_mask_passes_f1_after_stl_round_trip():
     written = trimesh.load(io.BytesIO(mesh.export(file_type="stl")), file_type="stl",
                            process=False)
     assert set(statuses(written).values()) == {"PASS"}
+
+
+# --- Review fixes: mask input, outline simplification, determinism ------------------
+
+
+@pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.int32])
+def test_integer_masks_use_0_and_255(dtype):
+    mask = np.zeros((6, 7), dtype)
+    mask[1:4, 2:6] = 255
+    assert mask_outline(mask).equals(mask_outline(mask == 255))
+
+
+@pytest.mark.parametrize("values", [(0, 1), (0, 128), (0, 254)])
+def test_integer_masks_with_other_values_raise(values):
+    mask = np.full((4, 4), values[0], np.uint8)
+    mask[1:3, 1:3] = values[1]
+    with pytest.raises(FlatError, match="0 and 255"):
+        mask_outline(mask)
+
+
+@pytest.mark.parametrize("mask", [np.ones((3, 3), np.float64), np.full((3, 3), np.nan),
+                                  np.ones((3, 3), np.float32)])
+def test_float_masks_raise(mask):
+    with pytest.raises(FlatError, match="bool or integer"):
+        mask_outline(mask)
+
+
+def raw_union(mask: np.ndarray):
+    boxes = []
+    for y, row in enumerate(mask):
+        edges = np.diff(np.concatenate([[0], row.astype(np.int8), [0]]))
+        boxes += [shapely.box(a, y, e, y + 1)
+                  for a, e in zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1),
+                                  strict=True)]
+    return shapely.union_all(boxes)
+
+
+def collinear_vertices(geom) -> int:
+    count = 0
+    for part in polygons(geom):
+        for ring in (part.exterior, *part.interiors):
+            xy = np.asarray(ring.coords)[:-1]
+            a, b, c = xy, np.roll(xy, -1, axis=0), np.roll(xy, -2, axis=0)
+            cross = (b - a)[:, 0] * (c - b)[:, 1] - (b - a)[:, 1] * (c - b)[:, 0]
+            count += int(np.count_nonzero(cross == 0))
+    return count
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_outline_drops_collinear_vertices_and_keeps_the_geometry(seed):
+    mask = np.random.default_rng(seed).random((40, 57)) < 0.45
+    mask[5:30, 5:40] = True  # long straight runs give collinear vertices in the union
+    outline, union = mask_outline(mask), raw_union(mask)
+    assert collinear_vertices(union) > 0
+    assert collinear_vertices(outline) == 0
+    assert outline.is_valid
+    assert outline.area == union.area == int(mask.sum())
+    assert outline.symmetric_difference(union).area == 0
+    assert shapely.get_num_coordinates(outline) < shapely.get_num_coordinates(union)
+
+
+def test_square_mask_outline_has_four_corners():
+    mask = np.zeros((10, 10), bool)
+    mask[1:9, 2:7] = True
+    outline = mask_outline(mask)
+    assert isinstance(outline, shapely.Polygon)
+    assert len(outline.exterior.coords) == 5
+
+
+CHILD = """
+import hashlib, json, sys
+import numpy as np
+sys.path.insert(0, sys.argv[1])
+from selection_fixtures import RED, WHITE, roadie_like
+from tdmg.flat import HAUSDORFF_STEP_PX, clean, extrude, mask_outline, to_model
+img = roadie_like()
+rgb = img[..., :3]
+mask = (img[..., 3] == 255) & ((rgb == RED).all(axis=2) | (rgb == WHITE).all(axis=2))
+model, transform = to_model(mask_outline(mask), 60.0)
+parts, report = clean(model, 0.4, 0.64, HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
+mesh = extrude(parts, 3.0)
+arrays = np.ascontiguousarray(mesh.vertices).tobytes() + np.ascontiguousarray(
+    mesh.faces).tobytes()
+record = json.dumps([transform, report], sort_keys=True, allow_nan=False).encode()
+print(hashlib.sha256(arrays).hexdigest(), hashlib.sha256(record).hexdigest())
+"""
+
+
+def test_two_fresh_processes_give_identical_mesh_and_report():
+    tests_dir = str(Path(__file__).parent)
+    outputs = []
+    for hash_seed in ("1", "2"):
+        env = {**os.environ, "PYTHONHASHSEED": hash_seed}
+        done = subprocess.run([sys.executable, "-c", CHILD, tests_dir], env=env,
+                              capture_output=True, text=True, check=True, timeout=300)
+        outputs.append(done.stdout.split())
+    assert len(outputs[0]) == 2
+    assert outputs[0] == outputs[1]

@@ -25,28 +25,46 @@ from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
 QUAD_SEGS = 8  # Buffer arcs per quarter circle. Chord error is r*(1-cos(pi/32)), about
                # 0.001 mm at r = 0.2 mm, far below a layer. An approximation setting.
+HAUSDORFF_STEP_PX = 0.25  # Boundary sampling step for the measured change, in pixels.
+                          # A measurement resolution, not a threshold: the caller passes
+                          # HAUSDORFF_STEP_PX * scale_mm_per_px as clean's sample_step_mm.
+DROPPED_LISTED = 10  # Display only: how many dropped-island areas the report lists.
+MASK_ON = 255  # Integer masks hold 0 and 255, as mask.png does (selection.load_mask).
 
 
 class FlatError(ValueError):
     """The selection cannot be made into flat geometry as asked. Nothing is written."""
 
 
-def mask_outline(mask: np.ndarray) -> shapely.Geometry:
-    """Exact pixel-cell outline, in pixel units (x right, y down), as a union of row runs."""
+def _cells(mask: np.ndarray) -> np.ndarray:
     mask = np.asarray(mask)
     if mask.ndim != 2:
         raise FlatError(f"mask must be two-dimensional, got shape {mask.shape}")
-    cells = mask.astype(bool)
+    if mask.dtype == np.bool_:
+        return mask
+    if np.issubdtype(mask.dtype, np.integer):
+        if not np.isin(mask, (0, MASK_ON)).all():
+            raise FlatError(f"an integer mask must hold only 0 and {MASK_ON}")
+        return mask == MASK_ON
+    raise FlatError(f"mask must be bool or integer (0 and {MASK_ON}), got {mask.dtype}")
+
+
+def mask_outline(mask: np.ndarray) -> shapely.Geometry:
+    """Exact pixel-cell outline, in pixel units (x right, y down), as a union of row runs.
+
+    The mask is bool, or integer with only 0 and 255 (255 is foreground). Collinear
+    vertices left by the union are removed; the geometry is unchanged.
+    """
+    cells = _cells(mask)
     if not cells.any():
         raise FlatError("no printable foreground")
-    boxes = []
-    for y, row in enumerate(cells):
-        edges = np.diff(np.concatenate([[0], row.astype(np.int8), [0]]))
-        starts = np.flatnonzero(edges == 1)
-        ends = np.flatnonzero(edges == -1)
-        boxes.extend(shapely.box(int(a), y, int(e), y + 1)
-                     for a, e in zip(starts, ends, strict=True))
-    return shapely.union_all(boxes)
+    padded = np.zeros((cells.shape[0], cells.shape[1] + 2), np.int8)
+    padded[:, 1:-1] = cells
+    edges = np.diff(padded, axis=1)
+    ys, xs = np.nonzero(edges == 1)  # row-major, so the k-th start pairs with the k-th end
+    _, xe = np.nonzero(edges == -1)
+    boxes = shapely.box(xs, ys, xe, ys + 1)
+    return shapely.simplify(shapely.union_all(boxes), 0)
 
 
 def _require_positive(name: str, value: float) -> float:
@@ -100,40 +118,90 @@ def _order_key(part: Polygon) -> tuple:
     return (-part.area, part.bounds)
 
 
-def clean(geom_mm, opening_mm: float, min_island_mm2: float) -> tuple[list[Polygon], dict]:
+def _boundary_segments(geom) -> np.ndarray:
+    """Every boundary segment of geom as LineStrings."""
+    segments = []
+    for line in shapely.get_parts(geom.boundary):
+        xy = shapely.get_coordinates(line)
+        segments.append(np.stack([xy[:-1], xy[1:]], axis=1))
+    return shapely.linestrings(np.concatenate(segments))
+
+
+def _directed_distance(source, target, step: float) -> float:
+    """Largest distance from source's boundary, sampled at step, to the region target."""
+    xy = shapely.get_coordinates(shapely.segmentize(source.boundary, step))
+    shapely.prepare(target)
+    outside = xy[~shapely.contains_xy(target, xy[:, 0], xy[:, 1])]
+    if len(outside) == 0:
+        return 0.0
+    tree = shapely.STRtree(_boundary_segments(target))
+    _, distances = tree.query_nearest(shapely.points(outside), return_distance=True)
+    return float(distances.max())
+
+
+def sampled_hausdorff(a, b, step: float) -> float:
+    """Two-sided Hausdorff distance between regions a and b, sampled on both boundaries.
+
+    Each boundary is split into pieces no longer than step, and every vertex is a sample.
+    A sample covered by the other region is at distance 0, else at its exact distance to
+    the other boundary. Samples are points of the boundaries and their distances are
+    exact, so the result is a lower bound of the boundary-to-region Hausdorff distance
+    and lies within step / 2 of it. GEOS's plain hausdorff_distance looks only at
+    vertices, so it misses a removed bar whose middle has no vertex.
+    """
+    return max(_directed_distance(a, b, step), _directed_distance(b, a, step))
+
+
+def clean(geom_mm, opening_mm: float, min_island_mm2: float,
+          sample_step_mm: float) -> tuple[list[Polygon], dict]:
     """Open by opening_mm (round joins, QUAD_SEGS); split into polygons; drop small parts.
 
-    Returns the parts, largest first, and a report {opening_mm, min_island_mm2,
-    area_before_mm2, area_after_mm2, removed_area_mm2, hausdorff_mm, dropped_islands}.
-    Lines and points in the input are not printable area; if any appear they are
-    skipped and counted as ignored_non_polygonal.
+    opening_mm must be above 0: the opening is what separates parts that touch only at a
+    corner. Returns the parts, largest first, and a report with a fixed key set:
+    opening_mm, min_island_mm2, area_before_mm2, area_after_mm2, removed_area_mm2,
+    hausdorff_mm (sampled_hausdorff at sample_step_mm, a lower bound within the step),
+    hausdorff_sample_step_mm, dropped_islands {count, total_area_mm2, largest_mm2} for
+    parts the opening left below min_island_mm2, vanished_parts {count, total_area_mm2}
+    for input parts the opening erased entirely, and ignored_non_polygonal, the count of
+    lines and points in the input, which have no printable area.
     """
-    opening_mm = _require_non_negative("opening_mm", opening_mm)
+    opening_mm = _require_positive("opening_mm", opening_mm)
     min_island_mm2 = _require_non_negative("min_island_mm2", min_island_mm2)
-    polys, skipped = _polygons(geom_mm)
-    before = shapely.union_all(polys)
+    sample_step_mm = _require_positive("sample_step_mm", sample_step_mm)
+    if isinstance(geom_mm, (Polygon, MultiPolygon)) and geom_mm.is_valid:
+        before, skipped = geom_mm, 0
+    else:
+        polys, skipped = _polygons(geom_mm)
+        before = shapely.union_all(polys)
     radius = opening_mm / 2
-    opened = before.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
+    eroded = before.buffer(-radius, quad_segs=QUAD_SEGS)
+    opened = eroded.buffer(radius, quad_segs=QUAD_SEGS)
+
+    inputs = np.asarray(_polygons(before)[0], dtype=object)
+    shapely.prepare(eroded)
+    vanished = inputs[~shapely.intersects(eroded, inputs)] if len(inputs) else inputs
     candidates, _ = _polygons(opened)
     candidates.sort(key=_order_key)
     parts = [p for p in candidates if p.area >= min_island_mm2]
     dropped = sorted((float(p.area) for p in candidates if p.area < min_island_mm2),
                      reverse=True)
-    after = shapely.union_all(parts)
     area_before = float(before.area)
     area_after = float(sum(p.area for p in parts))
+    if not parts:
+        raise FlatError("nothing printable remains after cleaning (removed "
+                        f"{area_before - area_after:.6g} mm^2 of {area_before:.6g} mm^2)")
+    after = shapely.union_all(parts)
     report = {"opening_mm": opening_mm, "min_island_mm2": min_island_mm2,
               "area_before_mm2": area_before, "area_after_mm2": area_after,
               "removed_area_mm2": area_before - area_after,
-              "hausdorff_mm": (None if after.is_empty
-                               else float(shapely.hausdorff_distance(before, after))),
-              "dropped_islands": dropped}
-    if skipped:
-        report["ignored_non_polygonal"] = skipped
-    if not parts:
-        raise FlatError("nothing printable remains after cleaning (removed "
-                        f"{report['removed_area_mm2']:.6g} mm^2 of "
-                        f"{area_before:.6g} mm^2)")
+              "hausdorff_mm": sampled_hausdorff(before, after, sample_step_mm),
+              "hausdorff_sample_step_mm": sample_step_mm,
+              "dropped_islands": {"count": len(dropped),
+                                  "total_area_mm2": float(sum(dropped)),
+                                  "largest_mm2": dropped[:DROPPED_LISTED]},
+              "vanished_parts": {"count": len(vanished),
+                                 "total_area_mm2": float(sum(p.area for p in vanished))},
+              "ignored_non_polygonal": skipped}
     return parts, report
 
 
