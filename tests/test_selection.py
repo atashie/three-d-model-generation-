@@ -35,6 +35,7 @@ from tdmg.selection import (
     pixels_sha256,
     select_from_mask,
     select_subject,
+    selection_identity,
     write_selection,
 )
 
@@ -798,3 +799,10 @@ def test_masks_in_other_modes_are_refused(tmp_path):
     Image.new("CMYK", (2, 2)).save(tmp_path / "c.jpg")
     with pytest.raises(SelectionError, match="CMYK"):
         load_mask(tmp_path / "c.jpg", (2, 2))
+
+
+def test_selection_identity_reproduces_the_recorded_id(tmp_path):
+    rec = _run(tmp_path, "a")
+    assert selection_identity(rec["algorithm"], rec["input"]["pixels_sha256"],
+                              rec["controls"], rec["interpretation"]["text"]) == \
+        rec["selection_id"]

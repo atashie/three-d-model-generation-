@@ -9,6 +9,7 @@ import trimesh
 from PIL import Image
 from selection_fixtures import BIRD_SEED, DISC_SEED, roadie_like
 
+import tdmg.flat
 from tdmg.checks import F1_CHECK_IDS, merge_exact, topology_checks
 from tdmg.flat import (
     FLAT_ALGORITHM_VERSION,
@@ -71,7 +72,8 @@ def test_roadie_run_gives_one_body_and_passes_f1(run):
     assert record["mesh"]["bodies"] == 1
     assert checks["F4.body_count"]["status"] == "PASS"
     assert record["cleaning"]["dropped_islands"]["count"] == 0
-    for i in ("F2.fits_build_volume", "F2.target_width", "F5.triangles"):
+    for i in ("F2.fits_build_volume", "F2.target_width", "F2.export_matches_geometry",
+              "F5.triangles"):
         assert checks[i]["status"] == "PASS"
     assert checks["F3.thin_regions"]["status"] == "UNKNOWN"
     assert checks["F6.slicer"]["status"] == "UNKNOWN"
@@ -107,8 +109,10 @@ def test_roadie_record_contents(run, selection_dir):
     assert set(record["outputs"]) == {"model.stl", "outline.png"}
     assert {"python", "numpy", "shapely", "trimesh", "manifold3d"} <= set(record["environment"])
     assert record["review"] == (
-        "Open outline.png: grey is kept, red was removed as unprintable. The verdict stays "
-        "NOT CERTIFIED until F3 policy and slicer checks exist.")
+        "Open outline.png: grey is kept, red was removed by the cleaning rules "
+        "(flat.sliver.opening_width, flat.island.min_square_side; both untested "
+        "hypotheses), which also round convex corners. The verdict stays NOT CERTIFIED "
+        "until F3 policy and slicer checks exist.")
 
 
 def test_roadie_files_exist_and_record_is_canonical_with_lf(run):
@@ -306,3 +310,78 @@ def test_a_gate_fail_still_writes_every_file_with_the_verdict(selection_dir, tmp
     assert record["verdict"] == "NOT CERTIFIED"
     assert sorted(p.name for p in out.iterdir()) == sorted(FILES)
     assert json.loads((out / "flat.json").read_bytes()) == record
+
+
+def scaled_stl(monkeypatch, factor=0.1):
+    """Make make_flat export a mesh scaled by factor, as a broken encoder would."""
+    encode = tdmg.flat._encode_stl
+
+    def broken(mesh):
+        return encode(trimesh.Trimesh(np.asarray(mesh.vertices) * factor, mesh.faces,
+                                      process=False))
+
+    monkeypatch.setattr(tdmg.flat, "_encode_stl", broken)
+
+
+def test_an_export_that_differs_from_the_geometry_fails_the_gate(selection_dir, tmp_path,
+                                                                  monkeypatch):
+    scaled_stl(monkeypatch)
+    record = make_flat(selection_dir, 60.0, 3.0, tmp_path / "out")
+    checks = by_id(record)
+    assert checks["F2.export_matches_geometry"]["status"] == "FAIL"
+    assert {checks[i]["status"] for i in F1_CHECK_IDS} == {"PASS"}
+    assert checks["F2.target_width"]["status"] == "PASS"     # the scale itself was right
+    assert checks["F2.target_width"]["measured"]["mesh_width_mm"] == pytest.approx(6.0)
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == sorted(FILES)
+
+
+def edited_selection(selection_dir, tmp_path, change):
+    copy = tmp_path / "sel"
+    shutil.copytree(selection_dir, copy)
+    record = json.loads((copy / "selection.json").read_bytes())
+    change(record)
+    (copy / "selection.json").write_bytes(record_text(record))
+    return copy
+
+
+def _set(path, value):
+    def change(record):
+        *parents, last = path
+        target = record
+        for key in parents:
+            target = target[key]
+        if value is DELETE:
+            del target[last]
+        else:
+            target[last] = value
+    return change
+
+
+DELETE = object()
+
+
+@pytest.mark.parametrize("path, value, message", [
+    (("selection_id",), "", "selection_id"),
+    (("selection_id",), "0" * 63 + "g", "selection_id"),
+    (("interpretation", "text"), "Use the disc too.", "inconsistent"),
+    (("controls", "color_tolerance", "value"), 31.0, "inconsistent"),
+    (("controls",), DELETE, "controls"),
+    (("algorithm",), DELETE, "algorithm"),
+    (("algorithm",), "selection-0", "inconsistent"),
+    (("input", "pixels_sha256"), DELETE, "pixels_sha256"),
+    (("input", "pixels_sha256"), "f" * 64, "inconsistent"),
+    (("schema",), "tdmg.selection/0", "tdmg.selection/1"),
+    (("interpretation",), DELETE, "interpretation"),
+])
+def test_selection_provenance_is_verified(selection_dir, tmp_path, path, value, message):
+    copy = edited_selection(selection_dir, tmp_path, _set(path, value))
+    with pytest.raises(FlatError, match=message):
+        make_flat(copy, 60.0, 3.0, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+def test_an_inconsistent_selection_names_the_problem(selection_dir, tmp_path):
+    copy = edited_selection(selection_dir, tmp_path,
+                            _set(("interpretation", "text"), "Use the disc too."))
+    with pytest.raises(FlatError, match="^selection.json is inconsistent: "):
+        make_flat(copy, 60.0, 3.0, tmp_path / "out")

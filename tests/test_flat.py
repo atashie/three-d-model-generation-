@@ -25,6 +25,7 @@ from tdmg.flat import (
     body_count_check,
     build_volume_check,
     clean,
+    export_check,
     extrude,
     flat_checks,
     mask_outline,
@@ -646,11 +647,13 @@ def test_f2_target_width_passes_and_reports_final_extents():
     mesh = merge_exact(extrude(polygons(model), 2.0))
     check = target_width_check(transform, 40.0, mesh)
     assert check.status == "PASS"
-    assert check.measured == pytest.approx(40.0, rel=1e-12)
+    assert check.measured["scaled_mask_width_mm"] == pytest.approx(40.0, rel=1e-12)
+    assert check.measured["mesh_width_mm"] == pytest.approx(40.0, rel=1e-12)
     assert check.threshold == 40.0
     assert check.rule is None
     assert "40 x 24 x 2 mm" in check.note
     assert "cleaning removes material" in check.note
+    assert "F2.export_matches_geometry" in check.note
 
 
 def test_f2_target_width_fails_on_a_wrong_scale():
@@ -693,8 +696,8 @@ def test_f6_slicer_is_always_unknown():
 
 def test_required_checks_are_f1_to_f6():
     assert FLAT_REQUIRED_CHECKS == F1_CHECK_IDS | {
-        "F2.fits_build_volume", "F2.target_width", "F3.thin_regions", "F4.body_count",
-        "F5.triangles", "F6.slicer"}
+        "F2.fits_build_volume", "F2.target_width", "F2.export_matches_geometry",
+        "F3.thin_regions", "F4.body_count", "F5.triangles", "F6.slicer"}
     assert {r.id for r in topology_checks(merge_exact(extrude([shapely.box(0, 0, 1, 1)],
                                                               1.0)))} == F1_CHECK_IDS
 
@@ -705,7 +708,7 @@ def test_verdict_is_not_certified_even_for_a_perfect_part():
     model, transform = to_model(mask_outline(mask), 40.0)
     parts = polygons(model)
     mesh = merge_exact(extrude(parts, 2.0))
-    results = topology_checks(mesh) + flat_checks(mesh, parts, transform, 40.0, a1(),
+    results = topology_checks(mesh) + flat_checks(mesh, parts, transform, 40.0, 2.0, a1(),
                                                   load_rules())
     found = by_id(results)
     assert set(found) == FLAT_REQUIRED_CHECKS
@@ -731,3 +734,87 @@ def test_non_numeric_parameters_are_flat_errors(bad):
         clean(shapely.box(0, 0, 5, 5), OPENING, bad, STEP)
     with pytest.raises(FlatError, match="min_width_mm"):
         thin_regions([shapely.box(0, 0, 5, 5)], bad)
+
+
+# --- Review fixes: the export check and the opening at the boundary width -----------
+
+
+def stl_round_trip(mesh) -> trimesh.Trimesh:
+    data = mesh.export(file_type="stl")
+    return merge_exact(trimesh.load(io.BytesIO(data), file_type="stl", process=False))
+
+
+def holed_part():
+    return [shapely.box(3.1, 7.3, 43.1, 31.3).difference(shapely.box(10, 10, 20, 20))]
+
+
+def test_export_check_passes_on_the_stl_of_the_parts():
+    parts = holed_part()
+    check = export_check(stl_round_trip(extrude(parts, 2.5)), parts, 2.5)
+    assert (check.id, check.status, check.rule) == ("F2.export_matches_geometry", "PASS", None)
+    measured, threshold = check.measured, check.threshold
+    assert measured["xy_bounds_mm"] == pytest.approx([3.1, 7.3, 43.1, 31.3], abs=1e-5)
+    assert measured["z_range_mm"] == pytest.approx([0.0, 2.5], abs=1e-6)
+    assert measured["volume_mm3"] == pytest.approx((40 * 24 - 100) * 2.5, rel=1e-6)
+    assert 0 < threshold["coord_tol_mm"] < 1e-5          # 43.1 mm x 2^-23 is 5.1e-6 mm
+    assert 0 < threshold["volume_tol_mm3"] < 1e-2 * measured["volume_mm3"]
+    json.dumps(check.as_dict(), allow_nan=False)
+
+
+@pytest.mark.parametrize("change", ["scale_all", "double_z", "shift_x", "shrink_z"])
+def test_export_check_fails_when_the_mesh_differs(change):
+    parts = holed_part()
+    mesh = extrude(parts, 2.5)
+    vertices = np.array(mesh.vertices)
+    if change == "scale_all":
+        vertices *= 0.1
+    elif change == "double_z":
+        vertices[:, 2] *= 2
+    elif change == "shift_x":
+        vertices[:, 0] += 0.001
+    else:
+        vertices[:, 2] *= 0.999
+    moved = trimesh.Trimesh(vertices, mesh.faces, process=False)
+    check = export_check(stl_round_trip(moved), parts, 2.5)
+    assert check.status == "FAIL"
+    assert set(statuses(moved).values()) == {"PASS"}     # F1 alone cannot see it
+
+
+def test_export_check_fails_on_a_volume_change_inside_the_bounds():
+    # The mesh has a notch the parts lack. Its bounds are the same: only volume can see it.
+    parts = [shapely.box(0, 0, 10, 10)]
+    mesh = extrude([shapely.Polygon([(0, 0), (10, 0), (10, 10), (5, 5.5), (0, 10)])], 2.0)
+    check = export_check(stl_round_trip(mesh), parts, 2.0)
+    assert check.status == "FAIL"
+    assert check.measured["xy_bounds_mm"] == [0.0, 0.0, 10.0, 10.0]
+
+
+# Measured 2026-11-10 with Shapely 2.2.0 (GEOS 3.14.1), QUAD_SEGS = 8, by bisection: a
+# negative buffer of a long rectangle comes out empty unless its height exceeds the buffer
+# width by about 5e-5 of that width (2e-5 mm at 0.4 mm, 4.5e-5 mm at 0.9 mm). The margin was
+# the same at offsets of 0 and 200 mm and for lengths of 1, 10 and 100 mm. These tests pin
+# heights on each side of that margin; they do not pin the margin itself.
+@pytest.mark.parametrize("height, kept", [(0.4, False), (0.400001, False), (0.40001, False),
+                                          (0.4001, True), (0.401, True), (0.41, True),
+                                          (0.45, True)])
+def test_opening_removes_rectangles_at_or_just_above_its_width(height, kept):
+    rect = shapely.box(0, 0, 10, height)
+    if kept:
+        _, report = clean(rect, 0.4, 0.0, STEP)
+        assert report["area_after_mm2"] > 0.99 * rect.area   # only the corners round off
+    else:
+        with pytest.raises(FlatError, match="nothing printable remains"):
+            clean(rect, 0.4, 0.0, STEP)
+
+
+@pytest.mark.parametrize("height, all_thin", [(0.9, True), (0.900001, True), (0.90001, True),
+                                              (0.9001, False), (0.901, False), (0.91, False),
+                                              (0.95, False)])
+def test_thin_regions_count_rectangles_at_or_just_above_the_width_as_thin(height, all_thin):
+    rect = shapely.box(0, 0, 10, height)
+    found = thin_regions([rect], 0.9)
+    if all_thin:
+        assert (found["pieces"], found["area_mm2"]) == (1, pytest.approx(rect.area, rel=1e-9))
+    else:
+        assert found["pieces"] == 4                           # the four rounded corners
+        assert found["area_mm2"] < 0.03 * rect.area

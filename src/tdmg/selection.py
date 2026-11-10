@@ -373,6 +373,19 @@ def _preview(rgba: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return out
 
 
+def selection_identity(algorithm: str, input_pixels_sha256: str, controls: dict,
+                       instructions: str | None) -> str:
+    """selection_id: SHA-256 of the canonical JSON of these four fields.
+
+    The one definition, used by write_selection and by stages that verify a selection.
+    Raises ValueError for NaN in the controls and UnicodeEncodeError (a ValueError) for
+    text that UTF-8 cannot encode.
+    """
+    identity = {"algorithm": algorithm, "input_pixels_sha256": input_pixels_sha256,
+                "controls": controls, "instructions": instructions}
+    return hashlib.sha256(canonical_json(identity)).hexdigest()
+
+
 def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict:
     """Write mask.png, cutout.png, preview.png and selection.json into a new or empty folder.
 
@@ -399,14 +412,13 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
     # In mask mode the controls carry user_mask_sha256, so the mask is part of the id too.
     # Built from the construction-time snapshot, never from the live dicts.
     snap, for_id = sel.snapshot(), sel.snapshot()    # two independent copies
-    identity = {"algorithm": ALGORITHM_VERSION, "input_pixels_sha256": intake.pixels_sha256,
-                "controls": for_id["controls"],
-                "instructions": for_id["interpretation"]["text"]}
     try:
         record = {
             "schema": RECORD_SCHEMA, "tdmg_version": __version__,
             "algorithm": ALGORITHM_VERSION,
-            "selection_id": hashlib.sha256(canonical_json(identity)).hexdigest(),
+            "selection_id": selection_identity(ALGORITHM_VERSION, intake.pixels_sha256,
+                                               for_id["controls"],
+                                               for_id["interpretation"]["text"]),
             "input": {"name": intake.source_name, "file_sha256": intake.file_sha256,
                       "pixels_sha256": intake.pixels_sha256, "width": w, "height": h,
                       "exif_transposed": intake.exif_transposed},

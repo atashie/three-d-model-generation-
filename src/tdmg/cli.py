@@ -177,7 +177,9 @@ def flat(
     Exit codes:
       0  files written, and no check FAILed (UNKNOWN checks allowed)
       1  files written, and at least one check FAILed
-      2  input or usage error; nothing written
+      2  input or usage error: nothing is written; or an I/O failure
+         while writing, which can leave a folder without flat.json:
+         such a folder is incomplete and must not be used
     Exit 0 does not mean the part is certified; read verdict in flat.json.
     """
     # Typer's Rich help keeps the single line breaks of every paragraph after the first,

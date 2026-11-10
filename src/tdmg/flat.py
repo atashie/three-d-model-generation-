@@ -18,6 +18,7 @@ import hashlib
 import io
 import json
 import math
+import re
 from importlib.metadata import version as package_version
 from pathlib import Path
 
@@ -42,7 +43,7 @@ from tdmg.records import (
 )
 from tdmg.rules import load_rules
 from tdmg.selection import RECORD_SCHEMA as SELECTION_SCHEMA
-from tdmg.selection import SelectionError, load_mask, pixels_sha256
+from tdmg.selection import SelectionError, load_mask, pixels_sha256, selection_identity
 
 QUAD_SEGS = 8  # Buffer arcs per quarter circle. Chord error is r*(1-cos(pi/32)), about
                # 0.001 mm at r = 0.2 mm, far below a layer. An approximation setting.
@@ -53,7 +54,16 @@ DROPPED_LISTED = 10  # Display only: how many dropped-island areas the report li
 MASK_ON = 255  # Integer masks hold 0 and 255, as mask.png does (selection.load_mask).
 THIN_LISTED = 5  # Display only: how many thin-region pieces the F3 measurement lists.
 DISPLAY_DECIMALS = 3  # Display rounding of listed thin-region areas and centroids (mm).
-WIDTH_RTOL = 1e-9  # F2.target_width float comparison only; the scale is exact up to rounding.
+# F2.target_width compares scale x mask width, both float64, with the requested width. The
+# scale is width / mask width, so the product differs from width only by the rounding of one
+# division and one multiplication, each at most 2^-53 (1.1e-16) relative: about 2.2e-16 in
+# all. 1e-9 is a loose margin for this computed equality, not a physical tolerance.
+WIDTH_RTOL = 1e-9
+# Binary STL stores float32. Rounding to nearest moves a coordinate x by at most
+# |x| * 2^-24; F2.export_matches_geometry allows twice that, 2^-23, relative to the largest
+# expected coordinate. Not a physical tolerance either: storage rounding only.
+STL_COORD_RTOL = 2.0 ** -23
+HEX64 = re.compile(r"[0-9a-f]{64}")
 THIN_RULE = "fdm.wall.min_thickness"
 TRIANGLE_RULE = "slicer.orca.max_triangles_per_plate"
 OPENING_RULE = "flat.sliver.opening_width"
@@ -64,13 +74,15 @@ RECORD_SCHEMA = "tdmg.flat/1"
 OUTLINE_KEPT = (128, 128, 128)        # grey: printed
 OUTLINE_REMOVED = (220, 40, 40)       # red: in the mask, removed by cleaning
 OUTLINE_BACKGROUND = (255, 255, 255)  # white: not in the mask
-REVIEW = ("Open outline.png: grey is kept, red was removed as unprintable. The verdict stays "
-          "NOT CERTIFIED until F3 policy and slicer checks exist.")
+REVIEW = ("Open outline.png: grey is kept, red was removed by the cleaning rules "
+          f"({OPENING_RULE}, {ISLAND_RULE}; both untested hypotheses), which also round "
+          "convex corners. The verdict stays NOT CERTIFIED until F3 policy and slicer "
+          "checks exist.")
 # Every check the flat gate needs. F3 and F6 are UNKNOWN until their policy and slicer
 # integration exist, so the verdict is NOT CERTIFIED for now.
 FLAT_REQUIRED_CHECKS = F1_CHECK_IDS | {"F2.fits_build_volume", "F2.target_width",
-                                       "F3.thin_regions", "F4.body_count", "F5.triangles",
-                                       "F6.slicer"}
+                                       "F2.export_matches_geometry", "F3.thin_regions",
+                                       "F4.body_count", "F5.triangles", "F6.slicer"}
 
 
 class FlatError(ValueError):
@@ -237,8 +249,18 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float,
           sample_step_mm: float) -> tuple[list[Polygon], dict]:
     """Open by opening_mm (round joins, QUAD_SEGS); split into polygons; drop small parts.
 
-    opening_mm must be above 0: the opening is what separates parts that touch only at a
-    corner. Returns the parts, largest first, and a report with a fixed key set:
+    The opening and the island limit come from the cleaning rules (hypotheses, untested
+    on a printer). The opening removes features narrower than opening_mm and also rounds
+    every convex corner to radius opening_mm / 2. opening_mm must be above 0: the opening
+    is what separates parts that touch only at a corner.
+
+    Measured at the boundary (Shapely 2.2.0, GEOS 3.14.1, QUAD_SEGS = 8): the erosion of a
+    feature collapses to nothing unless it is wider than opening_mm by about 5e-5 of
+    opening_mm. A 10 mm rectangle 0.40001 mm high is removed at opening 0.4 mm; one 0.4001
+    mm high is kept. So features at, or within that margin above, the opening width are
+    removed (tests/test_flat.py pins this).
+
+    Returns the parts, largest first, and a report with a fixed key set:
     opening_mm, min_island_mm2, area_before_mm2, area_after_mm2, removed_area_mm2,
     boundary_hausdorff_mm, hausdorff_upper_bound_mm, hausdorff_sample_step_mm,
     dropped_islands {count, total_area_mm2, largest_mm2} for parts the opening left below
@@ -337,7 +359,10 @@ def thin_regions(parts: list[Polygon], min_width_mm: float) -> dict:
     The opening (round joins, QUAD_SEGS) is by a disk of diameter min_width_mm, so what it
     removes is every region a disk of that width cannot reach. Convex corners always lose a
     sliver (r^2 (1 - pi/4) for a right angle, r = min_width_mm / 2), so every outline has
-    some thin area. Returns min_width_mm, the total area, the number of pieces and the
+    some thin area. As in clean, the erosion collapses numerically for a feature within
+    about 5e-5 of min_width_mm above it (measured: a 10 mm rectangle 0.90001 mm high is
+    all thin at 0.9 mm, one 0.9001 mm high only at its corners), so such features count
+    as thin. Returns min_width_mm, the total area, the number of pieces and the
     largest THIN_LISTED pieces by area, each with its area and centroid in model mm,
     rounded to DISPLAY_DECIMALS for display.
     """
@@ -356,12 +381,22 @@ def thin_regions(parts: list[Polygon], min_width_mm: float) -> dict:
 
 
 def thin_region_check(parts: list[Polygon], rules: dict) -> CheckResult:
-    """F3.thin_regions: always UNKNOWN for now, with the measurement."""
+    """F3.thin_regions: always UNKNOWN for now, with the measurement.
+
+    It measures the cleaned polygons, not the mesh. F2.export_matches_geometry ties the
+    mesh to those polygons (bounds and volume), so the measurement applies to the export.
+    """
     threshold = rules[THIN_RULE].default
     return CheckResult("F3.thin_regions", "UNKNOWN", thin_regions(parts, threshold),
                        threshold, THIN_RULE,
                        "tapered tips always appear; pass/fail policy pending research on "
                        "slicer handling of narrow features")
+
+
+def _signed_volume(mesh: trimesh.Trimesh) -> float:
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    tri = vertices[np.asarray(mesh.faces, dtype=np.int64)]
+    return float(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])).sum() / 6)
 
 
 def _extents(mesh: trimesh.Trimesh) -> list[float]:
@@ -383,14 +418,65 @@ def build_volume_check(mesh: trimesh.Trimesh, printer: PrinterProfile) -> CheckR
 
 
 def target_width_check(transform: dict, width_mm: float, mesh: trimesh.Trimesh) -> CheckResult:
-    """F2.target_width: the scale maps the mask's bounding-box width to width_mm."""
+    """F2.target_width: the scale maps the mask's bounding-box width to width_mm.
+
+    It judges the scale only. The mesh width is reported, and F2.export_matches_geometry
+    checks it against the cleaned outline.
+    """
     scaled = transform["scale_mm_per_px"] * transform["mask_width_px"]
     ok = math.isclose(scaled, width_mm, rel_tol=WIDTH_RTOL, abs_tol=0.0)
-    size = " x ".join(f"{e:.6g}" for e in _extents(mesh))
-    return CheckResult("F2.target_width", "PASS" if ok else "FAIL", scaled, float(width_mm),
-                       None, f"the mask's width is scaled to the requested width; final "
-                             f"extents after cleaning are {size} mm, which can be smaller "
-                             "because cleaning removes material")
+    extents = _extents(mesh)
+    size = " x ".join(f"{e:.6g}" for e in extents)
+    return CheckResult("F2.target_width", "PASS" if ok else "FAIL",
+                       {"scaled_mask_width_mm": scaled, "mesh_width_mm": extents[0]},
+                       float(width_mm), None,
+                       f"the mask's width is scaled to the requested width; final extents "
+                       f"after cleaning are {size} mm, which can be smaller because cleaning "
+                       "removes material; the mesh width is checked against the cleaned "
+                       "outline by F2.export_matches_geometry")
+
+
+def export_check(mesh: trimesh.Trimesh, parts: list[Polygon],
+                 thickness_mm: float) -> CheckResult:
+    """F2.export_matches_geometry: the mesh read back from the STL is the intended solid.
+
+    Compares the mesh with the cleaned parts extruded to thickness_mm:
+    - x and y bounds equal the parts' bounds, and the z range is [0, thickness_mm], each
+      within coord_tol = STL_COORD_RTOL x the largest expected |coordinate|;
+    - the volume equals area x thickness_mm within volume_tol. Moving every vertex by at
+      most coord_tol per axis (sqrt(3) coord_tol in distance) changes the enclosed volume
+      by at most about surface area x sqrt(3) coord_tol, to first order. The prism's
+      surface area is 2 x area + perimeter x thickness; volume_tol doubles the product for
+      the second-order terms.
+    Both tolerances cover float32 storage only, so a scaled, shifted or reshaped export
+    FAILs. The thresholds are derived, not rules, so rule is None.
+    """
+    region = shapely.union_all(parts)
+    expected_xy = [float(v) for v in region.bounds]
+    expected_z = [0.0, float(thickness_mm)]
+    area = float(sum(p.area for p in parts))
+    expected_volume = area * thickness_mm
+    largest = max(max(abs(v) for v in expected_xy), thickness_mm)
+    coord_tol = largest * STL_COORD_RTOL
+    surface = 2 * area + float(region.length) * thickness_mm
+    volume_tol = 2 * math.sqrt(3) * coord_tol * surface
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    low, high = vertices.min(axis=0), vertices.max(axis=0)
+    xy = [float(low[0]), float(low[1]), float(high[0]), float(high[1])]
+    z = [float(low[2]), float(high[2])]
+    bound_error = max(abs(a - b) for a, b in zip(xy + z, expected_xy + expected_z,
+                                                strict=True))
+    volume = _signed_volume(mesh)
+    volume_error = abs(volume - expected_volume)
+    ok = bound_error <= coord_tol and volume_error <= volume_tol
+    return CheckResult(
+        "F2.export_matches_geometry", "PASS" if ok else "FAIL",
+        {"xy_bounds_mm": xy, "z_range_mm": z, "volume_mm3": volume,
+         "max_bound_error_mm": bound_error, "volume_error_mm3": volume_error},
+        {"xy_bounds_mm": expected_xy, "z_range_mm": expected_z,
+         "volume_mm3": expected_volume, "coord_tol_mm": coord_tol,
+         "volume_tol_mm3": volume_tol},
+        None, "tolerances cover float32 storage in the STL only (derived, not rules)")
 
 
 def _body_count(mesh: trimesh.Trimesh) -> int:
@@ -421,11 +507,12 @@ def slicer_check() -> CheckResult:
 
 
 def flat_checks(mesh: trimesh.Trimesh, parts: list[Polygon], transform: dict,
-                width_mm: float, printer: PrinterProfile, rules: dict) -> list[CheckResult]:
+                width_mm: float, thickness_mm: float, printer: PrinterProfile,
+                rules: dict) -> list[CheckResult]:
     """The F2-F6 checks, on an exactly merged mesh and the cleaned parts it came from."""
     return [build_volume_check(mesh, printer), target_width_check(transform, width_mm, mesh),
-            thin_region_check(parts, rules), body_count_check(mesh),
-            triangle_check(mesh, rules), slicer_check()]
+            export_check(mesh, parts, thickness_mm), thin_region_check(parts, rules),
+            body_count_check(mesh), triangle_check(mesh, rules), slicer_check()]
 
 
 # --- Run from a selection folder and write the outputs (S2-S4, S8) -------------------
@@ -483,13 +570,9 @@ def _read_selection(selection_dir: Path) -> tuple[dict, np.ndarray]:
         raise FlatError(f"{record_path} is not valid JSON: {e}") from None
     if not isinstance(record, dict) or record.get("schema") != SELECTION_SCHEMA:
         raise FlatError(f"{record_path} is not a {SELECTION_SCHEMA} record")
-    size = record.get("input", {})
-    w, h = (size.get(k) if isinstance(size, dict) else None for k in ("width", "height"))
-    if not all(type(v) is int and v > 0 for v in (w, h)):
-        raise FlatError(f"{record_path} has no valid input width and height")
-    expected = record.get("mask_pixels_sha256")
-    if not isinstance(expected, str) or not isinstance(record.get("selection_id"), str):
-        raise FlatError(f"{record_path} has no mask_pixels_sha256 or selection_id")
+    _check_provenance(record, record_path)
+    w, h = record["input"]["width"], record["input"]["height"]
+    expected = record["mask_pixels_sha256"]
     mask_path = selection_dir / "mask.png"
     if not mask_path.is_file():
         raise FlatError(f"{mask_path} not found")
@@ -502,13 +585,52 @@ def _read_selection(selection_dir: Path) -> tuple[dict, np.ndarray]:
     return record, mask
 
 
+def _check_provenance(record: dict, record_path: Path) -> None:
+    """The fields that identify the selection are present, and selection_id matches them.
+
+    The id is recomputed with selection.selection_identity, the definition write_selection
+    uses, so an edited control, instruction or input hash with the old id is refused.
+    """
+    size = record.get("input")
+    if not isinstance(size, dict):
+        raise FlatError(f"{record_path} has no input block")
+    if not all(type(size.get(k)) is int and size[k] > 0 for k in ("width", "height")):
+        raise FlatError(f"{record_path} has no valid input width and height")
+    interpretation = record.get("interpretation")
+    fields = {"algorithm": isinstance(record.get("algorithm"), str),
+              "controls": isinstance(record.get("controls"), dict),
+              "input.pixels_sha256": _is_hex64(size.get("pixels_sha256")),
+              "interpretation.text": isinstance(interpretation, dict)
+              and "text" in interpretation
+              and isinstance(interpretation["text"], (str, type(None))),
+              "mask_pixels_sha256": _is_hex64(record.get("mask_pixels_sha256")),
+              "selection_id": _is_hex64(record.get("selection_id"))}
+    bad = [name for name, ok in fields.items() if not ok]
+    if bad:
+        raise FlatError(f"{record_path} is missing or has invalid: {', '.join(bad)}")
+    try:
+        recomputed = selection_identity(record["algorithm"], size["pixels_sha256"],
+                                        record["controls"], interpretation["text"])
+    except ValueError as e:          # NaN in the controls, or text UTF-8 cannot encode
+        raise FlatError(f"selection.json is inconsistent: its identity cannot be "
+                        f"recomputed ({e})") from None
+    if recomputed != record["selection_id"]:
+        raise FlatError("selection.json is inconsistent: selection_id does not match its "
+                        "algorithm, input pixels, controls and instructions")
+
+
+def _is_hex64(value) -> bool:
+    return isinstance(value, str) and HEX64.fullmatch(value) is not None
+
+
+def _encode_stl(mesh: trimesh.Trimesh) -> bytes:
+    """Binary STL bytes (float32 coordinates). The gate parses exactly these bytes."""
+    return mesh.export(file_type="stl")
+
+
 def _mesh_summary(mesh: trimesh.Trimesh) -> dict:
-    vertices = np.asarray(mesh.vertices, dtype=np.float64)
-    faces = np.asarray(mesh.faces, dtype=np.int64)
-    tri = vertices[faces]
-    volume = float(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])).sum() / 6)
-    return {"triangles": len(faces), "bodies": _body_count(mesh), "volume_mm3": volume,
-            "extents_mm": _extents(mesh)}
+    return {"triangles": len(mesh.faces), "bodies": _body_count(mesh),
+            "volume_mm3": _signed_volume(mesh), "extents_mm": _extents(mesh)}
 
 
 def _flat_environment() -> dict:
@@ -520,8 +642,11 @@ def _flat_environment() -> dict:
 def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1") -> dict:
     """Make model.stl, outline.png and flat.json from a tdmg select output folder.
 
-    Everything is built, encoded and gated in memory first, so a refused run writes
-    nothing. The gate judges the STL bytes that are written: they are parsed back, merged
+    Everything is built, encoded and gated in memory first, so a refused input writes
+    nothing. An I/O failure while writing (a full disk, a failed rename) can leave an
+    incomplete folder without flat.json, which must not be used. A check that FAILs does
+    not stop the write: the files and the verdict are written for review. The gate
+    judges the STL bytes that are written: they are parsed back, merged
     exactly, and checked. flat_id is a SHA-256 of the canonical JSON of the algorithm,
     the mask's pixel hash and the parameters (with the printer id and the rules that set
     them); the environment is not part of it. flat_id identifies the geometry, so check
@@ -550,13 +675,13 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     model, transform = to_model(mask_outline(mask), width_mm)
     parts, cleaning = clean(model, opening["value"], min_island["value"],
                             HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
-    stl = extrude(parts, thickness_mm).export(file_type="stl")
+    stl = _encode_stl(extrude(parts, thickness_mm))
     kept = rasterise(parts, transform, mask.shape)
     files = {"model.stl": stl, "outline.png": png_bytes(_outline_image(mask, kept))}
 
     gated = merge_exact(trimesh.load(io.BytesIO(stl), file_type="stl", process=False))
-    checks = topology_checks(gated) + flat_checks(gated, parts, transform, width_mm, profile,
-                                                  rules)
+    checks = topology_checks(gated) + flat_checks(gated, parts, transform, width_mm,
+                                                  thickness_mm, profile, rules)
     params = {"width_mm": width_mm, "thickness_mm": thickness_mm, "printer": profile.id,
               "opening_mm": opening, "min_island_mm2": min_island}
     identity = {"algorithm": FLAT_ALGORITHM_VERSION,

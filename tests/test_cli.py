@@ -6,6 +6,7 @@ from PIL import Image
 from selection_fixtures import roadie_like
 from typer.testing import CliRunner
 
+import tdmg.flat
 from tdmg import __version__
 from tdmg.cli import app
 from tdmg.rules import load_rules
@@ -273,7 +274,9 @@ EXIT_LINES = (
     "Exit codes:",
     "0 files written, and no check FAILed (UNKNOWN checks allowed)",
     "1 files written, and at least one check FAILed",
-    "2 input or usage error; nothing written",
+    "2 input or usage error: nothing is written; or an I/O failure",
+    "while writing, which can leave a folder without flat.json:",
+    "such a folder is incomplete and must not be used",
     "Exit 0 does not mean the part is certified; read verdict in flat.json.",
 )
 
@@ -285,3 +288,15 @@ def test_flat_help_keeps_the_exit_code_list_intact_at_80_columns():
              for line in narrow.invoke(app, ["flat", "--help"]).output.splitlines()]
     start = lines.index(EXIT_LINES[0])
     assert lines[start:start + len(EXIT_LINES)] == list(EXIT_LINES)
+
+
+def test_flat_exits_1_when_the_export_differs_from_the_geometry(tmp_path, monkeypatch):
+    sel = _selection(tmp_path)
+    encode = tdmg.flat._encode_stl
+    monkeypatch.setattr(tdmg.flat, "_encode_stl", lambda mesh: encode(
+        mesh.copy().apply_scale(0.1)))
+    out = tmp_path / "flat"
+    r = _flat(sel, out)
+    assert r.exit_code == 1, r.output
+    assert "F2.export_matches_geometry FAIL" in r.stdout
+    assert sorted(p.name for p in out.iterdir()) == ["flat.json", "model.stl", "outline.png"]
