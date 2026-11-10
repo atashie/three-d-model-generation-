@@ -11,7 +11,7 @@
       locator: "Oddie is one 8-connected piece at every alpha cutoff tested"
       provenance: primary
       validation: untested
-      claim: On Oddie, cutoffs 1 to 255 all give one piece and change its area by 2.2%. 128 counts a pixel when it is at least half covered. Measured in software on one image; not a general result.
+      claim: On Oddie, the five cutoffs tested (1, 64, 128, 192 and 255) all give one piece; area changes by 2.2% between 1 and 255. 128 counts a pixel when it is at least half covered. Measured in software on one image; not a general result.
   notes: Adjustable with --alpha-min. It matters only for images with partly transparent pixels.
 
 - id: perception.flood.color_tolerance
