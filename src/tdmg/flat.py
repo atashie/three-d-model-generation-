@@ -3,8 +3,10 @@
 The reference outline is the exact pixel-cell outline: the union of the mask's pixel
 squares, with each pixel (column x, row y) the cell [x, x + 1] x [y, y + 1]. It has no
 half-pixel bias, unlike OpenCV centre tracing, which runs through pixel centres and
-shrinks the outline by half a pixel (rule `vectorize.opencv.contour_offset_px`). The
-outline's staircase edge is one pixel high; this module does not smooth it.
+shrinks the outline by half a pixel (rule `vectorize.opencv.contour_offset_px`). Its
+staircase edge is one pixel high. make_flat smooths the outline by default with
+tdmg.smoothing.smooth_outline (rule flat.smooth.sigma_px), which uses the same pixel-cell
+coordinates; smooth_px=0 keeps the exact outline.
 
 The image-to-model transform is x_mm = (x_px - x0) * s and y_mm = (y1 - y_px) * s, where
 x0 and y1 are the left and bottom edges of the outline's bounding box in pixels and
@@ -45,6 +47,8 @@ from tdmg.records import (
 from tdmg.rules import load_rules
 from tdmg.selection import RECORD_SCHEMA as SELECTION_SCHEMA
 from tdmg.selection import SelectionError, load_mask, pixels_sha256, selection_identity
+from tdmg.smoothing import METHOD as SMOOTHING_METHOD
+from tdmg.smoothing import SmoothingError, smooth_outline
 
 QUAD_SEGS = 8  # Buffer arcs per quarter circle. Chord error is r*(1-cos(pi/32)), about
                # 0.001 mm at r = 0.2 mm, far below a layer. An approximation setting.
@@ -68,16 +72,22 @@ THIN_RULE = "fdm.wall.min_thickness"
 TRIANGLE_RULE = "slicer.orca.max_triangles_per_plate"
 OPENING_RULE = "flat.sliver.opening_width"
 ISLAND_RULE = "flat.island.min_square_side"
-FLAT_ALGORITHM_VERSION = "flat-1"
+SMOOTH_RULE = "flat.smooth.sigma_px"
+# flat-2 (2026-11-10): the outline is smoothed by default (smooth_px), and params.smoothing
+# records it. flat-1 always used the exact pixel outline (smooth_px=0 here).
+FLAT_ALGORITHM_VERSION = "flat-2"
 RECORD_SCHEMA = "tdmg.flat/1"
 # outline.png display colours only; these are not thresholds.
-OUTLINE_KEPT = (128, 128, 128)        # grey: printed
-OUTLINE_REMOVED = (220, 40, 40)       # red: in the mask, removed by cleaning
-OUTLINE_BACKGROUND = (255, 255, 255)  # white: not in the mask
-REVIEW = ("Open outline.png: grey is kept, red was removed by the cleaning rules "
-          f"({OPENING_RULE}, {ISLAND_RULE}; both untested hypotheses), which also round "
-          "convex corners. The verdict stays NOT CERTIFIED until F3 policy and slicer "
-          "checks exist.")
+OUTLINE_KEPT = (128, 128, 128)        # grey: in the mask and in the final shape
+OUTLINE_REMOVED = (220, 40, 40)       # red: in the mask, not in the final shape
+OUTLINE_ADDED = (40, 90, 220)         # blue: outside the mask, in the final shape
+OUTLINE_BACKGROUND = (255, 255, 255)  # white: in neither
+REVIEW = ("Open outline.png: grey is in the mask and kept; red is in the mask but not in "
+          f"the model, removed by smoothing ({SMOOTH_RULE}, when on) or by the cleaning "
+          f"rules ({OPENING_RULE}, {ISLAND_RULE}); blue is outside the mask but in the "
+          "model, added by smoothing. All three rules are untested hypotheses. Smoothing "
+          "and cleaning both round convex corners. The verdict stays NOT CERTIFIED until "
+          "F3 policy and slicer checks exist.")
 # Every check the flat gate needs. F3 and F6 are UNKNOWN until their policy and slicer
 # integration exist, so the verdict is NOT CERTIFIED for now.
 FLAT_REQUIRED_CHECKS = F1_CHECK_IDS | {"F2.fits_build_volume", "F2.target_width",
@@ -132,7 +142,8 @@ def to_model(outline, width_mm: float) -> tuple[shapely.Geometry, dict]:
     """Scale to width_mm, flip Y, and put the bounding box's lower-left at the origin.
 
     The transform dict gives the scale and the bounding box of the outline in pixels
-    (mask_width_px and mask_height_px are the foreground's extents, not the image size).
+    (mask_width_px and mask_height_px are the outline's extents, not the image size; for a
+    smoothed outline they are the smoothed extents).
     """
     width_mm = _require_positive("width_mm", width_mm)
     if outline.is_empty or outline.area <= 0:
@@ -542,11 +553,12 @@ def rasterise(parts: list[Polygon], transform: dict, shape: tuple[int, int]) -> 
 
 
 def _outline_image(mask: np.ndarray, kept: np.ndarray) -> np.ndarray:
-    """H x W x 3: kept pixels grey, mask pixels removed by cleaning red, the rest white."""
+    """H x W x 3: grey in mask and kept, red in mask only, blue kept only, the rest white."""
     image = np.empty((*mask.shape, 3), np.uint8)
     image[...] = OUTLINE_BACKGROUND
     image[mask & ~kept] = OUTLINE_REMOVED
-    image[kept] = OUTLINE_KEPT
+    image[~mask & kept] = OUTLINE_ADDED
+    image[mask & kept] = OUTLINE_KEPT
     return image
 
 
@@ -627,11 +639,56 @@ def _mesh_summary(mesh: trimesh.Trimesh) -> dict:
 def _flat_environment() -> dict:
     """records.environment() plus the geometry libraries the mesh bytes depend on."""
     return {**environment(), "shapely": shapely.__version__, "trimesh": trimesh.__version__,
-            "manifold3d": package_version("manifold3d")}
+            "manifold3d": package_version("manifold3d"),
+            "contourpy": package_version("contourpy")}
 
 
-def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1") -> dict:
+def _smooth_value(smooth_px) -> float | None:
+    """None (use the rule default), 0.0 (off), or a finite value above 0."""
+    if smooth_px is None:
+        return None
+    value = _number("smooth_px", smooth_px)
+    if not math.isfinite(value) or value < 0:
+        raise FlatError(f"smooth_px must be 0 (off) or a finite number above 0, got {value}")
+    return value
+
+
+SMOOTHING_OFF = {"applied": False, "sigma_px": None, "method": None, "area_change_px2": None,
+                 "boundary_hausdorff_px": None, "parts_before": None, "parts_after": None}
+
+
+def _outline(mask: np.ndarray, sigma: dict | None) -> tuple[shapely.Geometry, dict]:
+    """The outline to build from, in pixel-cell units, and the record's smoothing section.
+
+    sigma None keeps the exact pixel outline; the section is then SMOOTHING_OFF (applied
+    false, every other entry null). Otherwise the outline is smooth_outline(mask, sigma),
+    and the section measures it against the exact outline: the area change (px^2), the
+    sampled two-sided boundary distance (_sampled_hausdorff at HAUSDORFF_STEP_PX) and the
+    number of polygons before and after.
+    """
+    exact = mask_outline(mask)
+    if sigma is None:
+        return exact, dict(SMOOTHING_OFF)
+    try:
+        smooth = smooth_outline(mask, sigma["value"])
+    except SmoothingError as e:
+        raise FlatError(f"smoothing failed: {e}") from None
+    return smooth, {"applied": True, "sigma_px": sigma, "method": SMOOTHING_METHOD,
+                    "area_change_px2": float(smooth.area - exact.area),
+                    "boundary_hausdorff_px": _sampled_hausdorff(exact, smooth,
+                                                                HAUSDORFF_STEP_PX),
+                    "parts_before": len(_polygons(exact)[0]),
+                    "parts_after": len(_polygons(smooth)[0])}
+
+
+def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1",
+              smooth_px=None) -> dict:
     """Make model.stl, outline.png and flat.json from a tdmg select output folder.
+
+    smooth_px is the Gaussian sigma, in image pixels, of tdmg.smoothing.smooth_outline:
+    None takes the default of rule flat.smooth.sigma_px, 0 keeps the exact pixel outline,
+    and any other value must be finite and above 0. The record's smoothing section
+    measures what smoothing changed (see _outline).
 
     Everything is built, encoded and gated in memory first, so a refused input writes
     nothing. An I/O failure while writing (a full disk, a failed rename) can leave an
@@ -647,6 +704,7 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     """
     width_mm = _require_positive("width_mm", width_mm)
     thickness_mm = _require_positive("thickness_mm", thickness_mm)
+    smooth_value = _smooth_value(smooth_px)
     selection, mask = _read_selection(Path(selection_dir))
     if printer not in printer_ids():
         raise FlatError(f"no printer profile {printer!r}; choose one of {printer_ids()}")
@@ -663,7 +721,12 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     min_island = {"value": (side * nozzle) ** 2, "rules": [ISLAND_RULE],
                   "nozzle_diameter_mm": nozzle,
                   "formula": "(min_square_side x nozzle_diameter_mm)^2"}
-    model, transform = to_model(mask_outline(mask), width_mm)
+    if smooth_value is None:
+        sigma = {"value": float(rules[SMOOTH_RULE].default), "rule": SMOOTH_RULE}
+    else:                              # an explicit value: no rule set it
+        sigma = None if smooth_value == 0 else {"value": smooth_value, "rule": None}
+    outline, smoothing = _outline(mask, sigma)
+    model, transform = to_model(outline, width_mm)
     parts, cleaning = clean(model, opening["value"], min_island["value"],
                             HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
     stl = _encode_stl(extrude(parts, thickness_mm))
@@ -674,7 +737,8 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     checks = topology_checks(gated) + flat_checks(gated, parts, transform, width_mm,
                                                   thickness_mm, profile, rules)
     params = {"width_mm": width_mm, "thickness_mm": thickness_mm, "printer": profile.id,
-              "opening_mm": opening, "min_island_mm2": min_island}
+              "opening_mm": opening, "min_island_mm2": min_island,
+              "smoothing": {"applied": False} if sigma is None else {"sigma_px": sigma}}
     identity = {"algorithm": FLAT_ALGORITHM_VERSION,
                 "mask_pixels_sha256": selection["mask_pixels_sha256"],
                 "params": params}
@@ -684,7 +748,8 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
         "flat_id": hashlib.sha256(canonical_json(identity)).hexdigest(),
         "selection": {"selection_id": selection["selection_id"],
                       "mask_pixels_sha256": selection["mask_pixels_sha256"]},
-        "params": params, "transform": transform, "cleaning": cleaning,
+        "params": params, "smoothing": smoothing, "transform": transform,
+        "cleaning": cleaning,
         "mesh": _mesh_summary(gated),
         "checks": [c.as_dict() for c in checks],
         "verdict": verdict(checks, FLAT_REQUIRED_CHECKS),

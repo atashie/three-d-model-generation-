@@ -159,6 +159,18 @@ def _check_line(check: dict) -> str:
     return line
 
 
+def _smoothing_line(record: dict) -> str:
+    """'smoothing off', or the sigma, its source, and how far the boundary moved in mm."""
+    smoothing = record["smoothing"]
+    if not smoothing["applied"]:
+        return "smoothing off"
+    sigma = smoothing["sigma_px"]
+    source = f"rule {sigma['rule']}" if sigma["rule"] else "set by --smooth-px"
+    moved = smoothing["boundary_hausdorff_px"] * record["transform"]["scale_mm_per_px"]
+    return (f"smoothing sigma {sigma['value']:g} px ({source}): boundary moved up to "
+            f"{moved:.3g} mm")
+
+
 @app.command()
 def flat(
     selection: Annotated[Path, typer.Argument(exists=True, file_okay=False,
@@ -171,6 +183,9 @@ def flat(
     out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
     printer: Annotated[str, typer.Option(
         "--printer", help="Printer profile id (see `tdmg printers`).")] = "bambu-a1",
+    smooth_px: Annotated[float | None, typer.Option(
+        "--smooth-px", help="Gaussian smoothing of the outline in image pixels; default from "
+                            "rule flat.smooth.sigma_px; 0 keeps the exact pixel outline")] = None,
 ) -> None:
     """Make a flat solid from a selection: write model.stl, outline.png and flat.json.
 
@@ -186,7 +201,8 @@ def flat(
     # so the list above renders line for line. Each line is under 76 characters, so an
     # 80-column terminal does not wrap it (tests/test_cli.py checks this).
     try:
-        rec = make_flat(selection, width_mm, thickness_mm, out, printer=printer)
+        rec = make_flat(selection, width_mm, thickness_mm, out, printer=printer,
+                        smooth_px=smooth_px)
     except (FlatError, SelectionError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -194,6 +210,7 @@ def flat(
         _os_error(e)
         raise typer.Exit(2) from None
     typer.echo(f"verdict {rec['verdict']}")
+    typer.echo(_smoothing_line(rec))
     for c in rec["checks"]:
         if c["status"] != "PASS":
             typer.echo(_check_line(c))
@@ -203,7 +220,8 @@ def flat(
     typer.echo(f"size {size} mm, {mesh['triangles']} triangles, {bodies}")
     typer.echo(f"flat_id {rec['flat_id']}")
     typer.echo(f"wrote {out / 'model.stl'}")
-    typer.echo(f"wrote {out / 'outline.png'} - open outline.png to check what cleaning removed")
+    typer.echo(f"wrote {out / 'outline.png'} - open outline.png to check what smoothing and "
+               "cleaning changed")
     typer.echo(f"wrote {out / 'flat.json'}")
     if any(c["status"] == "FAIL" for c in rec["checks"]):
         raise typer.Exit(1)

@@ -2,6 +2,7 @@ import json
 import re
 
 import numpy as np
+import pytest
 from PIL import Image
 from selection_fixtures import roadie_like
 from typer.testing import CliRunner
@@ -203,8 +204,13 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
     assert f"{record['mesh']['triangles']} triangles, 1 body" in text
     assert f"flat_id {record['flat_id']}" in text
     assert str(out / "model.stl") in text
-    assert f"{out / 'outline.png'} - open outline.png to check what cleaning removed" in text
+    assert (f"{out / 'outline.png'} - open outline.png to check what smoothing and cleaning "
+            "changed") in text
     assert f"wrote {out / 'flat.json'}" in text
+    moved = (record["smoothing"]["boundary_hausdorff_px"]
+             * record["transform"]["scale_mm_per_px"])
+    assert (f"smoothing sigma 2.5 px (rule flat.smooth.sigma_px): boundary moved up to "
+            f"{moved:.3g} mm\n") in text
 
 
 def test_flat_without_width_is_a_usage_error(tmp_path):
@@ -261,8 +267,10 @@ def test_flat_reports_os_errors_without_a_traceback(tmp_path):
 
 def test_flat_help_documents_exit_codes():
     text = _plain(runner.invoke(app, ["flat", "--help"], prog_name="tdmg").output)
-    for option in ("--width-mm", "--thickness-mm", "--out", "--printer"):
+    for option in ("--width-mm", "--thickness-mm", "--out", "--printer", "--smooth-px"):
         assert option in text
+    assert ("Gaussian smoothing of the outline in image pixels; default from rule "
+            "flat.smooth.sigma_px; 0 keeps the exact pixel outline") in text
     # Typer 0.28 puts braces round a required argument's metavar, as for select's {image}.
     assert "Usage: tdmg flat [OPTIONS] {SELECTION_DIR}" in text
     assert EXIT_LINES[-1] == ("Exit 0 does not mean the part is certified; read verdict in "
@@ -300,3 +308,31 @@ def test_flat_exits_1_when_the_export_differs_from_the_geometry(tmp_path, monkey
     assert r.exit_code == 1, r.output
     assert "F2.export_matches_geometry FAIL" in r.stdout
     assert sorted(p.name for p in out.iterdir()) == ["flat.json", "model.stl", "outline.png"]
+
+
+def test_flat_smooth_px_0_turns_smoothing_off(tmp_path):
+    out = tmp_path / "flat"
+    r = _flat(_selection(tmp_path), out, "--smooth-px", "0")
+    assert r.exit_code == 0, r.output
+    record = json.loads((out / "flat.json").read_bytes())
+    assert record["smoothing"]["applied"] is False
+    assert "smoothing off\n" in r.stdout
+
+
+def test_flat_explicit_smooth_px_is_used(tmp_path):
+    out = tmp_path / "flat"
+    r = _flat(_selection(tmp_path), out, "--smooth-px", "1.5")
+    assert r.exit_code == 0, r.output
+    record = json.loads((out / "flat.json").read_bytes())
+    assert record["smoothing"]["sigma_px"] == {"value": 1.5, "rule": None}
+    assert "smoothing sigma 1.5 px (set by --smooth-px): boundary moved up to " in r.stdout
+
+
+@pytest.mark.parametrize("value", ["-1", "nan", "inf"])
+def test_flat_bad_smooth_px_exits_2_and_writes_nothing(tmp_path, value):
+    out = tmp_path / "flat"
+    r = _flat(_selection(tmp_path), out, "--smooth-px", value)
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: smooth_px")
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+    assert not out.exists()
