@@ -24,8 +24,8 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
 Latest local validation (2026-11-10, Windows PC): **251 tests passed**, `ruff check .`
-and the generated-doc check passed. CI has not yet run on the 2026-11-10 commits; they
-are pushed only with the owner's go-ahead.
+and the generated-doc check passed. CI passed on all three OSes for `f5c83ae`
+(run 42835658505). The first push failed CI on a Rich-styling test assumption, since fixed.
 Earlier 133-test counts below are the original stack-verification record.
 
 ## Next steps, in order
@@ -57,7 +57,11 @@ Earlier 133-test counts below are the original stack-verification record.
      - The counts equal the planning measurements, and a repeated run was byte-identical.
      - The owner confirmed both selections.
    - **Reviews:** each task had a spec review and a code-quality review; then an independent Codex review found 7 issues. All were verified and fixed; see `research/reviews/2026-11-10-selection/README.md`.
-   - **Next R1 step, not started:** trace `mask.png` into outlines (using rule `vectorize.opencv.contour_offset_px`), then normalize, extrude, base and loop, write STL/3MF, run the final gate and slice in Orca. Write a plan for it first. OrcaSlicer is not yet installed or verified on the PC.
+   - **Next R1 step, planned 2026-11-10:** `docs/plans/2026-11-10-flat-geometry.md`. It adds `tdmg flat`:
+     - steps: exact pixel-cell outline, explicit transform, cleaning by the existing rules, manifold3d extrusion, STL, and a gate run on the written file;
+     - the verdict stays NOT CERTIFIED until an F3 policy and a slicer exist;
+     - it was prototyped on both masks.
+   - **Earlier wording of this step:** trace `mask.png` into outlines (using rule `vectorize.opencv.contour_offset_px`), then normalize, extrude, base and loop, write STL/3MF, run the final gate and slice in Orca. Write a plan for it first. OrcaSlicer is not yet installed or verified on the PC.
    - Owner images are not committed until their rights are confirmed; the tests use synthetic look-alikes.
 
 ## Open questions for the owner
