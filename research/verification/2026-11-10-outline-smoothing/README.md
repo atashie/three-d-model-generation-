@@ -58,6 +58,11 @@ Roadie mask.
 - **Agreement:** the two outlines agree to within 0.187 px (sampled two-sided
   Hausdorff), which is the upsample's quarter-pixel staircase. The mask area is
   74,768 px.
+  - *Correction, same day, after the Codex review in
+    `research/reviews/2026-11-10-smoothing/`:* 0.187 px is a sampled **lower bound**
+    of the boundary-to-region distance. It is not a proven maximum disagreement. A
+    larger difference between samples, or one inside the other region, could exceed
+    it. The measurement itself is unchanged.
 - **Smoothness:** contourpy gives a smooth outline with no staircase, hence the shorter
   perimeter.
 - **Cost:** it needs no upsampled array.

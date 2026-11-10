@@ -175,3 +175,6 @@ Commit.
   and a test pins its sha256.
 - **Task 4:** see the smoothing record. Roadie and Oddie at 60 × 3 mm each give one body,
   no warnings, and repeat byte for byte.
+- **Codex review** (`research/reviews/2026-11-10-smoothing/`). Warnings now come from
+  part-to-part correspondence, so offsetting merges, splits and hole changes are
+  caught. The distance is described as boundary-to-region (`hausdorff_lower_bound_px`).
