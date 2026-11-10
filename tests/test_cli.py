@@ -190,7 +190,11 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
     assert sorted(p.name for p in out.iterdir()) == ["flat.json", "model.stl", "outline.png"]
     text = r.stdout
     assert "verdict NOT CERTIFIED" in text
-    assert "F3.thin_regions UNKNOWN: tapered tips always appear" in text
+    f3 = next(c for c in record["checks"] if c["id"] == "F3.thin_regions")
+    measured = f3["measured"]
+    assert (f"F3.thin_regions UNKNOWN - measured area_mm2={measured['area_mm2']:.4g}, "
+            f"min_width_mm=0.9, pieces={measured['pieces']}; threshold 0.9: "
+            "tapered tips always appear") in text
     assert "F6.slicer UNKNOWN: no slicer integration yet" in text
     assert "F1." not in text                        # passing checks are not listed
     x, y, z = record["mesh"]["extents_mm"]
@@ -199,6 +203,7 @@ def test_flat_writes_outputs_and_reports_the_verdict(tmp_path):
     assert f"flat_id {record['flat_id']}" in text
     assert str(out / "model.stl") in text
     assert f"{out / 'outline.png'} - open outline.png to check what cleaning removed" in text
+    assert f"wrote {out / 'flat.json'}" in text
 
 
 def test_flat_without_width_is_a_usage_error(tmp_path):
@@ -233,11 +238,14 @@ def test_flat_exits_1_when_a_check_fails_but_still_writes(tmp_path, monkeypatch)
     rules = load_rules()
     rule_id = "slicer.orca.max_triangles_per_plate"
     rules[rule_id] = rules[rule_id].model_copy(update={"default": 4})
+    # make_flat calls load_rules through tdmg.flat's module-level import, so patching
+    # the name in tdmg.flat changes the rules it sees (tdmg.rules is untouched).
     monkeypatch.setattr("tdmg.flat.load_rules", lambda: rules)
     out = tmp_path / "flat"
     r = _flat(sel, out)
     assert r.exit_code == 1, r.output
-    assert "F5.triangles FAIL" in r.stdout
+    triangles = json.loads((out / "flat.json").read_bytes())["mesh"]["triangles"]
+    assert f"  F5.triangles FAIL - measured {triangles}; threshold 4\n" in r.stdout
     assert sorted(p.name for p in out.iterdir()) == ["flat.json", "model.stl", "outline.png"]
 
 
@@ -251,7 +259,29 @@ def test_flat_reports_os_errors_without_a_traceback(tmp_path):
 
 
 def test_flat_help_documents_exit_codes():
-    text = _plain(runner.invoke(app, ["flat", "--help"]).output)
+    text = _plain(runner.invoke(app, ["flat", "--help"], prog_name="tdmg").output)
     for option in ("--width-mm", "--thickness-mm", "--out", "--printer"):
         assert option in text
-    assert "Exit codes: 0" in text and "1 if any check FAILed" in text and "2 for" in text
+    # Typer 0.28 puts braces round a required argument's metavar, as for select's {image}.
+    assert "Usage: tdmg flat [OPTIONS] {SELECTION_DIR}" in text
+    assert EXIT_LINES[-1] == ("Exit 0 does not mean the part is certified; read verdict in "
+                              "flat.json.")
+    assert " ".join(EXIT_LINES) in text
+
+
+EXIT_LINES = (
+    "Exit codes:",
+    "0 files written, and no check FAILed (UNKNOWN checks allowed)",
+    "1 files written, and at least one check FAILed",
+    "2 input or usage error; nothing written",
+    "Exit 0 does not mean the part is certified; read verdict in flat.json.",
+)
+
+
+def test_flat_help_keeps_the_exit_code_list_intact_at_80_columns():
+    # Each exit-code line must come out as one rendered line, not re-wrapped or joined.
+    narrow = CliRunner(env={"NO_COLOR": "1", "FORCE_COLOR": None, "COLUMNS": "80"})
+    lines = [" ".join(ANSI.sub("", line).split())
+             for line in narrow.invoke(app, ["flat", "--help"]).output.splitlines()]
+    start = lines.index(EXIT_LINES[0])
+    assert lines[start:start + len(EXIT_LINES)] == list(EXIT_LINES)

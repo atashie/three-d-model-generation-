@@ -291,6 +291,8 @@ def tiny_triangle_limit(monkeypatch, limit=4):
     rules = load_rules()
     rule_id = "slicer.orca.max_triangles_per_plate"
     rules[rule_id] = rules[rule_id].model_copy(update={"default": limit})
+    # make_flat calls load_rules through tdmg.flat's module-level import, so patching
+    # the name in tdmg.flat changes the rules it sees (tdmg.rules is untouched).
     monkeypatch.setattr("tdmg.flat.load_rules", lambda: rules)
 
 

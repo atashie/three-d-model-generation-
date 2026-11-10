@@ -133,9 +133,36 @@ def select(
     typer.echo(f"wrote {out / 'preview.png'} - check the subject before going on")
 
 
+def _compact(value) -> str:
+    """A measurement for one terminal line: floats to 4 significant digits, dicts as
+    key=value for their scalar entries (lists inside a dict, such as F3's largest pieces,
+    stay in flat.json)."""
+    if isinstance(value, float):
+        return f"{value:.4g}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_compact(v) for v in value) + "]"
+    if isinstance(value, dict):
+        return ", ".join(f"{k}={_compact(v)}" for k, v in sorted(value.items())
+                         if not isinstance(v, (list, dict)))
+    return str(value)
+
+
+def _check_line(check: dict) -> str:
+    """'  ID STATUS - measured M; threshold T: note', leaving out the parts that are absent."""
+    parts = [f"{name} {_compact(check[name])}" for name in ("measured", "threshold")
+             if check[name] is not None]
+    line = f"  {check['id']} {check['status']}"
+    if parts:
+        line += " - " + "; ".join(parts)
+    if check["note"]:
+        line += f": {check['note']}"
+    return line
+
+
 @app.command()
 def flat(
     selection: Annotated[Path, typer.Argument(exists=True, file_okay=False,
+                                              metavar="SELECTION_DIR",
                                               help="A tdmg select output folder.")],
     width_mm: Annotated[float, typer.Option(
         "--width-mm", help="Width of the selection in the model, in mm.")],
@@ -147,14 +174,15 @@ def flat(
 ) -> None:
     """Make a flat solid from a selection: write model.stl, outline.png and flat.json.
 
-    Exit codes: 0 if the files were written and no check FAILed.
-
-    (A NOT CERTIFIED verdict with only UNKNOWN checks still exits 0.)
-
-    1 if any check FAILed; the files are still written, for review.
-
-    2 for input and usage errors; nothing is written.
+    Exit codes:
+      0  files written, and no check FAILed (UNKNOWN checks allowed)
+      1  files written, and at least one check FAILed
+      2  input or usage error; nothing written
+    Exit 0 does not mean the part is certified; read verdict in flat.json.
     """
+    # Typer's Rich help keeps the single line breaks of every paragraph after the first,
+    # so the list above renders line for line. Each line is under 76 characters, so an
+    # 80-column terminal does not wrap it (tests/test_cli.py checks this).
     try:
         rec = make_flat(selection, width_mm, thickness_mm, out, printer=printer)
     except (FlatError, SelectionError) as e:
@@ -166,8 +194,7 @@ def flat(
     typer.echo(f"verdict {rec['verdict']}")
     for c in rec["checks"]:
         if c["status"] != "PASS":
-            note = f": {c['note']}" if c["note"] else ""
-            typer.echo(f"  {c['id']} {c['status']}{note}")
+            typer.echo(_check_line(c))
     mesh = rec["mesh"]
     size = " x ".join(f"{e:.2f}" for e in mesh["extents_mm"])
     bodies = f"{mesh['bodies']} bod{'y' if mesh['bodies'] == 1 else 'ies'}"
@@ -175,6 +202,7 @@ def flat(
     typer.echo(f"flat_id {rec['flat_id']}")
     typer.echo(f"wrote {out / 'model.stl'}")
     typer.echo(f"wrote {out / 'outline.png'} - open outline.png to check what cleaning removed")
+    typer.echo(f"wrote {out / 'flat.json'}")
     if any(c["status"] == "FAIL" for c in rec["checks"]):
         raise typer.Exit(1)
 
