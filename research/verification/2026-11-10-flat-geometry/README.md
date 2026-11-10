@@ -43,3 +43,13 @@ they derive from the owner's images.
   appearance to be reported).
 - **Slicing:** with any slicer (F6).
 - **Printing:** physical prints and caliper measurements.
+
+## Re-run after the Codex review fixes (commit `f2367af`)
+
+The same command, into new `-60x3-c` folders. Both exited 0.
+
+- **Export check:** the new `F2.export_matches_geometry` check passed for both.
+  - Roadie: largest bounds error 6.8e-7 mm, volume error 2.6e-5 mm³ of 2,223.8 mm³.
+  - Oddie: 3.6e-6 mm and 8.5e-7 mm³ of 4,980.9 mm³.
+- **Repeatability:** `model.stl` was byte-identical to the earlier `-a` runs, and the
+  `flat_id`s were unchanged.

@@ -29,8 +29,9 @@ valid solid can still include an unwanted background.
 - **`tdmg select`** covers S0 and S1, with explicit controls and no language
   interpretation.
 - **`tdmg flat`** covers S2–S4 and S8 for flat (G1) shapes. It:
-  - outlines the mask exactly, transforms it to millimetres and removes unprintable
-    slivers;
+  - outlines the mask exactly and transforms it to millimetres;
+  - removes slivers and specks by the cleaning rules (`flat.sliver.opening_width`,
+    `flat.island.min_square_side`, both untested hypotheses);
   - extrudes the shape and writes `model.stl`;
   - gates the bytes it writes, with F1, F2, F3 (measured; UNKNOWN), F4, F5 and F6
     (UNKNOWN).

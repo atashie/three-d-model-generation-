@@ -1,6 +1,14 @@
 # Project status
 
-**Last updated:** 2026-11-10. Phase 1 has started. Subject selection (`tdmg select`, stages S0/S1) is implemented, reviewed, and run on the owner's images. The owner confirmed the Roadie and Oddie selections. Tracing and geometry (the rest of R1) are not started. The R4 backend choice remains open.
+**Last updated:** 2026-11-10. Phase 1 is under way, with two commands:
+
+- **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
+- **`tdmg flat`** (S2–S4, S8): makes a flat STL and gates it.
+
+Both ran on the owner's Roadie and Oddie at 60 × 3 mm, giving one valid body each.
+The verdicts are NOT CERTIFIED, held back by the thin-wall policy (F3) and the slicer
+check (F6). Not done yet: loop or base, 3MF, a slicer, and printing. The R4 backend is
+still open.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
 
@@ -11,7 +19,14 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 | Research | Landscape report (v2.1) and seven historical source notes; Windows/TripoSR/MakerLab results in `research/experiments/2026-11-g3-local-vs-hosted/`. Independent reviews in `research/reviews/2026-11-09-codex/`, `research/reviews/2026-11-09-pc/` and `research/reviews/2026-11-10-selection/` |
 | Plan | `docs/PLAN.md` v2.1 adds plain-language image interpretation and a reviewable subject mask. The owner's decisions are in its section 13 |
 | Phase 0 (foundations) | **Baseline and Windows extension verified.** Package `tdmg`, 26 rules with checked citations (28 since Phase 1), A1 printer profile and docs. Local checks and hosted CI pass on Windows, macOS and Linux |
-| Phase 1 (R1 flat single-color) | **Started.** `tdmg select` (S0 intake and S1 subject selection) is implemented and tested. It ran on both owner images, and the owner confirmed the results. See `docs/guide/input-interpretation.md` and `research/verification/2026-11-10-subject-selection/`. Not started: tracing, extrusion, gates, slicing. |
+| Phase 1 (R1 flat single-color) | **Started.** `tdmg select` (S0 intake and S1 subject selection) is implemented and tested. It ran on both owner images, and the owner confirmed the results. See `docs/guide/input-interpretation.md` and `research/verification/2026-11-10-subject-selection/`. **`tdmg flat` (2026-11-10)** has the following parts:
+  - an exact pixel-cell outline, an explicit transform, and cleaning by the rules;
+  - manifold3d extrusion;
+  - a gate on the written STL: F1 topology, including pinched vertices; F2 size and
+    export match; F3 measured as UNKNOWN; F4; F5; F6 UNKNOWN.
+
+  See `research/verification/2026-11-10-flat-geometry/`. Not started: the loop or
+  base, 3MF, the slicer (F6), the F3 policy, and printing. |
 | Photo-to-3D backend (needed for R4) | TripoSR CPU test completed: ten measured runs, 32–35 seconds/model, 3.55–4.00 GiB peak working set. Repeated geometry matches exactly after sorting; OBJ bytes differ. All raw meshes fail topology checks; Roadie's background dominates its shape. See `research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md`. No backend chosen |
 
 ## Machines
@@ -23,10 +38,11 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09.
 
-Latest local validation (2026-11-10, Windows PC): **251 tests passed**, `ruff check .`
-and the generated-doc check passed. CI passed on all three OSes for `f5c83ae`
-(run 42835658505). The first push failed CI on a Rich-styling test assumption, since fixed.
-Earlier 133-test counts below are the original stack-verification record.
+Latest local validation (2026-11-10, Windows PC, after `tdmg flat`): **468 tests
+passed**, both plain and with `CI=true GITHUB_ACTIONS=true`. `ruff check .` and the
+generated-doc check also passed. The last confirmed CI run was green on all three
+OSes for `f5c83ae` (run 42835658505); the `tdmg flat` commits are checked after
+pushing.
 
 ## Next steps, in order
 
@@ -57,11 +73,24 @@ Earlier 133-test counts below are the original stack-verification record.
      - The counts equal the planning measurements, and a repeated run was byte-identical.
      - The owner confirmed both selections.
    - **Reviews:** each task had a spec review and a code-quality review; then an independent Codex review found 7 issues. All were verified and fixed; see `research/reviews/2026-11-10-selection/README.md`.
-   - **Next R1 step, planned 2026-11-10:** `docs/plans/2026-11-10-flat-geometry.md`. It adds `tdmg flat`:
-     - steps: exact pixel-cell outline, explicit transform, cleaning by the existing rules, manifold3d extrusion, STL, and a gate run on the written file;
-     - the verdict stays NOT CERTIFIED until an F3 policy and a slicer exist;
-     - it was prototyped on both masks.
-   - **Earlier wording of this step:** trace `mask.png` into outlines (using rule `vectorize.opencv.contour_offset_px`), then normalize, extrude, base and loop, write STL/3MF, run the final gate and slice in Orca. Write a plan for it first. OrcaSlicer is not yet installed or verified on the PC.
+   - **2026-11-10: flat geometry (`tdmg flat`) is done.** The plan is
+     `docs/plans/2026-11-10-flat-geometry.md`, executed with notes.
+     - It ran on the owner's selections at the owner's chosen 60 × 3 mm: Roadie gave
+       37,148 triangles and Oddie 33,248, one body each, and repeat runs were byte for
+       byte identical.
+     - Reviews: each task had subagent spec and quality reviews; then an independent
+       Codex review. See `research/reviews/2026-11-10-flat/`.
+     - Pending from the owner: whether Bambu Studio imports
+       `artifacts/flat-runs/*-60x3-a/model.stl` as one piece at about 60 mm. This is a
+       manual check, not F6.
+   - **Next, in order:**
+     1. A slicer plan. The owner approved installing a pinned OrcaSlicer release; record
+        its version. The plan covers a headless slice of the flat STL, Windows exit codes
+        measured (not assumed), and F6 from real output.
+     2. An F3 thin-wall pass/fail policy, based on research into how the slicer prints
+        narrow regions.
+     3. R1 features (keychain loop or base) and 3MF output with a UUID identity scheme.
+     4. The first physical print and caliper check (`acceptance.dimension.tolerance`).
    - Owner images are not committed until their rights are confirmed; the tests use synthetic look-alikes.
 
 ## Open questions for the owner
@@ -88,18 +117,23 @@ The full list is in `docs/PLAN.md` section 13.
 - **GPU rental:** unnecessary for now, per owner.
 - **Interpretation:** user wants plain-language subject/exclusion instructions; keep Roadie's bird and ignore its grey background. Implemented as explicit selection (`tdmg select`): text is recorded verbatim, and points or a mask apply it. No change to default no-LLM runtime policy.
 - **First R1 step:** subject selection first (2026-11-10). Interpretation via explicit controls was accepted; a phrase grammar or opt-in LLM can come later.
+- **First flat size:** 60 mm wide, 3 mm thick, for Roadie and Oddie (2026-11-10).
+- **OrcaSlicer:** the owner approved installing it on the PC when the slicer plan starts (2026-11-10).
 
 ## Compaction handoff
 
-- **Latest session (2026-11-10):** the owner chose to start Phase 1 with subject
-  selection. It was planned, implemented by subagents with two reviews per task,
-  reviewed by Codex, and run on the owner's images, and the owner accepted the result.
-  Commits are local on `main`; pushing needs the owner's go-ahead.
-- **Release verification:** all three GitHub Actions jobs passed for `cc331ad`. The
-  2026-11-10 commits have not yet been through CI.
-- **Start next session:** read `CLAUDE.md`, this page, then `docs/PLAN.md` and
-  `docs/guide/input-interpretation.md`. The CLI has `select`; there is no tracing,
-  geometry or generation command yet, and no language interpreter.
+- **Latest session (2026-11-10):**
+  - **Subject selection:** `tdmg select` was built, reviewed and pushed, and CI is
+    green.
+  - **Flat geometry:** `tdmg flat` was built by subagents with two reviews per task,
+    reviewed by Codex, and run on the owner's selections.
+  - **Pushing:** the owner said "push, then proceed" for this line of work. Push after
+    the Codex findings are handled, then confirm that CI passes.
+- **Start next session:** read `CLAUDE.md`, this page, `docs/PLAN.md`, then the two
+  plans in `docs/plans/`.
+  - The CLI has `select` and `flat`. It has no slicer, 3MF, loop or base, and no
+    language interpreter.
+  - The local outputs are in `artifacts/selection-runs/` and `artifacts/flat-runs/`.
 - **Evidence:** read `RESULTS-PC.md` and `MAKERLAB-RESULTS.md` in the experiment
   directory. Local TripoSR: fast, repeatable geometry, invalid raw topology.
   MakerLab: both supplied meshes pass measured closed-topology checks but each

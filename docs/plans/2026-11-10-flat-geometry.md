@@ -56,7 +56,7 @@ that is manifold by construction), trimesh (STL I/O and mesh queries), Pillow an
    `--thickness-mm`, with no defaults. They are the user's choices, not design rules, so
    they need no rules-registry entries.
 3. **The width applies to the selection.** The scale is `width_mm / mask width in
-   pixels`, exactly. Cleaning then removes features no nozzle can print. The record
+   pixels`, exactly. Cleaning then removes features by the cleaning rules (untested hypotheses). The record
    reports the final extents and the measured change (area removed, Hausdorff distance),
    so the user can see it. The width is not silently re-fitted.
 4. **The image-to-model transform** is `x_mm = (x_px − x0)·s` and `y_mm = (y1 − y_px)·s`.
@@ -432,3 +432,10 @@ expected size. That is a manual import check, not F6.
 - **Task 9:** see `research/verification/2026-11-10-flat-geometry/README.md`. Roadie and
   Oddie at 60 × 3 mm each give one body, pass every F1, F2, F4 and F5 check, are NOT
   CERTIFIED only through F3 and F6, and repeat byte for byte.
+- **Codex review** (`research/reviews/2026-11-10-flat/`) led to:
+  - a new check, `F2.export_matches_geometry`, so the size checks judge the written
+    mesh;
+  - verification of the selection's identity;
+  - a measured note that cleaning removes features up to the opening width plus about
+    0.005% of it, because the erosion collapses numerically there;
+  - honest wording for exit code 2 and for what cleaning removes.
