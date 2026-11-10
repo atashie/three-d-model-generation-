@@ -22,8 +22,8 @@ step on 2026-11-10. The evidence is `research/verification/2026-11-10-thin-walls
 - **The first layer:** it is deliberately shrunk by `elefant_foot_compensation`
   (0.075 mm), which gives gaps of up to 0.24 mm there.
 
-**Status:** written 2026-11-10. The owner approved the rule in Decision 2 on
-2026-11-10 ("I approve this rule"). Not started.
+**Status:** written 2026-11-10. The owner approved Decision 2 and later Decision 2a.
+Executed the same day; see "Execution notes".
 
 ## Decisions
 
@@ -92,3 +92,28 @@ step on 2026-11-10. The evidence is `research/verification/2026-11-10-thin-walls
 - Profiles other than the pinned A1 0.20 mm PLA.
 - Auto-thickening thin features.
 - PrusaSlicer portability.
+
+## Execution notes
+
+- **Tasks 1–2:** `src/tdmg/printed.py` plus the F3 checks in `tdmg slice`. Three checks
+  are now required: `F3.printed_connectivity`, `F3.edge_coverage` and `F3.edge_overprint`
+  (Decision 2a). `F3.thin_regions` is information only in slice.
+- **Review-driven changes:**
+  - **Placement:** the known placement (OrcaSlicer centres the bbox on the plate) replaces
+    a fitted shift. The fitted shift could absorb one-sided errors, which were measured
+    false PASSes.
+  - **Holes:** holes and parts are matched one to one.
+  - **Exceptions:** any analysis exception gives UNKNOWN, and the outputs are still
+    written.
+  - **Feature allow-list:** features outside it, such as brim, skirt and support, give
+    UNKNOWN.
+  - **Parser:** G-code forms OrcaSlicer does not write are refused. That covers G01, a
+    missing space, N line numbers and checksums, G5, G18 and G19, firmware retract, and a
+    Custom extrusion after the model starts.
+  - **Z checks:** Z order and continuity are checked.
+  - **Rotation ties:** tied quarter-turns are judged by the worse result.
+  - **Identity:** the tolerance and elephant-foot values enter `slice_id`.
+- **Task 3:** see the addendum in `research/verification/2026-11-10-thin-walls/README.md`.
+  Roadie and Oddie pass all three F3 checks. Only `F6.portability` blocks PRINTABLE.
+- **Known limits:** printed-over holes of 0.4 mm or less cannot be told apart at 0.2 mm;
+  sharp corners are strict; strength is not judged.

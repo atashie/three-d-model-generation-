@@ -83,3 +83,46 @@ the edge gap jumps to about half the bridge length. Printed features stayed with
   - The bead model's accuracy against real plastic. That would need calipers or a
     microscope.
   - Any case beyond two cartoons and five bridges.
+
+## Addendum: implementation results and corrections, 2026-11-10
+
+The policy is implemented in `src/tdmg/printed.py` and `tdmg slice` (commits `95d8c07`,
+`9785c1e`, `6f1720f`, `0a44a2d`, `019e404`). Changes relative to the research method
+above:
+
+- **Placement is the known one, not fitted.** OrcaSlicer centres the model's bounding box
+  on the plate. Measured: Roadie's centre at (128.0007, 128.0013) and Oddie's at
+  (127.995, 128.002), against the plate centre (128, 128), the centre of the machine
+  profile's `printable_area`.
+  - The research's first-layer bounding-box match was off by 0.03–0.04 mm, because the
+    elephant-foot shrink is not uniform. Its 0.061 / 0.067 mm "above the first layer"
+    figures therefore partly reflect misalignment. With the known placement they are
+    0.027 / 0.037 mm.
+  - A fitted placement was also shown to absorb one-sided errors and produce false
+    PASSes, for example a side printed 0.25 mm short. That is why fitting was dropped.
+- **Model sections** are cut at each layer's mid-height (Z_HEIGHT − LAYER_HEIGHT / 2),
+  not at a fixed 0.1 mm offset.
+- **Overprint is measured too** (owner decision). The largest distance of printed plastic
+  outside the model is 0.013 mm for Roadie and 0.013 mm for Oddie (first layer: 0.012 /
+  0.009 mm). The 0.5 mm first-layer lines do not push plastic outward.
+- **Layer heights:** OrcaSlicer writes `; LAYER_HEIGHT: 0.4` before Internal Bridge lines
+  inside a 0.2 mm layer. Only the first LAYER_HEIGHT after each Z_HEIGHT is the layer's
+  height. `; Z_HEIGHT: %g` is confirmed in the v2.5.0 source (`src/libslic3r/GCode.cpp`
+  line 6681).
+
+**Final runs** (`tdmg slice`, output in the git-ignored `artifacts/slice-runs/*-60x3-f3`):
+
+| Model | Connectivity | Edge coverage, worst (allowance) | Overprint, worst | Certification |
+|---|---|---|---|---|
+| Roadie | PASS, 15/15 layers | 0.231 mm, first layer (0.275) | 0.013 mm | NOT CERTIFIED: F6.portability UNKNOWN |
+| Oddie | PASS, 15/15 layers | 0.222 mm, first layer (0.275) | 0.013 mm | NOT CERTIFIED: F6.portability UNKNOWN |
+
+**Known limits of the policy:**
+- **Small holes:** a hole of 0.4 mm or less that gets printed over cannot fail the
+  0.2 mm overprint check, because every point inside it is within 0.2 mm of the model.
+  Such holes are far below `fdm.hole.min_diameter` (2 mm).
+- **Sharp corners:** corners sharper than about 62° can fail coverage by construction.
+  The owner decided to keep this strict.
+- **What is not judged:** strength is not judged.
+- **Scope:** the checks hold only for the pinned OrcaSlicer 2.5.0 A1 profile and its
+  model-feature list. Overhang wall and Bridge give UNKNOWN until they are seen.
