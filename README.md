@@ -12,7 +12,7 @@ The pipeline is deterministic code. Machine learning appears only where no rule 
 
 - New to 3D printing files? Read [docs/guide/00-start-here.md](docs/guide/00-start-here.md).
 - The design and its reasons: [docs/PLAN.md](docs/PLAN.md).
-- Planned subject selection from plain-language instructions: [input interpretation](docs/guide/input-interpretation.md).
+- Choosing what in an image becomes the model (`tdmg select`): [input interpretation](docs/guide/input-interpretation.md).
 - Print types and recipes: [docs/print-types/README.md](docs/print-types/README.md).
 - Every design rule and its evidence: [docs/reference/rules.md](docs/reference/rules.md).
 - The research behind it: [reports/Image to printable 3D model landscape.md](reports/Image%20to%20printable%203D%20model%20landscape.md).
@@ -26,6 +26,7 @@ uv sync                                   # create .venv from uv.lock
 uv run pytest                             # run the tests
 uv run tdmg rules                         # list the design rules
 uv run tdmg recipes                       # list the print recipes
+uv run tdmg select IMAGE --out DIR ...    # select the subject; writes a preview to check
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

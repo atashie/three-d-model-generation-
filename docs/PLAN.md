@@ -119,8 +119,9 @@ inside an otherwise transparent image. Record the original instructions, resolve
 selection, mask and prepared-image hashes. Geometry validity cannot establish that
 the intended subject was selected. Unsupported or ambiguous instructions must be
 reported, not silently ignored. See [input interpretation](guide/input-interpretation.md)
-for the planned interaction and acceptance cases. This is a design requirement,
-not an implemented natural-language interpreter; the default no-LLM rule remains.
+for the interaction and acceptance cases. Explicit selection (points or a corrected
+mask, with the text stored verbatim) is implemented as `tdmg select`. No natural-language
+interpreter is implemented, and the default no-LLM rule remains.
 
 Each check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule ID. A check that cannot be measured returns UNKNOWN; it never silently passes. Each recipe declares its required checks in code. The overall verdict is PRINTABLE only if every required check passes.
 
@@ -488,4 +489,6 @@ Answered by the project owner on 2026-11-09.
   plain language what the image means for the model. Owner example: Roadie is the
   bird alone; ignore the grey background. Support this before geometry generation
   through explicit subject/exclusion selection and a reviewable foreground mask.
-  Implementation is planned; automatic language-to-selection behavior is not yet built.
+  Explicit selection is implemented as `tdmg select` (2026-11-10, plan
+  `docs/plans/2026-11-10-subject-selection.md`); the owner confirmed the Roadie and
+  Oddie selections. Automatic language-to-selection behavior is not built.
