@@ -1,0 +1,50 @@
+== bridge_0.15: 3.5 s; slicer exit 0; layers 15; turn 90, tied [90, 270]
+   F3.printed_connectivity FAIL: 15 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 2.500 mm at z 0.4 (allowance 0.2), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== bridge_0.3: 3.9 s; slicer exit 0; layers 15; turn 90, tied [90, 270]
+   F3.printed_connectivity FAIL: 15 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 2.500 mm at z 0.4 (allowance 0.2), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== bridge_0.45: 3.0 s; slicer exit 0; layers 15; turn 90, tied [90, 270]
+   F3.printed_connectivity FAIL: 1 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 2.479 mm at z 0.2 (allowance 0.275), 1 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== bridge_0.6: 3.0 s; slicer exit 0; layers 15; turn 90, tied [90, 270]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage PASS: max gap 0.210 mm at z 0.2 (allowance 0.275), 0 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode, quarantined False
+== bridge_1.0: 3.0 s; slicer exit 0; layers 15; turn 90, tied [90, 270]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage PASS: max gap 0.210 mm at z 0.2 (allowance 0.275), 0 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode, quarantined False
+== hair_end_0.3x5: 3.5 s; slicer exit 0; layers 15; turn 90, tied [90]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 5.000 mm at z 0.4 (allowance 0.2), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== hair_side_0.3x3: 3.1 s; slicer exit 0; layers 15; turn 90, tied [90]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 3.000 mm at z 0.4 (allowance 0.2), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== hair_end_0.2x3: 3.1 s; slicer exit 0; layers 15; turn 90, tied [90]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 3.000 mm at z 0.4 (allowance 0.2), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== spike_tri_1.0base_x4: 3.1 s; slicer exit 0; layers 15; turn 90, tied [90]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 1.771 mm at z 0.2 (allowance 0.275), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 2.8 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
+== rect_60x3_hair_end_0.3x4: 3.0 s; slicer exit 0; layers 15; turn 90, tied [90]
+   F3.printed_connectivity PASS: 0 of 15 layers differ
+   F3.edge_coverage FAIL: max gap 4.000 mm at z 0.4 (allowance 0.2), 15 layer(s) over
+   F3.edge_overprint PASS: max 0.000 mm at z 0.4 (allowance 0.2), 0 layer(s) over
+   gcode plate_1.gcode.failed, quarantined True
