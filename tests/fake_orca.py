@@ -14,7 +14,8 @@ the model:
     stats      write plate_1.statistics.json (default true)
     layers     summary.layer_count (default 100)
     objects    number of entries in "objects" (default 1)
-    log        write the log file (default false; the real slicer wrote one only on errors)
+    log        write the log file (default: only when exit is nonzero, as the real slicer
+               does without --debug; README addendum, item 1)
     sleep      seconds to wait first (default 0)
     grandchild start a child process that sleeps this many seconds and holds the output
                pipes open, as a slicer helper process might (default: none)
@@ -58,7 +59,7 @@ def main(argv: list[str]) -> int:
         code = f"import time; time.sleep({control['grandchild']})"
         subprocess.Popen([sys.executable, "-c", code], stdout=sys.stdout, stderr=sys.stderr)
     time.sleep(control.get("sleep", 0))
-    if control.get("log", False):
+    if control.get("log", control.get("exit", 0) != 0):
         log.write_text("fake log\n")
     if control.get("gcode", True):
         now = datetime.datetime.now()

@@ -523,6 +523,16 @@ def test_run_slicer_refuses_a_missing_program(tmp_path):
         run_slicer([str(tmp_path / "no-such.exe")], stl, profiles, work, 10)
 
 
+def test_run_slicer_refuses_a_semicolon_in_a_settings_path(tmp_path):
+    stl, profiles, work = _setup_run(tmp_path)
+    odd = tmp_path / "a;b"
+    odd.mkdir()
+    (odd / "process.json").write_bytes(b"{}")
+    with pytest.raises(SlicerError, match="contains ';'"):
+        run_slicer(FAKE, stl, {**profiles, "process": odd / "process.json"}, work, 10)
+    assert not (work / "out").exists()
+
+
 def test_run_slicer_needs_an_empty_work_folder(tmp_path):
     stl, profiles, work = _setup_run(tmp_path)
     (work / "stale").write_bytes(b"")

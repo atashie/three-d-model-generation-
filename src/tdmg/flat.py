@@ -636,6 +636,17 @@ def _check_provenance(record: dict, record_path: Path) -> None:
                         "algorithm, input pixels, controls and instructions")
 
 
+def flat_identity(algorithm: str, mask_pixels_sha256: str, params: dict) -> str:
+    """flat_id: SHA-256 of the canonical JSON of these three fields.
+
+    The one definition, used by make_flat and by stages that verify a flat record
+    (tdmg slice). Raises ValueError for NaN or infinity in params.
+    """
+    identity = {"algorithm": algorithm, "mask_pixels_sha256": mask_pixels_sha256,
+                "params": params}
+    return hashlib.sha256(canonical_json(identity)).hexdigest()
+
+
 def _is_hex64(value) -> bool:
     return isinstance(value, str) and HEX64.fullmatch(value) is not None
 
@@ -892,13 +903,11 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     params = {"width_mm": width_mm, "thickness_mm": thickness_mm, "printer": profile.id,
               "opening_mm": opening, "min_island_mm2": min_island,
               "smoothing": {"applied": False} if sigma is None else {"sigma_px": sigma}}
-    identity = {"algorithm": FLAT_ALGORITHM_VERSION,
-                "mask_pixels_sha256": selection["mask_pixels_sha256"],
-                "params": params}
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": FLAT_ALGORITHM_VERSION,
-        "flat_id": hashlib.sha256(canonical_json(identity)).hexdigest(),
+        "flat_id": flat_identity(FLAT_ALGORITHM_VERSION, selection["mask_pixels_sha256"],
+                                 params),
         "selection": {"selection_id": selection["selection_id"],
                       "mask_pixels_sha256": selection["mask_pixels_sha256"]},
         "params": params, "smoothing": smoothing,

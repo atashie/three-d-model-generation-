@@ -289,9 +289,13 @@ def run_slicer(cmd_prefix: list[str], stl: Path, profiles: dict[str, Path], work
     work = Path(workdir).resolve()
     if not work.is_dir() or any(work.iterdir()):
         raise SlicerError(f"slicer work folder {work} must be an existing, empty folder")
+    absolute = {k: Path(v).resolve() for k, v in profiles.items()}
+    for kind in ("machine", "process"):
+        if ";" in str(absolute[kind]):     # --load-settings separates its two paths with ";"
+            raise SlicerError(f"the {kind} profile path {absolute[kind]} contains ';', which "
+                              "--load-settings cannot take")
     out_dir, log = work / "out", work / "slicer.log"
     out_dir.mkdir()
-    absolute = {k: Path(v).resolve() for k, v in profiles.items()}
     args = [*cmd_prefix, *slicer_args(Path(stl).resolve(), absolute, out_dir, log)]
     # A new process group on POSIX, so a timeout can kill everything the slicer started.
     group = {} if os.name == "nt" else {"start_new_session": True}
@@ -460,8 +464,12 @@ def gcode_hashes(data: bytes) -> dict:
 
 
 def f6_checks(run: SlicerRun, expected_counts: set[int] | frozenset[int],
-              pin: SlicerPin | None = None) -> tuple[list[CheckResult], dict | None]:
+              pin: SlicerPin | None = None,
+              timeout_rule: str | None = TIMEOUT_RULE) -> tuple[list[CheckResult], dict | None]:
     """F6 on a run's outputs, and the parsed statistics (None when there are none).
+
+    timeout_rule is the rule that set run.timeout_s, named by F6.slicer_exit when the run
+    was stopped; None when the caller chose the timeout explicitly.
 
     expected_counts is expected_layer_counts(...); the check records it as a sorted list.
     After a failed or stopped run, a missing statistics file leaves layer_count and
@@ -469,7 +477,7 @@ def f6_checks(run: SlicerRun, expected_counts: set[int] | frozenset[int],
     """
     pin = pin or load_pin()
     allowed = sorted(expected_counts)
-    checks = [_exit_check(run, pin)]
+    checks = [_exit_check(run, pin, timeout_rule)]
     exited_ok = checks[0].status == "PASS"
 
     gcode = run.out_dir / GCODE_NAME
@@ -517,9 +525,9 @@ def f6_checks(run: SlicerRun, expected_counts: set[int] | frozenset[int],
     return checks, stats
 
 
-def _exit_check(run: SlicerRun, pin: SlicerPin) -> CheckResult:
+def _exit_check(run: SlicerRun, pin: SlicerPin, timeout_rule: str | None) -> CheckResult:
     if run.timed_out:
-        return CheckResult("F6.slicer_exit", "FAIL", None, run.timeout_s, TIMEOUT_RULE,
+        return CheckResult("F6.slicer_exit", "FAIL", None, run.timeout_s, timeout_rule,
                            f"stopped after the {run.timeout_s:g} s timeout")
     code = decode_exit(run.returncode, platform_key(), pin)
     if code["signed"] == 0:

@@ -24,7 +24,7 @@ from tdmg.selection import (
     write_selection,
 )
 from tdmg.slicer import SlicerError
-from tdmg.slicing import make_slice
+from tdmg.slicing import DO_NOT_PRINT, make_slice
 
 app = typer.Typer(help="Image -> FDM-printable 3MF/STL. See docs/guide/00-start-here.md.",
                   no_args_is_help=True)
@@ -273,8 +273,7 @@ def slice_(
     except OSError as e:              # unreadable input, unwritable output, disk full ...
         _os_error(e)
         raise typer.Exit(2) from None
-    typer.echo(f"verdict {rec['verdict']}")
-    typer.echo(rec["certification"])
+    typer.echo(rec["certification"])     # the verdict, with the checks that block it
     code = rec["exit"]
     if code["timed_out"]:
         typer.echo(f"slicer stopped after {rec['params']['timeout_s']['value']:g} s")
@@ -293,6 +292,7 @@ def slice_(
         typer.echo(f"wrote {out / name}")
     typer.echo(f"wrote {out / 'slice.json'}")
     if any(c["status"] == "FAIL" for c in rec["checks"]):
+        typer.echo(DO_NOT_PRINT)
         raise typer.Exit(1)
 
 

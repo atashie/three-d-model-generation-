@@ -9,25 +9,32 @@ end runs the real slicer when TDMG_ORCASLICER_DIR points at a verified install.
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import sys
 
+import numpy as np
 import pytest
 from test_make_flat import write_roadie_selection
+from test_selection import _intake
 from typer.testing import CliRunner
 
+import tdmg.flat
 import tdmg.slicing
 from tdmg.cli import app
-from tdmg.flat import make_flat
+from tdmg.flat import flat_identity, make_flat
 from tdmg.paths import REPO_ROOT
 from tdmg.records import canonical_json
-from tdmg.slicer import SlicerError, load_pin, platform_key
+from tdmg.rules import load_rules
+from tdmg.selection import SelectionSpec, select_subject, write_selection
+from tdmg.slicer import Slicer, SlicerError, load_pin, platform_key
 from tdmg.slicing import (
     RECORD_SCHEMA,
     SLICE_ALGORITHM_VERSION,
     SLICE_REQUIRED_EXTRA,
     make_slice,
+    slicer_command,
 )
 
 FAKE = REPO_ROOT / "tests" / "fake_orca.py"
@@ -112,6 +119,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
     assert (record["schema"], record["algorithm"]) == (RECORD_SCHEMA, SLICE_ALGORITHM_VERSION)
     assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-1"
     assert record["links"] == {"flat_id": flat["flat_id"],
+                               "flat_record_sha256": _sha((flat_dir / "flat.json").read_bytes()),
                                "model_stl_sha256": flat["outputs"]["model.stl"],
                                "selection_id": flat["selection"]["selection_id"]}
     assert record["params"] == {"timeout_s": {"value": 300, "rule": "slicer.orca.timeout_s"},
@@ -142,8 +150,10 @@ def test_record_contents(flat_dir, fake, tmp_path):
         "F6.slicer_exit": "PASS", "F6.gcode_present": "PASS", "F6.layer_count": "PASS",
         "F6.single_object": "PASS", "F6.portability": "UNKNOWN"}
     assert record["verdict"] == "NOT CERTIFIED"
-    assert "F3.thin_regions" in record["certification"]
-    assert "F6.portability" in record["certification"]
+    # The reason is derived from the required checks that are not PASS, in check order.
+    assert record["certification"] == ("NOT CERTIFIED: F3.thin_regions UNKNOWN, "
+                                        "F6.portability UNKNOWN")
+    assert record["environment"]["platform"] == platform.platform()
     assert record["log_written"] is False
     files = sorted(p.name for p in out.iterdir())
     assert files == ["plate_1.gcode", "plate_1.statistics.json", "slice.json"]
@@ -164,8 +174,34 @@ def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
                            "app_tree_sha256": pin.app_tree.sha256},
                 "profiles": {k: p.sha256 for k, p in pin.profiles.flat.items()},
+                "flat_record_sha256": record["links"]["flat_record_sha256"],
                 "command": record["command"]}
     assert record["slice_id"] == _sha(canonical_json(identity))
+
+
+def test_flat_identity_is_the_definition_make_flat_uses(flat_dir):
+    flat = json.loads((flat_dir / "flat.json").read_bytes())
+    assert flat_identity(flat["algorithm"], flat["selection"]["mask_pixels_sha256"],
+                         flat["params"]) == flat["flat_id"]
+
+
+def test_a_different_flat_record_gives_a_different_slice_id(flat_dir, fake, tmp_path):
+    root = fake()
+    a = make_slice(flat_dir, tmp_path / "a", root)
+    copy = _copy_flat(flat_dir, tmp_path)
+    record = json.loads((copy / "flat.json").read_bytes())
+    record["review"] = record["review"] + " (edited)"        # not part of flat_id
+    (copy / "flat.json").write_bytes(json.dumps(record).encode())
+    b = make_slice(copy, tmp_path / "b", root)
+    assert a["links"]["flat_id"] == b["links"]["flat_id"]
+    assert a["links"]["flat_record_sha256"] != b["links"]["flat_record_sha256"]
+    assert a["slice_id"] != b["slice_id"]
+
+
+def test_slicer_command_is_the_verified_exe(tmp_path):
+    exe = tmp_path / "app" / "orca-slicer.exe"
+    slicer = Slicer(tmp_path, exe, {}, {}, PIN)
+    assert slicer_command(slicer) == [str(exe)]
 
 
 def test_repeat_runs_differ_only_in_the_timestamp(flat_dir, fake, tmp_path):
@@ -178,6 +214,27 @@ def test_repeat_runs_differ_only_in_the_timestamp(flat_dir, fake, tmp_path):
     # The timeout does not change the output, so it is not part of the id.
     assert b["params"]["timeout_s"] == {"value": 120.0, "rule": None}
     assert a["slice_id"] == b["slice_id"]
+
+
+def test_a_timeout_is_recorded(flat_dir, fake, tmp_path):
+    out = tmp_path / "slice"
+    record = make_slice(flat_dir, out, fake(sleep=30), timeout_s=0.5)
+    checks = by_id(record)
+    assert record["exit"]["timed_out"] is True and record["exit"]["raw"] is None
+    assert checks["F6.slicer_exit"]["status"] == "FAIL"
+    # An explicit timeout: no rule set it, so the check names none.
+    assert checks["F6.slicer_exit"]["rule"] is None
+    assert checks["F6.slicer_exit"]["threshold"] == 0.5
+    assert "F6.slicer_exit FAIL" in record["certification"]
+
+
+def test_the_default_timeout_check_names_the_rule(flat_dir, fake, tmp_path, monkeypatch):
+    rules = load_rules()
+    short = rules["slicer.orca.timeout_s"].model_copy(update={"default": 0.5})
+    monkeypatch.setattr(tdmg.slicing, "load_rules", lambda: {**rules,
+                                                             "slicer.orca.timeout_s": short})
+    record = make_slice(flat_dir, tmp_path / "slice", fake(sleep=30))
+    assert by_id(record)["F6.slicer_exit"]["rule"] == "slicer.orca.timeout_s"
 
 
 def test_the_log_is_copied_when_the_slicer_writes_one(flat_dir, fake, tmp_path):
@@ -198,7 +255,40 @@ def test_a_failed_slice_writes_the_record_and_fails(flat_dir, fake, tmp_path):
     assert record["exit"]["name"] == "CLI_NO_SUITABLE_OBJECTS"
     assert record["stats"] is None and record["gcode"] is None
     assert record["stderr_tail"].endswith("No object is fully inside")
-    assert sorted(p.name for p in out.iterdir()) == ["slice.json"]
+    assert record["certification"].startswith("NOT CERTIFIED: F3.thin_regions UNKNOWN, "
+                                              "F6.slicer_exit FAIL, F6.gcode_present FAIL")
+    # Like the real slicer, the fake writes a log when it fails.
+    assert record["log_written"] is True
+    assert sorted(p.name for p in out.iterdir()) == ["slice.json", "slicer.log"]
+
+
+def test_gcode_from_a_failed_slice_is_renamed(flat_dir, fake, tmp_path):
+    out = tmp_path / "slice"
+    record = make_slice(flat_dir, out, fake(exit=-100))
+    assert by_id(record)["F6.slicer_exit"]["status"] == "FAIL"
+    names = sorted(p.name for p in out.iterdir())
+    assert "plate_1.gcode" not in names and "plate_1.gcode.failed" in names
+    assert record["gcode"]["file"] == "plate_1.gcode.failed"
+    assert record["gcode"]["sha256"] == record["outputs"]["plate_1.gcode.failed"]
+
+
+def _two_body_flat(tmp_path):
+    rgba = np.zeros((60, 100, 4), np.uint8)
+    rgba[10:50, 5:45] = (230, 20, 20, 255)
+    rgba[10:50, 55:95] = (230, 20, 20, 255)
+    intake = _intake(rgba)
+    sel = tmp_path / "sel2"
+    write_selection(intake, select_subject(intake, SelectionSpec()), sel)
+    out = tmp_path / "flat2"
+    make_flat(sel, 60.0, 3.0, out)
+    return out
+
+
+def test_several_bodies_are_named_in_the_reason(fake, tmp_path):
+    flat2 = _two_body_flat(tmp_path)
+    record = make_slice(flat2, tmp_path / "slice", fake())
+    assert by_id(record)["F4.body_count"]["status"] == "UNKNOWN"
+    assert "F4.body_count UNKNOWN" in record["certification"]
 
 
 # --- Refusals: nothing written -----------------------------------------------------------
@@ -217,10 +307,30 @@ def test_a_model_changed_after_flat_is_refused(flat_dir, fake, tmp_path):
     assert not (tmp_path / "slice").exists()
 
 
+def _set_check(check_id, **fields):
+    def change(record):
+        for c in record["checks"]:
+            if c["id"] == check_id:
+                c.update(fields)
+    return change
+
+
 @pytest.mark.parametrize(("change", "message"), [
     (lambda r: r.update(schema="tdmg.flat/0"), "schema"),
     (lambda r: r.pop("flat_id"), "flat_id"),
+    (lambda r: r.update(flat_id="ab" * 31), "flat_id"),
+    (lambda r: r["selection"].pop("selection_id"), "selection_id"),
+    (lambda r: r["selection"].update(selection_id="x" * 64), "selection_id"),
     (lambda r: r["params"].pop("thickness_mm"), "thickness_mm"),
+    (lambda r: r["params"].update(thickness_mm=True), "thickness_mm"),
+    (lambda r: r["params"].update(thickness_mm="3"), "thickness_mm"),
+    # The reviewer's Experiment A: F3 forged to PASS and the thickness edited.
+    (lambda r: (_set_check("F3.thin_regions", status="PASS")(r),
+                r["params"].update(thickness_mm=2.0)), "flat.json is inconsistent"),
+    (lambda r: r["params"].update(width_mm=61.0), "flat.json is inconsistent"),
+    (lambda r: r.update(checks=["F1.finite PASS"]), "check"),
+    (_set_check("F1.finite", status="OK"), "status"),
+    (_set_check("F1.finite", extra=1), "check"),
 ])
 def test_a_bad_flat_record_is_refused(flat_dir, fake, tmp_path, change, message):
     copy = _copy_flat(flat_dir, tmp_path)
@@ -242,8 +352,24 @@ def test_a_non_empty_output_folder_is_refused_before_slicing(flat_dir, fake, tmp
     out = tmp_path / "slice"
     out.mkdir()
     (out / "x").write_bytes(b"")
+    ran = tmp_path / "ran.txt"
     with pytest.raises(SlicerError, match="not empty"):
-        make_slice(flat_dir, out, fake())
+        make_slice(flat_dir, out, fake(cwd_file=str(ran)))
+    assert not ran.exists()                              # the slicer never started
+
+
+def test_a_profile_changed_after_locate_is_refused(flat_dir, fake, tmp_path, monkeypatch):
+    root = fake()
+    real_locate = tdmg.slicing.locate
+
+    def locate_then_change(slicer_dir, pin):
+        found = real_locate(slicer_dir, pin)
+        (root / "profiles-flat" / "process.json").write_bytes(b'{"layer_height": "0.1"}')
+        return found
+    monkeypatch.setattr(tdmg.slicing, "locate", locate_then_change)
+    with pytest.raises(SlicerError, match="process.json.*does not match the pin"):
+        make_slice(flat_dir, tmp_path / "slice", root)
+    assert not (tmp_path / "slice").exists()
 
 
 def test_a_changed_install_is_refused(flat_dir, fake, tmp_path):
@@ -276,8 +402,8 @@ def test_cli_exit_0_prints_the_summary(flat_dir, fake, tmp_path):
     assert r.exit_code == 0, r.output
     record = json.loads((out / "slice.json").read_bytes())
     text = r.stdout
-    assert text.startswith("verdict NOT CERTIFIED\n")
-    assert record["certification"] in text
+    assert text.startswith("NOT CERTIFIED: F3.thin_regions UNKNOWN, F6.portability UNKNOWN\n")
+    assert "do not print" not in text
     assert "slicer exit 0 (CLI_SUCCESS)" in text
     assert "15 layers, 766.1 s, 3.727 g (slicer estimates)" in text
     assert "  F6.portability UNKNOWN: second slicer (PrusaSlicer) not run" in text
@@ -291,7 +417,22 @@ def test_cli_exit_1_on_a_truncated_print(flat_dir, fake, tmp_path):
     r = _slice(flat_dir, out, "--slicer-dir", str(fake(layers=2)))
     assert r.exit_code == 1, r.output
     assert "F6.layer_count FAIL - measured 2; threshold [15]" in r.stdout
+    assert "a check FAILed: do not print this G-code" in r.stdout
     assert (out / "slice.json").is_file()
+
+
+def test_cli_exit_1_when_a_flat_check_failed(fake, tmp_path, monkeypatch):
+    rules = load_rules()
+    tiny = rules["slicer.orca.max_triangles_per_plate"].model_copy(update={"default": 4})
+    monkeypatch.setattr(tdmg.flat, "load_rules",
+                        lambda: {**rules, "slicer.orca.max_triangles_per_plate": tiny})
+    sel = write_roadie_selection(tmp_path / "sel")
+    make_flat(sel, 60.0, 3.0, tmp_path / "flat")
+    out = tmp_path / "slice"
+    r = _slice(tmp_path / "flat", out, "--slicer-dir", str(fake()))
+    assert r.exit_code == 1, r.output
+    assert "F5.triangles FAIL" in r.stdout
+    assert "a check FAILed: do not print this G-code" in r.stdout
 
 
 def test_cli_timeout_option(flat_dir, fake, tmp_path):
