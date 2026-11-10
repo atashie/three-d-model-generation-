@@ -73,3 +73,43 @@ thin leaf tip stays attached at every cutoff.
   colour-space conversion.
 - Visual inspection covered only the tolerance-40 Roadie mask.
 - None of this tests tracing, extrusion or printing.
+
+## Implementation run on the owner's images, 2026-11-10 (Task 8 of the plan)
+
+`tdmg select` at commit `074c544`, same PC and environment as above. The outputs are in
+`artifacts/selection-runs/` (git-ignored: they are derived from the owner's images). The
+input hashes are unchanged from `input-hashes.txt`.
+
+Roadie command, varying only `--tolerance`:
+
+    uv run tdmg select <Downloads>/three-d-test/roadie.png --out artifacts/selection-runs/<run> \
+      --instructions "Use only the roadrunner bird. Ignore the grey circular background." \
+      --remove-at 60,396 --keep-at 470,470 --tolerance <t>
+
+The keep-point `470,470` is a red body pixel, RGB (249, 5, 7).
+
+| Run | Status | Selected px | selection_id (first 12) |
+|---|---|---:|---|
+| Roadie, tolerance 30 | one_piece | 74,768 | 877bbf959286 |
+| Roadie, tolerance 30, repeated | one_piece | 74,768 | 877bbf959286 |
+| Roadie, tolerance 20 | one_piece | 77,526 | 52c212c513bb |
+| Roadie, tolerance 40 | one_piece | 72,915 | ee9891c1c454 |
+| Oddie, instructions only | one_piece | 298,172 | 66d83eeb85ae |
+
+- **Matches the planning measurement:** the pixel counts equal the planning measurements
+  exactly. Roadie matches the flood table above, and Oddie matches `alpha>= 128` in
+  `oddie-alpha.txt`.
+- **Repeatable:** the repeated tolerance-30 run produced byte-identical `mask.png`,
+  `cutout.png`, `preview.png` and `selection.json`. That is repeatability within one
+  environment on one machine. Cross-machine repeatability is not tested.
+- **Oddie warning:** Oddie's run warned that its instructions were recorded but not
+  machine-interpreted, as designed. Its alpha channel alone selects it.
+- **Visual check:** an enlarged comparison of beak and feet at tolerances 20, 30 and 40
+  showed the beak whole at every tolerance. The thin beak noted above in the tolerance-40
+  mask was a misreading of the raw mask, not a loss. The tolerances differ only in a thin
+  dark edge fringe: tolerance 20 keeps a few dark specks beside the crest. The gaps
+  between the legs are removed and both shoes are kept at all three.
+- **Owner's verdict (2026-11-10):** Roadie's bird is selected correctly at the default
+  tolerance 30. Oddie is selected correctly.
+
+This verifies subject selection only. No tracing, geometry, slicing or printing was done.
