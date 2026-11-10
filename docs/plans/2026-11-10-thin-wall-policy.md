@@ -51,6 +51,13 @@ step on 2026-11-10. The evidence is `research/verification/2026-11-10-thin-walls
      0.275 mm). Otherwise it FAILs, giving the largest gap, its layer and its location.
    - `F3.thin_regions` stays in the flat record as information and is removed from the
      required set. Its note points to the two slicer-based checks.
+2a. **Owner decisions after review (2026-11-10):**
+    - **Reverse check, "yes":** add `F3.edge_overprint`, which FAILs when printed plastic
+      lies more than the same allowance outside the model. That also closes "plastic
+      printed over a small hole".
+    - **Sharp corners, "yes":** keep them strict. A corner sharper than about 62° can fail
+      `F3.edge_coverage` by construction, because a round bead misses a vertex by
+      r(1/sin(θ/2) − 1). Revisit if a real model trips it.
 3. **Honest scope, stated in the docs and the record:**
    - the bead model, a line of the stated width with round ends, approximates real
      plastic;
