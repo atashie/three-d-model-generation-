@@ -28,8 +28,10 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
   - a gate on the written STL: F1 topology, including pinched vertices; F2 size and
     export match; F3 measured as UNKNOWN; F4; F5; F6 UNKNOWN.
 
-  See `research/verification/2026-11-10-flat-geometry/`. Not started: the loop or
-  base, 3MF, the slicer (F6), the F3 policy, and printing. |
+  See `research/verification/2026-11-10-flat-geometry/`. **`tdmg slice` (2026-11-10)**
+  slices with a pinned OrcaSlicer 2.5.0 and measures F6; see
+  `research/verification/2026-11-10-orcaslicer-windows/`. Not started: the loop or base,
+  3MF, the F3 policy, PrusaSlicer, and printing. |
 | Photo-to-3D backend (needed for R4) | TripoSR CPU test completed: ten measured runs, 32–35 seconds/model, 3.55–4.00 GiB peak working set. Repeated geometry matches exactly after sorting; OBJ bytes differ. All raw meshes fail topology checks; Roadie's background dominates its shape. See `research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md`. No backend chosen |
 
 ## Machines

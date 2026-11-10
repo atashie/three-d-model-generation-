@@ -215,3 +215,12 @@ and names (as facts, cited to `src/libslic3r/Utils.hpp` v2.5.0) are fine.
     refused, only pinned by the record hash. Refusing it would mean re-running flat's
     checks.
 - **Task 4:** see the OrcaSlicer research record's "Slicing the owner's models" section.
+- **Codex review** (`research/reviews/2026-11-10-slicer/`):
+  - layer counts now come from the stored STL's z extent, with a float32 bound;
+  - G-code is quarantined on any required FAIL;
+  - the full app tree is verified on every run, unless `--skip-tree-check` is given,
+    which is recorded and changes the slice ID;
+  - the research scripts refuse to delete a non-empty folder.
+
+  These change the slice ID's composition. The Task 4 IDs in the research record
+  belong to commit `58ebe94`.

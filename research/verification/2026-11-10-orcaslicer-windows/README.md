@@ -169,3 +169,10 @@ run twice for each model. Every run exited 0 (slicer exit 0, CLI_SUCCESS).
   line.
 - **Outputs:** the outputs are in the git-ignored `artifacts/slice-runs/`.
 - **Not done:** nothing was printed. Bambu Studio's own estimates were not compared.
+
+## Script safety fix, 2026-11-10
+
+The Codex review (`research/reviews/2026-11-10-slicer/`) found that `measure_orca.py` and
+`measure_more.py` deleted their work folder recursively without checking it. Both now
+refuse a folder that exists and is not empty, and create a new one instead. The
+measured behaviour and the recorded results are unchanged; only the guard was added.

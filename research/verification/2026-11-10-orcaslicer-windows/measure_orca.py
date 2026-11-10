@@ -10,7 +10,9 @@ import trimesh
 
 exe, prof, work = (pathlib.Path(a).resolve() for a in sys.argv[1:4])
 models = [pathlib.Path(a).resolve() for a in sys.argv[4:]]
-shutil.rmtree(work, ignore_errors=True); work.mkdir(parents=True)
+if work.exists() and any(work.iterdir()):  # safety: never delete existing data (added 2026-11-10)
+    sys.exit(f"refusing: {work} exists and is not empty; pass a new folder")
+work.mkdir(parents=True, exist_ok=True)
 trimesh.creation.box((20, 20, 20)).apply_translation((10, 10, 10)).export(work / "cube.stl")
 openm = trimesh.creation.box((20, 20, 20)); openm.faces = openm.faces[1:]; openm.export(work / "open.stl")
 trimesh.creation.box((300, 20, 5)).apply_translation((150, 10, 2.5)).export(work / "toobig.stl")

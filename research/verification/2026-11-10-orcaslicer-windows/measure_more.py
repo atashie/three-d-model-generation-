@@ -18,7 +18,9 @@ import sys
 import trimesh
 
 exe, prof, work = (pathlib.Path(a).resolve() for a in sys.argv[1:4])
-shutil.rmtree(work, ignore_errors=True)
+if work.exists() and any(work.iterdir()):  # safety: never delete existing data (added 2026-11-10)
+    sys.exit(f"refusing: {work} exists and is not empty; pass a new folder")
+work.mkdir(parents=True, exist_ok=True)
 work.mkdir(parents=True)
 process = json.loads((prof / "process.json").read_text())
 first, h = float(process["initial_layer_print_height"]), float(process["layer_height"])

@@ -39,7 +39,8 @@ valid solid can still include an unwanted background.
     (UNKNOWN).
 
 Its verdict is always NOT CERTIFIED for now. Exit code 0 means only that no check
-failed. There are no loops, bases, 3MF output or slicer runs yet.
+failed. There are no loops, bases or 3MF output yet. Slicing is the separate
+`tdmg slice` step, described below.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 
