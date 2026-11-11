@@ -319,13 +319,25 @@ def run_slicer(cmd_prefix: list[str], stl: Path, profiles: dict[str, Path], work
     out_dir, log = work / "out", work / "slicer.log"
     out_dir.mkdir()
     args = [*cmd_prefix, *slicer_args(Path(stl).resolve(), absolute, out_dir, log)]
+    returncode, timed_out, out, err = run_process(args, work, timeout)
+    return SlicerRun(args, returncode, timed_out, timeout, output_tail(out), output_tail(err),
+                     out_dir, log)
+
+
+def run_process(args: list[str], cwd: Path,
+                timeout: float) -> tuple[int | None, bool, bytes, bytes]:
+    """(returncode, timed_out, stdout, stderr) of one run of args in cwd.
+
+    A run still going after `timeout` seconds is killed with every process it started;
+    its returncode is then None. Used for OrcaSlicer and PrusaSlicer (tdmg.portability).
+    """
     # A new process group on POSIX, so a timeout can kill everything the slicer started.
     group = {} if os.name == "nt" else {"start_new_session": True}
     try:
         proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                stdin=subprocess.DEVNULL, cwd=work, **group)
+                                stdin=subprocess.DEVNULL, cwd=cwd, **group)
     except OSError as err:
-        raise SlicerError(f"cannot start the slicer {cmd_prefix[0]}: {err}") from err
+        raise SlicerError(f"cannot start the slicer {args[0]}: {err}") from err
     timed_out = False
     try:
         out, err = proc.communicate(timeout=timeout)
@@ -337,8 +349,7 @@ def run_slicer(cmd_prefix: list[str], stl: Path, profiles: dict[str, Path], work
         except subprocess.TimeoutExpired:
             proc.kill()
             out, err = b"", b""
-    return SlicerRun(args, None if timed_out else proc.returncode, timed_out, timeout,
-                     _tail(out), _tail(err), out_dir, log)
+    return None if timed_out else proc.returncode, timed_out, out or b"", err or b""
 
 
 def _kill_tree(proc: subprocess.Popen) -> None:
@@ -354,7 +365,8 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     proc.kill()   # in case the tree kill missed it; harmless if it is already gone
 
 
-def _tail(data: bytes | None) -> str:
+def output_tail(data: bytes | None) -> str:
+    """The last OUTPUT_TAIL_CHARS characters of a run's output, decoded as UTF-8."""
     return (data or b"").decode("utf-8", errors="replace")[-OUTPUT_TAIL_CHARS:]
 
 
@@ -547,8 +559,6 @@ def f6_checks(run: SlicerRun, expected_counts: set[int] | frozenset[int],
             "objects in the slicer statistics; one STL loads as one object even with "
             "several bodies, which F4.body_count checks (UNKNOWN for several bodies, which "
             "blocks certification)"))
-    checks.append(CheckResult("F6.portability", "UNKNOWN", None, None, None,
-                              "second slicer (PrusaSlicer) not run"))
     return checks, stats
 
 

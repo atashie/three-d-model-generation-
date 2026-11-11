@@ -5,18 +5,32 @@ tests check them against that record where it has them.
 """
 
 import hashlib
+import json
 import os
+from pathlib import Path
 
 import pytest
+import trimesh
 
+from tdmg.flat import STL_COORD_RTOL
 from tdmg.paths import REPO_ROOT
 from tdmg.portability import (
+    INFO_HALF_UNIT,
     PRUSA_ENV_VAR,
     PRUSA_PIN_ID,
     PrusaPin,
+    explicit_settings,
+    gcode_args,
+    gcode_layers,
+    info_args,
     load_prusa_pin,
     locate_prusaslicer,
+    parse_info,
+    prusa_gcode_hashes,
+    size_tolerance_mm,
     verify_prusa_install,
+    volume_error_bound,
+    volume_tolerance_mm3,
 )
 from tdmg.slicer import SlicerError
 
@@ -186,3 +200,147 @@ def test_the_real_install_matches_the_pin():
     assert found.verified["exe_sha256"] == PIN.exe.sha256
     assert found.verified["app_tree"] == {"files": PIN.app_tree.files,
                                           "sha256": PIN.app_tree.sha256}
+
+
+# --- The explicit settings ----------------------------------------------------------------
+
+# The A1 values in the flattened OrcaSlicer profiles (see tests/test_slice.py).
+MACHINE = {"printable_area": ["0x0", "256x0", "256x256", "0x256"], "printable_height": "256",
+           "nozzle_diameter": ["0.4"]}
+PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2"}
+FILAMENT = {"filament_diameter": ["1.75"]}
+
+
+def test_explicit_settings_come_from_the_orca_profiles():
+    settings = explicit_settings(MACHINE, PROCESS, FILAMENT)
+    assert settings == {
+        "--bed-shape": {"value": "0x0,256x0,256x256,0x256", "profile": "machine",
+                        "key": "printable_area"},
+        "--max-print-height": {"value": "256", "profile": "machine", "key": "printable_height"},
+        "--nozzle-diameter": {"value": "0.4", "profile": "machine", "key": "nozzle_diameter"},
+        "--layer-height": {"value": "0.2", "profile": "process", "key": "layer_height"},
+        "--first-layer-height": {"value": "0.2", "profile": "process",
+                                 "key": "initial_layer_print_height"},
+        "--filament-diameter": {"value": "1.75", "profile": "filament",
+                                "key": "filament_diameter"}}
+    # The research record's command used exactly these values.
+    readme = (RECORD / "README.md").read_text(encoding="utf-8")
+    for flag, s in settings.items():
+        assert f"{flag} {s['value']}" in readme, flag
+    stl, gcode = Path("m.stl"), Path("o.gcode")
+    assert gcode_args(stl, gcode, settings) == [
+        "--export-gcode", "m.stl", "-o", "o.gcode", "--bed-shape", "0x0,256x0,256x256,0x256",
+        "--max-print-height", "256", "--nozzle-diameter", "0.4", "--layer-height", "0.2",
+        "--first-layer-height", "0.2", "--filament-diameter", "1.75"]
+    assert info_args(stl) == ["--info", "m.stl"]
+
+
+@pytest.mark.parametrize(("profiles", "message"), [
+    (({**MACHINE, "printable_height": None}, PROCESS, FILAMENT), "printable_height"),
+    (({k: v for k, v in MACHINE.items() if k != "printable_area"}, PROCESS, FILAMENT),
+     "printable_area"),
+    (({**MACHINE, "printable_area": ["0x0", "256y0", "256x256"]}, PROCESS, FILAMENT),
+     "printable_area"),
+    (({**MACHINE, "nozzle_diameter": ["0.4", "0.6"]}, PROCESS, FILAMENT), "nozzle_diameter"),
+    ((MACHINE, {**PROCESS, "layer_height": "nan"}, FILAMENT), "layer_height"),
+    ((MACHINE, {"layer_height": "0.2"}, FILAMENT), "initial_layer_print_height"),
+    ((MACHINE, PROCESS, {"filament_diameter": ["-1.75"]}), "filament_diameter"),
+    ((MACHINE, PROCESS, {}), "filament_diameter")])
+def test_a_missing_or_bad_setting_is_refused(profiles, message):
+    with pytest.raises(SlicerError, match=message):
+        explicit_settings(*profiles)
+
+
+# --- Reading --info and the G-code -----------------------------------------------------------
+
+# The research record's --info output for the Roadie (results.txt), as the exe prints it.
+ROADIE_INFO = ("[model.stl]\r\nsize_x = 59.970630\r\nsize_y = 49.404216\r\nsize_z = 3.000000\r\n"
+               "min_x = 0.029370\r\nmin_y = 0.000432\r\nmin_z = 0.000000\r\n"
+               "max_x = 60.000000\r\nmax_y = 49.404648\r\nmax_z = 3.000000\r\n"
+               "number_of_facets = 31200\r\nmanifold = yes\r\nnumber_of_parts =  1\r\n"
+               "volume = 2277.742188\r\n")
+
+
+def test_parse_info_reads_the_measured_output():
+    info = parse_info(ROADIE_INFO)
+    assert info["size_mm"] == [59.97063, 49.404216, 3.0]
+    assert (info["facets"], info["manifold"], info["parts"]) == (31200, True, 1)
+    assert info["volume_mm3"] == 2277.742188
+    assert info["open_edges"] is None and info["repairs"] == {}
+    # The values results.txt recorded for the same run.
+    results = (RECORD / "results.txt").read_text(encoding="utf-8")
+    assert ("size_x = 59.970630; size_y = 49.404216; size_z = 3.000000; number_of_facets = "
+            "31200; manifold = yes; number_of_parts =  1; volume = 2277.742188") in results
+
+
+def test_parse_info_reads_an_open_or_repaired_mesh():
+    text = ROADIE_INFO.replace("manifold = yes", "manifold = no\r\nopen_edges = 3")
+    info = parse_info(text.replace("\r\n", "\n"))
+    assert (info["manifold"], info["open_edges"]) == (False, 3)
+    repaired = parse_info(ROADIE_INFO.replace("volume", "facets_reversed = 2\nvolume"))
+    assert repaired["repairs"] == {"facets_reversed": 2}
+
+
+@pytest.mark.parametrize(("text", "message"), [
+    ("", "no object"),
+    ("garbage", "no object"),
+    (ROADIE_INFO + ROADIE_INFO, "2 objects"),
+    (ROADIE_INFO.replace("volume = 2277.742188\r\n", ""), "volume"),
+    (ROADIE_INFO.replace("manifold = yes", "manifold = maybe"), "manifold"),
+    (ROADIE_INFO.replace("31200", "31200.5"), "number_of_facets"),
+    (ROADIE_INFO.replace("2277.742188", "nan"), "volume"),
+    (ROADIE_INFO + "colour = red\r\n", "colour"),
+    (ROADIE_INFO + "volume = 1\r\n", "twice"),
+    (ROADIE_INFO + "just text\r\n", "key = value")])
+def test_parse_info_refuses_anything_else(text, message):
+    with pytest.raises(SlicerError, match=message):
+        parse_info(text)
+
+
+def test_gcode_layers_and_hashes():
+    lines = ["; generated by PrusaSlicer 2.9.7 on 2026-11-11 at 12:08:29 UTC", "", "G28"]
+    for i in range(15):
+        lines += [";LAYER_CHANGE", f";Z:{0.2 * (i + 1):.6g}", ";HEIGHT:0.2"]
+    data = ("\n".join(lines) + "\n").encode()
+    assert gcode_layers(data) == {"layers": 15, "last_z_mm": 3.0}
+    assert gcode_layers(b"G28\n") == {"layers": 0, "last_z_mm": None}
+    with pytest.raises(SlicerError, match="Z"):
+        gcode_layers(b";LAYER_CHANGE\n;Z:abc\n")
+    other = data.replace(b"12:08:29", b"13:00:00")
+    a, b = prusa_gcode_hashes(data), prusa_gcode_hashes(other)
+    assert a["sha256"] != b["sha256"] and a["normalised_sha256"] == b["normalised_sha256"]
+    assert a["normalised_lines"] == 1
+    # Only line 1 is normalised; the same line anywhere else is a change.
+    assert prusa_gcode_hashes(b"G28\n" + data)["normalised_lines"] == 0
+
+
+# --- The tolerances -------------------------------------------------------------------------
+
+def test_the_volume_bound_covers_the_measured_cube():
+    # measure_prusa.py's cube: trimesh's 20 mm box, which --info reported as 8000.000488.
+    stl = trimesh.creation.box((20, 20, 20)).export(file_type="stl")
+    results = (RECORD / "results.txt").read_text(encoding="utf-8")
+    assert "number_of_parts =  1; volume = 8000.000488" in results
+    bound = volume_error_bound(stl)
+    assert abs(8000.000488 - 8000.0) <= bound <= 1e-4 * 8000.0
+    assert volume_tolerance_mm3(stl) == 2 * bound + INFO_HALF_UNIT
+
+
+OWNER = REPO_ROOT / "artifacts" / "flat-runs"
+
+
+@pytest.mark.parametrize(("name", "reported"), [("roadie-tol30-60x3-s3", 2277.742188),
+                                                ("oddie-60x3-s3", 5033.670898)])
+@pytest.mark.skipif(not OWNER.is_dir(), reason="the owner's flat runs are not on this machine")
+def test_the_volume_bound_covers_the_measured_owner_models(name, reported):
+    stl = (OWNER / name / "model.stl").read_bytes()
+    record = json.loads((OWNER / name / "flat.json").read_bytes())["mesh"]
+    error = abs(reported - record["volume_mm3"])
+    assert error <= volume_error_bound(stl)
+
+
+def test_the_size_tolerance():
+    assert size_tolerance_mm(60.0) == INFO_HALF_UNIT + 4 * STL_COORD_RTOL * 60.0
+    # The Roadie's reported sizes are within it of the flat record (README, finding 2).
+    for reported, record in ((59.970630, 59.97062849253416), (49.404216, 49.40421435981989)):
+        assert abs(reported - record) <= size_tolerance_mm(60.0)

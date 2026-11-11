@@ -404,13 +404,12 @@ def test_success_passes_every_measured_f6_check(tmp_path):
     assert run.args[:len(FAKE)] == FAKE
     assert sorted(p.name for p in run.out_dir.iterdir()) == [GCODE_NAME, STATS_NAME]
     status = {c.id: c.status for c in checks}
+    # F6.portability is measured with PrusaSlicer by tdmg.portability, not here.
     assert status == {"F6.slicer_exit": "PASS", "F6.gcode_present": "PASS",
-                      "F6.layer_count": "PASS", "F6.single_object": "PASS",
-                      "F6.portability": "UNKNOWN"}
+                      "F6.layer_count": "PASS", "F6.single_object": "PASS"}
     by = _by_id(checks)
     assert by["F6.layer_count"].measured == 100 and by["F6.layer_count"].threshold == [100]
     assert by["F6.slicer_exit"].measured["name"] == "CLI_SUCCESS"
-    assert "PrusaSlicer" in by["F6.portability"].note
     assert stats["layer_count"] == 100 and stats["objects"] == ["m0"]
 
 

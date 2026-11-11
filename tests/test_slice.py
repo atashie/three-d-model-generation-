@@ -2,8 +2,10 @@
 
 The fake install has a pin made for it (tdmg.slicing.load_pin is replaced), and the
 command is [sys.executable, tests/fake_orca.py] (tdmg.slicing.slicer_command is replaced).
-The fake reads its behaviour from $TDMG_FAKE_ORCA_CONTROL. The integration test at the
-end runs the real slicer when TDMG_ORCASLICER_DIR points at a verified install.
+The fake reads its behaviour from $TDMG_FAKE_ORCA_CONTROL. The fake PrusaSlicer
+(tests/fake_prusa.py, fixture prusa) works the same way, with $TDMG_FAKE_PRUSA_CONTROL.
+The integration tests at the end run the real slicers when TDMG_ORCASLICER_DIR (and
+TDMG_PRUSASLICER_DIR) point at verified installs.
 """
 
 import hashlib
@@ -30,12 +32,14 @@ import tdmg.slicing
 from tdmg.cli import app
 from tdmg.flat import flat_identity, make_flat
 from tdmg.paths import REPO_ROOT
+from tdmg.portability import PRUSA_GCODE_NOTE, load_prusa_pin
 from tdmg.printed import model_section
 from tdmg.records import canonical_json
 from tdmg.rules import load_rules
 from tdmg.selection import SelectionSpec, select_subject, write_selection
 from tdmg.slicer import Slicer, SlicerError, load_pin, platform_key
 from tdmg.slicing import (
+    PRINTABLE_MEANING,
     RECORD_SCHEMA,
     SLICE_ALGORITHM_VERSION,
     SLICE_REQUIRED_CHECKS,
@@ -54,8 +58,10 @@ PROCESS = {"layer_height": "0.2", "initial_layer_print_height": "0.2",
            "elefant_foot_compensation": "0.075"}
 # The filament keys make_slice reads: the A1 PLA Basic values (profiles-flat/filament.json).
 FILAMENT = {"filament_diameter": ["1.75"], "filament_flow_ratio": ["0.98"]}
-# The machine key make_slice reads: the A1's plate (profiles-flat/machine.json).
-MACHINE = {"printable_area": ["0x0", "256x0", "256x256", "0x256"]}
+# The machine keys make_slice reads: the A1's plate, height and nozzle
+# (profiles-flat/machine.json).
+MACHINE = {"printable_area": ["0x0", "256x0", "256x256", "0x256"], "printable_height": "256",
+           "nozzle_diameter": ["0.4"]}
 FILES = {"machine.json": json.dumps(MACHINE).encode(),
          "process.json": json.dumps(PROCESS).encode(),
          "filament.json": json.dumps(FILAMENT).encode()}
@@ -66,7 +72,10 @@ F3_IDS = ["F3.printed_connectivity", "F3.edge_coverage", "F3.edge_overprint"]
 RECORD_KEYS = {"schema", "tdmg_version", "algorithm", "slice_id", "links", "params", "slicer",
                "command", "exit", "stats", "checks", "verdict", "certification", "gcode",
                "stderr_tail", "log_written", "outputs", "environment", "review",
-               "printed"}
+               "printed", "certification_note", "portability"}
+NOT_CONFIGURED = ("PrusaSlicer is not configured: pass --prusaslicer-dir DIR or set "
+                  "TDMG_PRUSASLICER_DIR; install it with `uv run python "
+                  "scripts/setup_prusaslicer.py --dest DIR`")
 runner = CliRunner(env={"NO_COLOR": "1", "FORCE_COLOR": None, "COLUMNS": "200"})
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -110,6 +119,7 @@ def fake(tmp_path, monkeypatch):
     monkeypatch.setattr(tdmg.slicing, "slicer_command", lambda slicer: [sys.executable,
                                                                          str(FAKE)])
     monkeypatch.delenv("TDMG_ORCASLICER_DIR", raising=False)
+    monkeypatch.delenv("TDMG_PRUSASLICER_DIR", raising=False)   # tests opt in (fixture prusa)
     control = tmp_path / "control.json"
     monkeypatch.setenv("TDMG_FAKE_ORCA_CONTROL", str(control))
 
@@ -135,7 +145,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
     flat = json.loads((flat_dir / "flat.json").read_bytes())
     assert set(record) == RECORD_KEYS
     assert (record["schema"], record["algorithm"]) == (RECORD_SCHEMA, SLICE_ALGORITHM_VERSION)
-    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-3"
+    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-4"
     assert record["links"] == {"flat_id": flat["flat_id"],
                                "flat_record_sha256": _sha((flat_dir / "flat.json").read_bytes()),
                                "model_stl_sha256": flat["outputs"]["model.stl"],
@@ -171,6 +181,10 @@ def test_record_contents(flat_dir, fake, tmp_path):
         "F6.slicer_exit": "PASS", "F6.gcode_present": "PASS", "F6.layer_count": "PASS",
         "F6.single_object": "PASS", "F6.portability": "UNKNOWN"}
     assert record["verdict"] == "NOT CERTIFIED"
+    assert by_id(record)["F6.portability"]["note"] == NOT_CONFIGURED
+    assert record["certification_note"] is None
+    assert record["portability"]["configured"] is False
+    assert record["portability"]["slicer"] is None and record["portability"]["gcode"] is None
     # The reason is derived from the required checks that are not PASS, in check order.
     # The fake's default G-code has no layer comments, so the F3 checks cannot measure it.
     assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
@@ -194,7 +208,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
 def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
     record = make_slice(flat_dir, tmp_path / "slice", fake())
     pin = fake.pin
-    identity = {"algorithm": "slice-3", "flat_id": record["links"]["flat_id"],
+    identity = {"algorithm": "slice-4", "flat_id": record["links"]["flat_id"],
                 "model_stl_sha256": record["links"]["model_stl_sha256"],
                 "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
@@ -204,7 +218,8 @@ def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
                 "flat_record_sha256": record["links"]["flat_record_sha256"],
                 "command": record["command"],
                 "f3": {"tolerance": {"rule": "acceptance.dimension.tolerance", "value_mm": 0.2},
-                       "elefant_foot_compensation_mm": 0.075}}
+                       "elefant_foot_compensation_mm": 0.075},
+                "portability": None}           # PrusaSlicer not configured
     assert record["slice_id"] == _sha(canonical_json(identity))
 
 
@@ -788,7 +803,7 @@ def test_cli_exit_0_prints_the_summary(flat_dir, fake, tmp_path):
     assert "do not print" not in text
     assert "slicer exit 0 (CLI_SUCCESS)" in text
     assert "15 layers, 766.1 s, 3.727 g (slicer estimates)" in text
-    assert "  F6.portability UNKNOWN: second slicer (PrusaSlicer) not run" in text
+    assert f"  F6.portability UNKNOWN: {NOT_CONFIGURED}" in text
     assert "F6.layer_count" not in text            # PASS checks are not listed
     assert f"slice_id {record['slice_id']}" in text
     assert f"wrote {out / 'slice.json'}" in text
@@ -873,8 +888,11 @@ def test_the_required_checks_are_the_f6_checks():
 @pytest.mark.slicer
 @pytest.mark.skipif(not os.environ.get("TDMG_ORCASLICER_DIR"),
                     reason="TDMG_ORCASLICER_DIR is not set to a verified OrcaSlicer install")
-def test_roadie_slices_with_the_real_slicer(tmp_path):
+def test_roadie_slices_with_the_real_slicer(tmp_path, monkeypatch):
     from test_cli import _selection
+
+    # OrcaSlicer alone: test_roadie_is_portable_with_the_real_prusaslicer adds PrusaSlicer.
+    monkeypatch.delenv("TDMG_PRUSASLICER_DIR", raising=False)
 
     sel = _selection(tmp_path)
     flat_out = tmp_path / "flat"
@@ -898,3 +916,315 @@ def test_roadie_slices_with_the_real_slicer(tmp_path):
     assert record["printed"]["measured"] is True and len(record["printed"]["layers"]) == 15
     assert record["gcode"]["quarantined"] is False
     assert record["slicer"]["app_tree_verified"] is True
+
+
+# --- F6.portability with the fake PrusaSlicer ---------------------------------------------
+
+FAKE_PRUSA = REPO_ROOT / "tests" / "fake_prusa.py"
+PRUSA_PIN = load_prusa_pin()
+PRUSA_TOP = "PrusaSlicer-2.9.7/"
+PRUSA_APP = {PRUSA_TOP + "prusa-slicer-console.exe": b"pexe",
+             PRUSA_TOP + "PrusaSlicer.dll": b"pdll", PRUSA_TOP + "resources/y.txt": b"y"}
+PRUSA_SETTINGS = {
+    "--bed-shape": {"value": "0x0,256x0,256x256,0x256", "profile": "machine",
+                    "key": "printable_area"},
+    "--max-print-height": {"value": "256", "profile": "machine", "key": "printable_height"},
+    "--nozzle-diameter": {"value": "0.4", "profile": "machine", "key": "nozzle_diameter"},
+    "--layer-height": {"value": "0.2", "profile": "process", "key": "layer_height"},
+    "--first-layer-height": {"value": "0.2", "profile": "process",
+                             "key": "initial_layer_print_height"},
+    "--filament-diameter": {"value": "1.75", "profile": "filament", "key": "filament_diameter"}}
+PRUSA_GCODE_COMMAND = ["<prusa-slicer-console.exe>", "--export-gcode", "<model.stl>", "-o",
+                       "<prusaslicer.gcode>", "--bed-shape", "0x0,256x0,256x256,0x256",
+                       "--max-print-height", "256", "--nozzle-diameter", "0.4",
+                       "--layer-height", "0.2", "--first-layer-height", "0.2",
+                       "--filament-diameter", "1.75"]
+
+
+@pytest.fixture
+def prusa(tmp_path, monkeypatch):
+    """A fake PrusaSlicer install and its pin; returns a function that sets its behaviour."""
+    root = tmp_path / "prusa"
+    for rel, data in PRUSA_APP.items():
+        (root / "app" / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / "app" / rel).write_bytes(data)
+    pin = PRUSA_PIN.model_copy(update={
+        "exe": PRUSA_PIN.exe.model_copy(update={
+            "sha256": _sha(PRUSA_APP[PRUSA_TOP + "prusa-slicer-console.exe"])}),
+        "libraries": [PRUSA_PIN.libraries[0].model_copy(update={
+            "sha256": _sha(PRUSA_APP[PRUSA_TOP + "PrusaSlicer.dll"])})],
+        "app_tree": PRUSA_PIN.app_tree.model_copy(update={"files": len(PRUSA_APP),
+                                                          "sha256": _tree(PRUSA_APP)})})
+    monkeypatch.setattr(tdmg.slicing, "load_prusa_pin", lambda: pin)
+    monkeypatch.setattr(tdmg.slicing, "prusa_command",
+                        lambda found: [sys.executable, str(FAKE_PRUSA)])
+    control = tmp_path / "prusa-control.json"
+    monkeypatch.setenv("TDMG_FAKE_PRUSA_CONTROL", str(control))
+
+    def behave(**kwargs):
+        control.write_bytes(json.dumps(kwargs).encode())
+        return root
+    behave.pin = pin
+    behave.root = root
+    return behave
+
+
+def _prusa_identity(pin, verified=True):
+    return {"version": "2.9.7", "exe_sha256": pin.exe.sha256,
+            "libraries": {"app/PrusaSlicer-2.9.7/PrusaSlicer.dll": pin.libraries[0].sha256},
+            "app_tree_sha256": pin.app_tree.sha256, "app_tree_verified": verified}
+
+
+def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
+    out = tmp_path / "slice"
+    record = make_slice(flat_dir, out, fake(), prusaslicer_dir=prusa())
+    check = by_id(record)["F6.portability"]
+    assert check["status"] == "PASS", check
+    assert "generic G-code" in check["note"] and "not for the A1" in check["note"]
+    mesh = json.loads((flat_dir / "flat.json").read_bytes())["mesh"]
+    port = record["portability"]
+    assert port["configured"] is True and port["reason"] is None
+    assert port["slicer"] == {"name": "PrusaSlicer", "pin": "prusaslicer-2.9.7",
+                              **_prusa_identity(prusa.pin)}
+    assert port["settings"] == PRUSA_SETTINGS
+    assert port["commands"] == {"info": ["<prusa-slicer-console.exe>", "--info", "<model.stl>"],
+                                "gcode": PRUSA_GCODE_COMMAND}
+    info = port["info"]
+    assert (info["returncode"], info["timed_out"]) == (0, False)
+    parsed = info["parsed"]
+    assert (parsed["facets"], parsed["parts"], parsed["manifold"]) == (mesh["triangles"], 1,
+                                                                       True)
+    assert parsed["size_mm"] == pytest.approx(mesh["extents_mm"], abs=1e-6)
+    assert parsed["volume_mm3"] == pytest.approx(mesh["volume_mm3"], abs=1e-6)
+    assert port["expected"] == {"parts": mesh["bodies"], "facets": mesh["triangles"],
+                                "size_mm": mesh["extents_mm"], "volume_mm3": mesh["volume_mm3"],
+                                "layer_counts": [15]}
+    tolerances = port["tolerances"]
+    assert 0 < tolerances["size_mm"] < 1e-4 and 0 < tolerances["volume_mm3"] < 0.01 * 2300
+    assert 0 < tolerances["z_mm"] < 1e-4
+    gcode_part = port["gcode"]
+    assert (gcode_part["returncode"], gcode_part["timed_out"]) == (0, False)
+    assert (gcode_part["layers"], gcode_part["last_z_mm"]) == (15, 3.0)
+    assert gcode_part["expected_top_mm"] == pytest.approx(3.0)
+    assert (gcode_part["file"], gcode_part["quarantined"]) == ("prusaslicer.gcode", False)
+    assert gcode_part["sha256"] == record["outputs"]["prusaslicer.gcode"]
+    assert gcode_part["normalised_lines"] == 1
+    assert "not for the A1" in port["note"] and "never print" in port["note"]
+    assert sorted(p.name for p in out.iterdir()) == [
+        "plate_1.gcode", "plate_1.statistics.json", "prusaslicer.gcode", "slice.json"]
+    # Only F3 (the fake OrcaSlicer G-code has no layers) blocks certification now.
+    assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
+                                       "F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN")
+    assert json.loads((out / "slice.json").read_bytes()) == record
+    text = (out / "slice.json").read_text(encoding="utf-8")
+    assert str(tmp_path) not in text
+    # PrusaSlicer prints the G-code's full path; the record keeps it as a placeholder only.
+    assert "tdmg-slice-" not in text
+    assert gcode_part["stdout_tail"].strip() == ("Slicing result exported to "
+                                                 f"<work>{os.sep}gcode{os.sep}prusaslicer.gcode")
+
+
+@pytest.mark.parametrize(("control", "reason"), [
+    ({"info": {"manifold": "no", "open_edges": 3}}, "not manifold (open_edges 3)"),
+    ({"info": {"facets_reversed": 2}}, "repaired the mesh on import (facets_reversed 2)"),
+    ({"info": {"number_of_parts": 2}}, "number_of_parts 2, not the 1 bod"),
+    ({"info": {"number_of_facets": 12}}, "number_of_facets 12, not the"),
+    ({"info": {"size_x": "59.000000"}}, "size_x 59 mm"),
+    ({"info": {"size_z": "3.001000"}}, "size_z 3.001 mm"),
+    ({"info": {"volume": "2200.000000"}}, "volume 2200 mm3"),
+    ({"info": {"volume": None}}, "cannot read --info"),
+    ({"info_stdout": "garbage\n"}, "cannot read --info"),
+    ({"info_exit": 1, "stderr": "model.stl: Loading of a model file failed."},
+     "--info exited 1: model.stl: Loading of a model file failed."),
+    ({"gcode": False, "stdout": "All objects are outside of the print volume."},
+     "--export-gcode exited 0 but wrote no G-code"),
+    ({"gcode_exit": 1}, "--export-gcode exited 1"),
+    ({"layers": 10}, "10 layers, not one of [15]"),
+    ({"last_z": "2.8"}, "last ;Z: is 2.8 mm, not 3 mm")])
+def test_portability_fails_and_names_the_first_failed_condition(flat_dir, fake, prusa,
+                                                                 tmp_path, control, reason):
+    out = tmp_path / "slice"
+    record = make_slice(flat_dir, out, fake(), prusaslicer_dir=prusa(**control))
+    check = by_id(record)["F6.portability"]
+    assert check["status"] == "FAIL"
+    assert reason in check["note"], check["note"]
+    assert "F6.portability FAIL" in record["certification"]
+    names = {p.name for p in out.iterdir()}
+    # A FAIL quarantines both G-codes, under the same rule as the main one.
+    assert "plate_1.gcode" not in names and "prusaslicer.gcode" not in names
+    assert "plate_1.gcode.failed" in names
+    if record["portability"]["gcode"]["file"] is not None:
+        assert "prusaslicer.gcode.failed" in names
+        assert record["portability"]["gcode"]["quarantined"] is True
+
+
+def test_an_open_mesh_from_the_research_record_fails(flat_dir, fake, prusa, tmp_path):
+    # results.txt: the open cube reads "manifold = no; open_edges = 3" and slices to 10 of
+    # 100 layers with exit 0. Here both happen; --info is named first.
+    record = make_slice(flat_dir, tmp_path / "slice", fake(),
+                        prusaslicer_dir=prusa(info={"manifold": "no", "open_edges": 3},
+                                              layers=2))
+    check = by_id(record)["F6.portability"]
+    assert check["status"] == "FAIL" and "not manifold" in check["note"]
+    assert record["portability"]["gcode"]["layers"] == 2
+    assert record["portability"]["info"]["parsed"]["open_edges"] == 3
+
+
+def test_a_slow_prusaslicer_is_stopped(flat_dir, fake, prusa, tmp_path):
+    record = make_slice(flat_dir, tmp_path / "slice", fake(), timeout_s=4,
+                        prusaslicer_dir=prusa(sleep=30))
+    check = by_id(record)["F6.portability"]
+    assert check["status"] == "FAIL" and "--info was stopped after the 4 s timeout" in check[
+        "note"]
+    assert record["portability"]["info"]["timed_out"] is True
+    assert record["portability"]["gcode"]["timed_out"] is True
+
+
+def test_portability_is_part_of_slice_id(flat_dir, fake, prusa, tmp_path):
+    root = fake()
+    record = make_slice(flat_dir, tmp_path / "a", root, prusaslicer_dir=prusa())
+    pin = fake.pin
+    identity = {"algorithm": "slice-4", "flat_id": record["links"]["flat_id"],
+                "model_stl_sha256": record["links"]["model_stl_sha256"],
+                "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
+                           "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
+                           "app_tree_sha256": pin.app_tree.sha256,
+                           "app_tree_verified": True},
+                "profiles": {k: p.sha256 for k, p in pin.profiles.flat.items()},
+                "flat_record_sha256": record["links"]["flat_record_sha256"],
+                "command": record["command"],
+                "f3": {"tolerance": {"rule": "acceptance.dimension.tolerance", "value_mm": 0.2},
+                       "elefant_foot_compensation_mm": 0.075},
+                "portability": {"slicer": _prusa_identity(prusa.pin),
+                                "settings": {k: v["value"] for k, v in PRUSA_SETTINGS.items()},
+                                "commands": record["portability"]["commands"]}}
+    assert record["slice_id"] == _sha(canonical_json(identity))
+    without = make_slice(flat_dir, tmp_path / "b", root)
+    assert without["slice_id"] != record["slice_id"]
+    # --skip-tree-check covers both slicers, and changes the id.
+    skipped = make_slice(flat_dir, tmp_path / "c", root, prusaslicer_dir=prusa.root,
+                         check_tree=False)
+    assert skipped["portability"]["slicer"]["app_tree_verified"] is False
+    assert skipped["slicer"]["app_tree_verified"] is False
+    assert skipped["slice_id"] != record["slice_id"]
+
+
+def test_a_changed_prusaslicer_install_is_refused(flat_dir, fake, prusa, tmp_path):
+    root = fake()
+    (prusa().joinpath("app", PRUSA_TOP, "extra.dll")).write_bytes(b"new")
+    with pytest.raises(SlicerError, match="app tree.*does not match the pin.*"
+                                          "setup_prusaslicer.py"):
+        make_slice(flat_dir, tmp_path / "slice", root, prusaslicer_dir=prusa.root)
+    assert not (tmp_path / "slice").exists()
+    r = _slice(flat_dir, tmp_path / "cli", "--slicer-dir", str(root), "--prusaslicer-dir",
+               str(prusa.root))
+    assert r.exit_code == 2 and "app tree" in r.stderr
+    assert not (tmp_path / "cli").exists()
+    # The exe and the library are checked even with --skip-tree-check.
+    (prusa.root / "app" / PRUSA_TOP / "PrusaSlicer.dll").write_bytes(b"patched")
+    with pytest.raises(SlicerError, match="PrusaSlicer.dll.*does not match the pin"):
+        make_slice(flat_dir, tmp_path / "slice", root, prusaslicer_dir=prusa.root,
+                   check_tree=False)
+
+
+def test_a_missing_prusaslicer_folder_is_refused(flat_dir, fake, prusa, tmp_path, monkeypatch):
+    prusa()
+    monkeypatch.setenv("TDMG_PRUSASLICER_DIR", str(tmp_path / "nowhere"))
+    with pytest.raises(SlicerError, match="not a folder"):
+        make_slice(flat_dir, tmp_path / "slice", fake())
+    assert not (tmp_path / "slice").exists()
+
+
+def test_a_missing_setting_is_refused_only_when_prusaslicer_runs(flat_dir, fake, prusa,
+                                                                  tmp_path, monkeypatch):
+    root = fake()
+    machine = {k: v for k, v in MACHINE.items() if k != "printable_height"}
+    _with_profile(fake, monkeypatch, "machine", json.dumps(machine).encode())
+    with pytest.raises(SlicerError, match="printable_height.*--max-print-height"):
+        make_slice(flat_dir, tmp_path / "slice", root, prusaslicer_dir=prusa())
+    assert not (tmp_path / "slice").exists()
+    record = make_slice(flat_dir, tmp_path / "slice", root)       # not configured: unused
+    assert by_id(record)["F6.portability"]["status"] == "UNKNOWN"
+
+
+def test_the_environment_variable_configures_prusaslicer(flat_dir, fake, prusa, tmp_path,
+                                                          monkeypatch):
+    monkeypatch.setenv("TDMG_PRUSASLICER_DIR", str(prusa()))
+    record = make_slice(flat_dir, tmp_path / "slice", fake())
+    assert by_id(record)["F6.portability"]["status"] == "PASS"
+
+
+def test_printable_when_every_required_check_passes(square_flat, fake, prusa, tmp_path):
+    out = tmp_path / "slice"
+    record = make_slice(square_flat, out, fake(gcode_text=_square_gcode(square_flat)),
+                        prusaslicer_dir=prusa())
+    assert record["verdict"] == "PRINTABLE"
+    assert record["certification"] == "PRINTABLE"
+    note = record["certification_note"]
+    assert note == PRINTABLE_MEANING
+    for phrase in ("every required gate check passed", "pinned slicers", "A1 profile",
+                   "acceptance.dimension.tolerance", "still a hypothesis",
+                   "no calibration print", "strength is not judged"):
+        assert phrase in note, phrase
+    assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == ("plate_1.gcode", False)
+    assert record["portability"]["gcode"]["file"] == "prusaslicer.gcode"
+
+
+def test_cli_printable(square_flat, fake, prusa, tmp_path):
+    out = tmp_path / "slice"
+    r = _slice(square_flat, out, "--slicer-dir", str(fake(gcode_text=_square_gcode(
+        square_flat))), "--prusaslicer-dir", str(prusa()))
+    assert r.exit_code == 0, r.output
+    lines = r.stdout.splitlines()
+    assert lines[0] == "PRINTABLE"
+    assert lines[1] == PRINTABLE_MEANING
+    portability = next(line for line in lines if line.startswith("portability:"))
+    assert portability.startswith("portability: PrusaSlicer 2.9.7 PASS - 1 part, ")
+    assert "15 layers" in portability
+    assert PRUSA_GCODE_NOTE in r.stdout
+    assert f"wrote {out / 'prusaslicer.gcode'}" in r.stdout
+
+
+def test_cli_portability_line_when_not_configured_or_failed(flat_dir, fake, prusa, tmp_path):
+    r = _slice(flat_dir, tmp_path / "a", "--slicer-dir", str(fake()))
+    assert r.exit_code == 0, r.output
+    assert f"portability: UNKNOWN - {NOT_CONFIGURED}" in r.stdout
+    r = _slice(flat_dir, tmp_path / "b", "--slicer-dir", str(fake()), "--prusaslicer-dir",
+               str(prusa(layers=10)))
+    assert r.exit_code == 1, r.output
+    assert "portability: PrusaSlicer 2.9.7 FAIL - " in r.stdout
+    assert "F6.portability FAIL" in r.stdout
+    assert "prusaslicer.gcode.failed" in r.stdout
+
+
+def test_cli_help_documents_the_prusaslicer_option():
+    text = _plain(runner.invoke(app, ["slice", "--help"]).output)
+    assert "--prusaslicer-dir" in text and "TDMG_PRUSASLICER_DIR" in text
+    assert "setup_prusaslicer.py" in text
+
+
+@pytest.mark.slicer
+@pytest.mark.skipif(not (os.environ.get("TDMG_ORCASLICER_DIR")
+                         and os.environ.get("TDMG_PRUSASLICER_DIR")),
+                    reason="TDMG_ORCASLICER_DIR and TDMG_PRUSASLICER_DIR are not both set to "
+                           "verified installs")
+def test_roadie_is_portable_with_the_real_prusaslicer(tmp_path):
+    from test_cli import _selection
+
+    sel = _selection(tmp_path)
+    flat_out = tmp_path / "flat"
+    r = runner.invoke(app, ["flat", str(sel), "--width-mm", "60", "--thickness-mm", "3",
+                            "--out", str(flat_out)])
+    assert r.exit_code == 0, r.output
+    out = tmp_path / "slice"
+    r = _slice(flat_out, out)
+    assert r.exit_code == 0, r.output
+    record = json.loads((out / "slice.json").read_bytes())
+    check = by_id(record)["F6.portability"]
+    assert check["status"] == "PASS", check
+    port = record["portability"]
+    assert port["slicer"]["exe_sha256"] == PRUSA_PIN.exe.sha256
+    assert port["slicer"]["app_tree_verified"] is True
+    assert port["gcode"]["layers"] == 15 and port["gcode"]["last_z_mm"] == 3.0
+    assert port["info"]["parsed"]["manifold"] is True
+    assert (out / "prusaslicer.gcode").is_file()

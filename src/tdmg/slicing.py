@@ -1,4 +1,5 @@
-"""tdmg slice: slice a tdmg flat output with the pinned OrcaSlicer (S9, F6).
+"""tdmg slice: slice a tdmg flat output with the pinned OrcaSlicer (S9, F6), and check
+its portability with the pinned PrusaSlicer (F6.portability).
 
 docs/plans/2026-11-10-slicer-check.md, Decisions 6-8, as amended by the measurements in
 research/verification/2026-11-10-orcaslicer-windows/ (README and its addendum):
@@ -19,15 +20,25 @@ on every run, so the app_tree_sha256 in slice_id is a checked fact for that run;
 check_tree=False (--skip-tree-check) skips that, records app_tree_verified false, and
 gives a different slice_id.
 
+F6.portability runs PrusaSlicer 2.9.7 (tdmg.portability;
+docs/plans/2026-11-11-portability-check.md) when --prusaslicer-dir or
+$TDMG_PRUSASLICER_DIR gives its folder, with every setting passed explicitly from the
+hash-checked OrcaSlicer A1 profiles. Without it, F6.portability is UNKNOWN. Its G-code is
+kept as prusaslicer.gcode, generic G-code that is evidence of portability only and never
+for the A1; a FAIL quarantines it as prusaslicer.gcode.failed, as for plate_1.gcode.
+write_outputs takes plain file names only, so it sits beside plate_1.gcode rather than in
+a portability/ subfolder as the plan suggested.
+
 The record's verdict combines the flat record's checks, minus its placeholder F6.slicer,
 with the F3 and F6 checks of this run, and requires all of them except F3.thin_regions.
-The certification line names the required checks that are not PASS. Today F6.portability
-(no second slicer) is always UNKNOWN, so the verdict is NOT CERTIFIED.
+The certification line names the required checks that are not PASS. When every one
+passes it is PRINTABLE, and certification_note says what that means and what it does
+not (PRINTABLE_MEANING).
 
-Check-to-use gaps: the STL and the three profiles are read once, hashed, and the
-slicer runs on copies of exactly those bytes in a temporary folder. The exe, its
-libraries and the app tree are hashed by locate but run from the install, so a change
-between the hash and the run is not detected; the install folder is assumed to be the
+Check-to-use gaps: the STL and the three profiles are read once, hashed, and both
+slicers run on copies of exactly those bytes in a temporary folder. The exes, their
+libraries and the app trees are hashed by locate but run from the installs, so a change
+between the hash and the run is not detected; the install folders are assumed to be the
 user's own.
 """
 
@@ -50,6 +61,24 @@ from tdmg import __version__
 from tdmg.checks import CheckResult, verdict
 from tdmg.flat import FLAT_REQUIRED_CHECKS, STL_COORD_RTOL, flat_identity
 from tdmg.flat import RECORD_SCHEMA as FLAT_SCHEMA
+from tdmg.portability import (
+    PRUSA_FAILED_GCODE_NAME,
+    PRUSA_GCODE_NAME,
+    PRUSA_GCODE_NOTE,
+    Expected,
+    PrusaSlicer,
+    command_templates,
+    coordinate_max,
+    explicit_settings,
+    load_prusa_pin,
+    locate_prusaslicer,
+    not_configured_check,
+    portability_check,
+    prusa_gcode_hashes,
+    run_portability,
+    size_tolerance_mm,
+    volume_tolerance_mm3,
+)
 from tdmg.printed import (
     ELEPHANT_FOOT_KEY,
     F3_SLICE_CHECK_IDS,
@@ -100,7 +129,10 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   bounds (UNKNOWN in between); the G-code reconciled with the model's height and layer
 #   count, and with the statistics in F6.layer_count; commanded Z, G92 and extrusion
 #   amounts checked against the filament profile.
-SLICE_ALGORITHM_VERSION = "slice-3"
+# slice-4 (2026-11-11): F6.portability measured with the pinned PrusaSlicer 2.9.7 when it
+#   is configured (UNKNOWN otherwise); slice_id adds its identity, the explicit settings
+#   and its commands; the record has "portability" and "certification_note".
+SLICE_ALGORITHM_VERSION = "slice-4"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
 FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run with a FAILed check
@@ -118,7 +150,13 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 COMMAND_TEMPLATE = ["<orca-slicer.exe>", *slicer_args(
     Path("<model.stl>"), {k: Path(f"<{k}.json>") for k in PROFILE_KINDS},
     Path("<outdir>"), Path(f"<{LOG_NAME}>"))]
-DO_NOT_PRINT = f"a check FAILed: do not print this G-code; it is kept as {FAILED_GCODE_NAME}"
+DO_NOT_PRINT = (f"a check FAILed: do not print this G-code; it is kept as {FAILED_GCODE_NAME}"
+                f" (and PrusaSlicer's as {PRUSA_FAILED_GCODE_NAME})")
+PRINTABLE_MEANING = (
+    "PRINTABLE means every required gate check passed for this file with the pinned slicers "
+    "(OrcaSlicer 2.5.0 and, for portability, PrusaSlicer 2.9.7) and the A1 profile. It is "
+    "not a guarantee: the acceptance tolerance (acceptance.dimension.tolerance) is still a "
+    "hypothesis, no calibration print has been measured, and strength is not judged.")
 REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or Bambu "
           "Studio's) and check the layers and the first layer. Time and weight are the "
           "slicer's estimates for the A1 0.20 mm Standard and PLA Basic profiles, not "
@@ -128,13 +166,21 @@ REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or B
           "model, layer by layer (printed records the layers); they model each line as a "
           "bead of its stated width and do not judge strength. Every check of flat.json and "
           "of this run is required, except F3.thin_regions, which is information only. "
-          "While F6.portability has no second slicer (PrusaSlicer), it stays UNKNOWN and the "
-          "verdict is NOT CERTIFIED.")
+          "F6.portability runs PrusaSlicer 2.9.7 when --prusaslicer-dir or "
+          "TDMG_PRUSASLICER_DIR is given; without it, it is UNKNOWN and the verdict is NOT "
+          f"CERTIFIED. {PRUSA_GCODE_NOTE}. PRINTABLE, when every required check passes, is "
+          "explained in certification_note: the tolerance is still a hypothesis, no "
+          "calibration print has been measured and strength is not judged.")
 
 
 def slicer_command(slicer: Slicer) -> list[str]:
     """The program to run: the verified exe (tests replace this with the fake slicer)."""
     return [str(slicer.exe)]
+
+
+def prusa_command(prusa: PrusaSlicer) -> list[str]:
+    """PrusaSlicer's program: the verified console exe (tests replace it with a fake)."""
+    return [str(prusa.exe)]
 
 
 def stl_z_range(stl: bytes) -> tuple[float, float]:
@@ -329,8 +375,30 @@ def _cross_check_layers(f6: list[CheckResult], stats: dict | None,
     return out
 
 
+def _expected_mesh(flat: dict) -> dict:
+    """flat.json's mesh facts PrusaSlicer is compared with, checked. SlicerError if not."""
+    mesh = flat.get("mesh") if isinstance(flat.get("mesh"), dict) else {}
+
+    def count(v):
+        return isinstance(v, int) and not isinstance(v, bool) and v >= 1
+
+    def number(v):
+        return (isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v))
+    extents = mesh.get("extents_mm")
+    ok = {"mesh.bodies": count(mesh.get("bodies")),
+          "mesh.triangles": count(mesh.get("triangles")),
+          "mesh.extents_mm": (isinstance(extents, list) and len(extents) == 3
+                              and all(number(v) for v in extents)),
+          "mesh.volume_mm3": number(mesh.get("volume_mm3"))}
+    bad = [name for name, good in ok.items() if not good]
+    if bad:
+        raise SlicerError(f"flat.json is missing or has invalid: {', '.join(bad)}")
+    return mesh
+
+
 def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
-               check_tree: bool = True) -> dict:
+               check_tree: bool = True, prusaslicer_dir=None) -> dict:
     """Slice a tdmg flat output folder and write the G-code, the statistics, the log
     (when the slicer wrote one) and slice.json, last.
 
@@ -339,7 +407,13 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     written. A check that FAILs (including a failed slice) still writes the record. When
     any required check FAILs, the G-code is written as plate_1.gcode.failed (quarantined).
     check_tree=False skips the full app-tree check (exe, libraries and profiles are still
-    checked) and records app_tree_verified false.
+    checked) and records app_tree_verified false, for both slicers.
+
+    prusaslicer_dir (default $TDMG_PRUSASLICER_DIR) is the PrusaSlicer folder from
+    scripts/setup_prusaslicer.py. When neither is given, F6.portability is UNKNOWN. When
+    one is given, it must verify, and the OrcaSlicer profiles must hold every setting
+    PrusaSlicer is given, or the run is refused. PrusaSlicer runs --info and then
+    --export-gcode, each with the same timeout.
 
     slice_id is a SHA-256 of the canonical JSON of: the algorithm; the flat_id, which is
     lineage (it identifies the geometry request, not the checks); the model.stl hash; the
@@ -353,7 +427,10 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     but does not change what a completed run writes, so a timed-out and a completed run
     of the same request share a slice_id. The platform and the environment are recorded
     beside it, not in it. The F3 measurements of the G-code ("printed") are outputs, like
-    the G-code itself, so they are not part of it either.
+    the G-code itself, so they are not part of it either. With PrusaSlicer configured,
+    "portability" adds its identity (version, exe and library hashes, pinned tree hash and
+    whether it was verified), the explicit settings and both command templates; without
+    it, "portability" is None.
     """
     flat_dir = Path(flat_dir)
     rules = load_rules()
@@ -369,6 +446,7 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         raise SlicerError(str(err)) from None
     pin = load_pin()
     slicer = locate(slicer_dir, pin, full_tree=check_tree)
+    prusa = locate_prusaslicer(prusaslicer_dir, load_prusa_pin(), full_tree=check_tree)
     profile_data = _profile_bytes(slicer)
     try:
         process = json.loads(profile_data["process"])
@@ -390,6 +468,21 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     tolerance = float(rules[TOLERANCE_RULE].default)
     elephant = elephant_foot_mm(process)
     setup = Setup(plate, flow, tolerance, elephant, frozenset(allowed))
+    settings, expected = None, None
+    if prusa is not None:
+        # Both profiles parsed above as JSON objects (plate_from_profile and
+        # flow_from_profile would have refused anything else).
+        settings = explicit_settings(json.loads(profile_data["machine"]), process,
+                                     json.loads(profile_data["filament"]))
+        mesh = _expected_mesh(flat)
+        expected = Expected(
+            parts=mesh["bodies"], facets=mesh["triangles"],
+            size_mm=[float(v) for v in mesh["extents_mm"]],
+            volume_mm3=float(mesh["volume_mm3"]), layer_counts=sorted(allowed),
+            first_layer_mm=float(process["initial_layer_print_height"]),
+            layer_mm=float(process["layer_height"]),
+            size_tol_mm=size_tolerance_mm(coordinate_max(stl)),
+            volume_tol_mm3=volume_tolerance_mm3(stl))
 
     with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
         base = Path(tmp)
@@ -410,12 +503,24 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         f3, printed = f3_checks(gcode, stl, setup,
                                 None if exited else "the slicer failed (F6.slicer_exit)")
         f6 = _cross_check_layers(f6, stats, printed)
-        checks = f3 + f6
+        prusa_gcode, measurements = None, None
+        if prusa is None:
+            portability = not_configured_check()
+        else:
+            (base / "prusa").mkdir()
+            info_run, gcode_run, prusa_gcode = run_portability(
+                prusa_command(prusa), model, settings, base / "prusa", timeout["value"])
+            portability, measurements = portability_check(info_run, gcode_run, prusa_gcode,
+                                                          expected, timeout["rule"])
+        checks = f3 + f6 + [portability]
         quarantined = any(c.status == "FAIL" for c in previous + checks
                           if c.id in SLICE_REQUIRED_CHECKS)
         files = {}
         if gcode is not None:
             files[FAILED_GCODE_NAME if quarantined else GCODE_NAME] = gcode
+        prusa_name = PRUSA_FAILED_GCODE_NAME if quarantined else PRUSA_GCODE_NAME
+        if prusa_gcode is not None:
+            files[prusa_name] = prusa_gcode
         if (run.out_dir / STATS_NAME).is_file():
             files[STATS_NAME] = (run.out_dir / STATS_NAME).read_bytes()
         log_written = run.log_path.is_file()
@@ -441,8 +546,31 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
                 "flat_record_sha256": flat_record_sha256,
                 "command": COMMAND_TEMPLATE,
                 "f3": {"tolerance": {"rule": TOLERANCE_RULE, "value_mm": tolerance},
-                       "elefant_foot_compensation_mm": elephant}}
+                       "elefant_foot_compensation_mm": elephant},
+                "portability": None if prusa is None else {
+                    "slicer": prusa.identity(),
+                    "settings": {k: v["value"] for k, v in settings.items()},
+                    "commands": command_templates(settings)}}
     gcode_name = next((n for n in (GCODE_NAME, FAILED_GCODE_NAME) if n in files), None)
+    if prusa is None:
+        portability_record = {"configured": False, "reason": portability.note,
+                              "note": PRUSA_GCODE_NOTE, "slicer": None, "settings": None,
+                              "commands": None, "expected": None, "tolerances": None,
+                              "info": None, "gcode": None}
+    else:
+        written = prusa_gcode is not None
+        portability_record = {
+            "configured": True, "reason": None, "note": PRUSA_GCODE_NOTE,
+            "slicer": {"name": prusa.pin.name, "pin": prusa.pin.id, **prusa.identity()},
+            "settings": settings, "commands": command_templates(settings),
+            "expected": expected.as_dict(), "tolerances": measurements["tolerances"],
+            "info": measurements["info"],
+            "gcode": {**measurements["gcode"], "file": prusa_name if written else None,
+                      "quarantined": quarantined if written else None,
+                      **(prusa_gcode_hashes(prusa_gcode) if written else
+                         {"sha256": None, "normalised_sha256": None,
+                          "normalised_lines": None})}}
+    cert = certification(all_checks, SLICE_REQUIRED_CHECKS)
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": SLICE_ALGORITHM_VERSION,
@@ -463,7 +591,9 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         "printed": printed,
         "checks": [c.as_dict() for c in all_checks],
         "verdict": verdict(all_checks, set(SLICE_REQUIRED_CHECKS)),
-        "certification": certification(all_checks, SLICE_REQUIRED_CHECKS),
+        "certification": cert,
+        "certification_note": PRINTABLE_MEANING if cert == "PRINTABLE" else None,
+        "portability": portability_record,
         "gcode": (None if gcode_name is None else
                   {"file": gcode_name, "quarantined": quarantined,
                    **gcode_hashes(files[gcode_name])}),

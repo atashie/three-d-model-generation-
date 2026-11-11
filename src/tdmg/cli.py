@@ -1,7 +1,7 @@
 """Command-line interface. Phase 0 exposes the registries. Phase 1 has `select` (subject
 selection for review), `flat` (flat geometry from a selection, gated on the written
-STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6); `make` and `check`
-follow."""
+STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checked for
+portability with the pinned PrusaSlicer); `make` and `check` follow."""
 
 from pathlib import Path
 from typing import Annotated
@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from tdmg import __version__
 from tdmg.flat import FlatError, make_flat
+from tdmg.portability import PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, RECIPES
 from tdmg.rules import load_rules
@@ -242,6 +243,27 @@ def flat(
         raise typer.Exit(1)
 
 
+def _portability_line(rec: dict) -> str:
+    """'portability: ...': PrusaSlicer's verdict and what it read, or why it did not run."""
+    check = next(c for c in rec["checks"] if c["id"] == "F6.portability")
+    port = rec["portability"]
+    if not port["configured"]:
+        return f"portability: {check['status']} - {port['reason']}"
+    slicer = port["slicer"]
+    head = f"portability: {slicer['name']} {slicer['version']} {check['status']} - "
+    parsed = port["info"]["parsed"]
+    if parsed is None:
+        read = "--info not read"
+    else:
+        size = " x ".join(f"{v:.2f}" for v in parsed["size_mm"])
+        parts = f"{parsed['parts']} part{'' if parsed['parts'] == 1 else 's'}"
+        read = (f"{parts}, {parsed['facets']} facets, size {size} mm, volume "
+                f"{parsed['volume_mm3']:.6g} mm3")
+    layers = port["gcode"]["layers"]
+    sliced = "no G-code" if layers is None else f"{layers} layers"
+    return f"{head}{read}, {sliced}; {PRUSA_GCODE_NOTE}"
+
+
 @app.command("slice")
 def slice_(
     flat_dir: Annotated[Path, typer.Argument(exists=True, file_okay=False, metavar="FLAT_DIR",
@@ -254,10 +276,18 @@ def slice_(
         "--timeout-s", help="Stop the slicer after this many seconds; default from rule "
                             "slicer.orca.timeout_s")] = None,
     skip_tree_check: Annotated[bool, typer.Option(
-        "--skip-tree-check", help="Do not hash every file of the slicer's app folder (saves "
-                                  "about 3 s); recorded as app_tree_verified false")] = False,
+        "--skip-tree-check", help="Do not hash every file of the slicers' app folders "
+                                  "(saves a few seconds per slicer); recorded as "
+                                  "app_tree_verified false")] = False,
+    prusaslicer_dir: Annotated[Path | None, typer.Option(
+        "--prusaslicer-dir", help="PrusaSlicer folder from scripts/setup_prusaslicer.py, for "
+                                  "F6.portability; default $TDMG_PRUSASLICER_DIR; without "
+                                  "either, F6.portability is UNKNOWN")] = None,
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
+
+    With PrusaSlicer configured, F6.portability checks that it reads and slices the
+    model too; its prusaslicer.gcode is generic G-code, never for the A1.
 
     Exit codes:
       0  files written, and no check FAILed (UNKNOWN checks allowed)
@@ -270,7 +300,7 @@ def slice_(
     """
     try:
         rec = make_slice(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s,
-                         check_tree=not skip_tree_check)
+                         check_tree=not skip_tree_check, prusaslicer_dir=prusaslicer_dir)
     except SlicerError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -278,6 +308,8 @@ def slice_(
         _os_error(e)
         raise typer.Exit(2) from None
     typer.echo(rec["certification"])     # the verdict, with the checks that block it
+    if rec["certification_note"]:
+        typer.echo(rec["certification_note"])     # what PRINTABLE means, and does not
     if not rec["slicer"]["app_tree_verified"]:
         typer.echo("app tree not verified (--skip-tree-check)")
     code = rec["exit"]
@@ -293,6 +325,7 @@ def slice_(
     if stats is not None:
         typer.echo(f"{stats['layer_count']} layers, {stats['time_s']:.1f} s, "
                    f"{stats['weight_g']:.4g} g (slicer estimates)")
+    typer.echo(_portability_line(rec))
     typer.echo(f"slice_id {rec['slice_id']}")
     for name in rec["outputs"]:
         typer.echo(f"wrote {out / name}")
