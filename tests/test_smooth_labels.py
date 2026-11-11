@@ -399,9 +399,10 @@ def test_an_exactly_symmetric_blurred_tie_goes_to_the_lower_label():
     # s = 1 the fine centres are the pixel centres, where no interpolation happens, so the
     # samples of 0 and 1 on column 10 are the blurred fields there. They are equal by the
     # mirror symmetry; with OpenCV's float sums that equality is exact at sigma 1.7 on this
-    # build (checked below, since it depends on the summation order), and both exceed the
-    # field of 2. So column 10 is a tie between 0 and 1, which 0 must win in both
-    # orientations.
+    # build, and both exceed the field of 2. So column 10 is a tie between 0 and 1, which 0
+    # must win in both orientations. Exactness depends on OpenCV's summation order, so the
+    # test skips on a build where the mirrored fields are not bit-equal;
+    # test_a_full_tie_goes_to_the_lowest_label covers the tie rule on every build.
     sigma = 1.7
     for left, right in ((0, 1), (1, 0)):
         labels = np.full((9, 21), left, np.int32)
@@ -410,7 +411,10 @@ def test_an_exactly_symmetric_blurred_tie_goes_to_the_lower_label():
         padded = np.pad(labels, 1, mode="edge")
         f = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma, sigmaY=sigma,
                               borderType=cv2.BORDER_REPLICATE)[1:-1, 1:-1] for c in range(3)]
-        assert np.array_equal(f[0][:, 10], f[1][:, 10]), "precondition: an exact tie"
+        if not np.array_equal(f[0][:, 10], f[1][:, 10]):
+            pytest.skip("this OpenCV build does not give bit-equal mirrored blurred fields at "
+                        "sigma 1.7; test_a_full_tie_goes_to_the_lowest_label covers the tie "
+                        "rule")
         assert (f[0][:, 10] > f[2][:, 10]).all()
         assert (fine_map(labels, sigma, 1)[:, 10] == 0).all()
 

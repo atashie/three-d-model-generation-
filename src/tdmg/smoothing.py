@@ -155,11 +155,7 @@ def _sigma_or_zero(value) -> float:
 
 
 def _supersample(value) -> int:
-    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
-        raise SmoothingError(f"supersample must be an integer, got {value!r}")
-    if int(value) < 1:
-        raise SmoothingError(f"supersample must be at least 1, got {int(value)}")
-    return int(value)
+    return _positive_int("supersample", value)
 
 
 def _label_map(labels) -> np.ndarray:
