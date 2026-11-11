@@ -51,7 +51,7 @@ passed. These commits are pushed; for CI see above.
 ## Next steps, in order
 
 1. **R2 color (owner's next request, 2026-11-11):** design agreed in
-   `docs/plans/2026-11-11-color-design.md`. Next: the implementation plan for its step 1
+   `docs/plans/2026-11-11-color-design.md`. Next: execute `docs/plans/2026-11-11-color-palette.md`, its step 1
    (`tdmg.color` and `tdmg colors`, with previews for the owner to review).
 2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
