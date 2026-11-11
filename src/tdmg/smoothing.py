@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 import numbers
+from dataclasses import dataclass
 
 import contourpy
 import cv2
@@ -224,8 +225,24 @@ def _linear_taps(n: int, s: int) -> tuple[np.ndarray, np.ndarray]:
     return lo, (num - lo * 2 * s) / (2 * s)
 
 
+@dataclass(frozen=True, eq=False)
+class SmoothedLabels:
+    """The result of smooth_labels. eq=False: compared by identity (numpy arrays have no
+    single truth value).
+
+    fine: int32 (H * s, W * s), read-only, the fine label map (see smooth_labels).
+    vanished: the input's labels (sorted ascending) that no fine pixel holds: colors the
+      blur removed entirely (regions smaller than about sigma). Always () at sigma 0. It
+      is reported, not hidden: the caller (the colors record) must say which colors are
+      lost.
+    """
+
+    fine: np.ndarray
+    vanished: tuple[int, ...]
+
+
 def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
-                  *, _band_rows: int = _BAND_ROWS) -> np.ndarray:
+                  *, _band_rows: int = _BAND_ROWS) -> SmoothedLabels:
     """A fine label map: the label map's regions smoothed by one Gaussian, without gaps.
 
     labels: (H, W) integer label map, OUTSIDE (-1, tdmg.color) outside the mask and
@@ -233,9 +250,11 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
       labelled pixel. sigma_px: the Gaussian sigma in image pixels, finite and >= 0 (as
       tdmg.color_config.edge_sigma_px gives). supersample: an int >= 1 (bool refused).
 
-    Returns a new int32 array of shape (H * s, W * s), s = supersample. Every fine pixel
-    holds exactly one label, one of the labels present in the input (never OUTSIDE); a
-    color can disappear if the blur removes it. SmoothingError for any invalid argument.
+    Returns a SmoothedLabels: fine, a new read-only int32 array of shape (H * s, W * s),
+    s = supersample, and vanished. Every fine pixel holds exactly one label, one of the
+    labels present in the input (never OUTSIDE). A color can disappear if the blur removes
+    it; such colors are listed in vanished, never dropped silently. SmoothingError for any
+    invalid argument.
 
     Extent and coordinates: the fine map covers the image, no more. In the pixel-cell
     coordinates of tdmg.flat.mask_outline and smooth_outline (x right, y down, image pixel
@@ -252,9 +271,14 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     <= sum_j v_j sum_{i>=0} (w_i + w_{i+1}) = 1, up to float32 rounding. Linear
     interpolation between the centres -0.5 and 0.5 then crosses 0.5 at x >= 0, and no
     crossing lies between two pad centres (each is below 0.5). So when step 2 clips this
-    map to the R1 outline, it finds a label everywhere. Float32 rounding can put the
-    contour a hair outside (measured at most 4.5e-8 px on 200 random masks touching the
-    border); step 2 should intersect the R1 outline with the image box [0, W] x [0, H].
+    map to the R1 outline, it finds a label everywhere, except that float32 rounding of
+    the field puts smooth_outline's contour slightly outside the image box. Measured on
+    the Windows PC (2026-11-11) over full-image and border-touching random masks from
+    20 x 20 to 2000 x 1500 px: at most 5.6e-7 px at sigma 2.5, 9.0e-7 px at sigma 6.0
+    and 1.9e-6 px at sigma 10, about 2.2e-7 * sigma px (a field error df moves the
+    crossing by df / slope, and the slope is about 1 / (sigma sqrt(2 pi)) per px). So step
+    2 MUST intersect the R1 outline with the image box [0, W] x [0, H] before clipping
+    this map to it.
 
     Method (LABELS_METHOD):
     1. Outside the mask: every OUTSIDE pixel takes the label of its nearest labelled pixel
@@ -288,7 +312,7 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     filled = _fill_outside(_label_map(labels))
     h, w = filled.shape
     if sigma == 0:
-        return np.repeat(np.repeat(filled, s, axis=0), s, axis=1)
+        return _result(np.repeat(np.repeat(filled, s, axis=0), s, axis=1), filled)
     padded = np.pad(filled, 1, mode="edge")
     present = np.unique(filled)                          # ascending label
     fields = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma,
@@ -312,4 +336,10 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
                 best = np.where(win, v, best)
                 best_c[win] = c
         out[rows] = best_c
-    return out
+    return _result(out, filled)
+
+
+def _result(fine: np.ndarray, filled: np.ndarray) -> SmoothedLabels:
+    fine.setflags(write=False)
+    gone = np.setdiff1d(np.unique(filled), np.unique(fine))      # sorted ascending
+    return SmoothedLabels(fine=fine, vanished=tuple(int(c) for c in gone))
