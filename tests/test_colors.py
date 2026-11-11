@@ -17,6 +17,7 @@ from tdmg.color import CLEANUP_METHOD, METHOD, OUTSIDE, clean_regions, printable
 from tdmg.colors import (
     COLORS_ALGORITHM_VERSION,
     LABELS_OUTSIDE,
+    OUTER_OUTLINE,
     OUTPUT_FILES,
     PREVIEW_SCALE,
     RECORD_SCHEMA,
@@ -198,10 +199,9 @@ def test_outputs_and_record_schema(done, sel):
     assert set(rec["cleanup"]) == {"passes", "cap_hit", "thin_pixels_reassigned",
                                    "thin_pixels_left", "thin_returned", "no_core",
                                    "pieces_merged", "pixels_changed", "moved", "dropped_hex",
-                                   "kept_pieces", "kept_area_px", "limits"}
-    assert rec["cleanup"]["limits"] == rec["limits"]
+                                   "kept_pieces", "kept_area_px"}
     assert rec["smoothing"] == {"sigma_px": 2.5, "edge_rule": "flat.smooth.sigma_px",
-                                "supersample": SUPERSAMPLE, "method": LABELS_METHOD,
+                                "supersample": SUPERSAMPLE,
                                 "vanished": []}
     assert rec["base_index"] == 0
     pal = rec["palette"]
@@ -214,6 +214,12 @@ def test_outputs_and_record_schema(done, sel):
     assert counts == sorted(counts, reverse=True)
     assert "python" in rec["environment"] and "scipy" in rec["environment"]
     assert "regions.png" in rec["review"]
+    assert rec["preview"]["outer_outline"] == OUTER_OUTLINE
+
+
+def test_preview_says_the_outer_outline_is_smoothed_later():
+    assert OUTER_OUTLINE == "outer outline: image pixels (smoothed when the model is built)"
+    assert OUTER_OUTLINE in tdmg.colors.legend_rows("smooth")
 
 
 def test_the_record_matches_the_library_functions(done, sel):

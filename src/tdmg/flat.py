@@ -43,7 +43,7 @@ from tdmg.records import (
     write_outputs,
 )
 from tdmg.rules import load_rules
-from tdmg.selection import HEX64, SelectionError, read_selection
+from tdmg.selection import SelectionError, read_selection
 from tdmg.smoothing import METHOD as SMOOTHING_METHOD
 from tdmg.smoothing import SmoothingError, smooth_outline
 
@@ -599,10 +599,6 @@ def flat_identity(algorithm: str, mask_pixels_sha256: str, params: dict) -> str:
     identity = {"algorithm": algorithm, "mask_pixels_sha256": mask_pixels_sha256,
                 "params": params}
     return hashlib.sha256(canonical_json(identity)).hexdigest()
-
-
-def _is_hex64(value) -> bool:
-    return isinstance(value, str) and HEX64.fullmatch(value) is not None
 
 
 def _encode_stl(mesh: trimesh.Trimesh) -> bytes:

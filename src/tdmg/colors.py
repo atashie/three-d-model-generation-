@@ -69,8 +69,10 @@ REVIEW = "Open regions.png to check the colors before building geometry."
 
 # --- regions.png layout. Display only: none of these is a threshold. ---------------------
 # Each image pixel is shown as PREVIEW_SCALE x PREVIEW_SCALE screen pixels. 2 is enough to
-# see whether an edge is smooth or furry on the owner's ~800-px images (the smoothed edge
-# is drawn from the 4x fine map), while the preview stays about 3200 px wide.
+# see whether an edge is smooth or furry on the owner's ~800-1000-px images (the smoothed
+# edge is drawn from the 4x fine map). The preview is 2 * PREVIEW_SCALE * W wide and
+# PREVIEW_SCALE * (H + ROW_PX * (legend rows + palette size)) tall: Roadie (836 x 792)
+# gives 3344 x 1752 px with 4 colors, Oddie (1024 x 1013) 4096 x 2194.
 PREVIEW_SCALE = 2
 CHANGED_DASH_PX = 3                       # dash length of the cleanup outline
 CHANGED_DASH = ((0, 0, 0), (255, 255, 255))   # black and white, visible on any color
@@ -83,6 +85,12 @@ MARGIN_PX = 4
 TEXT_X_PX = MARGIN_PX + SWATCH_PX + 6
 LEGEND = ("left: cutout. right: final colors with the {edges} edges. "
           "black/white dashes: changed by cleanup")
+OUTER_OUTLINE = "outer outline: image pixels (smoothed when the model is built)"
+
+
+def legend_rows(edges: str) -> list[str]:
+    """The legend lines above the swatches in regions.png."""
+    return [LEGEND.format(edges=edges), OUTER_OUTLINE]
 
 
 class ColorsError(ValueError):
@@ -141,9 +149,11 @@ def _plain(obj):
 
 def swatch_box(index: int, height_px: int) -> tuple[int, int, int, int]:
     """(top, left, bottom, right) of palette entry index's swatch in regions.png, for an
-    image height_px tall. Row 0 of the strip is the legend; entry i is row i + 1."""
+    image height_px tall. The strip starts with the legend rows (legend_rows); entry i is
+    the row after them plus i."""
     s = PREVIEW_SCALE
-    top = s * height_px + s * (ROW_PX * (index + 1) + (ROW_PX - SWATCH_PX) // 2)
+    row = index + len(legend_rows(""))
+    top = s * height_px + s * (ROW_PX * row + (ROW_PX - SWATCH_PX) // 2)
     left = s * MARGIN_PX
     return top, left, top + s * SWATCH_PX, left + s * SWATCH_PX
 
@@ -206,7 +216,8 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
     outline is smoothed in step 2, not here), on the same checkerboard. Pixels whose color
     cleanup changed (changed_mask) are outlined on the right: the inner edge of the
     changed region, enlarged, drawn in black and white dashes of CHANGED_DASH_PX along the
-    diagonals, so it shows on any color. Below: a legend row, and one row per palette entry
+    diagonals, so it shows on any color. Below: the legend rows (legend_rows, which say
+    that the outer outline is the image's pixel outline, smoothed in step 2), and one row per palette entry
     with its swatch, index, hex code, area share, and whether it is the base or vanished in
     smoothing.
     """
@@ -223,7 +234,7 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
     dash = ((yy + xx) // CHANGED_DASH_PX) % 2
     right[yy, xx] = np.array(CHANGED_DASH, np.uint8)[dash]
     panels = np.concatenate([left, right], axis=1).astype(np.uint8)
-    rows = [(None, LEGEND.format(edges=edges))]
+    rows = [(None, line) for line in legend_rows(edges)]
     for e in palette:
         notes = (["base"] if e["base"] else []) + (
             ["vanished in smoothing"] if e["index"] in vanished else [])
@@ -319,15 +330,18 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         "quantize": {"iterations": q.iterations, "converged": q.converged,
                      "n_requested": q.n_requested, "n_distinct_colors": q.n_distinct_colors,
                      "dropped": q.dropped, "palette_hex": list(q.hex)},
-        "cleanup": _plain(dataclasses.asdict(log)),
+        # The log's limits are the top-level "limits"; they are not repeated here.
+        "cleanup": {k: v for k, v in _plain(dataclasses.asdict(log)).items()
+                    if k != "limits"},
         "smoothing": {"sigma_px": sigma, "edge_rule": edge_rule,
-                      "supersample": smoothed.supersample, "method": smoothed.method,
+                      "supersample": smoothed.supersample,  # method: methods.labels
                       "vanished": [{"index": i, "hex": cleaned.hex[i]}
                                    for i in smoothed.vanished]},
         "methods": methods,
         "preview": {"scale": PREVIEW_SCALE,
                     "right_panel": "final colors from the fine map, nearest fine pixel to "
                                    "each preview pixel centre; image mask outside",
+                    "outer_outline": OUTER_OUTLINE,
                     "changed_outline": "inner edge of the pixels cleanup changed, black and "
                                        "white dashes"},
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
