@@ -10,6 +10,8 @@ Only pixels where mask.png is 255 count. Both methods see the same masked pixels
 - kmeans: sRGB -> CIELAB (D65), farthest-point seeding from the most frequent color,
   Lloyd iterations in float64 weighted by pixel count, until no color changes cluster or
   MAX_ITER is reached.
+- kmeans_w: the same, except each seed after the first maximises count * dmin^2 (dmin =
+  CIELAB distance to the nearest chosen seed), ties to the lowest unique-color index.
 - mediancut: Pillow Image.quantize(colors=N, method=MEDIANCUT, dither=NONE) on a 1-row image
   of the masked pixels (median cut depends only on the color histogram).
 Palettes are ordered by area descending, then L*, a*, b*. Each palette color is the rounded
@@ -66,7 +68,7 @@ def lab_to_srgb8(lab):
     return np.clip(np.rint(c * 255), 0, 255).astype(np.uint8)
 
 
-def kmeans_lab(px, n):
+def kmeans_lab(px, n, weighted=False):
     """Labels (0..n-1, unordered) for px (k, 3) uint8, and the iteration count."""
     packed = (px[:, 0].astype(np.uint32) << 16) | (px[:, 1].astype(np.uint32) << 8) | px[:, 2]
     uniq, inverse, counts = np.unique(packed, return_inverse=True, return_counts=True)
@@ -76,7 +78,8 @@ def kmeans_lab(px, n):
     seeds = [int(np.argmax(counts))]  # argmax returns the lowest index on ties
     dmin = np.linalg.norm(lab - lab[seeds[0]], axis=1)
     while len(seeds) < min(n, len(uniq)):
-        s = int(np.argmax(dmin))
+        # weighted: greedy argmax of count * dmin^2 (k-means++ D^2 weighting, no randomness)
+        s = int(np.argmax(counts * dmin ** 2 if weighted else dmin))  # lowest index on ties
         seeds.append(s)
         dmin = np.minimum(dmin, np.linalg.norm(lab - lab[s], axis=1))
     cent = lab[seeds].copy()
@@ -118,8 +121,8 @@ def order_and_palette(px, raw):
 
 def run(method, px, n):
     t0 = time.perf_counter()
-    if method == "kmeans":
-        raw, iters, converged = kmeans_lab(px, n)
+    if method in ("kmeans", "kmeans_w"):
+        raw, iters, converged = kmeans_lab(px, n, weighted=method == "kmeans_w")
     else:
         raw, iters, converged = mediancut(px, n), None, None
     labels, rgb = order_and_palette(px, raw)
@@ -191,7 +194,7 @@ def main():
         a = cut[..., 3:4].astype(np.float64) / 255
         orig = (cut[..., :3] * a + bg * (1 - a)).astype(np.uint8)
         for n in NS:
-            for method in ("kmeans", "mediancut"):
+            for method in ("kmeans", "mediancut", "kmeans_w"):
                 labels, rgb, t1, iters, conv = run(method, px, n)
                 labels2, rgb2, t2, _, _ = run(method, px, n)
                 lab_map = np.full(mask.shape, 255, np.uint8)

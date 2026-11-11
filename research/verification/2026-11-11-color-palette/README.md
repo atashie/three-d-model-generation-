@@ -146,3 +146,63 @@ artifacts/color-palette-runs artifacts/selection-runs/roadie-tol30 artifacts/sel
   maps pixels to boxes was not inspected.
 - **The reference CIELAB values** were compared with values recalled from memory, not
   with a fetched source. The OpenCV comparison is independent but not exact.
+
+## Addendum, 2026-11-11: k-means with weighted seeding
+
+**Why:** Surprise 1 above. The coordinator asked for a third method that weighs seeds by
+pixel count. The text above is the original record and is unchanged.
+
+**Method `kmeans_w`:** the same CIELAB k-means, except for the seeding. The first seed is
+still the most frequent unique color. Each next seed is the unique color with the largest
+count × dmin², where dmin is the CIELAB distance to the nearest chosen seed. Ties go to
+the lowest unique-color index. As general knowledge (no source was fetched), this is the
+greedy argmax form of the D² weighting of k-means++ (Arthur and Vassilvitskii, 2007). It
+uses no random numbers.
+
+**Run:** `measure_palette.py` now runs three methods. The command was the same, with the
+output folder `artifacts/color-palette-runs-2/` (git-ignored previews). It ran at commit
+`9882f72` plus the edited script, which is committed with this addendum. `results.txt` was
+regenerated with all three methods. A diff of the old and new `results.txt`, without the
+`kmeans_w` lines, the run times and the commit id, showed no difference: the numbers and
+label-map hashes of the first two methods, and the CIELAB check, are unchanged.
+
+| Image | N | ΔE mean (current seeding) | ΔE p95 (current) | Pieces / small | Small px | Palette (area share) |
+|---|---:|---:|---:|---:|---:|---|
+| Roadie | 2 | 31.72 (31.72) | 74.14 (74.14) | 288 / 273 | 1.34% | same as current |
+| Roadie | 3 | 22.77 (22.77) | 59.63 (59.63) | 536 / 519 | 3.45% | same as current |
+| Roadie | 4 | 11.72 (11.72) | 34.37 (34.37) | 81 / 56 | 0.89% | same as current |
+| Oddie | 2 | **19.54** (33.60) | **41.97** (46.40) | 13 / 2 | 0.00% | 337626 58.5, 506276 41.5 |
+| Oddie | 3 | **9.52** (17.81) | 44.46 (**35.27**) | 1381 / 1370 | 0.86% | 254c1a 40.4, 577089 36.0, 48a835 23.6 |
+| Oddie | 4 | **7.75** (17.78) | **33.42** (34.83) | 1436 / 1424 | 0.86% | 234c1a 40.0, 4c708b 34.3, 48a835 23.6, dc4f47 2.1 |
+
+- **Roadie:** at N = 2 and 4 the label maps are identical to the current seeding (same
+  hash). At N = 3 the palette is the same but the label map differs slightly (one more
+  small piece).
+- **Run time and repeatability:** 0.04–0.07 s per run; both runs gave identical label maps
+  in every case.
+
+**Outliers:** the weighted seeding no longer spends a color on a tiny outlier.
+- Oddie N = 2: green (58.5%) and blue (41.5%), instead of one color for 97.9% and the red
+  mouth.
+- Oddie N = 4: dark green, blue, light green and red. The white eye highlights (0.1%) no
+  longer get a color.
+- But at N = 3 the red face (2.1% of the area) gets no color: the eyes and mouth become
+  dark green and blue. That is why the 95th percentile is worse at N = 3 (44.46 against
+  35.27). Area weighting favours large regions over small, salient ones.
+
+**The author's look at the previews (not the owner's review):**
+- Oddie N = 4 is the closest of all runs to the drawing: both leaf greens, the blue body
+  and the red face. The black outlines become thin dark-green lines.
+- Those thin outline lines break up along the outer edge; that is where the extra small
+  pieces sit (magenta in the previews). The current seeding put the outlines into the
+  blue instead.
+- Oddie N = 2 and N = 3 lose the face: N = 2 shows no face at all, and N = 3 shows it only
+  as dark-green and blue lines.
+
+**What the numbers now support:** k-means in CIELAB with the weighted seeding.
+- Its ΔE mean is equal (Roadie) or much lower (Oddie: about half) in every case, and its
+  95th percentile is equal or lower in 5 of 6 cases.
+- Its costs: more small pieces on Oddie at N = 3 and 4 (0.86% of the pixels, before
+  cleanup), and at low N a small, salient color such as Oddie's red face can be lost.
+- Median cut is still not as good. The plan is not edited here. Whether a lost face at
+  N = 3 matters is a question for the owner's review (plan Task 7).
