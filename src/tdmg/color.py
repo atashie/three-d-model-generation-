@@ -32,6 +32,16 @@ the owner's images). The CIELAB constants now come from the W3C CSS Color 4 samp
 instead of the script's seven-decimal matrix and white; on the owner's images, at N = 2,
 3 and 4, both give the same Task 1 label hashes, palettes and iteration counts (measured
 2026-11-11 on the Windows PC). They move one near-tie pixel in step 6 (Roadie, N = 2).
+
+Round trip: sRGB -> CIELAB -> sRGB returns all 16,777,216 8-bit colors exactly (checked
+2026-11-11 on the Windows PC; the tests check a 52^3 grid).
+
+Platform: every result above, and the owner-image fixtures in tests/test_color.py, were
+measured on the Windows PC only. The fixtures have not yet been run on the M5 Mac, so
+cross-platform parity is unverified. To reduce the risk, the color conversions use
+explicit elementwise sums (_mat3) rather than a BLAS matrix product, and the distances
+use np.linalg.norm one centroid at a time; neither calls BLAS. Both matrices are the
+spec's rational numbers, so no LAPACK inverse is computed either.
 """
 
 from __future__ import annotations
@@ -75,14 +85,21 @@ SRGB_GAMMA = 2.4
 # lin_sRGB_to_XYZ: "[ 506752 / 1228815,  87881 / 245763,   12673 /   70218 ],"
 # "[  87098 /  409605, 175762 / 245763,   12673 /  175545 ],"
 # "[   7918 /  409605,  87881 / 737289, 1001167 / 1053270 ],"
-# The inverse is this matrix inverted in float64 (the spec's XYZ_to_lin_sRGB gives the
-# same matrix as rational numbers; its inverse is the one below to rounding).
+# The inverse, XYZ -> linear sRGB, is the spec's own rational matrix (no LAPACK inverse,
+# so it does not depend on the platform). Locator, section 19, function XYZ_to_lin_sRGB:
+# "[   12831 /   3959,    -329 /    214, -1974 /   3959 ],"
+# "[ -851781 / 878810, 1648619 / 878810, 36519 / 878810 ],"
+# "[     705 /  12673,   -2585 /  12673,   705 /    667 ],"
 M_RGB_TO_XYZ = np.array([
     [506752 / 1228815, 87881 / 245763, 12673 / 70218],
     [87098 / 409605, 175762 / 245763, 12673 / 175545],
     [7918 / 409605, 87881 / 737289, 1001167 / 1053270],
 ])
-M_XYZ_TO_RGB = np.linalg.inv(M_RGB_TO_XYZ)
+M_XYZ_TO_RGB = np.array([
+    [12831 / 3959, -329 / 214, -1974 / 3959],
+    [-851781 / 878810, 1648619 / 878810, 36519 / 878810],
+    [705 / 12673, -2585 / 12673, 705 / 667],
+])
 
 # D65 white. Locator, section 19:
 #   "const D65 = [0.3127 / 0.3290, 1.00000, (1.0 - 0.3127 - 0.3290) / 0.3290];"
@@ -103,12 +120,20 @@ class ColorError(ValueError):
     """Bad input to tdmg.color."""
 
 
+def _mat3(m: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """m (3, 3) applied to the last axis of v (..., 3), as explicit elementwise products and
+    sums in a fixed order, (v0 m_i0 + v1 m_i1) + v2 m_i2. No BLAS call is involved, so the
+    result does not depend on the BLAS build or its use of FMA or vector kernels."""
+    return np.stack([(v[..., 0] * m[i, 0] + v[..., 1] * m[i, 1]) + v[..., 2] * m[i, 2]
+                     for i in range(3)], axis=-1)
+
+
 def srgb_to_lab(rgb8) -> np.ndarray:
     """8-bit sRGB (..., 3) to CIELAB (..., 3), D65 white, float64."""
     c = np.asarray(rgb8, dtype=np.float64) / 255.0
     lin = np.where(c <= SRGB_LIN_THRESHOLD, c / SRGB_SLOPE,
                    ((c + SRGB_OFFSET) / (1 + SRGB_OFFSET)) ** SRGB_GAMMA)
-    xyz = (lin @ M_RGB_TO_XYZ.T) / WHITE_D65
+    xyz = _mat3(M_RGB_TO_XYZ, lin) / WHITE_D65
     f = np.where(xyz > LAB_EPSILON, np.cbrt(xyz), (LAB_KAPPA * xyz + 16) / 116)
     return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]),
                      200 * (f[..., 1] - f[..., 2])], axis=-1)
@@ -126,24 +151,31 @@ def lab_to_srgb8(lab) -> np.ndarray:
         np.where(L > LAB_KAPPA * LAB_EPSILON, fy ** 3, L / LAB_KAPPA),
         np.where(fz ** 3 > LAB_EPSILON, fz ** 3, (116 * fz - 16) / LAB_KAPPA),
     ], axis=-1)
-    lin = np.clip((xyz * WHITE_D65) @ M_XYZ_TO_RGB.T, 0.0, 1.0)
+    lin = np.clip(_mat3(M_XYZ_TO_RGB, xyz * WHITE_D65), 0.0, 1.0)
     c = np.where(lin > SRGB_GAM_THRESHOLD,
                  (1 + SRGB_OFFSET) * lin ** (1 / SRGB_GAMMA) - SRGB_OFFSET, SRGB_SLOPE * lin)
     return np.clip(np.rint(c * 255), 0, 255).astype(np.uint8)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Quantized:
-    """The result of `quantize`. Arrays are read-only. k is the number of palette colors.
+    """The result of `quantize` or `from_labels`. Arrays are read-only. k is the number of
+    palette colors. eq=False: instances compare by identity (numpy arrays have no single
+    truth value, so a generated __eq__ would fail).
 
-    labels: (H, W) int32, the palette index of each masked pixel, OUTSIDE (-1) elsewhere.
-    rgb: (k, 3) uint8 palette colors; hex: the same as "#rrggbb"; lab: (k, 3) float64,
-      the CIELAB of the rounded colors. counts: masked pixels per color; shares: counts
-      over all masked pixels. Ordered by count descending, then L*, a*, b*.
-    iterations: Lloyd centroid updates; converged: False if MAX_ITER was reached.
-    n_requested: n as given; n_distinct_colors: unique colors among the masked pixels
-      (when below n, the palette has at most that many colors); dropped: palette colors
-      left with no pixel after the final reassignment, and removed.
+    labels: int32, the shape of the image (or of the labels given to from_labels), the
+      palette index of each pixel, OUTSIDE (-1) outside the mask.
+    rgb: (k, 3) uint8 palette colors; hex: tuple of k str, "#rrggbb"; lab: (k, 3) float64,
+      the CIELAB of the rounded colors.
+    counts: tuple of k int, pixels per color; shares: tuple of k float, counts over all
+      labelled pixels.
+    Order: always count descending, then L*, a*, b* ascending; from_labels re-sorts after
+      every step that changes labels, and palette index i means this order.
+    iterations: int, Lloyd centroid updates; converged: bool, False if MAX_ITER was reached.
+    n_requested: int, n as given; n_distinct_colors: int, unique colors among the masked
+      pixels (when below n, the palette has at most that many colors); dropped: int,
+      palette colors left with no pixel and removed (by the final reassignment, or by any
+      later step that passes its own count to from_labels).
     """
 
     labels: np.ndarray
@@ -160,7 +192,7 @@ class Quantized:
 
 
 def _unique_colors(px: np.ndarray):
-    """(k, 3) uint8 pixels -> (sorted packed uniques, inverse, counts, CIELAB of uniques)."""
+    """(m, 3) uint8 pixels -> (sorted packed uniques, inverse, counts, CIELAB of uniques)."""
     packed = ((px[:, 0].astype(np.uint32) << 16) | (px[:, 1].astype(np.uint32) << 8)
               | px[:, 2].astype(np.uint32))
     uniq, inverse, counts = np.unique(packed, return_inverse=True, return_counts=True)
@@ -179,15 +211,29 @@ def _seed(lab: np.ndarray, counts: np.ndarray, n: int) -> list[int]:
     return seeds
 
 
+def _nearest(lab: np.ndarray, cent: np.ndarray, dist: np.ndarray | None = None) -> np.ndarray:
+    """Index of the nearest of cent (k, 3) for each of lab (m, 3); ties to the lowest index.
+
+    The distances go one centroid at a time into a (m, k) float64 array (dist, reused if
+    given), so the largest temporary is (m, 3), not (m, k, 3). Each column is the same
+    np.linalg.norm over the 3 components as the broadcast form computed.
+    """
+    if dist is None:
+        dist = np.empty((len(lab), len(cent)), np.float64)
+    for j in range(len(cent)):
+        dist[:, j] = np.linalg.norm(lab - cent[j], axis=1)
+    return np.argmin(dist, axis=1)
+
+
 def _kmeans(lab: np.ndarray, counts: np.ndarray, n: int):
     """Weighted Lloyd iterations from `_seed`. Returns (centroids, assignment of each
     unique color, centroid updates, converged)."""
     w = counts.astype(np.float64)
     cent = lab[_seed(lab, counts, n)].copy()
     assign = None
+    dist = np.empty((len(lab), len(cent)), np.float64)
     for it in range(1, MAX_ITER + 1):
-        dist = np.linalg.norm(lab[:, None, :] - cent[None, :, :], axis=2)
-        new = np.argmin(dist, axis=1)  # lowest centroid index on ties
+        new = _nearest(lab, cent, dist)  # lowest centroid index on ties
         if assign is not None and np.array_equal(new, assign):
             return cent, new, it - 1, True
         assign = new
@@ -198,33 +244,75 @@ def _kmeans(lab: np.ndarray, counts: np.ndarray, n: int):
     return cent, assign, MAX_ITER, False
 
 
-def _finish(lab: np.ndarray, counts: np.ndarray, inverse: np.ndarray, cent: np.ndarray):
-    """Round the centroids, reassign to the nearest rounded color, drop empty ones, order.
-
-    Returns (labels of each pixel, rgb (k, 3) uint8, counts (k,), number dropped).
-    """
-    rgb = lab_to_srgb8(cent)
-    plab = srgb_to_lab(rgb)
-    dist = np.linalg.norm(lab[:, None, :] - plab[None, :, :], axis=2)
-    nearest = np.argmin(dist, axis=1)  # per unique color; lowest index on ties
-    sizes = np.bincount(nearest, weights=counts, minlength=len(rgb)).astype(np.int64)
-    kept = [k for k in range(len(rgb)) if sizes[k] > 0]
-    order = sorted(kept, key=lambda k: (-int(sizes[k]), *plab[k].tolist()))
-    remap = np.full(len(rgb), OUTSIDE, np.int64)
-    remap[order] = np.arange(len(order))
-    return remap[nearest][inverse], rgb[order], sizes[order], len(rgb) - len(kept)
-
-
 def _readonly(a: np.ndarray) -> np.ndarray:
     a.flags.writeable = False
     return a
 
 
+def from_labels(labels, rgb, *, iterations: int, converged: bool, n_requested: int,
+                n_distinct_colors: int, dropped: int = 0) -> Quantized:
+    """Build a Quantized from a label map and its palette, in the canonical order.
+
+    labels: an integer array of any shape, each value an index into rgb or OUTSIDE (-1).
+    rgb: (m, 3) uint8 palette colors. Palette entries that no pixel uses are removed and
+    added to `dropped`. The rest are ordered by pixel count descending, then by the L*,
+    a*, b* of the color ascending, and the labels are renumbered to match (OUTSIDE stays
+    -1). This order is the final one after any step: a later step that changes labels
+    (such as the region cleanup) calls this again, so the palette is re-sorted by its new
+    areas, and a numeric palette index (such as the config's `base`) refers to that final
+    order, which is what the preview shows. The other keywords are copied into the result.
+    Raises ColorError on a bad palette, a label out of range, or no labelled pixel.
+    """
+    labels = np.asarray(labels)
+    rgb = np.asarray(rgb)
+    if rgb.dtype != np.uint8 or rgb.ndim != 2 or rgb.shape[1] != 3:
+        raise ColorError(f"rgb must be uint8 with shape (m, 3), got {rgb.dtype} {rgb.shape}")
+    if not np.issubdtype(labels.dtype, np.integer):
+        raise ColorError(f"labels must be an integer array, got {labels.dtype}")
+    if labels.size and (labels.min() < OUTSIDE or labels.max() >= len(rgb)):
+        raise ColorError(f"every label must be {OUTSIDE} or an index below {len(rgb)}, "
+                         f"got {labels.min()}..{labels.max()}")
+    inside = labels != OUTSIDE
+    total = int(inside.sum())
+    if total == 0:
+        raise ColorError("labels mark no pixel")
+    sizes = np.bincount(labels[inside].astype(np.int64), minlength=len(rgb))  # exact ints
+    plab = srgb_to_lab(rgb)
+    kept = [k for k in range(len(rgb)) if sizes[k] > 0]
+    order = sorted(kept, key=lambda k: (-int(sizes[k]), *plab[k].tolist()))
+    remap = np.full(len(rgb), OUTSIDE, np.int64)
+    remap[order] = np.arange(len(order))
+    out = np.full(labels.shape, OUTSIDE, np.int32)
+    out[inside] = remap[labels[inside]]
+    pal = rgb[order].copy()
+    return Quantized(
+        labels=_readonly(out),
+        rgb=_readonly(pal),
+        hex=tuple("#" + "".join(f"{int(v):02x}" for v in c) for c in pal),
+        lab=_readonly(plab[order].copy()),
+        counts=tuple(int(sizes[k]) for k in order),
+        shares=tuple(int(sizes[k]) / total for k in order),
+        iterations=int(iterations),
+        converged=bool(converged),
+        n_requested=int(n_requested),
+        n_distinct_colors=int(n_distinct_colors),
+        dropped=int(dropped) + len(rgb) - len(kept),
+    )
+
+
 def quantize(rgb: np.ndarray, mask: np.ndarray, n: int) -> Quantized:
     """Palette of at most n colors for the pixels of `rgb` where `mask` is True.
 
-    rgb: (H, W, 3) uint8 sRGB. mask: (H, W) bool. n: int >= 1. See METHOD in the module
-    docstring. Raises ColorError on bad input or an empty mask.
+    rgb: (H, W, 3) uint8 sRGB. mask: (H, W) bool. n: int >= 1 (a Python or numpy
+    integer; bool and float are refused). See METHOD in the module docstring. The result
+    is built by from_labels, so its order is count descending, then L*, a*, b*, and a
+    palette index means that order. Raises ColorError on bad input or an empty mask.
+
+    Cost, measured on the Windows PC on 2026-11-11 (time.perf_counter; peak traced by
+    tracemalloc, which counts numpy's allocations) for a 4000 x 4000 uniform random-noise
+    image (10,313,015 unique colors), n = 4, 40 iterations. Before the distances were
+    computed one centroid at a time: 76.6 s, peak 3476 MiB. After: 78.8 s, peak 1940 MiB,
+    with the same palette and labels (SHA-256 of the int32 label map 4c9aa069f06d4e33...).
     """
     rgb = np.asarray(rgb)
     mask = np.asarray(mask)
@@ -239,22 +327,11 @@ def quantize(rgb: np.ndarray, mask: np.ndarray, n: int) -> Quantized:
                          f"got {mask.dtype} {mask.shape}")
     if not mask.any():
         raise ColorError("mask selects no pixel")
+    n = int(n)
     _, inverse, counts, lab = _unique_colors(rgb[mask])
-    cent, _, iterations, converged = _kmeans(lab, counts, int(n))
-    px_labels, pal, sizes, dropped = _finish(lab, counts, inverse, cent)
+    cent, _, iterations, converged = _kmeans(lab, counts, n)
+    pal = lab_to_srgb8(cent)
     labels = np.full(mask.shape, OUTSIDE, np.int32)
-    labels[mask] = px_labels
-    total = int(mask.sum())
-    return Quantized(
-        labels=_readonly(labels),
-        rgb=_readonly(pal),
-        hex=tuple("#" + "".join(f"{int(v):02x}" for v in c) for c in pal),
-        lab=_readonly(srgb_to_lab(pal)),
-        counts=tuple(int(s) for s in sizes),
-        shares=tuple(int(s) / total for s in sizes),
-        iterations=iterations,
-        converged=converged,
-        n_requested=int(n),
-        n_distinct_colors=len(counts),
-        dropped=dropped,
-    )
+    labels[mask] = _nearest(lab, srgb_to_lab(pal))[inverse]  # lowest index on ties
+    return from_labels(labels, pal, iterations=iterations, converged=converged,
+                       n_requested=n, n_distinct_colors=len(counts))

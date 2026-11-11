@@ -13,7 +13,7 @@ import pytest
 from PIL import Image
 
 from tdmg import color
-from tdmg.color import ColorError, Quantized, lab_to_srgb8, quantize, srgb_to_lab
+from tdmg.color import ColorError, Quantized, from_labels, lab_to_srgb8, quantize, srgb_to_lab
 
 ROOT = Path(__file__).resolve().parents[1]
 RESEARCH = ROOT / "research" / "verification" / "2026-11-11-color-palette"
@@ -74,6 +74,8 @@ def test_lab_to_srgb8_clips_out_of_gamut():
     assert out.dtype == np.uint8
     assert out[0].tolist() == [255, 255, 255]
     assert out[1].tolist() == [0, 0, 0]
+    # a* = 300 is far outside sRGB: red clips to 255 and green to 0; blue stays in range.
+    assert out[2].tolist() == [255, 0, 139]
 
 
 # --- quantize: synthetic images ---------------------------------------------------------
@@ -228,7 +230,7 @@ def test_fewer_distinct_colors_than_n_gives_fewer_reported():
     img = np.zeros((10, 10, 3), np.uint8)
     img[:, 5:] = (255, 255, 0)
     q = quantize(img, full_mask(img), 4)
-    assert q.hex == ("#000000", "#ffff00") or q.hex == ("#ffff00", "#000000")
+    assert q.hex == ("#000000", "#ffff00")  # equal areas: L* 0 before L* 97.1
     assert q.n_requested == 4 and q.n_distinct_colors == 2 and len(q.hex) == 2
     assert q.dropped == 0
     one = quantize(img, full_mask(img), 1)
@@ -259,18 +261,71 @@ def test_order_is_area_descending_then_lab():
     assert quantize(img2, full_mask(img2), 2).hex == ("#000000", "#ffffff")
 
 
-def test_palette_entry_left_without_pixels_is_dropped_and_reported():
+FROM_LABELS_KW = {"iterations": 2, "converged": True, "n_requested": 4, "n_distinct_colors": 9}
+
+
+def test_from_labels_drops_empty_orders_and_renumbers():
+    labels = np.array([[0, 0, 2, -1], [2, 2, 3, -1], [3, 3, 0, 0]])
+    rgb = np.array([[0, 0, 0], [9, 9, 9], [255, 255, 255], [200, 0, 0]], np.uint8)
+    q = from_labels(labels, rgb, **FROM_LABELS_KW, dropped=1)
+    # counts 0: 4, 1: 0 (dropped), 2: 3, 3: 3; the 3-3 tie is ordered by L*: red before white
+    assert q.hex == ("#000000", "#c80000", "#ffffff")
+    assert q.counts == (4, 3, 3)
+    assert q.shares == pytest.approx((0.4, 0.3, 0.3))
+    assert q.dropped == 2
+    assert q.labels.dtype == np.int32
+    np.testing.assert_array_equal(q.labels, [[0, 0, 2, -1], [2, 2, 1, -1], [1, 1, 0, 0]])
+    np.testing.assert_allclose(q.lab, srgb_to_lab(q.rgb))
+    assert (q.iterations, q.converged, q.n_requested, q.n_distinct_colors) == (2, True, 4, 9)
+
+
+def test_from_labels_refuses_bad_input():
+    rgb = np.array([[0, 0, 0], [255, 255, 255]], np.uint8)
+    with pytest.raises(ColorError, match="label"):
+        from_labels(np.array([0, 2]), rgb, **FROM_LABELS_KW)
+    with pytest.raises(ColorError, match="label"):
+        from_labels(np.array([0, -2]), rgb, **FROM_LABELS_KW)
+    with pytest.raises(ColorError, match="integer"):
+        from_labels(np.array([0.0, 1.0]), rgb, **FROM_LABELS_KW)
+    with pytest.raises(ColorError, match=r"\(m, 3\)"):
+        from_labels(np.array([0, 1]), rgb.astype(np.int64), **FROM_LABELS_KW)
+    with pytest.raises(ColorError, match="no pixel"):
+        from_labels(np.array([-1, -1]), rgb, **FROM_LABELS_KW)
+
+
+def test_quantize_drops_a_rounded_duplicate_via_from_labels():
     """Two centroids that round to the same hex: the second gets no pixel (ties go to the
-    lowest index) and is dropped. Built at the finishing step, where it happens."""
+    lowest index) and is dropped."""
     px = np.array([[100, 100, 100]] * 3 + [[0, 0, 0]], np.uint8)
-    _, inverse, counts, ulab = color._unique_colors(px)
+    _, inverse, _, ulab = color._unique_colors(px)
     grey = srgb_to_lab(np.array([[100, 100, 100]], np.uint8))[0]
     cent = np.array([srgb_to_lab(np.array([[0, 0, 0]], np.uint8))[0], grey, grey + 1e-6])
-    labels, rgb, counts_out, dropped = color._finish(ulab, counts, inverse, cent)
-    assert dropped == 1
-    assert hexes(rgb) == ["#646464", "#000000"]
-    assert counts_out.tolist() == [3, 1]
-    assert labels.tolist() == [0, 0, 0, 1]
+    rgb = lab_to_srgb8(cent)
+    nearest = color._nearest(ulab, srgb_to_lab(rgb))
+    np.testing.assert_array_equal(nearest[inverse], [1, 1, 1, 0])
+    q = from_labels(nearest[inverse], rgb, **FROM_LABELS_KW)
+    assert q.dropped == 1
+    assert q.hex == ("#646464", "#000000")
+    assert q.counts == (3, 1)
+    assert q.labels.tolist() == [0, 0, 0, 1]
+
+
+def test_n_as_numpy_integer_is_accepted_and_float_refused():
+    img = noisy_image()
+    a = quantize(img, full_mask(img), 3)
+    b = quantize(img, full_mask(img), np.int64(3))
+    assert a.hex == b.hex and type(b.n_requested) is int
+    with pytest.raises(ColorError, match="n must be"):
+        quantize(img, full_mask(img), 3.0)
+
+
+def test_not_converged_is_reported(monkeypatch):
+    img = noisy_image()
+    full = quantize(img, full_mask(img), 3)  # needs 4 centroid updates
+    assert full.converged and full.iterations > 1
+    monkeypatch.setattr(color, "MAX_ITER", 1)
+    q = quantize(img, full_mask(img), 3)
+    assert not q.converged and q.iterations == 1
 
 
 def test_invalid_input_is_refused():
@@ -302,7 +357,8 @@ def test_result_arrays_are_read_only():
 # --- Fixtures from the owner's images (Task 1 record) ------------------------------------
 
 
-def _research_rows():
+@pytest.fixture(scope="module")
+def research_rows():
     """Parse the kmeans_w rows and palettes from the Task 1 results.txt."""
     text = (RESEARCH / "results.txt").read_text(encoding="utf-8")
     out = {}
@@ -323,18 +379,15 @@ def _research_rows():
     return out
 
 
-RESEARCH_ROWS = _research_rows()
-
-
-def _owner_selection(name):
+def _owner_selection(name, research_rows):
     d = SELECTIONS / name
     if not (d / "mask.png").is_file() or not (d / "cutout.png").is_file():
         pytest.skip(f"owner selection {d} is not present (git-ignored owner images)")
-    rec = RESEARCH_ROWS[name]
+    rec = research_rows[name]
     for f, want in (("mask.png", rec["mask"]), ("cutout.png", rec["cutout"])):
         got = hashlib.sha256((d / f).read_bytes()).hexdigest()[:16]
-        if got != want:
-            pytest.skip(f"{d / f} has sha256 {got}, not the {want} measured in Task 1")
+        assert got == want, (f"{d / f} is present but has sha256[:16] {got}, not the {want} "
+                             "measured in Task 1: the fixture would test other images")
     mask = np.array(Image.open(d / "mask.png")) == 255
     rgb = np.array(Image.open(d / "cutout.png").convert("RGBA"))[..., :3]
     return rgb, mask
@@ -342,7 +395,7 @@ def _owner_selection(name):
 
 @pytest.mark.parametrize("name", ["roadie-tol30", "oddie"])
 @pytest.mark.parametrize("n", [2, 3, 4])
-def test_owner_images_match_task1_record(name, n):
+def test_owner_images_match_task1_record(name, n, research_rows):
     """The Task 1 hashes, reproduced, and what the final reassignment changes.
 
     What measure_palette.py hashed: a uint8 (H, W) C-order array, 255 outside the mask,
@@ -356,8 +409,8 @@ def test_owner_images_match_task1_record(name, n):
     the reassignment changed is the recorded not_nearest% (the share whose assigned color
     was not their nearest).
     """
-    rgb, mask = _owner_selection(name)
-    want = RESEARCH_ROWS[name]["rows"][n]
+    rgb, mask = _owner_selection(name, research_rows)
+    want = research_rows[name]["rows"][n]
     px = rgb[mask]
     _, inverse, counts, ulab = color._unique_colors(px)
     cent, assign, iters, converged = color._kmeans(ulab, counts, n)
