@@ -3,6 +3,10 @@
 Standalone: it needs only a mask and sigma, and does not depend on tdmg.flat. tdmg flat
 calls it by default (docs/plans/2026-11-10-outline-smoothing.md; rule flat.smooth.sigma_px).
 
+smooth_labels (at the end of this module) is the multicolor counterpart for a color label
+map (tdmg.color): the same Gaussian per color, then an argmax on a supersampled grid in
+the same pixel-cell coordinates. Its docstring gives its method and coordinates.
+
 Method (METHOD):
 1. The mask (bool, or integer 0/255) becomes a float32 field, 1 on the foreground, padded
    by PAD_PX zero pixels on every side.
@@ -44,10 +48,12 @@ import contourpy
 import cv2
 import numpy as np
 import shapely
+from scipy import ndimage
 from shapely import affinity
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 
 from tdmg._masks import binary_cells
+from tdmg.color import OUTSIDE
 
 LEVEL = 0.5   # midpoint between background (0) and foreground (1); see the docstring
 PAD_PX = 1    # zero pad so every contour closes (one pixel suffices; see the docstring)
@@ -115,3 +121,195 @@ def smooth_outline(mask: np.ndarray, sigma_px: float) -> shapely.Geometry:
                              "every foreground feature is smaller than the blur")
     shift = 0.5 - PAD_PX
     return affinity.translate(geom, shift, shift)
+
+
+# --- Color label maps (docs/plans/2026-11-11-color-palette.md, Decision 5, Task 5) -------
+
+# The default supersample factor. A numerical choice, not a rule: it sets the size of the
+# staircase left by the fine label map, 1/SUPERSAMPLE of an image pixel. Example: the
+# owner's Roadie at 60 mm wide is about 0.100 mm/px (60 mm over its 599 px mask width), so
+# 4 gives about 0.025 mm, far below a 0.4 mm bead. Memory and time grow with its square.
+SUPERSAMPLE = 4
+
+# Fine rows interpolated at a time. It bounds the working memory only: every fine pixel is
+# computed from the same values by the same arithmetic whatever the band, so the result
+# does not depend on it (tests/test_smooth_labels.py compares two band sizes).
+_BAND_ROWS = 512
+
+LABELS_METHOD = ("nearest-label fill of OUTSIDE (exact squared distance, lowest label on "
+                 "ties), edge-replicated by one pixel; per color, the indicator blurred "
+                 "with OpenCV GaussianBlur (sigma_px in x and y, BORDER_REPLICATE); "
+                 "bilinear samples at the fine pixel centres; argmax, lowest label on "
+                 "ties. sigma 0: nearest upsample of the filled map")
+
+
+def _sigma_or_zero(value) -> float:
+    """value as a float: a real number (not a bool or a string), finite and at least 0."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        raise SmoothingError(f"sigma_px must be a number, got {value!r}")
+    sigma = float(value)
+    if not math.isfinite(sigma) or sigma < 0:
+        raise SmoothingError(f"sigma_px must be a finite number of at least 0, got {sigma}")
+    return sigma
+
+
+def _supersample(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
+        raise SmoothingError(f"supersample must be an integer, got {value!r}")
+    if int(value) < 1:
+        raise SmoothingError(f"supersample must be at least 1, got {int(value)}")
+    return int(value)
+
+
+def _label_map(labels) -> np.ndarray:
+    """labels as a new int32 (H, W) array; SmoothingError unless it is a valid label map."""
+    a = np.asarray(labels)
+    if a.ndim != 2:
+        raise SmoothingError(f"labels must be two-dimensional, got shape {a.shape}")
+    if a.dtype == np.bool_ or not np.issubdtype(a.dtype, np.integer):
+        raise SmoothingError(f"labels must be an integer array, got {a.dtype}")
+    if a.size == 0:
+        raise SmoothingError(f"labels is empty (shape {a.shape})")
+    if int(a.min()) < OUTSIDE:
+        raise SmoothingError(f"labels must be {OUTSIDE} (OUTSIDE) or a palette index of "
+                             f"at least 0, got {int(a.min())}")
+    if int(a.max()) > np.iinfo(np.int32).max:
+        raise SmoothingError(f"labels must fit in int32, got {int(a.max())}")
+    if int(a.max()) == OUTSIDE:
+        raise SmoothingError("labels has no labelled pixel (all OUTSIDE)")
+    return a.astype(np.int32)
+
+
+def _fill_outside(labels: np.ndarray) -> np.ndarray:
+    """labels with every OUTSIDE pixel set to the label of its nearest labelled pixel.
+
+    Nearest is by Euclidean distance between pixel centres. Ties are broken here, not by
+    scipy, as in tdmg.color's thin step: per color, scipy.ndimage.distance_transform_edt
+    (return_indices) gives a nearest pixel of that color, the squared distance to it is
+    recomputed as an exact integer (it does not depend on which of several equally near
+    pixels EDT returns), and the pixel takes the color at the least squared distance; on
+    a tie, the lowest label.
+    """
+    out = labels == OUTSIDE
+    if not out.any():
+        return labels
+    ty, tx = np.nonzero(out)
+    best = np.full(len(ty), np.iinfo(np.int64).max, np.int64)
+    best_c = np.full(len(ty), OUTSIDE, np.int32)
+    for c in np.unique(labels[~out]):                    # ascending label
+        iy, ix = ndimage.distance_transform_edt(labels != c, return_distances=False,
+                                                return_indices=True)
+        d2 = ((iy[ty, tx].astype(np.int64) - ty) ** 2
+              + (ix[ty, tx].astype(np.int64) - tx) ** 2)
+        closer = d2 < best                               # strict: the lowest label wins ties
+        best = np.where(closer, d2, best)
+        best_c = np.where(closer, c, best_c)
+    filled = labels.copy()
+    filled[ty, tx] = best_c
+    return filled
+
+
+def _linear_taps(n: int, s: int) -> tuple[np.ndarray, np.ndarray]:
+    """For the n * s fine centres along an axis of n image pixels: the lower tap index
+    into the one-pixel-padded axis (n + 2 samples) and the weight of the upper tap.
+
+    Fine centre m is at image coordinate (m + 0.5) / s; padded sample p sits at the pixel
+    centre p - 0.5. So the position in padded samples is u = (m + 0.5) / s + 0.5
+    = (2m + 1 + s) / (2s), from 0.5 + 0.5/s to n + 0.5 - 0.5/s: always strictly between
+    samples 0 and n + 1. The lower tap is floor(u) and the weight u - floor(u), both from
+    exact integers (the weight is one division of integers, so correctly rounded).
+    """
+    num = 2 * np.arange(n * s, dtype=np.int64) + 1 + s
+    lo = num // (2 * s)
+    return lo, (num - lo * 2 * s) / (2 * s)
+
+
+def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
+                  *, _band_rows: int = _BAND_ROWS) -> np.ndarray:
+    """A fine label map: the label map's regions smoothed by one Gaussian, without gaps.
+
+    labels: (H, W) integer label map, OUTSIDE (-1, tdmg.color) outside the mask and
+      palette indices 0..k-1 inside (such as clean_regions' result), with at least one
+      labelled pixel. sigma_px: the Gaussian sigma in image pixels, finite and >= 0 (as
+      tdmg.color_config.edge_sigma_px gives). supersample: an int >= 1 (bool refused).
+
+    Returns a new int32 array of shape (H * s, W * s), s = supersample. Every fine pixel
+    holds exactly one label, one of the labels present in the input (never OUTSIDE); a
+    color can disappear if the blur removes it. SmoothingError for any invalid argument.
+
+    Extent and coordinates: the fine map covers the image, no more. In the pixel-cell
+    coordinates of tdmg.flat.mask_outline and smooth_outline (x right, y down, image pixel
+    (column c, row r) the cell [c, c + 1] x [r, r + 1]), fine pixel (row i, column j) is
+    the cell [j/s, (j + 1)/s] x [i/s, (i + 1)/s], with its centre at ((j + 0.5)/s,
+    (i + 0.5)/s). So mask_outline(fine == c) scaled by 1/s about the origin is color c's
+    region in the coordinates that smooth_outline returns and that tdmg.flat's to_model
+    transform takes (x_mm = (x - x0) * scale, y_mm = (y1 - y) * scale).
+
+    No pad is needed, because smooth_outline's contour lies within [0, W] x [0, H].
+    Proof: it pads by one zero pixel. On the left, say, the pad's field is f(-1) = sum
+    over the foreground (i >= 0, j) of w_{i+1} v_j and column 0's is f(0) = sum of
+    w_i v_j (w, v: the normalised, symmetric 1-D weights in x and y). So f(-1) + f(0)
+    <= sum_j v_j sum_{i>=0} (w_i + w_{i+1}) = 1, up to float32 rounding. Linear
+    interpolation between the centres -0.5 and 0.5 then crosses 0.5 at x >= 0, and no
+    crossing lies between two pad centres (each is below 0.5). So when step 2 clips this
+    map to the R1 outline, it finds a label everywhere. Float32 rounding can put the
+    contour a hair outside (measured at most 4.5e-8 px on 200 random masks touching the
+    border); step 2 should intersect the R1 outline with the image box [0, W] x [0, H].
+
+    Method (LABELS_METHOD):
+    1. Outside the mask: every OUTSIDE pixel takes the label of its nearest labelled pixel
+       (Euclidean, exact integer squared distance, lowest label on ties; _fill_outside).
+    2. sigma 0 (the exact preset): the filled map is upsampled by nearest neighbour, each
+       pixel becoming an s x s block (np.repeat on both axes). No blur; steps 3-5 are
+       skipped.
+    3. The filled map is padded by one pixel by edge replication. For each label c, its
+       indicator (float32, 1 where the label is c) is blurred with the call that
+       smooth_outline makes: cv2.GaussianBlur, ksize (0, 0) (OpenCV derives the kernel
+       from sigma), sigma_px in x and y, but BORDER_REPLICATE in place of BORDER_CONSTANT.
+       Why the border differs: in smooth_outline everything beyond the image is
+       background, so zero extension is the mask's own extension. Here the image's
+       border pixels are labelled (step 1), and replication extends each label outwards,
+       as the nearest fill would. The indicators then sum to 1 everywhere, so the fields
+       do too, and for two labels label 0 wins where its field exceeds 0.5, the level
+       smooth_outline uses. When label 0 is absent from the image border, its field is
+       exactly smooth_outline's (replicating zeros is the zero extension).
+    4. Each field is sampled at the fine pixel centres by bilinear interpolation between
+       the four nearest padded pixel centres (_linear_taps gives the positions): first in
+       y (between padded rows), then in x (between padded columns), in float64.
+    5. Each fine pixel takes the label with the largest sample, the lowest label on ties.
+
+    Cost: one exact EDT per color on H x W (only if there are OUTSIDE pixels), one blur
+    per color of (H + 2) x (W + 2), and one interpolation per color of the H s x W s fine
+    map, done in bands of _band_rows fine rows (a memory bound only; the result does not
+    depend on it), so the working memory is a few bands plus the int32 output.
+    """
+    sigma = _sigma_or_zero(sigma_px)
+    s = _supersample(supersample)
+    filled = _fill_outside(_label_map(labels))
+    h, w = filled.shape
+    if sigma == 0:
+        return np.repeat(np.repeat(filled, s, axis=0), s, axis=1)
+    padded = np.pad(filled, 1, mode="edge")
+    present = np.unique(filled)                          # ascending label
+    fields = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma,
+                               sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
+              for c in present]
+    row_lo, row_t = _linear_taps(h, s)
+    col_lo, col_t = _linear_taps(w, s)
+    out = np.empty((h * s, w * s), np.int32)
+    for start in range(0, h * s, _band_rows):
+        rows = slice(start, min(start + _band_rows, h * s))
+        lo, t = row_lo[rows], row_t[rows, None]
+        best = None
+        best_c = np.full((len(lo), w * s), present[0], np.int32)
+        for c, f in zip(present, fields, strict=True):
+            g = f[lo] * (1 - t) + f[lo + 1] * t                         # (band, W + 2)
+            v = g[:, col_lo] * (1 - col_t) + g[:, col_lo + 1] * col_t  # (band, W s)
+            if best is None:
+                best = v
+            else:
+                win = v > best                           # strict: the lowest label wins ties
+                best = np.where(win, v, best)
+                best_c[win] = c
+        out[rows] = best_c
+    return out
