@@ -229,6 +229,53 @@ spec review and a quality review, then the Codex critical review in Task 8.
      handle each finding.
    - Then push, and record the CI result in STATUS.
 
+## Added after the owner's review (Task 7, 2026-11-11)
+
+The owner's answers are recorded in the Task 1 research folder's addendum. Decided:
+- smooth edges stay the default;
+- cartoon outlines are dropped by default, and `keep` redraws one uniform outline along
+  every border;
+- shade pairs are flagged, never merged automatically: the owner decides, and the
+  config holds explicit merges.
+
+So two settings, extraction and merges, are added before Task 8:
+
+7a. **Measure first:** outline and shade indicators, on Roadie and Oddie.
+    - **Extraction:** N = 4, 5 and 6.
+    - **Per color:** its Lab; the share of its pixels removed by the printable opening
+      ("thinness"); the share of its pixels next to another color or to the outside;
+      its typical band width (from a distance transform).
+    - **Per pair of colors:** the hue-angle difference and the L* difference.
+    - **Goal:** find whether a simple rule separates the outline color (Roadie's brown;
+      Oddie's black lines, once extracted) and the shade pairs (Oddie's two greens; its
+      two blues) from the rest. Record it in the research folder before any rule is
+      set. If no simple rule separates them, say so: detection then becomes "the owner
+      names the color", with no automatic guess.
+7b. **Config and rules:**
+    - **`outlines: drop | keep`** (default drop) and **`outline_color: auto | none |
+      <index>`**. Here `none` means the image has no outline color. The indices refer
+      to the extraction order, which the preview shows.
+    - **`merge: [[from, into], ...]`**, explicit merges by extraction index.
+    - **`colors`** stays the final count, at most the cap. The extraction count is
+      `colors` + the number of merges + 1 when an outline color is set. It is never
+      silently capped, and the record shows it.
+    - **Rules, as hypotheses with Task 7a's evidence:** the detection thresholds, and
+      the kept-outline width (at least `flat.sliver.opening_width`).
+7c. **Implementation:** in `tdmg.color`, as pure functions.
+    - **Detection:** the outline candidate and the shade-pair flags, reported but never
+      acted on, except an outline under `auto`.
+    - **`drop`:** every outline-color pixel takes the nearest other color, by exact
+      distance with the same tie rule as cleanup.
+    - **`keep`:** the outline color is removed first, then a band of the rule's width is
+      drawn along every border between colors and along the outer edge.
+    - **Merges** are applied before cleanup.
+    - **Record and preview:** they list the extracted colors, the outline found (and
+      why), the flagged shade pairs, and the merges applied. The preview shows the
+      extracted palette with flags, so the owner can choose merges by index.
+    - Each part gets spec and quality reviews.
+7d. **Owner review of the new previews** (Roadie: outline dropped, then kept; Oddie:
+    outline dropped, shade pairs flagged, then with the merges the owner chooses).
+
 ## Out of scope
 
 - **Geometry:** the 3MF, glue pieces and slicing (steps 2–5 of the design).

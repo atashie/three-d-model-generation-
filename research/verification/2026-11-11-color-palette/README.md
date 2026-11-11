@@ -259,3 +259,29 @@ hash is unchanged.
 than k-means at N = 3 and 4. At N = 2 it is still slightly better than the current seeding (mean on Oddie, p95
 on both), but not than the weighted seeding on Oddie. The weighted seeding is still the method the numbers support, with the costs
 stated in the previous addendum.
+
+## Addendum: owner review of the first previews (plan Task 7), 2026-11-11
+
+**What was reviewed:** `tdmg colors` at 60 mm, 4 colors, smooth and furry edges, for
+Roadie and Oddie (`colors_id` b8d6edf6…, 1c770a7b…, 01127cd1…, 728f7785…; the previews
+are in the git-ignored `artifacts/colors-review/`). The owner's answers, verbatim:
+
+1. On Roadie: "right colors, but the grey-black (brown?) outline shows up on some edges
+   but not all - think we should ask the user whether or not we want to keep the
+   outlines (usually not) that are common in cartoons, and if so we should keep them
+   consistently along all borders."
+2. On Oddie's lost outlines and shading: "regarding teh outlines, see comment 1;
+   regarding the shading / shadow, this should also be up to the user: either keep each
+   color uniform (without shading) or discuss withe the user which aspect of the
+   shading to include or exclude."
+3. On edges: "smooth on default".
+
+**Follow-up choices (answers to two questions):**
+- **Outlines:** "Drop by default (Recommended)". `keep` redraws one uniform band of
+  printable width along all outer and inner borders.
+- **Shading:** "Flag pairs, I decide (Recommended)". The preview flags likely shade
+  pairs. Nothing is merged unless the config says so; the default keeps the tones as
+  extracted.
+
+**Why the outline was inconsistent:** the outline was treated as an ordinary color, so
+cleanup removed its thin parts and kept its wide ones.
