@@ -158,6 +158,13 @@ THIN_REGIONS_NOTE = ("information only in tdmg slice: F3.printed_connectivity, "
                      "F3.edge_coverage and F3.edge_overprint judge thin features from the "
                      "G-code")
 STATUSES = ("PASS", "FAIL", "UNKNOWN")
+
+
+def _thin_regions_note(note: str | None) -> str:
+    """The flat note, with THIN_REGIONS_NOTE added unless it already says information only."""
+    if not note:
+        return THIN_REGIONS_NOTE
+    return note if "information only" in note else f"{note}; {THIN_REGIONS_NOTE}"
 HEX64 = re.compile(r"[0-9a-f]{64}")
 # The command as recorded: placeholders, so the record holds no path from this machine.
 COMMAND_TEMPLATE = ["<orca-slicer.exe>", *slicer_args(
@@ -461,9 +468,9 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     timeout = _timeout(timeout_s, rules)
     prusa_timeout = _timeout(timeout_s, rules, PRUSA_TIMEOUT_RULE)
     flat, flat_raw, stl = _read_flat(flat_dir)
-    # F3.thin_regions stays in the record as information; the note says so.
-    previous = [replace(c, note=f"{c.note}; {THIN_REGIONS_NOTE}" if c.note else
-                        THIN_REGIONS_NOTE) if c.id == THIN_REGIONS else c
+    # F3.thin_regions stays in the record as information; the note says so. Flat records
+    # from older code do not say it, so the note is added unless it is already there.
+    previous = [replace(c, note=_thin_regions_note(c.note)) if c.id == THIN_REGIONS else c
                 for c in _flat_checks(flat)]
     try:
         create_folder = check_output_dir(out_dir)

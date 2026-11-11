@@ -1314,3 +1314,13 @@ def test_roadie_is_portable_with_the_real_prusaslicer(tmp_path):
     assert port["gcode"]["layers"] == 15 and port["gcode"]["last_z_mm"] == 3.0
     assert port["info"]["parsed"]["manifold"] is True
     assert (out / "prusaslicer.portability-only.gcode.txt").is_file()
+
+
+def test_the_thin_regions_note_says_information_only_once():
+    from tdmg.slicing import THIN_REGIONS_NOTE, _thin_regions_note
+    current = "tapered tips always appear; information only: tdmg slice judges thin features"
+    assert _thin_regions_note(current) == current
+    stale = "tapered tips always appear; pass/fail policy pending research"
+    assert _thin_regions_note(stale) == f"{stale}; {THIN_REGIONS_NOTE}"
+    assert _thin_regions_note(None) == THIN_REGIONS_NOTE
+    assert _thin_regions_note("") == THIN_REGIONS_NOTE
