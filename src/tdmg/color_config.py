@@ -18,7 +18,8 @@ The keys (Task 7b added extract, outlines, outline_color and merge):
 - colors: the most colors the final palette may have, 2 to the printer's palette cap
   (default: the cap). More may remain; the plan is then written but not ready.
 - extract: how many colors quantize extracts, 2 to MAX_EXTRACT and at least colors
-  (default: the rule color.extract.default_count).
+  (default: max(the rule color.extract.default_count, colors), source "rule"; a value
+  given in a flag or the file is never raised, it is refused if below colors).
 - edges: smooth, furry or exact (default smooth).
 - base: auto or an index into the final palette (default auto).
 - outlines: drop or keep (default drop): what happens to the outline family.
@@ -265,9 +266,10 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
                          printer: PrinterProfile) -> ResolvedColorConfig:
     """Flags (None = not given), then the config file, then the defaults.
 
-    The default for colors is the printer's palette cap, and for extract the rule
-    color.extract.default_count. `rules` also lets the resolved edges preset be checked
-    against the registry here (see edge_sigma_px). Then, on the resolved values: base must
+    The default for colors is the printer's palette cap, and for extract the larger of the
+    rule color.extract.default_count and colors. `rules` also lets the resolved edges
+    preset be checked against the registry here (see edge_sigma_px). Then, on the resolved
+    values: base must
     be below colors (check_base), extract at least colors, and the indices in outline_color
     and merge below extract and not overlapping (check_extraction_indices).
     """
@@ -287,7 +289,9 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
         elif key == PROFILE_DEFAULT:
             settings[key], sources[key] = cap, "profile"
         elif key in RULE_DEFAULTS:
-            settings[key], sources[key] = _rule_default(key, rules, cap), "rule"
+            # extract: at least colors, so the default never conflicts with it.
+            value = max(_rule_default(key, rules, cap), settings["colors"])
+            settings[key], sources[key] = value, "rule"
         else:
             settings[key], sources[key] = DEFAULTS[key], "default"
     # Cleanup only shrinks the palette, so a base at or above colors can never be valid in a

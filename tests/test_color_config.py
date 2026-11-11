@@ -489,3 +489,16 @@ def test_outline_color_and_merge_are_accepted_from_any_source():
     # The CLI has no flags for them (config file only), but the resolver takes any source.
     r = _resolve({"outline_color": "none", "merge": [[5, 0]]})
     assert r.sources["outline_color"] == "flag" and r.settings["merge"] == ((5, 0),)
+
+
+def test_extract_default_is_at_least_colors():
+    # extract defaults to max(rule default, colors): a printer with more slots than the
+    # rule's 6 still resolves by default, and the source stays "rule".
+    eight = _printer_with_slots(8)
+    r = _resolve(printer=eight)
+    assert (r.settings["colors"], r.settings["extract"], r.sources["extract"]) == (8, 8, "rule")
+    r = _resolve({"colors": 7}, printer=eight)
+    assert r.settings["extract"] == 7
+    assert _resolve({"colors": 3}, printer=eight).settings["extract"] == 6
+    with pytest.raises(ColorConfigError, match="extract 6 is below colors 8"):
+        _resolve({"extract": 6}, printer=eight)        # given explicitly: never raised

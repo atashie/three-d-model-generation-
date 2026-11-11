@@ -1,19 +1,20 @@
-"""tdmg.color: the owner's merges, index matching and the outline seam
+"""tdmg.color: the owner's merges, index tracking (Quantized.remap) and the outline seam
 (docs/plans/2026-11-11-color-palette.md, Task 7b)."""
 
 import numpy as np
 import pytest
 
 from tdmg.color import (
+    KEEP_NO_EFFECT_NOTE,
     OUTLINE_METHOD,
     OUTLINE_PLACEHOLDER_NOTE,
     OUTSIDE,
     ColorError,
     OutlineResult,
     apply_merges,
+    clean_regions,
     from_labels,
     handle_outlines,
-    index_map,
     merge_problem,
     quantize,
 )
@@ -45,12 +46,12 @@ def test_apply_merges_moves_pixels_and_shrinks_the_palette(q5):
     # 0 gets 4's pixels (500 + 100), 2 gets 3's (300 + 200); 1 keeps 400. Re-sorted.
     assert m.hex == (q5.hex[0], q5.hex[2], q5.hex[1])
     assert m.counts == (600, 500, 400) and sum(m.shares) == pytest.approx(1.0)
-    assert index_map(q5, m) == (0, 2, 1, None, None)
+    assert m.remap == (0, 2, 1, None, None)
     # Every pixel of a merged color now has its into color; the others are unchanged.
     for a, b in ((4, 0), (3, 2)):
-        assert (m.labels[q5.labels == a] == index_map(q5, m)[b]).all()
+        assert (m.labels[q5.labels == a] == m.remap[b]).all()
     for i in (0, 1, 2):
-        assert (m.labels[q5.labels == i] == index_map(q5, m)[i]).all()
+        assert (m.labels[q5.labels == i] == m.remap[i]).all()
     assert (m.labels == OUTSIDE).sum() == (q5.labels == OUTSIDE).sum() == 100
     assert m.dropped == q5.dropped + 2            # merged-away colors count as dropped
     assert (m.iterations, m.converged, m.n_requested, m.n_distinct_colors) == (
@@ -62,12 +63,12 @@ def test_apply_merges_resorts_by_the_new_areas(q5):
     # 2 (300 px) takes 0's 500: it becomes the largest color, index 0.
     m = apply_merges(q5, [(0, 2)])
     assert m.hex[0] == q5.hex[2] and m.counts[0] == 800
-    assert index_map(q5, m) == (None, 1, 0, 2, 3)
+    assert m.remap == (None, 1, 0, 2, 3)
 
 
 def test_apply_merges_keeps_the_into_color_unchanged(q5):
     m = apply_merges(q5, [(1, 0)])
-    i = index_map(q5, m)[0]
+    i = m.remap[0]
     assert m.hex[i] == q5.hex[0] and (m.rgb[i] == q5.rgb[0]).all()
     assert (m.lab[i] == q5.lab[0]).all()
 
@@ -81,7 +82,7 @@ def test_apply_merges_does_not_depend_on_pair_order(q5):
 def test_two_colors_into_one(q5):
     m = apply_merges(q5, [(3, 2), (4, 2)])
     assert m.counts == (600, 500, 400)
-    assert index_map(q5, m) == (1, 2, 0, None, None)
+    assert m.remap == (1, 2, 0, None, None)
 
 
 def test_no_merges_leaves_the_labels(q5):
@@ -119,21 +120,41 @@ def test_merge_problem():
     assert "no chains" in merge_problem([(2, 1), (1, 0)])
 
 
-def test_index_map_matches_by_color(q5):
-    same = from_labels(q5.labels, q5.rgb, iterations=0, converged=True, n_requested=5,
-                       n_distinct_colors=5)
-    assert index_map(q5, same) == (0, 1, 2, 3, 4)
-    m = apply_merges(q5, [(0, 4)])                # 4 becomes the largest
-    assert index_map(q5, m) == (None, 1, 2, 3, 0)
+def test_from_labels_records_the_old_to_new_index_array():
+    labels = np.array([[2, 2, 2, 0, OUTSIDE, 1, 1]])
+    rgb = np.array([[10, 10, 10], [200, 0, 0], [0, 0, 200], [5, 5, 5]], np.uint8)
+    q = from_labels(labels, rgb, iterations=0, converged=True, n_requested=4,
+                    n_distinct_colors=4)
+    # Ordered by count: old 2 (3 px) -> 0, old 1 (2 px) -> 1, old 0 (1 px) -> 2; 3 unused.
+    assert q.remap == (2, 1, 0, None)
+    assert q.hex == ("#0000c8", "#c80000", "#0a0a0a") and q.dropped == 1
 
 
-def test_index_map_refuses_a_palette_with_a_repeated_color():
-    labels = np.array([[0, 1]])
+def test_remap_is_by_index_not_by_color():
+    # Two palette entries with the same color are still told apart by index.
+    labels = np.array([[0, 1, 1]])
     rgb = np.array([[1, 2, 3], [1, 2, 3]], np.uint8)
     q = from_labels(labels, rgb, iterations=0, converged=True, n_requested=2,
                     n_distinct_colors=1)
-    with pytest.raises(ColorError, match="a color twice"):
-        index_map(q, q)
+    assert q.remap == (1, 0)
+
+
+def test_quantize_remap_has_one_entry_per_rounded_centroid(q5):
+    assert sorted(i for i in q5.remap if i is not None) == list(range(5))
+
+
+def test_clean_regions_remap_follows_its_palette(q5):
+    from tdmg.color import Limits
+    limits = Limits(min_width_px=0.5, min_area_px=150.0, mm_per_px=0.1, opening_width_mm=0.05,
+                    island_area_mm2=1.5, nozzle_diameter_mm=0.4,
+                    opening_rule="flat.sliver.opening_width",
+                    island_rule="flat.island.min_square_side")
+    cleaned, log = clean_regions(q5, limits)
+    for i, j in enumerate(cleaned.remap):
+        if j is None:
+            assert q5.hex[i] in log.dropped_hex
+        else:
+            assert cleaned.hex[j] == q5.hex[i]
 
 
 # --- the outline seam (Task 7c fills it in) ---------------------------------------------
@@ -142,7 +163,9 @@ def test_index_map_refuses_a_palette_with_a_repeated_color():
 def test_outline_none_does_nothing(q5, outlines):
     out, res = handle_outlines(q5, outline_color="none", outlines=outlines)
     assert out is q5
-    assert res == OutlineResult(family=(), found_by="none", method=OUTLINE_METHOD, note=None)
+    notes = (KEEP_NO_EFFECT_NOTE,) if outlines == "keep" else ()
+    assert res == OutlineResult(family=(), found_by="none", method=OUTLINE_METHOD,
+                                remap=(0, 1, 2, 3, 4), notes=notes)
 
 
 @pytest.mark.parametrize("outlines", ["drop", "keep"])
@@ -150,7 +173,10 @@ def test_outline_auto_is_a_placeholder_that_finds_nothing(q5, outlines):
     out, res = handle_outlines(q5, outline_color="auto", outlines=outlines)
     assert out is q5 and res.family == () and res.found_by == "auto"
     assert res.method == OUTLINE_METHOD == "outline-not-implemented/0"
-    assert res.note == OUTLINE_PLACEHOLDER_NOTE and "not implemented" in res.note
+    assert res.remap == (0, 1, 2, 3, 4)
+    assert res.notes[0] == OUTLINE_PLACEHOLDER_NOTE and "not implemented" in res.notes[0]
+    assert res.notes[1:] == ((KEEP_NO_EFFECT_NOTE,) if outlines == "keep" else ())
+    assert "keep has no effect: no outline color" in KEEP_NO_EFFECT_NOTE
 
 
 def test_an_explicit_outline_list_is_refused_until_task_7c(q5):

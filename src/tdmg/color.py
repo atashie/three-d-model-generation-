@@ -42,9 +42,11 @@ docstring. It moves labels only, never palette colors. Its limits are the R1 rul
 printing sizes, converted to pixels by `printable_limits_px`.
 
 Extraction steps (plan Task 7b): `handle_outlines` is the seam for the outline family
-(Task 7b does no outline handling; Task 7c fills it in), `apply_merges` applies the owner's
-explicit (from, into) merges, and `index_map` matches palette indices before and after a
-step by color. Like the cleanup, they move labels only, never palette colors.
+(Task 7b does no outline handling; Task 7c fills it in) and `apply_merges` applies the
+owner's explicit (from, into) merges. Like the cleanup, they move labels only, never
+palette colors. Every step builds its result with from_labels, whose `remap` records each
+old palette index's new index, so indices are followed through the steps by index, never
+by color. tdmg.color_plan.plan_colors chains the steps.
 
 Platform: every result above, and the owner-image fixtures in tests/test_color.py, were
 measured on the Windows PC only. The fixtures have not yet been run on the M5 Mac, so
@@ -189,6 +191,10 @@ class Quantized:
       pixels (when below n, the palette has at most that many colors); dropped: int,
       palette colors left with no pixel and removed (by the final reassignment, or by any
       later step that passes its own count to from_labels).
+    remap: tuple with one entry per palette color given to from_labels (the `rgb` argument,
+      in its order): that color's index in this result, or None if it got no pixel and was
+      removed. For clean_regions and apply_merges, that argument is the input's palette, so
+      remap maps the input's indices to the result's.
     """
 
     labels: np.ndarray
@@ -202,6 +208,7 @@ class Quantized:
     n_requested: int
     n_distinct_colors: int
     dropped: int
+    remap: tuple[int | None, ...]
 
 
 def _unique_colors(px: np.ndarray):
@@ -273,7 +280,8 @@ def from_labels(labels, rgb, *, iterations: int, converged: bool, n_requested: i
     -1). This order is the final one after any step: a later step that changes labels
     (such as the region cleanup) calls this again, so the palette is re-sorted by its new
     areas, and a numeric palette index (such as the config's `base`) refers to that final
-    order, which is what the preview shows. The other keywords are copied into the result.
+    order, which is what the preview shows. The result's remap gives, for each row of rgb,
+    its new index (None if removed). The other keywords are copied into the result.
     Raises ColorError on a bad palette, a label out of range, or no labelled pixel.
     """
     labels = np.asarray(labels)
@@ -310,6 +318,7 @@ def from_labels(labels, rgb, *, iterations: int, converged: bool, n_requested: i
         n_requested=int(n_requested),
         n_distinct_colors=int(n_distinct_colors),
         dropped=int(dropped) + len(rgb) - len(kept),
+        remap=tuple(int(remap[k]) if remap[k] != OUTSIDE else None for k in range(len(rgb))),
     )
 
 
@@ -882,22 +891,8 @@ OUTLINE_METHOD = "outline-not-implemented/0"
 OUTLINE_PLACEHOLDER_NOTE = ("outline detection is not implemented yet (plan Task 7c): auto "
                             "finds no outline family, so the outline colors stay as "
                             "ordinary colors")
-
-
-def index_map(before: Quantized, after: Quantized) -> tuple[int | None, ...]:
-    """For each palette index of before, its index in after, or None if after lacks it.
-
-    Matched by the palette color (rgb), which steps such as merges and clean_regions keep
-    unchanged while they move labels and re-sort the palette. Raises ColorError if before's
-    palette has a color twice (quantize never gives that: a repeated rounded color gets no
-    pixel in the nearest reassignment, so it is dropped).
-    """
-    if not isinstance(before, Quantized) or not isinstance(after, Quantized):
-        raise ColorError("index_map needs two Quantized results")
-    if len(set(before.hex)) != len(before.hex):
-        raise ColorError("the palette has a color twice, so indices cannot be matched by color")
-    where = {h: i for i, h in enumerate(after.hex)}
-    return tuple(where.get(h) for h in before.hex)
+KEEP_NO_EFFECT_NOTE = ("outlines: keep has no effect: no outline color (outline_color is "
+                       "none, or auto found none; until plan Task 7c auto finds none)")
 
 
 def merge_problem(merges) -> str | None:
@@ -928,7 +923,8 @@ def apply_merges(q: Quantized, merges) -> Quantized:
     result does not depend on their order. The palette colors are not changed: the `into`
     color keeps its rgb, and each `from` color is left with no pixel, so from_labels
     removes it (and counts it in `dropped`) and re-sorts the palette by the new areas.
-    index_map(q, result) gives each color's new index (None for the merged-away ones). q's
+    The result's remap gives each of q's indices its new index (None for the merged-away
+    ones). q's
     iterations, converged, n_requested and n_distinct_colors are passed through. With no
     pairs the labels are unchanged (the result is still a new Quantized).
     Raises ColorError on a bad pair.
@@ -966,13 +962,17 @@ class OutlineResult:
 
     family: the outline family, as extraction indices (q's indices), ascending.
     found_by: "none" (outline_color none), "auto" (detection) or "config" (a list).
-    method: OUTLINE_METHOD. note: a sentence for the record and the CLI, or None.
+    method: OUTLINE_METHOD.
+    remap: for each extraction index, its index in the returned colors, or None if the
+      outline handling removed it (Task 7b: the identity, since nothing is changed).
+    notes: sentences for the record and the CLI (possibly none).
     """
 
     family: tuple[int, ...]
     found_by: str
     method: str
-    note: str | None
+    remap: tuple[int | None, ...]
+    notes: tuple[str, ...]
 
 
 def _detect_outline_family_placeholder(q: Quantized) -> tuple[int, ...]:
@@ -991,15 +991,21 @@ def handle_outlines(q: Quantized, *, outline_color, outlines: str
 
     Task 7b: no outline handling is implemented. "none" and "auto" (through
     _detect_outline_family_placeholder, which finds nothing) return q itself with an empty
-    family; an explicit list is refused with ColorError, because acting on it is Task 7c.
+    family and the identity remap; an explicit list is refused with ColorError, because
+    acting on it is Task 7c. With no family, `keep` has no effect, and a note says so
+    (KEEP_NO_EFFECT_NOTE).
     """
     if outlines not in ("drop", "keep"):
         raise ColorError(f"outlines must be drop or keep, got {outlines!r}")
-    if outline_color == "none":
-        return q, OutlineResult(family=(), found_by="none", method=OUTLINE_METHOD, note=None)
-    if outline_color == "auto":
-        family = _detect_outline_family_placeholder(q)
-        return q, OutlineResult(family=family, found_by="auto", method=OUTLINE_METHOD,
-                                note=OUTLINE_PLACEHOLDER_NOTE)
+    identity = tuple(range(len(q.hex)))
+    if outline_color in ("none", "auto"):
+        if outline_color == "none":
+            family, notes = (), ()
+        else:
+            family, notes = _detect_outline_family_placeholder(q), (OUTLINE_PLACEHOLDER_NOTE,)
+        if outlines == "keep" and not family:
+            notes += (KEEP_NO_EFFECT_NOTE,)
+        return q, OutlineResult(family=family, found_by=outline_color, method=OUTLINE_METHOD,
+                                remap=identity, notes=notes)
     raise ColorError("outline_color as a list of indices is not implemented yet (plan Task "
                      "7c); use auto or none")

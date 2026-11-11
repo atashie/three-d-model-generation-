@@ -428,8 +428,8 @@ def _colors_lines(rec: dict) -> list[str]:
               "outline_color and merge use these indices")]
     for e in ext["palette"]:
         lines.append(f"  {e['index']} {e['hex']} {e['share']:6.1%}  {extracted_fate(e)}")
-    if rec["outline"]["note"]:
-        lines.append(f"outline: {rec['outline']['note']}")
+    for note in rec["outline"]["notes"]:
+        lines.append(f"outline: {note}")
     for m in rec["merges"]:
         lines.append(f"merged: {m['from']} {m['from_hex']} into {m['into']} {m['into_hex']}")
     lines.append(f"palette: {len(rec['palette'])} colors (at most {s['colors']}), edges "

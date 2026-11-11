@@ -14,9 +14,11 @@ import pytest
 from PIL import Image
 from selection_fixtures import roadie_like
 
+import tdmg.color_plan
 import tdmg.colors
 from tdmg.color import (
     CLEANUP_METHOD,
+    KEEP_NO_EFFECT_NOTE,
     METHOD,
     OUTLINE_METHOD,
     OUTLINE_PLACEHOLDER_NOTE,
@@ -296,20 +298,18 @@ def test_empty_out_folder_is_used(sel, tmp_path):
 
 # --- colors_id ------------------------------------------------------------------------
 
-def _id(sel, tmp_path, name, monkey_outline=False, **kw):
-    if not monkey_outline:
+def _id(sel, tmp_path, name, monkeypatch=None, **kw):
+    if monkeypatch is None:
         return run(sel, tmp_path / name, **kw)["colors_id"]
     # A different outline method (as Task 7c will bring) changes the id.
-    real = tdmg.colors.handle_outlines
+    real = tdmg.color_plan.handle_outlines
 
     def other(q, **k):
         out, res = real(q, **k)
         return out, dataclasses.replace(res, method="outline-other/1")
-    try:
-        tdmg.colors.handle_outlines = other
+    with monkeypatch.context() as m:
+        m.setattr(tdmg.color_plan, "handle_outlines", other)
         return run(sel, tmp_path / name, **kw)["colors_id"]
-    finally:
-        tdmg.colors.handle_outlines = real
 
 
 def test_colors_id_is_reproducible_and_recomputable(done, sel, tmp_path):
@@ -318,7 +318,7 @@ def test_colors_id_is_reproducible_and_recomputable(done, sel, tmp_path):
     assert len(rec["colors_id"]) == 64
 
 
-def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path):
+def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeypatch):
     base = done[0]["colors_id"]
     rules = copy.deepcopy(RULES)
     rid = "flat.sliver.opening_width"
@@ -341,7 +341,7 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path):
         "outlines": _id(sel, tmp_path, "keep", flags={"outlines": "keep"}),
         "outline_color": _id(sel, tmp_path, "none", flags={"outline_color": "none"}),
         "merge": _id(sel, tmp_path, "m", flags={"merge": [[3, 0]]}),
-        "outline method": _id(sel, tmp_path, "om", monkey_outline=True),
+        "outline method": _id(sel, tmp_path, "om", monkeypatch=monkeypatch),
     }
     assert base not in ids.values()
     assert len(set(ids.values())) == len(ids), ids
@@ -790,13 +790,13 @@ def test_record_extraction_outline_merges_and_ready(done):
     assert ext["extract"] == 6 and ext["n_extracted"] == len(ext["palette"]) == 4
     assert [e["hex"] for e in ext["palette"]] == rec["quantize"]["palette_hex"]
     assert set(ext["palette"][0]) == {"index", "hex", "rgb", "lab", "share", "count",
-                                      "final_index", "merged_into"}
+                                      "fate", "final_index", "merged_into"}
     for e in ext["palette"]:
-        assert e["merged_into"] is None
+        assert e["merged_into"] is None and e["fate"] == "final"
         assert rec["palette"][e["final_index"]]["hex"] == e["hex"]
     assert rec["outline"] == {"outlines": "drop", "outline_color": "auto", "found_by": "auto",
                               "family": [], "method": OUTLINE_METHOD,
-                              "note": OUTLINE_PLACEHOLDER_NOTE}
+                              "notes": [OUTLINE_PLACEHOLDER_NOTE]}
     assert rec["merges"] == []
     assert rec["identity"]["settings"] == DEFAULT_SETTINGS
 
@@ -827,7 +827,8 @@ def test_one_merge_makes_it_ready(not_ready, sel5, tmp_path):
     assert rec["merges"] == [{"from": 4, "from_hex": ext[4]["hex"], "into": 3,
                               "into_hex": ext[3]["hex"]}]
     got = rec["extraction"]["palette"]
-    assert (got[4]["final_index"], got[4]["merged_into"]) == (None, 3)
+    assert (got[4]["fate"], got[4]["final_index"], got[4]["merged_into"]) == (
+        "merged", None, 3)
     assert rec["palette"][got[3]["final_index"]]["count"] == ext[3]["count"] + ext[4]["count"]
     labels = np.array(Image.open(out / "labels.png"))
     assert (labels[10:70, 100:110] == got[3]["final_index"]).all()   # the black stripe
@@ -835,9 +836,14 @@ def test_one_merge_makes_it_ready(not_ready, sel5, tmp_path):
     assert rec["colors_id"] != not_ready[0]["colors_id"]
 
 
-def test_not_ready_base_is_checked_against_the_final_palette(sel5, tmp_path):
+def test_base_is_checked_against_the_final_palette_ready_or_not(sel5, tmp_path):
     rec = run(sel5, tmp_path / "ok", flags={"extract": 5, "colors": 4, "base": 3})
     assert rec["ready"] is False and rec["base_index"] == 3
+    # Three merges leave 2 final colors, so base 3 (below colors 4) is refused.
+    with pytest.raises(ColorsError, match="base 3 is not a color index of a 2-color palette"):
+        run(sel5, tmp_path / "refused", flags={"extract": 5, "colors": 4, "base": 3,
+                                               "merge": [[2, 0], [3, 0], [4, 1]]})
+    assert not (tmp_path / "refused").exists()
 
 
 def test_not_ready_preview_lists_extracted_colors_and_the_reason(not_ready):
@@ -882,7 +888,10 @@ def test_an_explicit_outline_list_is_refused_until_task_7c(sel, tmp_path):
 def test_outline_none_and_keep_are_recorded(sel, tmp_path):
     rec = run(sel, tmp_path / "out", flags={"outline_color": "none", "outlines": "keep"})
     assert rec["outline"] == {"outlines": "keep", "outline_color": "none", "found_by": "none",
-                              "family": [], "method": OUTLINE_METHOD, "note": None}
+                              "family": [], "method": OUTLINE_METHOD,
+                              "notes": [KEEP_NO_EFFECT_NOTE]}
+    rec = run(sel, tmp_path / "auto", flags={"outlines": "keep"})
+    assert rec["outline"]["notes"] == [OUTLINE_PLACEHOLDER_NOTE, KEEP_NO_EFFECT_NOTE]
 
 
 def _set_ready(r):
@@ -911,12 +920,60 @@ def _set_ready(r):
     (lambda r: r["extraction"]["palette"][1].update(final_index=True),
      "final_index is not the final palette entry"),
     (lambda r: r.pop("extraction"), "missing or has an invalid field"),
+    (lambda r: r["extraction"]["palette"][1].update(fate="merged", final_index=None),
+     "fate 'merged' but merged_into is not set"),
+    (lambda r: r["extraction"]["palette"][1].update(fate="cleanup"),
+     "fate 'cleanup'"),
+    (lambda r: r["extraction"]["palette"][1].update(fate="outline", final_index=None),
+     "fate 'outline' but it is not in outline.family"),
+    (lambda r: r["extraction"]["palette"][1].update(fate="gone"), "fate 'gone'"),
+    (lambda r: r["extraction"]["palette"][1].update(fate="final", final_index=None),
+     "fate 'final' but final_index is not set"),
+    (lambda r: r["outline"].update(family=[9]), "outline.family"),
+    (lambda r: r["outline"].update(family=[1, 1]), "outline.family"),
+    (lambda r: r["outline"].update(family=[2, 1]), "outline.family"),
+    (lambda r: r["outline"].update(found_by="config"), "outline.found_by"),
 ])
 def test_verify_colors_refuses_edited_extraction_fields(done, sel, tmp_path, change, message):
     d = _copy(done[1], tmp_path, "colors")
     _edit_record(d, change)
     with pytest.raises(ColorsError, match=message):
         verify_colors(d, sel)
+
+
+def _two_final_colors_share_one_extraction(r):
+    # Final entry 1 is no longer any extraction entry's final index (entry 1 now says 0).
+    e = r["extraction"]["palette"][1]
+    e["final_index"], e["hex"] = 0, r["palette"][0]["hex"]
+    r["quantize"]["palette_hex"][1] = e["hex"]
+
+
+def test_verify_colors_requires_every_final_color_to_come_from_an_extracted_one(
+        done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, _two_final_colors_share_one_extraction)
+    with pytest.raises(ColorsError, match="final color 1 .* is not the final_index of an "
+                                          "extraction entry"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_checks_merge_hexes_and_cleanup_fates(sel5, tmp_path):
+    cfg = tmp_path / "m.yaml"
+    cfg.write_bytes(b"merge: [[4, 3]]\n")
+    out = tmp_path / "out"
+    run(sel5, out, flags={"extract": 5, "colors": 4, "edges": "exact"}, config_path=cfg)
+    verify_colors(out, sel5)
+    for change, message in (
+            (lambda r: r["merges"][0].update(from_hex="#000001"), "merges' from_hex"),
+            (lambda r: r["merges"][0].update(into_hex="#000001"), "merges' into_hex"),
+            (lambda r: r["extraction"]["palette"][4].update(fate="final"),
+             "fate 'final' but final_index is not set"),
+            (lambda r: r["extraction"]["palette"][4].update(fate="cleanup"),
+             "merged_into is set")):
+        d = _copy(out, tmp_path, f"c{abs(hash(message))}")
+        _edit_record(d, change)
+        with pytest.raises(ColorsError, match=message):
+            verify_colors(d, sel5)
 
 
 def test_verify_colors_refuses_a_not_ready_plan_marked_ready(not_ready, sel5, tmp_path):
@@ -934,6 +991,9 @@ def test_verify_colors_refuses_a_not_ready_plan_marked_ready(not_ready, sel5, tm
     (lambda i: i["settings"].update(outline_color=[]), "identity.settings.outline_color"),
     (lambda i: i["settings"].update(merge=[[1, 1]]), "identity.settings.merge"),
     (lambda i: i["settings"].pop("extract"), "identity.settings must hold exactly"),
+    (lambda i: i["settings"].update(extract=3), "extract 3 is below colors 4"),
+    (lambda i: i["settings"].update(merge=[[7, 0]]), "7 is not an extraction index"),
+    (lambda i: i["settings"].update(outline_color=[9]), "outline_color 9"),
 ])
 def test_verify_colors_checks_the_new_identity_types(done, sel, tmp_path, change, message):
     d = _copy(done[1], tmp_path, "colors")
@@ -1009,3 +1069,30 @@ def test_not_ready_at_and_below_the_cap_end_to_end(not_ready, sel5, tmp_path):
     assert rec["ready"] is False
     assert rec["not_ready_reason"] == not_ready_reason(5, 3, 0, 4)
     assert "or raise colors up to the printer's palette (4)" in rec["not_ready_reason"]
+
+
+def test_not_ready_reason_names_the_outline_step_when_it_ran():
+    assert not_ready_reason(5, 4, 2, 4, outline=True).startswith(
+        "5 colors remain after outline handling, 2 merge(s) and cleanup, but")
+    assert not_ready_reason(5, 4, 0, 4, outline=True).startswith(
+        "5 colors remain after outline handling and cleanup, but")
+    assert not_ready_reason(5, 4, 0, 4).startswith("5 colors remain after cleanup, but")
+
+
+def test_cleanup_fate_is_recorded(tmp_path):
+    # A one-pixel color that cleanup merges into its neighbour.
+    rgba = np.zeros((60, 60, 4), np.uint8)
+    rgba[5:55, 5:55] = (200, 30, 30, 255)
+    rgba[30, 30] = (30, 30, 200, 255)
+    sel = write_sel(tmp_path / "sel", rgba)
+    out = tmp_path / "out"
+    rec = run(sel, out, width_mm=5.0, flags={"colors": 2})
+    ext = rec["extraction"]["palette"]
+    assert [(e["fate"], e["final_index"]) for e in ext] == [("final", 0), ("cleanup", None)]
+    assert ext[1]["hex"] in rec["cleanup"]["dropped_hex"]
+    verify_colors(out, sel)
+    d = _copy(out, tmp_path, "edited")
+    _edit_record(d, lambda r: r["cleanup"].update(dropped_hex=[]))
+    with pytest.raises(ColorsError, match="fate 'cleanup' but its hex is not in "
+                                          "cleanup.dropped_hex"):
+        verify_colors(d, sel)

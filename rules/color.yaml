@@ -23,7 +23,10 @@
 # Extraction, outline and shade settings (plan Task 7b; the outline and shade rules are used
 # from Task 7c). Each threshold is read off a gap between a few values measured in software
 # on the owner's two images (research/verification/2026-11-11-color-palette/, addendum
-# "outline and shade indicators"), so each is a hypothesis and untested.
+# "outline and shade indicators"), so each is a hypothesis. Their evidence is marked
+# untested, not measured: the numbers were measured in software (no print), but what they
+# claim (which colors are outline or shade) was judged by eye on two images, and nothing
+# has tested them on other images or as part of a printed result.
 - id: color.extract.default_count
   kind: hypothesis
   summary: How many colors quantize extracts before outline handling and merges, when the config does not say (the `extract` setting). The final palette is then reduced to at most `colors` by the owner's merges and the outline handling.
@@ -41,7 +44,7 @@
       provenance: unverified
       validation: untested
       claim: The owner's choice between the offered options, recorded in the plan. A decision, not evidence that 6 suits other images.
-  notes: A count of palette colors, not a print threshold. At most `colors` survive into the final palette; if more remain, the plan is written with ready false. Larger values split Roadie's outline into more fringe clusters (the record's Surprises).
+  notes: "A count of palette colors, not a print threshold. When extract is not given, it defaults to the larger of this value and `colors` (tdmg.color_config), so the default never falls below the final palette's maximum; an extract given in a flag or the config file is never raised and is refused if below `colors`. This replaces the plan's earlier idea (Task 7b's first draft) of deriving the count as colors + merges + 1. At most `colors` survive into the final palette; if more remain, the plan is written with ready false. Larger values split Roadie's outline into more fringe clusters (the record's Surprises)."
 
 - id: color.outline.thin_share
   kind: hypothesis
@@ -68,6 +71,7 @@
   summary: "After the outline family is removed, two extracted colors are flagged as a likely shade pair when their CIELAB hue angles differ by less than this. Flags are reported for the owner, never applied."
   unit: deg
   default: 5.5
+  range: [0.0, 180.0]
   applies_to: {color: [C2]}
   evidence:
     - ref: research/verification/2026-11-11-color-palette/README.md

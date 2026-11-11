@@ -531,3 +531,11 @@ def test_colors_not_ready_writes_the_files_and_exits_1(tmp_path):
     r = _colors(sel, tmp_path / "merged", "--colors", "2", "--config", str(cfg))
     assert r.exit_code == 0, r.output
     assert "NOT READY" not in r.stdout
+
+
+def test_colors_keep_without_an_outline_family_says_it_has_no_effect(tmp_path):
+    r = _colors(_selection(tmp_path), tmp_path / "colors", "--outlines", "keep")
+    assert r.exit_code == 0, r.output
+    text = _plain(r.stdout)
+    assert "outline: outline detection is not implemented yet" in text
+    assert "outline: outlines: keep has no effect: no outline color" in text
