@@ -139,6 +139,20 @@ face: auto           # auto | up | down
 - Each glue piece and the base pass the R1 checks, and each piece fits its pocket with
   the stated clearance.
 
+### Requirements step 2 inherits from step 1 (added 2026-11-11, Task 6 review)
+
+- **Verify the plan:** read it with `tdmg.colors.verify_colors`, always with the selection
+  folder, so that `labels.png` is tied to the mask being extruded.
+- **Compare the plan with this run:** the printer and nozzle in the plan's identity must
+  equal the profile in use. Its rule values must equal the current registry; a mismatch
+  is refused, or accepted only on purpose and recorded.
+- **Width:** compare the requested `width_mm`, not the scale (`tdmg colors` uses the
+  exact mask width; `tdmg flat`'s smoothed outline differs by 0.4–0.6%).
+- **Palette trust:** the palette hex codes go into the 3MF. `verify_colors` checks them
+  only for internal consistency, because they are results outside the identity.
+- **Clipping:** the fine region map is clipped to the R1 outline intersected with the
+  image box (the outline can overshoot the image by up to about 2e-6 px).
+
 ## Testing
 
 - **Synthetic images with known answers:**
