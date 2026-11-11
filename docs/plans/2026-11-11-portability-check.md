@@ -22,7 +22,7 @@ approved installing PrusaSlicer on 2026-11-11. The evidence is
   cube gives 10 of 100.
 - **Repeatability:** only the line-1 timestamp differs between runs.
 
-**Status:** written 2026-11-11. Tasks 1–3 done the same day; Task 4 in progress. See
+**Status:** written 2026-11-11. All four tasks done the same day; CI green on all three OSes for `c93dfa1` (run 43035563763). See
 "Execution notes".
 
 ## Decisions
