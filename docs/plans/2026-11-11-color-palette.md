@@ -36,8 +36,9 @@ spec review and a quality review, then the Codex critical review in Task 8.
 3. **Palette: k-means in CIELAB, deterministic. Task 1 measures it before it is fixed.**
    - **Method:**
      - convert sRGB to CIELAB (D65, the standard formulas, written out in numpy);
-     - initialise with farthest-point seeding from the most frequent color: no random
-       numbers, ties broken by the lowest color index;
+     - initialise from the most frequent color, then seed greedily by count × dmin²
+       (changed after Task 1, see below): no random numbers, ties broken by the lowest
+       color index;
      - Lloyd iterations in float64 until no pixel changes, or an iteration cap that is
        recorded;
      - weight each unique color by its pixel count.
@@ -47,6 +48,29 @@ spec review and a quality review, then the Codex critical review in Task 8.
    - **Comparison in Task 1:** Pillow's median cut (`Image.quantize`, method MEDIANCUT,
      dither NONE), which is deterministic, in RGB. If median cut is as good on the
      metrics and by eye, prefer it: less code.
+   - **Measured (Task 1, 2026-11-11, `research/verification/2026-11-11-color-palette/`):**
+     - median cut was worse at N = 3 and 4 (mean ΔE at N = 4: 20.2 against 11.7 for
+       Roadie, 28.1 against 17.8 for Oddie), and it splits colors by brightness, not hue;
+     - farthest-point seeding spent colors on tiny outliers, such as Oddie's 0.1% eye
+       highlights at N = 4.
+   - **So the seeding is changed to the greedy, count-weighted form:** each next seed is
+     the unique color with the largest count × dmin², ties to the lowest index. On Oddie
+     it halved the mean ΔE at every N (7.75 at N = 4); on Roadie the results are the
+     same.
+   - **Its known cost:** a small but salient color (Oddie's 2.1% red face) gets no slot at
+     N = 2 or 3. The owner judges that in Task 7.
+   - **The extra outline specks it leaves** (0.86% of Oddie's pixels at N = 3 and 4,
+     before cleanup) are Decision 4's job.
+   - **Carried into Task 3 from the Task 1 quality review:**
+     - **Sourced constants:** the sRGB → XYZ matrix, the D65 white and the transfer-curve
+       constants each cite a fetched source and an exact locator, and a test pins the
+       reference Lab values.
+     - **Final labels:** after the palette is rounded to hex, each pixel is reassigned
+       to its nearest rounded palette color, so the preview, the ΔE and the labels
+       agree.
+     - **Port fidelity:** keep sorted unique colors, first-index ties, float64, and
+       "an empty cluster keeps its centroid". The Task 1 label-map hashes become
+       fixtures, in tests that skip when the owner images are absent.
 4. **Cleanup to printable regions, using the existing R1 rules.** No new numbers:
    - **Thin parts:** within each color's region, pixels removed by an opening of width
      `flat.sliver.opening_width` are reassigned to the neighbouring color that has the
