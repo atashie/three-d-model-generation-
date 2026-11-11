@@ -104,7 +104,7 @@
   kind: hypothesis
   summary: "Default width of the band that `outlines: keep` draws in the darkest outline-family color: it redraws the drawing's own lines (the ridge of the family's thin strokes) and runs inside the outer edge. The config key outline_width_mm overrides it."
   unit: mm
-  default: 0.45
+  default: 0.5
   scales_with_model: false
   applies_to: {color: [C2]}
   evidence:
@@ -113,12 +113,17 @@
       provenance: unverified
       validation: untested
       claim: "The owner's verbatim answer on the 0.6 mm band in the Task 7d previews (judged by eye on a screen, not printed): a little finer, about 0.4 mm. A preference, not a measurement."
-    - ref: docs/plans/2026-11-11-color-palette.md
-      locator: "0.45 mm is the finest step above it."
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "| Roadie (0.1002 mm/px, opening 3.99 px) | 2795 of 20580 px (13.6%) | 412 of 23808 px (1.7%) | 0 of 28028 px (0.0%) |"
+      provenance: primary
+      validation: untested
+      claim: "Our own software measurement (no print) at 60 mm: the region cleanup removes 13.6% (Roadie) and 28.6% (Oddie) of the kept band at 0.45 mm, 1.7% and 0.3% at 0.5 mm, none at 0.6 mm. 0.5 mm is the finest measured width whose lines survive cleanup; the next rows of the same table give Oddie's numbers."
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "the default kept-outline width (`color.outline.keep_width`) becomes"
       provenance: unverified
       validation: untested
-      claim: "Our own choice, stated in the plan: 0.4 mm equals flat.sliver.opening_width, and the region cleanup removes strips at or below that width, so the band must be wider; 0.45 mm is the finest 0.05 mm step above it. No measurement or print supports it yet."
-  notes: In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width or cleanup removes the band it draws; tests/test_rules.py checks that it does, and tdmg.color_config refuses an outline_width_mm at or below it. It replaces the first value, 0.6 mm (a round starting value, Task 7c), after the owner's Task 7d review. At 0.45 mm a band is only about one bead (0.42 mm) wide, so whether it prints cleanly is untested.
+      claim: "The controller's decision to use 0.5 mm, from the measurement and the owner's wish for a finer band than 0.6 mm. A decision, not a print result."
+  notes: "In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width (0.4 mm) or cleanup removes the band; tests/test_rules.py checks that it does, and tdmg.color_config refuses an outline_width_mm at or below it. Close above the opening is not enough: at 0.45 mm (less than one pixel above it on the owner's images) cleanup removed up to 28.6% of the band. History: 0.6 mm (Task 7c, a round starting value), 0.45 mm (Task 7e-b, the owner's request), 0.5 mm (after the measurement). Two images at 60 mm only; at other scales the margin over the opening in pixels changes. Whether a 0.5 mm band (about one 0.42 mm bead) prints cleanly is untested."
 
 - id: color.outline.keep_area_width_ratio
   kind: hypothesis

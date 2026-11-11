@@ -1,7 +1,8 @@
 """verify_colors: read a `tdmg colors` folder back and check it
 (docs/plans/2026-11-11-color-palette.md, Decision 8; Tasks 7b and 7c). Split out of
-tdmg.colors, which writes the folder; tdmg.colors re-exports verify_colors and
-VerifiedColors.
+tdmg.colors, which writes the folder. Import verify_colors and VerifiedColors from this
+module: tdmg.colors does not re-export them (this module imports tdmg.colors, so a
+re-export there would be circular).
 """
 
 from __future__ import annotations

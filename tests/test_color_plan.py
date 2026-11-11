@@ -26,7 +26,7 @@ A1 = load_printer("bambu-a1")
 # 0.6 mm/px: opening 0.67 px, island 1.8 px^2, so the stripes survive cleanup.
 LIMITS = printable_limits_px(0.6, RULES, A1)
 SETTINGS = {"colors": 4, "extract": 5, "edges": "exact", "base": "auto", "outlines": "drop",
-            "outline_color": "auto", "merge": (), "outline_width_mm": 0.45}
+            "outline_color": "auto", "merge": (), "outline_width_mm": 0.5}
 STRIPES = [((200, 30, 30), 30), ((30, 30, 200), 25), ((30, 200, 30), 20),
            ((240, 240, 240), 15), ((20, 20, 20), 10)]
 

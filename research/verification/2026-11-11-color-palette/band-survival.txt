@@ -1,0 +1,14 @@
+measure_band_survival.py sha256 264fb4fe5db2b301620540e5e8511486d83ead7884d86b4b701599541cf3cb98; python 3.13.1, numpy 2.5.4, scipy 1.18.1
+width 60.0 mm, printer bambu-a1, outlines keep, extract 6, outline_color auto
+== roadie-tol30: selection_id 877bbf959286ea967fead26cc114898f4b74dcb7c3304b1e2b0e96765edd0d95, 0.100167 mm/px, opening 3.993 px, merge []
+   W 0.45 mm (4.49 px): band 20580 px, lost in cleanup 2795 px (13.6%); cleanup changed 3225 px in 5 passes; final ['#f60606', '#451812', '#f5f5f5', '#f0f10a']
+   W 0.5 mm (4.99 px): band 23808 px, lost in cleanup 412 px (1.7%); cleanup changed 751 px in 5 passes; final ['#f60606', '#451812', '#f5f5f5', '#f0f10a']
+   W 0.6 mm (5.99 px): band 28028 px, lost in cleanup 0 px (0.0%); cleanup changed 347 px in 4 passes; final ['#451812', '#f60606', '#f5f5f5', '#f0f10a']
+== oddie: selection_id 66d83eeb85ae31ccebf2b3aacba71ddb6f7a06fd32480abe3bdb8b0c4b71ce0f, 0.074720 mm/px, opening 5.353 px, merge [[3, 1]]
+   W 0.45 mm (6.02 px): band 36916 px, lost in cleanup 10554 px (28.6%); cleanup changed 10846 px in 6 passes; final ['#25561b', '#547e9d', '#48a835', '#0d100d', '#dd4f47']
+   W 0.5 mm (6.69 px): band 42073 px, lost in cleanup 130 px (0.3%); cleanup changed 512 px in 4 passes; final ['#25561b', '#547e9d', '#48a835', '#0d100d', '#dd4f47']
+   W 0.6 mm (8.03 px): band 49954 px, lost in cleanup 0 px (0.0%); cleanup changed 365 px in 4 passes; final ['#547e9d', '#25561b', '#48a835', '#0d100d', '#dd4f47']
+== oddie: selection_id 66d83eeb85ae31ccebf2b3aacba71ddb6f7a06fd32480abe3bdb8b0c4b71ce0f, 0.074720 mm/px, opening 5.353 px, merge [[3, 1], [2, 0]]
+   W 0.45 mm (6.02 px): band 36916 px, lost in cleanup 10573 px (28.6%); cleanup changed 10758 px in 5 passes; final ['#25561b', '#547e9d', '#0d100d', '#dd4f47']
+   W 0.5 mm (6.69 px): band 42073 px, lost in cleanup 141 px (0.3%); cleanup changed 376 px in 4 passes; final ['#25561b', '#547e9d', '#0d100d', '#dd4f47']
+   W 0.6 mm (8.03 px): band 49954 px, lost in cleanup 0 px (0.0%); cleanup changed 209 px in 4 passes; final ['#25561b', '#547e9d', '#0d100d', '#dd4f47']

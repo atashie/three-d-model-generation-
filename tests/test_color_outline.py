@@ -570,7 +570,7 @@ def test_keep_takes_its_width_from_the_setting_and_refuses_one_at_the_opening(q)
     _, res = run(q, outlines="keep", width_mm=0.8)
     assert (res.keep_width_mm, res.keep_width_px) == (0.8, 0.8 / LIMITS.mm_per_px)
     _, res = run(q, outlines="keep")
-    assert res.keep_width_mm == RULES[KEEP_WIDTH_RULE].default == 0.45
+    assert res.keep_width_mm == RULES[KEEP_WIDTH_RULE].default == 0.5
     for bad in (0.4, 0.3):
         with pytest.raises(ColorError, match="must be wider than flat.sliver.opening_width"):
             run(q, outlines="keep", width_mm=bad)

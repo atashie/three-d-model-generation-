@@ -141,7 +141,7 @@ face: auto           # auto | up | down
 
 ### Requirements step 2 inherits from step 1 (added 2026-11-11, Task 6 review)
 
-- **Verify the plan:** read it with `tdmg.colors.verify_colors`, always with the selection
+- **Verify the plan:** read it with `tdmg.colors_verify.verify_colors`, always with the selection
   folder, so that `labels.png` is tied to the mask being extruded.
 - **Compare the plan with this run:** the printer and nozzle in the plan's identity must
   equal the profile in use. Its rule values must equal the current registry; a mismatch

@@ -79,7 +79,7 @@ TOP_KEYS = {"schema", "tdmg_version", "algorithm", "colors_id", "identity", "inp
 # The settings at their defaults, as recorded, and their sources.
 DEFAULT_SETTINGS = {"colors": 4, "extract": 6, "edges": "smooth", "base": "auto",
                     "outlines": "drop", "outline_color": "auto", "merge": [],
-                    "outline_width_mm": 0.45}
+                    "outline_width_mm": 0.5}
 DEFAULT_SOURCES = {"colors": "profile", "extract": "rule", "edges": "default",
                    "base": "default", "outlines": "default", "outline_color": "default",
                    "merge": "default", "outline_width_mm": "rule"}
@@ -337,7 +337,7 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeyp
     base = done[0]["colors_id"]
     rules = copy.deepcopy(RULES)
     rid = "flat.sliver.opening_width"
-    # Below the default outline_width_mm (0.45 mm), which must stay wider than it.
+    # Below the default outline_width_mm (0.5 mm), which must stay wider than it.
     rules[rid] = rules[rid].model_copy(update={"default": 0.42})
     sigma_rules = copy.deepcopy(RULES)
     sid = "flat.smooth.sigma_px"
@@ -357,7 +357,7 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeyp
         "outlines": _id(sel, tmp_path, "keep", flags={"outlines": "keep"}),
         "outline_color": _id(sel, tmp_path, "none", flags={"outline_color": "none"}),
         "merge": _id(sel, tmp_path, "m", flags={"merge": [[3, 0]]}),
-        "outline width": _id(sel, tmp_path, "ow", flags={"outline_width_mm": 0.5}),
+        "outline width": _id(sel, tmp_path, "ow", flags={"outline_width_mm": 0.6}),
         "outline method": _id(sel, tmp_path, "om", monkeypatch=monkeypatch),
     }
     assert base not in ids.values()
@@ -978,12 +978,12 @@ def test_outline_none_and_keep_are_recorded(sel, tmp_path):
     out = tmp_path / "auto"
     rec = run(sel, out, flags={"outlines": "keep"})
     o = rec["outline"]
-    assert o["keep_width"] == {"mm": 0.45, "px": 0.45 / rec["mm_per_px"]}
+    assert o["keep_width"] == {"mm": 0.5, "px": 0.5 / rec["mm_per_px"]}
     assert o["thresholds"] == {THIN_SHARE_RULE: 0.38, KEEP_RATIO_RULE: 2.0}
     assert KEEP_WIDTH_RULE not in rec["identity"]["rules"]
-    assert rec["identity"]["settings"]["outline_width_mm"] == 0.45
+    assert rec["identity"]["settings"]["outline_width_mm"] == 0.5
     assert set(o["specks_not_drawn"]) == {"count", "px"}
-    assert o["notes"][1].startswith("outlines: keep: a 0.45 mm (")
+    assert o["notes"][1].startswith("outlines: keep: a 0.5 mm (")
     verify_colors(out, sel)
 
 
@@ -1100,25 +1100,25 @@ def test_verify_colors_checks_the_new_identity_types(done, sel, tmp_path, change
 # The owner's images at 60 mm with the defaults (extract 6, colors 4, smooth, outline_color
 # auto, outlines drop, no merges), and three variants. Measured on the Windows PC,
 # 2026-11-11 (Task 7c; the Roadie runs and Oddie keep re-measured in Task 7e-b, outline
-# method /3, outline_width_mm 0.45). The extracted palettes equal the N = 6 rows of the
+# method /3, outline_width_mm 0.5). The extracted palettes equal the N = 6 rows of the
 # Task 7a record (outline-shade.txt), and so do the thinness values to the 0.1% shown
 # there.
 # - Roadie, drop: the outline family is the core #451812 and its red and grey fringes; the
 #   thin strokes and the fringes' wide pixels go; of the core's 22 wide areas only the
 #   pupil (421 px, 18.87 px across against 2 x the 6.0 px stroke width) stays: 4 colors,
 #   ready, the core 0.6%.
-# - Roadie, keep: the same drop, then (after the merges) a 0.45 mm (4.49 px) band in the
+# - Roadie, keep: the same drop, then (after the merges) a 0.5 mm (4.99 px) band in the
 #   core along the drawn lines (31 specks, 102 px, not drawn) and inside the outer edge.
-#   Red is the largest color again (43.7%; the core 24.8%). Cleanup removes 2795 of the
-#   band's 20580 px (13.6%), since 0.45 mm is close to the 0.4 mm opening.
+#   Red is the largest color again (39.1%; the core 32.2%). Cleanup removes 412 of the
+#   band's 23808 px (1.7%; 13.6% at 0.45 mm: band-survival.txt in the research folder).
 # - Oddie, default: the black lines are the family (thin 100%, no wide area): 5 colors, not
 #   ready, and both shade pairs flagged (greens 0-2, blues 1-3).
 # - Oddie with merge [[3, 1]] (the blue shadow into the blue body): 4 colors, ready; the
 #   green pair is still flagged.
 # - Oddie, keep with merge [[3, 1]]: the lines (leaf edges and veins, arms, feet) come back
-#   as a 6.02 px (0.45 mm) band in the black core, with no line on the old shading border;
-#   the black is a fifth color, so it is not ready. Cleanup removes 10554 of the band's
-#   36916 px (28.6%).
+#   as a 6.69 px (0.5 mm) band in the black core, with no line on the old shading border;
+#   the black is a fifth color, so it is not ready. Cleanup removes 130 of the band's
+#   42073 px (0.3%; 28.6% at 0.45 mm).
 OWNER_RUNS = {
     "roadie-drop": ("roadie-tol30", {}, {
         "family": [2, 3, 5], "core": 3,
@@ -1130,7 +1130,7 @@ OWNER_RUNS = {
         "family": [2, 3, 5], "core": 3,
         "final": ["#f60606", "#451812", "#f5f5f5", "#f0f10a"],
         "to_final": [0, 2, None, 1, 3, None],
-        "cleanup": (5, 3225, "3764cc882ec73e6a"), "ready": True, "pairs": [],
+        "cleanup": (5, 751, "3c8835b97735bc7c"), "ready": True, "pairs": [],
         "kept_wide": [421]}),
     "oddie-default": ("oddie", {}, {
         "family": [4], "core": 4,
@@ -1147,7 +1147,7 @@ OWNER_RUNS = {
         "family": [4], "core": 4,
         "final": ["#25561b", "#547e9d", "#48a835", "#0d100d", "#dd4f47"],
         "to_final": [0, 1, 2, None, 3, 4],
-        "cleanup": (6, 10846, "83070252286e484d"), "ready": False, "pairs": [[0, 2]]}),
+        "cleanup": (4, 512, "6c7b3e398a91d877"), "ready": False, "pairs": [[0, 2]]}),
 }
 OWNER_EXTRACTED = {
     "roadie-tol30": ["#f60606", "#f5f5f5", "#960a0a", "#451812", "#f0f10a", "#746c5b"],
@@ -1383,7 +1383,7 @@ def test_verify_colors_checks_the_outline_and_shade_rules_in_the_identity(
 def test_verify_colors_checks_the_kept_band_width(cartoon_done, tmp_path):
     out = tmp_path / "keep"
     rec = run(cartoon_done[2], out, width_mm=11.0, flags={"outlines": "keep"})
-    assert rec["outline"]["keep_width"] == {"mm": 0.45, "px": 0.45 / rec["mm_per_px"]}
+    assert rec["outline"]["keep_width"] == {"mm": 0.5, "px": 0.5 / rec["mm_per_px"]}
     verify_colors(out, cartoon_done[2])
     for change, message in (
             (lambda r: r["outline"]["keep_width"].update(px=6.5), "outline.keep_width.px"),

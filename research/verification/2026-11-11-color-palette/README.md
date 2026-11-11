@@ -746,3 +746,34 @@ owner's decision.
 
 **Holes:** no hole rule was added (7e-a found none). The owner should confirm on these
 previews that no gap remains.
+
+## Addendum, 2026-11-11: kept band width against cleanup (Task 7e-b, after the controller's decision)
+
+**Setup:** Windows PC, git `2508e26`, no library change.
+- **Script:** `measure_band_survival.py`, now committed. Its docstring defines band and
+  lost. It is the committed form of the inline script that the Task 7e-b addendum above
+  calls not committed.
+- **Output:** `band-survival.txt`.
+- **Run:** `outlines: keep` at 60 mm on both selections. Oddie is run twice: with its blues
+  merged, and with its blues and greens merged.
+- **Measure:** the share of the band's pixels that the region cleanup takes away.
+- Software only, no print.
+
+Band pixels lost in cleanup, by band width:
+
+| Run | 0.45 mm | 0.5 mm | 0.6 mm |
+|---|---|---|---|
+| Roadie (0.1002 mm/px, opening 3.99 px) | 2795 of 20580 px (13.6%) | 412 of 23808 px (1.7%) | 0 of 28028 px (0.0%) |
+| Oddie, blues merged (0.0747 mm/px, opening 5.35 px) | 10554 of 36916 px (28.6%) | 130 of 42073 px (0.3%) | 0 of 49954 px (0.0%) |
+| Oddie, blues and greens merged | 10573 of 36916 px (28.6%) | 141 of 42073 px (0.3%) | 0 of 49954 px (0.0%) |
+
+**Why:** at 0.45 mm the band is less than one pixel wider than the 0.4 mm opening on both
+images, so the opening removes diagonal and curved runs.
+
+**Controller's decision (2026-11-11):**
+- **The value:** the default kept-outline width (`color.outline.keep_width`) becomes
+  0.5 mm. Above, 0.5 mm loses at most 1.7% of the band, against 13.6–28.6% at 0.45 mm.
+- **The owner's wish:** a band finer than 0.6 mm. 0.5 mm is the finest width measured here
+  whose lines survive cleanup.
+- **Previews:** 2 and 3 in `artifacts/colors-review-3/` are remade at 0.5 mm. The two
+  `extra-*-0.5mm.png` previews are deleted.

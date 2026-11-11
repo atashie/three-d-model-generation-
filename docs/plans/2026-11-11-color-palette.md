@@ -518,3 +518,16 @@ addendum. The controller and the owner should choose between:
 **Correction to "0.45 mm is the finest step above it" (the Task 7d section above):**
 0.45 mm is above the opening, but by less than one pixel at these scales. That is not
 enough margin for diagonal and curved lines.
+
+**Decision, 2026-11-11 (controller, after the 7e-b measurement):** the default kept-outline
+width `color.outline.keep_width` is now **0.5 mm**. At that width cleanup removes 1.7% of
+Roadie's band and 0.3% of Oddie's, against 13.6% and 28.6% at 0.45 mm. The measurement is
+reproducible with `measure_band_survival.py` and its output `band-survival.txt`, both in the
+research folder.
+
+**Previews remade:** previews 2 and 3 in `artifacts/colors-review-3/` are remade at 0.5 mm,
+and the extra 0.5 mm previews are removed.
+- **Roadie:** 4 colors: red 39.1%, the dark core 32.2%, white 19.8%, yellow 8.8%.
+- **Oddie, kept, blues and greens merged:** 4 colors, ready.
+
+The owner reviews them next (Task 7e-c).

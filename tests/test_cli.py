@@ -407,7 +407,7 @@ def test_colors_flags_and_config(tmp_path):
     rec = json.loads((out / "colors.json").read_bytes())
     assert rec["settings"]["settings"] == {
         "colors": 2, "extract": 3, "edges": "furry", "base": "auto", "outlines": "drop",
-        "outline_color": "none", "merge": [[2, 0]], "outline_width_mm": 0.45}
+        "outline_color": "none", "merge": [[2, 0]], "outline_width_mm": 0.5}
     assert rec["settings"]["sources"] == {
         "colors": "flag", "extract": "flag", "edges": "config", "base": "flag",
         "outlines": "flag", "outline_color": "config", "merge": "config",

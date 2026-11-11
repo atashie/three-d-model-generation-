@@ -62,13 +62,12 @@ passed. These commits are pushed; for CI see above.
        - Drop keeps only core areas at least `color.outline.keep_area_width_ratio`
          strokes wide. On Roadie, that is only the pupil.
        - Shading tones take the nearest color.
-       - Keep skips stroke specks, and its width is the config key `outline_width_mm`
-         (default 0.45 mm).
+       - Keep skips stroke specks, and its width is the config key `outline_width_mm`.
+         The default is 0.5 mm: at 0.45 mm, cleanup removed 13.6–28.6% of the band
+         (`band-survival.txt` in the research folder).
        - The preview shows the smoothed outer outline on a mid-grey checker.
-   - **Next:** the owner reviews `artifacts/colors-review-3/`. **Open:** at 0.45 mm,
-     cleanup removes 13.6% (Roadie) and 28.6% (Oddie) of the kept band, and most inner
-     lines break. At 0.5 mm they stay whole. The extra 0.5 mm previews are in the same
-     folder. Decide the default width with the owner.
+   - **Next:** the owner reviews the four previews in `artifacts/colors-review-3/`
+     (Task 7e-c).
 
    This is functionally tested and run on the owner's images; the rules are untested
    hypotheses.

@@ -30,7 +30,7 @@ NO_FLAGS = {"colors": None, "edges": None, "base": None}
 # The Task 7b and 7e-b keys at their defaults (settings as resolved, as recorded, and their
 # sources).
 NEW = {"extract": 6, "outlines": "drop", "outline_color": "auto", "merge": (),
-       "outline_width_mm": 0.45}
+       "outline_width_mm": 0.5}
 NEW_PLAIN = {**NEW, "merge": []}
 NEW_SOURCES = {"extract": "rule", "outlines": "default", "outline_color": "default",
                "merge": "default", "outline_width_mm": "rule"}
@@ -527,7 +527,7 @@ def test_extract_default_is_at_least_colors():
 
 def test_outline_width_defaults_to_the_keep_width_rule():
     r = _resolve()
-    assert r.settings["outline_width_mm"] == RULES["color.outline.keep_width"].default == 0.45
+    assert r.settings["outline_width_mm"] == RULES["color.outline.keep_width"].default == 0.5
     assert r.sources["outline_width_mm"] == "rule"
     rules = copy.deepcopy(RULES)
     rid = "color.outline.keep_width"
