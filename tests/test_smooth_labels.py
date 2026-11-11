@@ -8,6 +8,7 @@ is in the same coordinates as smooth_outline.
 """
 
 import hashlib
+import json
 import math
 import time
 import tracemalloc
@@ -19,12 +20,14 @@ import shapely
 from shapely import affinity
 from test_smoothing import SIGMA, disc, roadie_mask, square
 
+from tdmg import smoothing
 from tdmg.color import OUTSIDE, clean_regions, printable_limits_px, quantize
 from tdmg.color_config import edge_sigma_px
 from tdmg.flat import mask_outline
 from tdmg.profiles import load_printer
 from tdmg.rules import load_rules
 from tdmg.smoothing import (
+    LABELS_METHOD,
     SUPERSAMPLE,
     SmoothedLabels,
     SmoothingError,
@@ -83,7 +86,7 @@ def test_output_shape_dtype_and_every_fine_pixel_labelled(s, sigma):
     labels[12:18, 14:26] = 2
     fine = fine_map(labels, sigma, s)
     assert fine.shape == (30 * s, 41 * s)
-    assert fine.dtype == np.int32
+    assert fine.dtype == np.uint8                          # the largest label is 2
     assert set(np.unique(fine).tolist()) == {0, 1, 2}     # no OUTSIDE, nothing else
 
 
@@ -347,12 +350,69 @@ def test_no_color_vanishes_from_large_regions():
     assert set(np.unique(out.fine).tolist()) == {0, 3}
 
 
-def test_the_result_is_frozen_and_read_only():
+def test_the_result_is_frozen_has_a_read_only_fine_map_and_json_safe_settings():
     out = smooth_labels(np.zeros((4, 4), np.int32), 1.0, 2)
     with pytest.raises(AttributeError):
         out.vanished = (1,)
     with pytest.raises(ValueError):
         out.fine[0, 0] = 1
+    assert (out.supersample, out.sigma_px, out.method) == (2, 1.0, LABELS_METHOD)
+    assert type(out.supersample) is int and type(out.sigma_px) is float
+    record = {"supersample": out.supersample, "sigma_px": out.sigma_px,
+              "method": out.method, "vanished": list(out.vanished)}
+    assert json.loads(json.dumps(record)) == record
+    exact = smooth_labels(np.zeros((4, 4), np.int64), np.float32(0), np.int64(3))
+    assert type(exact.supersample) is int and type(exact.sigma_px) is float
+    assert exact.vanished == ()
+
+
+@pytest.mark.parametrize("top, dtype", [(2, np.uint8), (255, np.uint8), (256, np.uint16),
+                                        (65535, np.uint16), (65536, np.uint32),
+                                        (2 ** 31 - 1, np.uint32)])
+@pytest.mark.parametrize("sigma", [0.0, SIGMA])
+def test_the_output_dtype_is_the_smallest_unsigned_one_for_the_largest_label(top, dtype,
+                                                                             sigma):
+    labels = np.zeros((30, 30), np.int64)
+    labels[:, 15:] = top
+    labels[0, 0] = OUTSIDE
+    fine = fine_map(labels, sigma, 2)
+    assert fine.dtype == dtype
+    assert set(np.unique(fine).tolist()) == {0, top}
+
+
+# --- argmax ties ---------------------------------------------------------------------
+
+
+def test_a_full_tie_goes_to_the_lowest_label(monkeypatch):
+    # With every blurred field replaced by the same constant, every fine pixel is a tie
+    # among all labels: the strict comparison keeps the lowest label. A ">=" would give
+    # the highest.
+    monkeypatch.setattr(smoothing.cv2, "GaussianBlur",
+                        lambda a, *args, **kwargs: np.full(a.shape, 0.25, np.float32))
+    labels = np.zeros((6, 8), np.int32)
+    labels[:, 2:4], labels[:, 4:6], labels[:, 6:] = 3, 5, 7
+    assert (fine_map(labels, SIGMA, 3) == 0).all()
+
+
+def test_an_exactly_symmetric_blurred_tie_goes_to_the_lower_label():
+    # Columns of 0 | one column of 2 | columns of 1, mirror-symmetric about column 10. At
+    # s = 1 the fine centres are the pixel centres, where no interpolation happens, so the
+    # samples of 0 and 1 on column 10 are the blurred fields there. They are equal by the
+    # mirror symmetry; with OpenCV's float sums that equality is exact at sigma 1.7 on this
+    # build (checked below, since it depends on the summation order), and both exceed the
+    # field of 2. So column 10 is a tie between 0 and 1, which 0 must win in both
+    # orientations.
+    sigma = 1.7
+    for left, right in ((0, 1), (1, 0)):
+        labels = np.full((9, 21), left, np.int32)
+        labels[:, 11:] = right
+        labels[:, 10] = 2
+        padded = np.pad(labels, 1, mode="edge")
+        f = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma, sigmaY=sigma,
+                              borderType=cv2.BORDER_REPLICATE)[1:-1, 1:-1] for c in range(3)]
+        assert np.array_equal(f[0][:, 10], f[1][:, 10]), "precondition: an exact tie"
+        assert (f[0][:, 10] > f[2][:, 10]).all()
+        assert (fine_map(labels, sigma, 1)[:, 10] == 0).all()
 
 
 # --- determinism ---------------------------------------------------------------------
@@ -373,6 +433,12 @@ def test_the_band_size_does_not_change_the_result():
     whole = fine_map(labels, SIGMA, 4)
     for band in (1, 7, 64):
         assert np.array_equal(fine_map(labels, SIGMA, 4, _band_rows=band), whole)
+
+
+@pytest.mark.parametrize("band", [0, -3, 2.0, True, None])
+def test_bad_band_rows_raise(band):
+    with pytest.raises(SmoothingError, match="_band_rows"):
+        smooth_labels(np.zeros((4, 4), np.int32), 1.0, 2, _band_rows=band)
 
 
 def test_supersample_default_is_the_module_constant():
@@ -431,8 +497,14 @@ PRINTER = load_printer("bambu-a1")
 # the blur rounds and thins them (smooth_outline's known effect on features below about
 # sigma). The tolerance, 1 percentage point, is a sanity margin about twice the largest
 # measured change; the hashes pin the exact output.
+# OWNER_FINE_SHA_INT32: SHA-256[:16] of the fine map as int32 (the output dtype before
+# 2026-11-11's quality review), so the uint8 output is shown to hold the same label
+# values; OWNER_FINE_SHA: the same of the fine map as returned (uint8).
 OWNER_SHARES_TOL = 0.01
-OWNER_FINE_SHA = {"roadie-tol30": "b10f4e03e0ffde1c", "oddie": "c0c1daf8b9b6bdca"}
+OWNER_FINE_SHA_INT32 = {"roadie-tol30": "b10f4e03e0ffde1c", "oddie": "c0c1daf8b9b6bdca"}
+OWNER_FINE_SHA = {"roadie-tol30": "5e8dbb76539e1db8", "oddie": "61ed36ed8701485f"}
+PARITY = ("see the comment above OWNER_SHARES_TOL: on a machine other than the Windows PC, "
+          "a mismatch means cross-platform parity must be investigated")
 
 
 @pytest.mark.parametrize("name", ["roadie-tol30", "oddie"])
@@ -462,11 +534,15 @@ def test_owner_images_smooth_preset(name, owner_selection):
     fine_shares = np.bincount(fine[inside], minlength=k) / inside.sum()
     diff = fine_shares - np.array(cleaned.shares)
     digest = hashlib.sha256(np.ascontiguousarray(fine).tobytes()).hexdigest()[:16]
+    digest32 = hashlib.sha256(fine.astype(np.int32).tobytes()).hexdigest()[:16]
     print(f"\n{name}: mm_per_px {mm_per_px:.6f}, sigma {sigma} ({rule}), s {s}, "
           f"fine {fine.shape}, {cleaned.hex}, cleaned shares "
           f"{[f'{v:.4%}' for v in cleaned.shares]}, fine shares "
           f"{[f'{v:.4%}' for v in fine_shares]}, change (points) "
           f"{[f'{100 * v:+.4f}' for v in diff]}; time {dt:.2f} s; tracemalloc peak "
-          f"{peak / 2 ** 20:.1f} MiB (numpy/Python only); vanished {result.vanished}; fine sha256 {digest}")
+          f"{peak / 2 ** 20:.1f} MiB (numpy/Python only); vanished {result.vanished}; "
+          f"fine {fine.dtype} sha256 {digest}, as int32 {digest32}")
     assert np.abs(diff).max() <= OWNER_SHARES_TOL
-    assert digest == OWNER_FINE_SHA[name]
+    assert fine.dtype == np.uint8
+    assert digest32 == OWNER_FINE_SHA_INT32[name], PARITY
+    assert digest == OWNER_FINE_SHA[name], PARITY

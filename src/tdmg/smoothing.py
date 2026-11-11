@@ -134,7 +134,7 @@ SUPERSAMPLE = 4
 
 # Fine rows interpolated at a time. It bounds the working memory only: every fine pixel is
 # computed from the same values by the same arithmetic whatever the band, so the result
-# does not depend on it (tests/test_smooth_labels.py compares two band sizes).
+# does not depend on it (tests/test_smooth_labels.py compares several band sizes).
 _BAND_ROWS = 512
 
 LABELS_METHOD = ("nearest-label fill of OUTSIDE (exact squared distance, lowest label on "
@@ -228,17 +228,25 @@ def _linear_taps(n: int, s: int) -> tuple[np.ndarray, np.ndarray]:
 @dataclass(frozen=True, eq=False)
 class SmoothedLabels:
     """The result of smooth_labels. eq=False: compared by identity (numpy arrays have no
-    single truth value).
+    single truth value). The other fields are JSON-safe (int, float, str, tuple of int),
+    for the colors record.
 
-    fine: int32 (H * s, W * s), read-only, the fine label map (see smooth_labels).
+    fine: the fine label map (see smooth_labels), shape (H * s, W * s), in the smallest
+      unsigned dtype that holds the largest input label (uint8 up to 255, uint16 up to
+      65535, else uint32). Its numpy write flag is off: a read-only flag, not a deep
+      guarantee (a caller can turn it back on).
     vanished: the input's labels (sorted ascending) that no fine pixel holds: colors the
       blur removed entirely (regions smaller than about sigma). Always () at sigma 0. It
       is reported, not hidden: the caller (the colors record) must say which colors are
       lost.
+    supersample: s, as an int. sigma_px: the sigma used, as a float. method: LABELS_METHOD.
     """
 
     fine: np.ndarray
     vanished: tuple[int, ...]
+    supersample: int
+    sigma_px: float
+    method: str
 
 
 def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
@@ -249,12 +257,20 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
       palette indices 0..k-1 inside (such as clean_regions' result), with at least one
       labelled pixel. sigma_px: the Gaussian sigma in image pixels, finite and >= 0 (as
       tdmg.color_config.edge_sigma_px gives). supersample: an int >= 1 (bool refused).
+      _band_rows: fine rows computed at a time, an int >= 1 (memory only; for tests).
 
-    Returns a SmoothedLabels: fine, a new read-only int32 array of shape (H * s, W * s),
-    s = supersample, and vanished. Every fine pixel holds exactly one label, one of the
-    labels present in the input (never OUTSIDE). A color can disappear if the blur removes
-    it; such colors are listed in vanished, never dropped silently. SmoothingError for any
-    invalid argument.
+    Returns a SmoothedLabels: fine, a new array of shape (H * s, W * s), s = supersample,
+    with the read-only flag set, in the smallest unsigned dtype that holds the largest
+    label (uint8 for a palette); vanished; and the settings. Every fine pixel holds
+    exactly one label, one of the labels present in the input (never OUTSIDE). A color can
+    disappear if the blur removes it; such colors are listed in vanished, never dropped
+    silently. SmoothingError for any invalid argument.
+
+    Two labels: label 0's fine region agrees with smooth_outline's polygon of the same
+    mask within one fine pixel (1/s image px) along the boundary, for s <= 8 only. The
+    bound is 0.707/s from the fine grid plus a measured gap of at most 0.020 image px
+    between the bilinear level set and contourpy's chords, which does not shrink with s
+    (tests/test_smooth_labels.py).
 
     Extent and coordinates: the fine map covers the image, no more. In the pixel-cell
     coordinates of tdmg.flat.mask_outline and smooth_outline (x right, y down, image pixel
@@ -264,9 +280,10 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     region in the coordinates that smooth_outline returns and that tdmg.flat's to_model
     transform takes (x_mm = (x - x0) * scale, y_mm = (y1 - y) * scale).
 
-    No pad is needed, because smooth_outline's contour lies within [0, W] x [0, H].
-    Proof: it pads by one zero pixel. On the left, say, the pad's field is f(-1) = sum
-    over the foreground (i >= 0, j) of w_{i+1} v_j and column 0's is f(0) = sum of
+    The fine map needs no pad, because smooth_outline's contour lies within the image box
+    [0, W] x [0, H] up to float32 rounding (measured below). Proof: smooth_outline pads
+    by one zero pixel. On the left, say, the pad's field is f(-1) = sum over the
+    foreground (i >= 0, j) of w_{i+1} v_j and column 0's is f(0) = sum of
     w_i v_j (w, v: the normalised, symmetric 1-D weights in x and y). So f(-1) + f(0)
     <= sum_j v_j sum_{i>=0} (w_i + w_{i+1}) = 1, up to float32 rounding. Linear
     interpolation between the centres -0.5 and 0.5 then crosses 0.5 at x >= 0, and no
@@ -305,14 +322,25 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     Cost: one exact EDT per color on H x W (only if there are OUTSIDE pixels), one blur
     per color of (H + 2) x (W + 2), and one interpolation per color of the H s x W s fine
     map, done in bands of _band_rows fine rows (a memory bound only; the result does not
-    depend on it), so the working memory is a few bands plus the int32 output.
+    depend on it). Measured on the Windows PC (2026-11-11), a 2000 x 2000 map with 4
+    colors inside a disc of radius 990 px, sigma 2.5, s 4 (an 8000 x 8000 fine map):
+    4.9 s (best of 3) and a tracemalloc peak of 356 MiB. The earlier version (int32
+    output, a full-size np.unique for vanished, git 9d66f8e) gave the same labels in
+    5.4 s with a peak of 636 MiB. tracemalloc counts numpy and Python allocations only,
+    not OpenCV's own buffers (the blur's), so the true peak is somewhat higher. The output
+    itself is H s x W s bytes for uint8 (61 MiB here); the rest is the fill's EDT
+    indices, the k coarse fields and a few float64 bands (_band_rows x W s x 8 bytes
+    each).
     """
     sigma = _sigma_or_zero(sigma_px)
     s = _supersample(supersample)
+    band_rows = _positive_int("_band_rows", _band_rows)
     filled = _fill_outside(_label_map(labels))
     h, w = filled.shape
+    dtype = _fine_dtype(int(filled.max()))
     if sigma == 0:
-        return _result(np.repeat(np.repeat(filled, s, axis=0), s, axis=1), filled)
+        fine = np.repeat(np.repeat(filled.astype(dtype), s, axis=0), s, axis=1)
+        return _result(fine, (), s, sigma)
     padded = np.pad(filled, 1, mode="edge")
     present = np.unique(filled)                          # ascending label
     fields = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma,
@@ -320,26 +348,55 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
               for c in present]
     row_lo, row_t = _linear_taps(h, s)
     col_lo, col_t = _linear_taps(w, s)
-    out = np.empty((h * s, w * s), np.int32)
-    for start in range(0, h * s, _band_rows):
-        rows = slice(start, min(start + _band_rows, h * s))
+    col_hi, col_u = col_lo + 1, 1 - col_t                # column taps and weights, once
+    out = np.empty((h * s, w * s), dtype)
+    as_label = present.astype(dtype)
+    index_dtype = _fine_dtype(len(present) - 1)
+    seen = np.zeros(len(present), bool)
+    for start in range(0, h * s, band_rows):
+        rows = slice(start, min(start + band_rows, h * s))
         lo, t = row_lo[rows], row_t[rows, None]
-        best = None
-        best_c = np.full((len(lo), w * s), present[0], np.int32)
-        for c, f in zip(present, fields, strict=True):
-            g = f[lo] * (1 - t) + f[lo + 1] * t                         # (band, W + 2)
-            v = g[:, col_lo] * (1 - col_t) + g[:, col_lo + 1] * col_t  # (band, W s)
-            if best is None:
-                best = v
+        u = 1 - t
+        shape = (len(lo), w * s)
+        best, v, tmp = np.empty(shape), np.empty(shape), np.empty(shape)
+        best_i = np.zeros(shape, index_dtype)            # index into present
+        for i, f in enumerate(fields):
+            g = f[lo] * u + f[lo + 1] * t                # (band, W + 2), float64
+            # v = g[:, col_lo] * col_u + g[:, col_hi] * col_t, with the same roundings
+            np.take(g, col_lo, axis=1, out=v)
+            np.multiply(v, col_u, out=v)
+            np.take(g, col_hi, axis=1, out=tmp)
+            np.multiply(tmp, col_t, out=tmp)
+            np.add(v, tmp, out=v)
+            if i == 0:
+                best, v = v, best
             else:
                 win = v > best                           # strict: the lowest label wins ties
-                best = np.where(win, v, best)
-                best_c[win] = c
-        out[rows] = best_c
-    return _result(out, filled)
+                best_i[win] = i
+                np.maximum(best, v, out=best)
+        seen |= np.bincount(best_i.ravel(), minlength=len(present)) > 0
+        np.take(as_label, best_i, out=out[rows])
+    vanished = tuple(int(c) for c in present[~seen])
+    return _result(out, vanished, s, sigma)
 
 
-def _result(fine: np.ndarray, filled: np.ndarray) -> SmoothedLabels:
+def _positive_int(name: str, value) -> int:
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
+        raise SmoothingError(f"{name} must be an integer, got {value!r}")
+    if int(value) < 1:
+        raise SmoothingError(f"{name} must be at least 1, got {int(value)}")
+    return int(value)
+
+
+def _fine_dtype(top: int) -> type:
+    """The smallest unsigned dtype that holds 0..top (labels fit in int32, so uint32 does)."""
+    for dtype in (np.uint8, np.uint16, np.uint32):
+        if top <= np.iinfo(dtype).max:
+            return dtype
+    raise SmoothingError(f"label {top} does not fit in uint32")
+
+
+def _result(fine: np.ndarray, vanished: tuple, s: int, sigma: float) -> SmoothedLabels:
     fine.setflags(write=False)
-    gone = np.setdiff1d(np.unique(filled), np.unique(fine))      # sorted ascending
-    return SmoothedLabels(fine=fine, vanished=tuple(int(c) for c in gone))
+    return SmoothedLabels(fine=fine, vanished=vanished, supersample=s, sigma_px=sigma,
+                          method=LABELS_METHOD)
