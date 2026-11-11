@@ -9,16 +9,20 @@ plan_colors runs, in order:
 2. check_extraction_indices against the real number of extracted colors (an image with
    fewer distinct colors gives fewer than `extract`), before the outline step reads any
    index.
-3. handle_outlines: the outline family (auto: the thinness rule; none; or a list), dropped
-   or redrawn as one band (outlines: drop or keep).
+3. handle_outlines (tdmg.color_outline): the outline family (auto: the thinness rule;
+   none; or a list) is dropped; under `keep` it also returns the band that redraws the
+   drawing's lines.
 4. check_extraction_indices again, now with the family and its core (a merge may go into
    the core, never from a family member); then apply_merges.
 5. shade_pairs among the colors left after steps 3 and 4, without the core: flagged for the
-   owner, never applied.
-6. clean_regions: the final palette.
+   owner, never applied (no labels change).
+6. Under `keep` (decided 2026-11-11): paint_band paints the band in the core's color, after
+   the merges, so no band is left inside a merged color.
+7. clean_regions: the final palette.
 Each step's result carries an explicit old -> new index array (Quantized.remap, and
 OutlineResult.remap for step 3); they are composed to give each extracted color its fate
-and final index. Colors (hex) are only a cross-check: every final palette entry must be
+and final index. Under keep, the core takes its final index through the band step even when
+the drop left it no pixel. Colors (hex) are only a cross-check: every final palette entry must be
 the final index of at least one extracted color with the same hex.
 """
 
@@ -28,22 +32,25 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from tdmg.color import (
-    SHADE_CHROMA_RULE,
-    SHADE_HUE_RULE,
     CleanupLog,
     ColorError,
     Limits,
-    OutlineResult,
     Quantized,
-    ShadePair,
     apply_merges,
     clean_regions,
-    handle_outlines,
     quantize,
+)
+from tdmg.color_config import ColorConfigError, check_extraction_indices
+from tdmg.color_outline import (
+    SHADE_CHROMA_RULE,
+    SHADE_HUE_RULE,
+    OutlineResult,
+    ShadePair,
+    handle_outlines,
+    paint_band,
     rule_value,
     shade_pairs,
 )
-from tdmg.color_config import ColorConfigError, check_extraction_indices
 from tdmg.rules import Rule
 
 # What became of an extracted color: still in the final palette; merged by the owner into
@@ -59,6 +66,7 @@ class ColorPlan:
 
     extracted: quantize's result. outlined, outline: handle_outlines' result. merges: the
     (from, into) pairs by extraction index, as given. merged: after apply_merges.
+    banded: after paint_band under keep with a family, else merged itself.
     shade_pairs: the flagged pairs (extraction indices), with the two thresholds used,
     shade_rules ((rule id, value), ...). cleaned, log: clean_regions' result, the final
     palette. fate and final_index: one entry per extraction index; final_index is set
@@ -70,6 +78,7 @@ class ColorPlan:
     outline: OutlineResult
     merges: tuple[tuple[int, int], ...]
     merged: Quantized
+    banded: Quantized
     shade_pairs: tuple[ShadePair, ...]
     shade_rules: tuple[tuple[str, float], ...]
     cleaned: Quantized
@@ -114,33 +123,46 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
     hue, chroma = rule_value(rules, SHADE_HUE_RULE), rule_value(rules, SHADE_CHROMA_RULE)
     pairs = shade_pairs(extracted.lab.tolist(), extracted.hex,
                         shade_candidates(n, outline.remap, outline.core, merges), hue, chroma)
-    cleaned, log = clean_regions(merged, limits)
+    banded, band_core = merged, None
+    if outline.band is not None:
+        banded, ci = paint_band(merged, outline.band, outline.core_rgb)
+        band_core = banded.remap[ci]
+    cleaned, log = clean_regions(banded, limits)
+
+    def final_of(b):
+        return None if b is None else cleaned.remap[b]
 
     into = dict(merges)
     fate, final = [], []
     for i in range(n):
         r = outline.remap[i]
-        if r is None:
+        if i in into:
+            fate.append("merged")
+            final.append(None)
+            continue
+        if i == outline.core and band_core is not None:
+            j = final_of(band_core)            # the band's color is the core's
+        elif r is None:
             # A guard: the outline step only ever removes family members.
             if i not in outline.family:
                 raise ColorError(f"extracted color {i} was removed by the outline handling "
                                  "but is not in the outline family")
             fate.append("outline")
             final.append(None)
-        elif i in into:
-            fate.append("merged")
-            final.append(None)
+            continue
         else:
             j = merged.remap[r]
-            j = None if j is None else cleaned.remap[j]
-            fate.append("final" if j is not None else "cleanup")
-            final.append(j)
+            if j is not None and banded is not merged:
+                j = banded.remap[j]
+            j = final_of(j)
+        fate.append("final" if j is not None else "cleanup")
+        final.append(j)
     for k, h in enumerate(cleaned.hex):
         if not any(f == k and extracted.hex[i] == h for i, f in enumerate(final)):
             raise ColorError(f"final color {k} ({h}) is not the final index of an extracted "
                              "color with the same color")
     return ColorPlan(extracted=extracted, outlined=outlined, outline=outline, merges=merges,
-                     merged=merged, shade_pairs=pairs,
+                     merged=merged, banded=banded, shade_pairs=pairs,
                      shade_rules=((SHADE_HUE_RULE, hue), (SHADE_CHROMA_RULE, chroma)),
                      cleaned=cleaned, log=log, fate=tuple(fate), final_index=tuple(final))
 

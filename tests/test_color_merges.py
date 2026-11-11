@@ -5,17 +5,19 @@ import numpy as np
 import pytest
 
 from tdmg.color import (
-    KEEP_NO_EFFECT_NOTE,
-    OUTLINE_METHOD,
     OUTSIDE,
     ColorError,
-    OutlineResult,
     apply_merges,
     clean_regions,
     from_labels,
-    handle_outlines,
     merge_problem,
     quantize,
+)
+from tdmg.color_outline import (
+    KEEP_NO_EFFECT_NOTE,
+    OUTLINE_METHOD,
+    OutlineResult,
+    handle_outlines,
 )
 
 # Five flat colors with distinct areas, so the extraction order is known: 0 is the largest.

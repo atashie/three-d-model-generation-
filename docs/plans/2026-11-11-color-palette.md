@@ -399,3 +399,28 @@ The larger values are at junctions. On a synthetic straight border the band is e
   leaves fuse into one region. With the blue merge, the arms and feet fuse into the body's
   silhouette. `keep` would draw a band between them only where two different colors meet,
   so same-color neighbours would stay fused either way.
+
+**Decision, 2026-11-11 (controller, after checking Oddie keep with merge [[3, 1]]): keep
+redraws the drawing's lines at width W, after the merges.** The first `keep` drew a band
+along every border between non-core colors at the outline step. That had three faults:
+- it drew no line between neighbours of the same color (Oddie's overlapping leaves);
+- it drew a line on shading borders (blue against dark blue);
+- it ran before the merges, so about 8,200 px of band stayed inside the merged blue.
+
+Now the band follows the strokes the artist drew: the ridge of the outline family's thin
+pixels, found at half-pixel resolution. The band covers the pixel centres within
+W/2 − 1/4 px of a ridge point, and still the pixels within W of the outer edge. The order
+is: drop, then merges, then the band painted in the core color, then cleanup. The shade
+pairs are still computed before the band. `OUTLINE_METHOD` is now `outline-thin-share/2`.
+The code moved to `tdmg.color_outline`, and `verify_colors` to `tdmg.colors_verify`.
+
+**Re-run with the new keep (2026-11-11, Windows PC; pins in `tests/test_colors.py`):**
+- **Roadie, keep:** still 4 colors and ready. The core's share is 38.5%; the band is
+  28086 px. By eye it looks like the first version.
+- **Oddie, keep with `merge: [[3, 1]]`:** the leaf edges and veins, the arm and foot
+  outlines and the mouth outline come back as an 8.03 px black band. There is no line on
+  the old shading border.
+- **The black is now a fifth color,** so Oddie with keep and only the blue merge is not
+  ready. The green pair is still flagged. This is a new choice for the owner in Task 7d:
+  keep the lines and merge the greens, or drop the lines.
+- Drop runs are unchanged.

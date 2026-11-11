@@ -1,4 +1,4 @@
-"""tdmg.color: outline detection, drop and keep, and the shade-pair flags
+"""tdmg.color_outline: outline detection, drop and keep, and the shade-pair flags
 (docs/plans/2026-11-11-color-palette.md, Task 7c)."""
 
 import copy
@@ -8,29 +8,32 @@ import numpy as np
 import pytest
 
 from tdmg.color import (
+    OUTSIDE,
+    ColorError,
+    from_labels,
+    open_mask,
+    printable_limits_px,
+    srgb_to_lab,
+)
+from tdmg.color_outline import (
     KEEP_NO_EFFECT_NOTE,
     KEEP_WIDTH_RULE,
     OUTLINE_METHOD,
-    OUTSIDE,
     THIN_SHARE_RULE,
-    ColorError,
     ShadePair,
-    clean_regions,
     detect_outline_family,
-    from_labels,
     handle_outlines,
-    keep_band,
-    open_mask,
-    printable_limits_px,
     shade_pairs,
-    srgb_to_lab,
+    stroke_band,
+    stroke_ridge,
 )
 from tdmg.profiles import load_printer
 from tdmg.rules import load_rules
 
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
-# 0.1 mm/px: the opening is 0.4 mm = 4 px (3.999... in float), the kept band 0.6 mm = 6 px.
+# 0.1 mm/px: the opening is 0.4 mm = 4 px (exactly 4.0 in float); the kept band is
+# 0.6 mm = 5.999... px in float (0.6 / 0.1), so W/2 and W round as for 6 px.
 LIMITS = printable_limits_px(0.1, RULES, A1)
 T = RULES[THIN_SHARE_RULE].default
 W_PX = RULES[KEEP_WIDTH_RULE].default / 0.1
@@ -113,9 +116,9 @@ def test_drop_removes_thin_strokes_and_keeps_the_wide_area_in_the_core_color(q):
     out, res = run(q)
     b, d = idx(q, "black"), idx(q, "darkred")
     assert res.family == tuple(sorted((b, d))) and res.core == b
-    assert res.found_by == "auto" and res.method == OUTLINE_METHOD == "outline-thin-share/1"
+    assert res.found_by == "auto" and res.method == OUTLINE_METHOD == "outline-thin-share/2"
     assert res.thresholds == ((THIN_SHARE_RULE, T),)
-    assert res.keep_width_mm is None and res.keep_width_px is None
+    assert res.keep_width_mm is None and res.keep_width_px is None and res.band is None
     assert res.remap[d] is None and res.remap[b] is not None       # the core is kept
     assert set(out.hex) == {HEX["red"], HEX["white"], HEX["black"]}
     lab = out.labels
@@ -167,57 +170,77 @@ def test_thin_pixels_tie_to_the_lowest_label():
     assert res.remap[idx(qq, "black")] is not None
 
 
-# --- keep ----------------------------------------------------------------------------------
+# --- keep: the drawing's own lines, redrawn at width W after the merges ---------------------
 
-def test_keep_draws_a_uniform_band_between_colors_and_inside_the_outer_edge(q):
+def test_keep_returns_the_band_of_the_drawn_lines_and_the_outer_edge(q):
     out, res = run(q, outlines="keep")
     assert res.keep_width_mm == RULES[KEEP_WIDTH_RULE].default
     assert res.keep_width_px == RULES[KEEP_WIDTH_RULE].default / LIMITS.mm_per_px
     assert res.thresholds == ((THIN_SHARE_RULE, T), (KEEP_WIDTH_RULE, res.keep_width_mm))
-    core = out.hex.index(HEX["black"])
-    row = out.labels[70]
-    is_core = row == core
-    # Inside the outer edge: round(W) = 6 px from each side.
-    assert is_core[LEFT:LEFT + 6].all() and not is_core[LEFT + 6]
-    assert is_core[RIGHT - 6:RIGHT].all() and not is_core[RIGHT - 7]
-    # Between red and white: one run of W px (within one pixel), centred on the border.
-    mid = is_core[30:90]
-    runs = np.flatnonzero(np.diff(mid.astype(int)))
-    assert len(runs) == 2
-    width = runs[1] - runs[0]
-    assert abs(width - W_PX) <= 1
-    centre = 30 + (runs[0] + 1 + runs[1]) / 2
-    assert abs(centre - 59.5) <= 1
-    # The pupil stays core, and the band is the same on every row of the straight border.
-    assert (out.labels[PUPIL][2:-2, 2:-2] == core).all()
-    widths = {int((out.labels[r, 30:90] == core).sum()) for r in range(20, 35)}
-    assert widths == {width}
-
-
-def test_the_kept_band_survives_cleanup(q):
-    out, _ = run(q, outlines="keep")
-    cleaned, _ = clean_regions(out, LIMITS)
-    core_before = out.hex.index(HEX["black"])
-    core_after = cleaned.hex.index(HEX["black"])
+    assert res.method == "outline-thin-share/2"
+    assert tuple(res.core_rgb) == BLACK and not res.band.flags.writeable
+    # The band is returned, not painted: out is the drop's result.
+    dropped, _ = run(q)
+    assert np.array_equal(out.labels, dropped.labels)
+    row = res.band[70]
+    # Inside the outer edge: floor(W + 1/2) = 6 px from each side.
+    assert row[LEFT:LEFT + 6].all() and not row[LEFT + 6]
+    assert row[RIGHT - 6:RIGHT].all() and not row[RIGHT - 7]
+    # The drawn line is columns 58 (fringe), 59, 60: its ridge is column 59, so the band is
+    # 2 * floor((W - 1) / 2) + 1 = 5 px, columns 57..61, on every row of the straight line.
     for r in range(20, 35):
-        assert np.array_equal(out.labels[r, 30:90] == core_before,
-                              cleaned.labels[r, 30:90] == core_after)
-    assert (cleaned.labels[70, LEFT:LEFT + 6] == core_after).all()
+        assert np.flatnonzero(res.band[r, 20:100]).tolist() == list(range(37, 42))
 
 
-def test_keep_band_definition_on_a_straight_border():
-    # Two colors, 0 left and 1 right of column 10, 2 is the core (absent). Each side gets
-    # the pixels whose centre is within W/2 of the shared edge; the outer edge gets W.
-    labels = np.zeros((40, 40), np.int64)
-    labels[:, 20:] = 1
-    for w, per_side, outer in ((6.0, 3, 6), (5.99, 3, 6), (8.03, 4, 8), (7.0, 4, 7)):
-        band = keep_band(labels, 2, w)
-        row = band[20]
-        assert row[20 - per_side:20 + per_side].all()
-        assert not row[20 - per_side - 1] and not row[20 + per_side]
-        col = band[:, 14]             # away from the middle border: only the outer band
-        assert col[:outer].all() and not col[outer]
-        assert col[40 - outer:].all() and not col[40 - outer - 1]
+def strokes_image(widths=(2,), n=40):
+    """A vertical stroke of each width, 12 px apart, from column 30, in an n x 2n image."""
+    s = np.zeros((n, n * 2), bool)
+    x = 30
+    starts = []
+    for w in widths:
+        s[:, x:x + w] = True
+        starts.append(x)
+        x += w + 12
+    return s, starts
+
+
+@pytest.mark.parametrize("stroke", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("w", [6.0, 5.99, 8.03])
+def test_a_straight_drawn_stroke_becomes_a_band_of_about_w_centred_on_it(stroke, w):
+    strokes, (x,) = strokes_image((stroke,))
+    inside = np.ones(strokes.shape, bool)
+    band = stroke_band(strokes, inside, w)
+    lo, hi = 2 + int(w), strokes.shape[1] - 2 - int(w)     # away from the outer band
+    cols = np.flatnonzero(band[20, lo:hi]) + lo
+    assert cols.tolist() == list(range(cols[0], cols[-1] + 1))        # one run
+    assert abs(len(cols) - w) <= 1
+    # Centred on the drawn stroke (edges x .. x + stroke): within half a pixel.
+    assert abs((cols[0] + cols[-1] + 1) / 2 - (x + stroke / 2)) <= 0.5
+    assert (band[5:35, cols[0]:cols[-1] + 1]).all()                  # the same on every row
+
+
+def test_the_ridge_is_the_centre_of_the_stroke():
+    strokes, (x,) = strokes_image((3,))
+    ridge = stroke_ridge(strokes)
+    assert np.flatnonzero(ridge[20]).tolist() == [x + 1]
+    strokes, (x,) = strokes_image((2,))
+    assert np.flatnonzero(stroke_ridge(strokes)[20]).tolist() == [x, x + 1]
+    assert not stroke_ridge(np.zeros((5, 5), bool)).any()
+
+
+def test_a_t_junction_band_is_at_most_w_plus_2_wide():
+    strokes = np.zeros((60, 60), bool)
+    strokes[20:22, 5:55] = True               # the bar
+    strokes[22:55, 30:32] = True              # the stem, meeting it
+    w = 6.0
+    band = stroke_band(strokes, np.ones(strokes.shape, bool), w)
+    for r in range(24, 50):                   # across the stem, below the bar's band
+        assert np.flatnonzero(band[r, 15:45]).size <= w + 2, r
+    # At the junction itself: the widest disc inside the band (twice the distance
+    # transform) is at most W + 2.
+    from scipy import ndimage
+    inner = band[8:52, 8:52]
+    assert 2 * ndimage.distance_transform_edt(inner).max() <= w + 2
 
 
 def test_keep_needs_a_band_wider_than_the_opening(q):
@@ -229,9 +252,83 @@ def test_keep_needs_a_band_wider_than_the_opening(q):
 
 def test_keep_without_a_family_has_no_effect(q):
     out, res = run(q, outline_color="none", outlines="keep")
-    assert out is q and res.family == () and res.core is None
+    assert out is q and res.family == () and res.core is None and res.band is None
     assert res.notes == (KEEP_NO_EFFECT_NOTE,)
     assert res.keep_width_mm is None and res.thresholds == ()
+
+
+# --- keep through plan_colors: lines kept, color borders and merges left alone -----------
+
+GREEN, BLUE, DARKBLUE = (37, 86, 27), (84, 126, 157), (57, 82, 102)
+
+
+def drawing():
+    """Rows 5..74, columns 5..114. Left (5..54): two green regions, top and bottom, parted
+    by a drawn 2 px black line (rows 39, 40), as Oddie's overlapping leaves. Right
+    (57..114): blue above row 40 and dark blue (its shading) below, with no drawn line
+    between them. Between left and right, a drawn 2 px black line (columns 55, 56)."""
+    rgb = np.zeros((80, 120, 3), np.uint8)
+    mask = np.zeros((80, 120), bool)
+    mask[5:75, 5:115] = True
+    rgb[5:75, 5:55] = GREEN
+    rgb[39:41, 5:55] = BLACK
+    rgb[5:75, 55:57] = BLACK
+    rgb[5:40, 57:115] = BLUE
+    rgb[40:75, 57:115] = DARKBLUE
+    return rgb, mask
+
+
+def draw_plan(**settings):
+    from tdmg.color_plan import plan_colors
+    s = {"colors": 4, "extract": 4, "edges": "exact", "base": "auto", "outlines": "keep",
+         "outline_color": "auto", "merge": (), **settings}
+    return plan_colors(*drawing(), s, LIMITS, RULES)
+
+
+def test_keep_redraws_a_line_between_two_regions_of_one_color():
+    p = draw_plan()
+    black = p.extracted.hex.index("#0a0a0a")
+    assert p.outline.family == (black,) and p.fate[black] == "final"
+    core = p.cleaned.hex.index("#0a0a0a")
+    lab = p.cleaned.labels
+    # The leaf line (rows 39, 40; ridge both rows) is a band of 6 rows, 37..42, in black.
+    for c in range(20, 40):
+        assert np.flatnonzero(lab[20:60, c] == core).tolist() == list(range(17, 23)), c
+    # Under drop the two greens fuse: no black is left there.
+    d = draw_plan(outlines="drop")
+    assert HEX["black"] not in d.cleaned.hex
+
+
+def test_keep_draws_no_band_on_a_color_border_with_no_drawn_line():
+    p = draw_plan()
+    core = p.cleaned.hex.index("#0a0a0a")
+    lab = p.cleaned.labels
+    # Columns 70..100 (away from the drawn line and the outer band): no black across the
+    # blue / dark blue border at row 40.
+    assert not (lab[15:65, 70:100] == core).any()
+
+
+def test_keep_after_a_merge_leaves_no_band_inside_the_merged_color():
+    p0 = draw_plan()
+    b, d = p0.extracted.hex.index("#547e9d"), p0.extracted.hex.index("#395266")
+    p = draw_plan(merge=((d, b),))
+    core = p.cleaned.hex.index("#0a0a0a")
+    blue = p.cleaned.hex.index("#547e9d")
+    lab = p.cleaned.labels
+    # Inside the outer band and the line's band; cleanup may fill an inner corner pixel of
+    # the band (rows 11 and 68, column 108), so the corners are left out.
+    right = lab[12:68, 62:108]
+    assert (right == blue).all()
+    assert (lab[5:75, 55:57] == core).all()   # the drawn line is kept
+
+
+def test_the_kept_band_survives_cleanup():
+    p = draw_plan()
+    core_b = p.banded.hex.index("#0a0a0a")
+    core_c = p.cleaned.hex.index("#0a0a0a")
+    before, after = p.banded.labels == core_b, p.cleaned.labels == core_c
+    assert not (before & ~after).any()        # no band pixel is removed
+    assert (after & ~before).sum() <= 20      # cleanup only fills a few inner corners
 
 
 # --- explicit list and none ---------------------------------------------------------------

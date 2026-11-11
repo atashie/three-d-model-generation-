@@ -18,19 +18,21 @@ import tdmg.color_plan
 import tdmg.colors
 from tdmg.color import (
     CLEANUP_METHOD,
+    METHOD,
+    OUTSIDE,
+    clean_regions,
+    printable_limits_px,
+    quantize,
+)
+from tdmg.color_outline import (
     KEEP_NO_EFFECT_NOTE,
     KEEP_WIDTH_RULE,
-    METHOD,
     OUTLINE_METHOD,
-    OUTSIDE,
     SHADE_CHROMA_RULE,
     SHADE_HUE_RULE,
     SHADE_METHOD,
     THIN_SHARE_RULE,
-    clean_regions,
     handle_outlines,
-    printable_limits_px,
-    quantize,
 )
 from tdmg.colors import (
     COLORS_ALGORITHM_VERSION,
@@ -41,7 +43,6 @@ from tdmg.colors import (
     RECORD_SCHEMA,
     ROW_PX,
     ColorsError,
-    VerifiedColors,
     colors_id,
     colors_identity,
     extracted_swatch_box,
@@ -49,8 +50,8 @@ from tdmg.colors import (
     mask_mm_per_px,
     not_ready_reason,
     swatch_box,
-    verify_colors,
 )
+from tdmg.colors_verify import VerifiedColors, verify_colors
 from tdmg.flat import mask_outline, to_model
 from tdmg.profiles import load_printer
 from tdmg.rules import load_rules
@@ -881,9 +882,11 @@ def test_not_ready_preview_lists_extracted_colors_and_the_reason(not_ready):
     for p in rec["palette"]:
         top, left, bottom, right = swatch_box(p["index"], h)
         assert (img[top:bottom, left:right] == p["rgb"]).all(), p
-    # Rows: legend (3), final colors, the extraction heading, extracted colors, the merge
-    # hint, not ready.
-    rows = len(tdmg.colors.legend_rows("")) + k + 1 + len(rec["extraction"]["palette"]) + 2
+    # Rows: legend (3), final colors, the extraction heading, extracted colors, then the
+    # wrapped merge hint, flagged pairs and not-ready reason.
+    rows = (len(tdmg.colors.legend_rows("")) + k + 1 + len(rec["extraction"]["palette"])
+            + tail_rows(rec))
+    assert tail_rows(rec) > 2                 # the hint and the reason wrap at this width
     assert img.shape[0] == PREVIEW_SCALE * (h + ROW_PX * rows)
 
 
@@ -892,7 +895,44 @@ def test_ready_preview_has_no_reason_row(done):
     img = np.array(Image.open(out / "regions.png"))
     h = rec["input"]["height_px"]
     rows = (len(tdmg.colors.legend_rows("")) + len(rec["palette"]) + 1
-            + len(rec["extraction"]["palette"]) + 1)
+            + len(rec["extraction"]["palette"]) + tail_rows(rec))
+    assert img.shape[0] == PREVIEW_SCALE * (h + ROW_PX * rows)
+
+
+def tail_rows(rec) -> int:
+    """The strip's rows after the extracted colors: wrapped to the strip's width."""
+    texts = [tdmg.colors.MERGE_HINT, *tdmg.colors.shade_pair_lines(rec["shade_pairs"])]
+    if not rec["ready"]:
+        texts.append(tdmg.colors.not_ready_line(
+            rec["not_ready_reason"].split(tdmg.colors.FLAGGED)[0]))
+    width = 2 * rec["input"]["width_px"] - 2 * tdmg.colors.MARGIN_PX
+    return sum(len(tdmg.colors.wrap_text(t, width)) for t in texts)
+
+
+def test_wrapped_rows_are_never_wider_than_the_strip():
+    from PIL import ImageFont
+    font = ImageFont.load_default_imagefont()
+    text = ("5 colors remain after outline handling and cleanup, but colors allows at most 4 "
+            "(the printer's palette); add merge pairs (by extraction index, from regions.png) "
+            "to the config file; " + "x" * 120)
+    for width in (60, 120, 240, 400, 2000):
+        lines = tdmg.colors.wrap_text(text, width, font)
+        assert all(font.getlength(line) <= width for line in lines), width
+        assert "".join(line.strip() for line in lines).replace(" ", "") == (
+            text.replace(" ", ""))
+    assert tdmg.colors.wrap_text("short", 400) == ["short"]
+
+
+def test_each_flagged_pair_has_its_own_preview_row(cartoon_done, tmp_path):
+    rec = run(cartoon_done[2], tmp_path / "c2", width_mm=11.0, flags={"colors": 2})
+    lines = tdmg.colors.shade_pair_lines(rec["shade_pairs"])
+    p = rec["shade_pairs"][0]
+    assert lines == [(f"shade pair (flagged, never merged for you): 0 {p['hex_i']} and 1 "
+                     f"{p['hex_j']}; consider merge: [[1, 0]]")]
+    img = np.array(Image.open(tmp_path / "c2" / "regions.png"))
+    h, k = rec["input"]["height_px"], len(rec["palette"])
+    rows = (len(tdmg.colors.legend_rows("")) + k + 1 + len(rec["extraction"]["palette"])
+            + tail_rows(rec))
     assert img.shape[0] == PREVIEW_SCALE * (h + ROW_PX * rows)
 
 
@@ -1047,12 +1087,16 @@ def test_verify_colors_checks_the_new_identity_types(done, sel, tmp_path, change
 # (outline-shade.txt), and so do the thinness values to the 0.1% shown there.
 # - Roadie, drop: the outline family is the core #451812 and its red and grey fringes; the
 #   thin strokes go, the pupil (and a few wide dark tips) stay in the core: 4 colors, ready.
-# - Roadie, keep: the same, then a 0.6 mm (5.99 px) band in the core along every border and
-#   inside the outer edge. The band is then the largest color, so base auto is the core.
+# - Roadie, keep: the same drop, then (after the merges) a 0.6 mm (5.99 px) band in the
+#   core along the drawn lines and inside the outer edge. The band is then the largest
+#   color, so base auto is the core.
 # - Oddie, default: the black lines are the family (thin 100%, no wide area): 5 colors, not
 #   ready, and both shade pairs flagged (greens 0-2, blues 1-3).
 # - Oddie with merge [[3, 1]] (the blue shadow into the blue body): 4 colors, ready; the
 #   green pair is still flagged.
+# - Oddie, keep with merge [[3, 1]]: the lines (leaf edges and veins, arms, feet) come back
+#   as an 8.03 px band in the black core, with no line on the old shading border; the black
+#   is a fifth color, so it is not ready.
 OWNER_RUNS = {
     "roadie-drop": ("roadie-tol30", {}, {
         "family": [2, 3, 5], "core": 3,
@@ -1063,7 +1107,7 @@ OWNER_RUNS = {
         "family": [2, 3, 5], "core": 3,
         "final": ["#451812", "#f60606", "#f5f5f5", "#f0f10a"],
         "to_final": [1, 2, None, 0, 3, None],
-        "cleanup": (4, 290, "c60bee06a18e80b4"), "ready": True, "pairs": []}),
+        "cleanup": (4, 355, "7c28d3b6b2b45188"), "ready": True, "pairs": []}),
     "oddie-default": ("oddie", {}, {
         "family": [4], "core": 4,
         "final": ["#25561b", "#48a835", "#547e9d", "#395266", "#dd4f47"],
@@ -1075,6 +1119,11 @@ OWNER_RUNS = {
         "final": ["#25561b", "#547e9d", "#48a835", "#dd4f47"],
         "to_final": [0, 1, 2, None, None, 3],
         "cleanup": (3, 7660, "1b10c29696824627"), "ready": True, "pairs": [[0, 2]]}),
+    "oddie-keep-merge-blues": ("oddie", {"merge": [[3, 1]], "outlines": "keep"}, {
+        "family": [4], "core": 4,
+        "final": ["#547e9d", "#25561b", "#48a835", "#0d100d", "#dd4f47"],
+        "to_final": [1, 0, 2, None, 3, 4],
+        "cleanup": (4, 365, "b6e562b39221a111"), "ready": False, "pairs": [[0, 2]]}),
 }
 OWNER_EXTRACTED = {
     "roadie-tol30": ["#f60606", "#f5f5f5", "#960a0a", "#451812", "#f0f10a", "#746c5b"],
@@ -1104,7 +1153,7 @@ def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_p
     digest = hashlib.sha256(labels.tobytes()).hexdigest()[:16]
     log = rec["cleanup"]
     assert (log["passes"], log["pixels_changed"], digest) == want["cleanup"], PARITY
-    assert [[p["i"], p["j"]] for p in rec["shade_pairs"]] == want["pairs"]
+    assert [[p["i"], p["j"]] for p in rec["shade_pairs"]] == want["pairs"], PARITY
     assert rec["ready"] is want["ready"]
     if want["ready"]:
         verify_colors(out, SELECTIONS / name)
@@ -1113,7 +1162,9 @@ def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_p
         assert rec["not_ready_reason"] == not_ready_reason(
             len(want["final"]), 4, len(flags.get("merge", [])), 4, outline=True,
             suggestions=[(p["j"], p["i"], p["hex_j"], p["hex_i"]) for p in pairs])
-        assert "consider merge: [[3, 1]] (#395266 into #547e9d)" in rec["not_ready_reason"]
+        if run_name == "oddie-default":
+            assert ("consider merge: [[3, 1]] (#395266 into #547e9d)"
+                    in rec["not_ready_reason"])
         with pytest.raises(ColorsError, match="not ready"):
             verify_colors(out, SELECTIONS / name)
     thin = [f"{e['hex']} {t:.1%}" for e, t in zip(ext, o["thinness"], strict=True)]
@@ -1213,15 +1264,21 @@ def test_extracted_text_marks_outline_members_core_and_shade_partners(cartoon_do
     rec = cartoon_done[0]
     ext = rec["extraction"]["palette"]
     o, shade = rec["outline"], rec["shade_pairs"]
-    texts = [tdmg.colors.extracted_text(e, o, shade) for e in ext]
+    texts = [tdmg.colors.extracted_text(e, o, shade, ext) for e in ext]
     core, fringe = o["core"], next(i for i in o["family"] if i != o["core"])
-    assert texts[core] == (f"outline core (thin {o['thinness'][core]:.0%}), kept as final "
+    assert texts[core] == (f"outline core (thin {o['thinness'][core]:.1%}), kept as final "
                            f"{ext[core]['final_index']}")
-    assert texts[fringe] == "outline (thin 100%)"
+    assert texts[fringe] == "outline (thin 100.0%)"
     assert texts[0] == f"final {ext[0]['final_index']}; shade pair with 1"
     assert texts[1].endswith("; shade pair with 0")
     gone = {**ext[core], "fate": "outline", "final_index": None}
-    assert tdmg.colors.extracted_text(gone, o, shade).endswith("no wide area left")
+    assert tdmg.colors.extracted_text(gone, o, shade, ext).endswith("no wide area left")
+    # A merge into a color that cleanup then removed says so.
+    fake = [{**e} for e in ext]
+    fake[0]["fate"], fake[0]["final_index"] = "cleanup", None
+    merged = {**ext[1], "fate": "merged", "final_index": None, "merged_into": 0}
+    assert tdmg.colors.extracted_text(merged, o, [], fake) == (
+        "merged into 0 (then removed by cleanup)")
 
 
 def test_preview_ends_the_extraction_panel_with_the_merge_hint():
@@ -1334,3 +1391,19 @@ def _fringe_as_core(r):
     o = r["outline"]
     o["core"] = _fringe(r)
     o["core_hex"] = r["extraction"]["palette"][o["core"]]["hex"]
+
+
+def test_verify_colors_allows_last_digit_lab_differences_only(cartoon_done, tmp_path):
+    # srgb_to_lab's float powers may differ in the last bits between C libraries, so the
+    # recorded Lab is compared to LAB_ABS_TOL (1e-9) per component.
+    from tdmg.colors_verify import LAB_ABS_TOL
+    assert LAB_ABS_TOL == 1e-9
+    d = _copy(cartoon_done[1], tmp_path, "tiny")
+    _edit_record(d, lambda r: r["extraction"]["palette"][2]["lab"].__setitem__(
+        0, r["extraction"]["palette"][2]["lab"][0] + 1e-12))
+    verify_colors(d, cartoon_done[2])
+    d = _copy(cartoon_done[1], tmp_path, "big")
+    _edit_record(d, lambda r: r["extraction"]["palette"][2]["lab"].__setitem__(
+        0, r["extraction"]["palette"][2]["lab"][0] + 1e-6))
+    with pytest.raises(ColorsError, match="lab is not the CIELAB of its rgb"):
+        verify_colors(d, cartoon_done[2])

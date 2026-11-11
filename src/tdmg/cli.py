@@ -11,6 +11,7 @@ import typer
 from pydantic import ValidationError
 
 from tdmg import __version__
+from tdmg.color_outline import THIN_SHARE_RULE
 from tdmg.colors import ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
@@ -429,9 +430,9 @@ def _colors_lines(rec: dict) -> list[str]:
     o = rec["outline"]
     for e in ext["palette"]:
         lines.append(f"  {e['index']} {e['hex']} {e['share']:6.1%}  "
-                     f"{extracted_text(e, o, rec['shade_pairs'])}")
+                     f"{extracted_text(e, o, rec['shade_pairs'], ext['palette'])}")
     if o["family"]:
-        how = {"auto": f"thinness above {o['thresholds'].get('color.outline.thin_share')}",
+        how = {"auto": f"thinness above {o['thresholds'].get(THIN_SHARE_RULE)}",
                "config": "outline_color in the config"}[o["found_by"]]
         lines.append(f"outline: family {o['family']} ({how}); core {o['core']} "
                      f"{o['core_hex']}; outlines {o['outlines']}")

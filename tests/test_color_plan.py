@@ -6,15 +6,17 @@ import pytest
 
 import tdmg.color_plan
 from tdmg.color import (
-    OUTLINE_METHOD,
     OUTSIDE,
     ColorError,
-    OutlineResult,
     Quantized,
     from_labels,
     printable_limits_px,
 )
 from tdmg.color_config import ColorConfigError
+from tdmg.color_outline import (
+    OUTLINE_METHOD,
+    OutlineResult,
+)
 from tdmg.color_plan import FATES, ColorPlan, _translate, plan_colors, shade_candidates
 from tdmg.profiles import load_printer
 from tdmg.rules import load_rules
@@ -124,6 +126,7 @@ def _fake_outline(family, core, removed, recolor=None):
         return out, OutlineResult(family=family, core=core, thinness=(0.0,) * len(q.hex),
                                   found_by="auto", method=OUTLINE_METHOD, remap=out.remap,
                                   thresholds=(), keep_width_mm=None, keep_width_px=None,
+                                  band=None, core_rgb=None,
                                   notes=())
     return fake
 

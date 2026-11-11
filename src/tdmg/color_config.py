@@ -326,7 +326,7 @@ def check_extraction_indices(outline_color, merge, n_extracted: int,
     n_extracted: the number of extracted colors; after quantize it can be below `extract`,
     when the image has fewer distinct colors. family: the outline family's extraction
     indices, or None before the outline step has found it; core: its kept core (the
-    darkest member, tdmg.color.outline_core), None when the family is empty. merge's own
+    darkest member, tdmg.color_outline.outline_core), None when the family is empty. merge's own
     structure (merge_problem) is checked again here, for direct callers.
 
     A merge's `from` must be outside the family (and outside an explicit outline_color
