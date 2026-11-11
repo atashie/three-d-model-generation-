@@ -361,17 +361,23 @@ def test_colors_id_refuses_nan():
 def test_verify_colors_accepts_a_good_folder(done, sel):
     rec, out = done
     labels8 = np.array(Image.open(out / "labels.png"))
-    for selection_dir in (None, sel):
-        v = verify_colors(out, selection_dir)
+    for check_preview in (True, False):
+        v = verify_colors(out, sel, check_preview=check_preview)
         assert isinstance(v, VerifiedColors)
         assert v.record == rec
         assert v.palette == rec["palette"] and v.settings == rec["settings"]["settings"]
         assert v.sigma_px == rec["smoothing"]["sigma_px"]
         assert v.supersample == rec["smoothing"]["supersample"]
         assert v.width_mm == rec["width_mm"] and v.base_index == rec["base_index"]
+        assert v.mm_per_px == rec["mm_per_px"]
         assert v.labels.dtype == np.int32 and not v.labels.flags.writeable
         want = np.where(labels8 == LABELS_OUTSIDE, OUTSIDE, labels8.astype(np.int32))
         assert (v.labels == want).all()
+
+
+def test_verify_colors_requires_the_selection():
+    with pytest.raises(TypeError):
+        verify_colors("somewhere")       # the selection is a required argument
 
 
 def _edit_record(d, change):
@@ -380,46 +386,133 @@ def _edit_record(d, change):
     (d / "colors.json").write_bytes(json.dumps(rec).encode())
 
 
+def _swap_counts(r):
+    p = r["palette"]
+    p[0]["count"], p[1]["count"] = p[1]["count"], p[0]["count"]
+
+
 @pytest.mark.parametrize("change, message", [
     (lambda r: r.update(width_mm=50.0), "width_mm does not match the identity"),
     (lambda r: r["settings"]["settings"].update(colors=3), "settings.settings"),
     (lambda r: r["input"].update(selection_id="0" * 64), "input.selection_id"),
     (lambda r: r.update(printer="other"), "printer"),
-    (lambda r: r["smoothing"].update(sigma_px=1.0), "sigma_px"),
-    (lambda r: r["smoothing"].update(supersample=2), "supersample"),
+    (lambda r: r["smoothing"].update(sigma_px=1.0), "smoothing.sigma_px"),
+    (lambda r: r["smoothing"].update(supersample=2), "smoothing.supersample"),
+    (lambda r: r["smoothing"].update(edge_rule="color.edges.furry_sigma_px"),
+     "smoothing.edge_rule"),
     (lambda r: r["methods"].update(quantize="x"), "methods"),
+    (lambda r: r["limits"].update(opening_width_mm=0.5), "limits.opening_width_mm"),
+    (lambda r: r["limits"].update(island_area_mm2=1.0), "limits.island_area_mm2"),
+    (lambda r: r["limits"].update(island_rule="x"), "limits.island_rule"),
+    (lambda r: r["limits"].update(mm_per_px=0.3), "limits.mm_per_px is not"),
+    (lambda r: r.update(mm_per_px=0.3), "mm_per_px is not"),
+    (lambda r: r["limits"].update(min_width_px=1.0), "limits.min_width_px is not"),
+    (lambda r: r["limits"].update(min_area_px=1.0), "limits.min_area_px is not"),
     (lambda r: r["identity"].update(width_mm=50.0), "colors_id does not match"),
     (lambda r: r["identity"]["rules"].update({"flat.sliver.opening_width": 0.5}),
      "colors_id does not match"),
     (lambda r: r.pop("identity"), "identity"),
     (lambda r: r.update(schema="tdmg.colors/0"), "tdmg.colors/1"),
     (lambda r: r["palette"].pop(), "labels.png has values"),
-    (lambda r: r["palette"][0].update(count=1), "pixel counts"),
+    (lambda r: r["palette"][1].update(index=5), "palette indices are not 0..k-1"),
+    (lambda r: r["palette"][0].update(hex="#000000"), "is not its rgb"),
+    (lambda r: r["palette"][0].update(rgb=[256, 0, 0]), "three ints 0..255"),
+    (lambda r: r["palette"][0].update(rgb=[1.0, 0, 0]), "three ints 0..255"),
+    (lambda r: r["palette"][-1].update(count=r["palette"][-1]["count"] - 1), "pixel counts"),
+    (_swap_counts, "palette counts increase"),
+    (lambda r: r["palette"][0].update(share=0.5), "shares are not its counts"),
+    (lambda r: r.update(base_index=1), "base_index and the palette's base flags"),
+    (lambda r: [p.update(base=p["index"] == 1) for p in r["palette"]],
+     "base_index and the palette's base flags"),
+    (lambda r: r.update(regions_pixels_sha256="0" * 64),
+     "regions.png's pixels do not match"),
+    (lambda r: r["outputs"].update({"extra.png": "0" * 64}), "outputs must be exactly"),
+    (lambda r: r["outputs"].pop("regions.png"), "outputs must be exactly"),
 ])
-def test_verify_colors_refuses_an_edited_record(done, tmp_path, change, message):
+def test_verify_colors_refuses_an_edited_record(done, sel, tmp_path, change, message):
     d = _copy(done[1], tmp_path, "colors")
     _edit_record(d, change)
     with pytest.raises(ColorsError, match=message):
-        verify_colors(d)
+        verify_colors(d, sel)
 
 
-def test_verify_colors_refuses_tampered_images(done, tmp_path):
+def _edit_identity(change):
+    """An identity edit with colors_id recomputed, so only the type checks can catch it."""
+    def edit(r):
+        change(r["identity"])
+        r["colors_id"] = colors_id(r["identity"])
+    return edit
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda i: i.update(supersample="4"), "supersample must be an integer"),
+    (lambda i: i.update(supersample=True), "supersample must be an integer"),
+    (lambda i: i.update(supersample=0), "supersample must be at least 1"),
+    (lambda i: i.update(width_mm=-1.0), "width_mm must be a finite number above 0"),
+    (lambda i: i.update(width_mm=True), "width_mm must be a number"),
+    (lambda i: i["rules"].update({"flat.smooth.sigma_px": -1.0}),
+     "sigma_px must be a finite number of at least 0"),
+    (lambda i: i["rules"].update({"flat.smooth.sigma_px": "2.5"}), "must be a finite number"),
+    (lambda i: i["rules"].pop("flat.smooth.sigma_px"), "identity.rules must hold exactly"),
+    (lambda i: i["settings"].update(base=True), "identity.settings.base"),
+    (lambda i: i["settings"].update(base="first"), "identity.settings.base"),
+    (lambda i: i["settings"].update(edges="fuzzy"), "identity.settings.edges"),
+    (lambda i: i["settings"].pop("base"), "identity.settings must hold exactly"),
+])
+def test_verify_colors_checks_identity_types(done, sel, tmp_path, change, message):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, _edit_identity(change))
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_an_identity_that_cannot_be_hashed(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    rec = json.loads((d / "colors.json").read_bytes())
+    rec["identity"]["width_mm"] = math.inf
+    (d / "colors.json").write_text(json.dumps(rec))     # json writes Infinity
+    with pytest.raises(ColorsError, match="identity cannot be hashed"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_maps_arithmetic_errors(done, sel, tmp_path):
+    # A huge nozzle overflows the island area (a float ** 2): ColorsError, not a crash.
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, _edit_identity(lambda i: i.update(nozzle_diameter_mm=1e300)))
+    with pytest.raises(ColorsError, match="cannot be computed"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_check_preview_false_skips_the_decode_only(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, lambda r: r.update(regions_pixels_sha256="0" * 64))
+    verify_colors(d, sel, check_preview=False)
+    with pytest.raises(ColorsError, match="regions_pixels_sha256"):
+        verify_colors(d, sel)
+    data = bytearray((d / "regions.png").read_bytes())
+    data[-20] ^= 1
+    (d / "regions.png").write_bytes(bytes(data))
+    with pytest.raises(ColorsError, match="regions.png does not match colors.json"):
+        verify_colors(d, sel, check_preview=False)
+
+
+def test_verify_colors_refuses_tampered_images(done, sel, tmp_path):
     d = _copy(done[1], tmp_path, "labels")
     labels = np.array(Image.open(d / "labels.png"))
     labels[tuple(np.argwhere(labels == LABELS_OUTSIDE)[0])] = 0
     Image.fromarray(labels).save(d / "labels.png")
     with pytest.raises(ColorsError, match="labels.png does not match colors.json"):
-        verify_colors(d)
+        verify_colors(d, sel)
     d = _copy(done[1], tmp_path, "regions")
     data = bytearray((d / "regions.png").read_bytes())
     data[-20] ^= 1
     (d / "regions.png").write_bytes(bytes(data))
     with pytest.raises(ColorsError, match="regions.png does not match colors.json"):
-        verify_colors(d)
+        verify_colors(d, sel)
     d = _copy(done[1], tmp_path, "gone")
     (d / "labels.png").unlink()
     with pytest.raises(ColorsError, match="labels.png not found"):
-        verify_colors(d)
+        verify_colors(d, sel)
 
 
 def _rewrite_labels(d, change):
@@ -431,11 +524,12 @@ def _rewrite_labels(d, change):
     _edit_record(d, lambda r: r["outputs"].update({"labels.png": digest}))
 
 
-def test_verify_colors_refuses_labels_out_of_range_even_with_a_matching_hash(done, tmp_path):
+def test_verify_colors_refuses_labels_out_of_range_even_with_a_matching_hash(done, sel,
+                                                                            tmp_path):
     d = _copy(done[1], tmp_path, "colors")
     _rewrite_labels(d, lambda a: a.__setitem__(tuple(np.argwhere(a == 0)[0]), 7))
     with pytest.raises(ColorsError, match="labels.png has values other than"):
-        verify_colors(d)
+        verify_colors(d, sel)
 
 
 def test_verify_colors_refuses_another_selection(done, tmp_path):
@@ -446,12 +540,21 @@ def test_verify_colors_refuses_another_selection(done, tmp_path):
 
 
 def test_verify_colors_refuses_labels_outside_the_selection_mask(done, sel, tmp_path):
-    # Hashes and counts made consistent, but labels.png labels a pixel outside the mask.
+    # labels.png, its hash, the counts and the shares are made consistent, and the scale is
+    # kept (the pixel is inside the mask's columns), but it labels a pixel outside the mask.
     d = _copy(done[1], tmp_path, "colors")
-    _rewrite_labels(d, lambda a: a.__setitem__(
-        tuple(np.argwhere(a == LABELS_OUTSIDE)[0]), 0))
-    _edit_record(d, lambda r: r["palette"][0].update(count=r["palette"][0]["count"] + 1))
-    verify_colors(d)                      # consistent on its own
+    labels = np.array(Image.open(d / "labels.png"))
+    cols = np.flatnonzero((labels != LABELS_OUTSIDE).any(axis=0))
+    outside = np.argwhere(labels == LABELS_OUTSIDE)
+    y, x = next(p for p in outside if cols[0] <= p[1] <= cols[-1])
+    _rewrite_labels(d, lambda a: a.__setitem__((y, x), 0))
+
+    def recount(r):
+        r["palette"][0]["count"] += 1
+        total = sum(p["count"] for p in r["palette"])
+        for p in r["palette"]:
+            p["share"] = p["count"] / total
+    _edit_record(d, recount)
     with pytest.raises(ColorsError, match="outside the selection's mask"):
         verify_colors(d, sel)
 

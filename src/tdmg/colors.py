@@ -36,11 +36,14 @@ from pathlib import Path
 import numpy as np
 import scipy
 from PIL import Image, ImageDraw, ImageFont
+from pydantic import ValidationError
 
 from tdmg import __version__
 from tdmg.color import (
     CLEANUP_METHOD,
+    ISLAND_RULE,
     METHOD,
+    OPENING_RULE,
     OUTSIDE,
     ColorError,
     changed_mask,
@@ -51,6 +54,7 @@ from tdmg.color import (
 from tdmg.color_config import (
     FURRY_RULE,
     SMOOTH_RULE,
+    ColorConfig,
     ColorConfigError,
     check_base,
     edge_sigma_px,
@@ -67,7 +71,14 @@ from tdmg.records import (
     write_outputs,
 )
 from tdmg.selection import SelectionError, checker, pixels_sha256, read_selection
-from tdmg.smoothing import LABELS_METHOD, SUPERSAMPLE, SmoothingError, smooth_labels
+from tdmg.smoothing import (
+    LABELS_METHOD,
+    SUPERSAMPLE,
+    SmoothingError,
+    _sigma_or_zero,
+    _supersample,
+    smooth_labels,
+)
 
 COLORS_ALGORITHM_VERSION = "colors-1"
 RECORD_SCHEMA = "tdmg.colors/1"
@@ -389,6 +400,7 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
 # --- verify_colors: reading a colors folder back (step 2) ---------------------------------
 
 EDGE_RULES = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE, "exact": None}
+SETTING_KEYS = ("colors", "edges", "base")
 
 
 @dataclass(frozen=True, eq=False)
@@ -413,30 +425,42 @@ class VerifiedColors:
     mm_per_px: float
 
 
-def verify_colors(colors_dir, selection_dir=None) -> VerifiedColors:
-    """Read a tdmg colors folder and check it, or raise ColorsError. Nothing is written.
+def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> VerifiedColors:
+    """Read a tdmg colors folder and check it against its selection, or raise ColorsError.
+    Nothing is written.
+
+    selection_dir is required, not optional: the tie between labels.png and the
+    selection's mask (labels exactly inside it) is what lets step 2 clip the colors to the
+    R1 outline, so a caller cannot skip it by leaving an argument out.
 
     Checks, in order:
-    - colors.json is UTF-8 JSON with schema RECORD_SCHEMA and an identity block, and
-      colors_id is colors_id(identity);
-    - the record fields that repeat the identity equal it: input.selection_id,
-      input.cutout_pixels_sha256, input.mask_pixels_sha256, settings.settings, width_mm,
-      printer, methods (and algorithm = methods.colors), limits.nozzle_diameter_mm,
-      limits.opening_width_mm and island_area_mm2 (from the identity's rules), and
-      smoothing.supersample, edge_rule and sigma_px (the edges preset's rule and its value
-      in the identity's rules; exact: no rule and 0);
-    - base_index and the palette's base flags agree with settings.base;
-    - the outputs are exactly labels.png and regions.png, and each file's SHA-256 is the
-      record's; regions.png's decoded pixels hash to regions_pixels_sha256;
-    - labels.png is 8-bit grey of the recorded size, every value is 255 or a palette
-      index, and the pixel count of each index is the palette entry's count.
-    With selection_dir: the selection is read with tdmg.selection.read_selection (with the
-    cutout), its selection_id, mask and cutout pixel hashes are the identity's, and
-    labels.png is 255 exactly outside its mask.
+    1. colors.json is UTF-8 JSON with schema RECORD_SCHEMA and an identity block;
+       colors_id is colors_id(identity).
+    2. The identity's values have valid types: settings as ColorConfig takes them (colors
+       an int, edges a preset, base auto or a non-bool int), supersample an int >= 1,
+       width_mm finite and above 0, the rules exactly the two cleanup rules plus the edges
+       preset's rule (none for exact), each a finite number, and the sigma finite and >= 0.
+    3. The record fields that repeat the identity equal it: input hashes, settings,
+       width_mm, printer, methods (and algorithm), limits (rule ids, nozzle, opening width,
+       island area) and smoothing (supersample, edge_rule, sigma_px).
+    4. The palette: indices 0..k-1; each hex is the "#rrggbb" of its rgb (ints 0..255);
+       counts do not increase; base_index and the base flags agree with settings.base.
+    5. The outputs are exactly labels.png and regions.png, and each file's SHA-256 is the
+       record's. With check_preview (the default), regions.png is decoded and its pixels
+       must hash to regions_pixels_sha256; step 2 passes False and skips the decode.
+    6. labels.png is 8-bit grey of the recorded size; every value is 255 or a palette
+       index; each index's pixel count is its palette count, and each share is that count
+       over the labelled pixels (the same division make_colors used).
+    7. mm_per_px is mask_mm_per_px(labelled pixels, width_mm), and it equals the record's
+       mm_per_px and limits.mm_per_px exactly; limits.min_width_px and min_area_px equal
+       the arithmetic of tdmg.color.printable_limits_px on the identity's rule values,
+       nozzle and that scale (the same float operations, so equality is exact).
+    8. The selection (read_selection, with the cutout): its selection_id, mask and cutout
+       pixel hashes are the identity's, and labels.png is 255 exactly outside its mask.
 
-    What it cannot check: fields outside the identity that are not listed above (such as
-    the palette's hex codes and the cleanup log) are as the record says; only a rerun of
-    make_colors with the same identity reproduces them.
+    What it cannot check: other record fields (such as the cleanup log and the palette's
+    Lab values) are as the record says; only a rerun of make_colors reproduces them.
+    OSError (an unreadable file) propagates; the CLI maps it to exit 2, as for colors.
     """
     colors_dir = Path(colors_dir)
     path = colors_dir / RECORD_NAME
@@ -451,40 +475,78 @@ def verify_colors(colors_dir, selection_dir=None) -> VerifiedColors:
     if not isinstance(record.get("identity"), dict):
         raise ColorsError(f"{path} has no identity block")
     try:
-        return _verify(colors_dir, record, selection_dir)
+        return _verify(colors_dir, record, selection_dir, check_preview)
     except (KeyError, TypeError, AttributeError, IndexError) as e:
         raise ColorsError(f"{path} is missing or has an invalid field: {e!r}") from None
+    except ArithmeticError as e:          # OverflowError, ZeroDivisionError ...
+        raise ColorsError(f"{path} has values that cannot be computed with: {e}") from None
 
 
 def _inconsistent(field: str) -> ColorsError:
     return ColorsError(f"colors.json is inconsistent: {field} does not match the identity")
 
 
-def _verify(colors_dir: Path, record: dict, selection_dir) -> VerifiedColors:
+def _identity_values(ident: dict) -> tuple[dict, float, int, float, str | None]:
+    """Check the identity's types; return its settings, width, supersample, sigma and the
+    edges rule id."""
+    settings = ident["settings"]
+    if not isinstance(settings, dict) or set(settings) != set(SETTING_KEYS):
+        raise ColorsError(f"identity.settings must hold exactly {', '.join(SETTING_KEYS)}")
+    try:
+        ColorConfig.model_validate(settings)
+    except ValidationError as e:
+        err = e.errors()[0]
+        raise ColorsError(f"identity.settings.{err['loc'][0]} is invalid: {err['msg']} "
+                          f"(got {err['input']!r})") from None
+    width = _width(ident["width_mm"])
+    try:
+        supersample = _supersample(ident["supersample"])
+    except SmoothingError as e:
+        raise ColorsError(f"identity.{e}") from None
+    edge_rule = EDGE_RULES[settings["edges"]]
+    rules = ident["rules"]
+    want = {OPENING_RULE, ISLAND_RULE} | ({edge_rule} if edge_rule else set())
+    if not isinstance(rules, dict) or set(rules) != want:
+        raise ColorsError(f"identity.rules must hold exactly {', '.join(sorted(want))}")
+    for rule_id, value in rules.items():
+        if (isinstance(value, bool) or not isinstance(value, numbers.Real)
+                or not math.isfinite(value)):
+            raise ColorsError(f"identity.rules[{rule_id!r}] must be a finite number, "
+                              f"got {value!r}")
+    try:
+        sigma = _sigma_or_zero(0.0 if edge_rule is None else rules[edge_rule])
+    except SmoothingError as e:
+        raise ColorsError(f"identity.rules: {e}") from None
+    return settings, width, supersample, sigma, edge_rule
+
+
+def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
+            ) -> VerifiedColors:
     ident = record["identity"]
     if colors_id(ident) != record["colors_id"]:
         raise ColorsError("colors.json is inconsistent: colors_id does not match its identity")
+    settings, width_mm, supersample, sigma, edge_rule = _identity_values(ident)
     inp, sm, lim = record["input"], record["smoothing"], record["limits"]
     rules = ident["rules"]
-    settings = record["settings"]["settings"]
-    edge_rule = EDGE_RULES.get(ident["settings"]["edges"], "?")
-    sigma = 0.0 if edge_rule is None else rules.get(edge_rule)
     nozzle = ident["nozzle_diameter_mm"]
+    opening_mm = float(rules[OPENING_RULE])
+    island_mm2 = (float(rules[ISLAND_RULE]) * nozzle) ** 2   # as printable_limits_px
     duplicates = {
         "input.selection_id": (inp["selection_id"], ident["selection_id"]),
         "input.cutout_pixels_sha256": (inp["cutout_pixels_sha256"],
                                        ident["cutout_pixels_sha256"]),
         "input.mask_pixels_sha256": (inp["mask_pixels_sha256"], ident["mask_pixels_sha256"]),
-        "settings.settings": (settings, ident["settings"]),
-        "width_mm": (record["width_mm"], ident["width_mm"]),
+        "settings.settings": (record["settings"]["settings"], settings),
+        "width_mm": (record["width_mm"], width_mm),
         "printer": (record["printer"], ident["printer"]),
         "methods": (record["methods"], ident["methods"]),
         "algorithm": (record["algorithm"], ident["methods"]["colors"]),
+        "limits.opening_rule": (lim["opening_rule"], OPENING_RULE),
+        "limits.island_rule": (lim["island_rule"], ISLAND_RULE),
         "limits.nozzle_diameter_mm": (lim["nozzle_diameter_mm"], nozzle),
-        "limits.opening_width_mm": (lim["opening_width_mm"], rules.get(lim["opening_rule"])),
-        "limits.island_area_mm2": (lim["island_area_mm2"],
-                                   (rules.get(lim["island_rule"], math.nan) * nozzle) ** 2),
-        "smoothing.supersample": (sm["supersample"], ident["supersample"]),
+        "limits.opening_width_mm": (lim["opening_width_mm"], opening_mm),
+        "limits.island_area_mm2": (lim["island_area_mm2"], island_mm2),
+        "smoothing.supersample": (sm["supersample"], supersample),
         "smoothing.edge_rule": (sm["edge_rule"], edge_rule),
         "smoothing.sigma_px": (sm["sigma_px"], sigma),
     }
@@ -493,15 +555,8 @@ def _verify(colors_dir: Path, record: dict, selection_dir) -> VerifiedColors:
             raise _inconsistent(field)
     palette = record["palette"]
     k = len(palette)
-    base_index = record["base_index"]
-    want_base = 0 if settings["base"] == "auto" else settings["base"]
-    if base_index != want_base or [p["base"] for p in palette] != [
-            i == base_index for i in range(k)]:
-        raise ColorsError("colors.json is inconsistent: base_index and the palette's base "
-                          "flags do not match settings.base")
-    if [p["index"] for p in palette] != list(range(k)):
-        raise ColorsError("colors.json is inconsistent: palette indices are not 0..k-1")
-    data = _verified_outputs(colors_dir, record)
+    base_index = _check_palette(palette, record["base_index"], settings["base"])
+    data = _verified_outputs(colors_dir, record, check_preview)
     labels8 = _decode(data["labels.png"], "labels.png", "L")
     if labels8.shape != (inp["height_px"], inp["width_px"]):
         raise ColorsError(f"labels.png is {labels8.shape[1]}x{labels8.shape[0]}, not the "
@@ -510,23 +565,55 @@ def _verify(colors_dir: Path, record: dict, selection_dir) -> VerifiedColors:
     if (labels8[inside] >= k).any():
         raise ColorsError(f"labels.png has values other than {LABELS_OUTSIDE} and the "
                           f"palette indices 0..{k - 1}")
-    counts = np.bincount(labels8[inside], minlength=k)
-    if counts.tolist() != [p["count"] for p in palette]:
+    counts = np.bincount(labels8[inside], minlength=k).tolist()
+    if counts != [p["count"] for p in palette]:
         raise ColorsError("labels.png's pixel counts do not match the palette's counts")
-    if selection_dir is not None:
-        _check_selection(selection_dir, ident, inside)
+    total = int(inside.sum())
+    if [p["share"] for p in palette] != [c / total for c in counts]:
+        raise ColorsError("the palette's shares are not its counts over the labelled pixels")
+    mm_per_px = mask_mm_per_px(inside, width_mm)
+    for field, got, want in (
+            ("mm_per_px", record["mm_per_px"], mm_per_px),
+            ("limits.mm_per_px", lim["mm_per_px"], mm_per_px),
+            ("limits.min_width_px", lim["min_width_px"], opening_mm / mm_per_px),
+            ("limits.min_area_px", lim["min_area_px"], island_mm2 / mm_per_px ** 2)):
+        if got != want:
+            raise ColorsError(f"colors.json is inconsistent: {field} is not what width_mm, "
+                              "the rules and labels.png give")
+    _check_selection(selection_dir, ident, inside)
     labels = np.where(inside, labels8.astype(np.int32), OUTSIDE).astype(np.int32)
     labels.flags.writeable = False
     return VerifiedColors(record=record, labels=labels, palette=palette,
-                          settings=dict(settings), base_index=base_index,
-                          sigma_px=float(sigma), supersample=ident["supersample"],
-                          width_mm=ident["width_mm"], mm_per_px=record["mm_per_px"])
+                          settings=dict(settings), base_index=base_index, sigma_px=sigma,
+                          supersample=supersample, width_mm=width_mm, mm_per_px=mm_per_px)
 
 
-def _verified_outputs(colors_dir: Path, record: dict) -> dict[str, bytes]:
+def _check_palette(palette: list, base_index, base) -> int:
+    """Indices 0..k-1, hex = rgb, counts not increasing, base flags agree; the base index."""
+    k = len(palette)
+    if [p["index"] for p in palette] != list(range(k)):
+        raise ColorsError("colors.json is inconsistent: palette indices are not 0..k-1")
+    for p in palette:
+        rgb = p["rgb"]
+        if (not isinstance(rgb, list) or len(rgb) != 3
+                or not all(type(v) is int and 0 <= v <= 255 for v in rgb)):
+            raise ColorsError(f"palette entry {p['index']}: rgb must be three ints 0..255")
+        if p["hex"] != "#" + "".join(f"{v:02x}" for v in rgb):
+            raise ColorsError(f"palette entry {p['index']}: hex {p['hex']!r} is not its rgb")
+    counts = [p["count"] for p in palette]
+    if counts != sorted(counts, reverse=True):
+        raise ColorsError("colors.json is inconsistent: palette counts increase")
+    want = 0 if base == "auto" else base
+    if base_index != want or [p["base"] for p in palette] != [i == want for i in range(k)]:
+        raise ColorsError("colors.json is inconsistent: base_index and the palette's base "
+                          "flags do not match settings.base")
+    return want
+
+
+def _verified_outputs(colors_dir: Path, record: dict, check_preview: bool) -> dict[str, bytes]:
     outputs = record["outputs"]
-    if set(outputs) != set(OUTPUT_FILES):
-        raise ColorsError(f"colors.json outputs must be {', '.join(OUTPUT_FILES)}")
+    if not isinstance(outputs, dict) or set(outputs) != set(OUTPUT_FILES):
+        raise ColorsError(f"colors.json outputs must be exactly {', '.join(OUTPUT_FILES)}")
     data = {}
     for name in OUTPUT_FILES:
         path = colors_dir / name
@@ -535,7 +622,7 @@ def _verified_outputs(colors_dir: Path, record: dict) -> dict[str, bytes]:
         data[name] = path.read_bytes()
         if hashlib.sha256(data[name]).hexdigest() != outputs[name]:
             raise ColorsError(f"{name} does not match colors.json")
-    if pixels_sha256(_decode(data["regions.png"], "regions.png", "RGB")) != (
+    if check_preview and pixels_sha256(_decode(data["regions.png"], "regions.png", "RGB")) != (
             record["regions_pixels_sha256"]):
         raise ColorsError("regions.png's pixels do not match regions_pixels_sha256")
     return data
