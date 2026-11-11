@@ -18,9 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import math
-import re
 from importlib.metadata import version as package_version
 from pathlib import Path
 
@@ -45,8 +43,7 @@ from tdmg.records import (
     write_outputs,
 )
 from tdmg.rules import load_rules
-from tdmg.selection import RECORD_SCHEMA as SELECTION_SCHEMA
-from tdmg.selection import SelectionError, load_mask, pixels_sha256, selection_identity
+from tdmg.selection import HEX64, SelectionError, read_selection
 from tdmg.smoothing import METHOD as SMOOTHING_METHOD
 from tdmg.smoothing import SmoothingError, smooth_outline
 
@@ -67,7 +64,6 @@ WIDTH_RTOL = 1e-9
 # |x| * 2^-24; F2.export_matches_geometry allows twice that, 2^-23, relative to the largest
 # expected coordinate. Not a physical tolerance either: storage rounding only.
 STL_COORD_RTOL = 2.0 ** -23
-HEX64 = re.compile(r"[0-9a-f]{64}")
 THIN_RULE = "fdm.wall.min_thickness"
 TRIANGLE_RULE = "slicer.orca.max_triangles_per_plate"
 OPENING_RULE = "flat.sliver.opening_width"
@@ -585,63 +581,13 @@ def _outline_image(mask: np.ndarray, kept: np.ndarray) -> np.ndarray:
 
 
 def _read_selection(selection_dir: Path) -> tuple[dict, np.ndarray]:
-    """selection.json and the verified mask (bool, image-sized)."""
-    record_path = selection_dir / "selection.json"
-    if not record_path.is_file():
-        raise FlatError(f"{record_path} not found; give a tdmg select output folder")
+    """selection.json and the verified mask (bool, image-sized, read-only), by
+    tdmg.selection.read_selection; its refusals become FlatError with the same message."""
     try:
-        record = json.loads(record_path.read_bytes().decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as e:
-        raise FlatError(f"{record_path} is not valid JSON: {e}") from None
-    if not isinstance(record, dict) or record.get("schema") != SELECTION_SCHEMA:
-        raise FlatError(f"{record_path} is not a {SELECTION_SCHEMA} record")
-    _check_provenance(record, record_path)
-    w, h = record["input"]["width"], record["input"]["height"]
-    expected = record["mask_pixels_sha256"]
-    mask_path = selection_dir / "mask.png"
-    if not mask_path.is_file():
-        raise FlatError(f"{mask_path} not found")
-    try:
-        mask = load_mask(mask_path, (h, w))
+        verified = read_selection(selection_dir)
     except SelectionError as e:
-        raise FlatError(f"mask.png cannot be used: {e}") from None
-    if pixels_sha256(mask) != expected:
-        raise FlatError("mask.png does not match selection.json")
-    return record, mask
-
-
-def _check_provenance(record: dict, record_path: Path) -> None:
-    """The fields that identify the selection are present, and selection_id matches them.
-
-    The id is recomputed with selection.selection_identity, the definition write_selection
-    uses, so an edited control, instruction or input hash with the old id is refused.
-    """
-    size = record.get("input")
-    if not isinstance(size, dict):
-        raise FlatError(f"{record_path} has no input block")
-    if not all(type(size.get(k)) is int and size[k] > 0 for k in ("width", "height")):
-        raise FlatError(f"{record_path} has no valid input width and height")
-    interpretation = record.get("interpretation")
-    fields = {"algorithm": isinstance(record.get("algorithm"), str),
-              "controls": isinstance(record.get("controls"), dict),
-              "input.pixels_sha256": _is_hex64(size.get("pixels_sha256")),
-              "interpretation.text": isinstance(interpretation, dict)
-              and "text" in interpretation
-              and isinstance(interpretation["text"], (str, type(None))),
-              "mask_pixels_sha256": _is_hex64(record.get("mask_pixels_sha256")),
-              "selection_id": _is_hex64(record.get("selection_id"))}
-    bad = [name for name, ok in fields.items() if not ok]
-    if bad:
-        raise FlatError(f"{record_path} is missing or has invalid: {', '.join(bad)}")
-    try:
-        recomputed = selection_identity(record["algorithm"], size["pixels_sha256"],
-                                        record["controls"], interpretation["text"])
-    except ValueError as e:          # NaN in the controls, or text UTF-8 cannot encode
-        raise FlatError(f"selection.json is inconsistent: its identity cannot be "
-                        f"recomputed ({e})") from None
-    if recomputed != record["selection_id"]:
-        raise FlatError("selection.json is inconsistent: selection_id does not match its "
-                        "algorithm, input pixels, controls and instructions")
+        raise FlatError(str(e)) from None
+    return verified.record, verified.mask
 
 
 def flat_identity(algorithm: str, mask_pixels_sha256: str, params: dict) -> str:

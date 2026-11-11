@@ -1,7 +1,8 @@
 """Command-line interface. Phase 0 exposes the registries. Phase 1 has `select` (subject
 selection for review), `flat` (flat geometry from a selection, gated on the written
 STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checked for
-portability with the pinned PrusaSlicer); `make` and `check` follow."""
+portability with the pinned PrusaSlicer). R2 adds `colors` (the color plan of a selection,
+for review); `make` and `check` follow."""
 
 from pathlib import Path
 from typing import Annotated
@@ -10,6 +11,7 @@ import typer
 from pydantic import ValidationError
 
 from tdmg import __version__
+from tdmg.colors import ColorsError, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
@@ -342,6 +344,87 @@ def slice_(
         prusa_written = PRUSA_FAILED_GCODE_NAME in rec["outputs"]
         typer.echo(DO_NOT_PRINT + (PRUSA_DO_NOT_PRINT if prusa_written else ""))
         raise typer.Exit(1)
+
+
+def _base(value: str | None) -> str | int | None:
+    if value is None or value == "auto":
+        return value
+    try:
+        return int(value)
+    except ValueError:
+        raise typer.BadParameter(f"expects auto or a color index, got {value!r}") from None
+
+
+@app.command()
+def colors(
+    selection: Annotated[Path, typer.Argument(exists=True, file_okay=False,
+                                              metavar="SELECTION_DIR",
+                                              help="A tdmg select output folder.")],
+    width_mm: Annotated[float, typer.Option(
+        "--width-mm", help="Width of the selection in the model, in mm.")],
+    out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
+    n_colors: Annotated[int | None, typer.Option(
+        "--colors", help="Number of colors; default the printer's palette (4 on the A1).")
+    ] = None,
+    edges: Annotated[str | None, typer.Option(
+        "--edges", help="smooth (default), furry or exact.")] = None,
+    base: Annotated[str | None, typer.Option(
+        "--base", help="auto (default: the largest color) or a color index.")] = None,
+    config: Annotated[Path | None, typer.Option(
+        "--config", help="YAML file with colors, edges and base; flags override it.")
+    ] = None,
+) -> None:
+    """Suggest a palette for a selection: write labels.png, regions.png and colors.json.
+
+    Exit codes:
+      0  files written
+      2  input, config or I/O error: nothing is written, except
+         that an I/O failure while writing can leave a folder
+         without colors.json, which must not be used
+    No checks run here, so there is no exit 1. Open regions.png to
+    review the colors before building geometry.
+    """
+    flags = {"colors": n_colors, "edges": edges, "base": _base(base)}
+    try:
+        rec = make_colors(selection, out, width_mm=width_mm, flags=flags, config_path=config,
+                          rules=load_rules(), printer=load_printer("bambu-a1"))
+    except ColorsError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:              # unreadable input, unwritable output, disk full ...
+        _os_error(e)
+        raise typer.Exit(2) from None
+    for line in _colors_lines(rec):
+        typer.echo(line)
+    for name in rec["outputs"]:
+        note = (" - open regions.png to check the colors before building geometry"
+                if name == "regions.png" else "")
+        typer.echo(f"wrote {out / name}{note}")
+    typer.echo(f"wrote {out / 'colors.json'}")
+
+
+def _colors_lines(rec: dict) -> list[str]:
+    """The palette, what was dropped or vanished, and colors_id (ASCII only)."""
+    s = rec["settings"]["settings"]
+    lines = [(f"palette: {len(rec['palette'])} colors (asked {s['colors']}), edges "
+              f"{s['edges']}, {rec['mm_per_px']:.4f} mm/px")]
+    for p in rec["palette"]:
+        lines.append(f"  {p['index']} {p['hex']} {p['share']:6.1%}"
+                     + ("  base" if p["base"] else ""))
+    q = rec["quantize"]
+    if q["n_distinct_colors"] < q["n_requested"]:
+        lines.append(f"note: the selection has only {q['n_distinct_colors']} distinct colors")
+    if q["dropped"]:
+        lines.append(f"dropped: {q['dropped']} palette color(s) got no pixel when quantizing")
+    for h in rec["cleanup"]["dropped_hex"]:
+        lines.append(f"dropped: {h} - cleanup merged all of it into its neighbours")
+    for v in rec["smoothing"]["vanished"]:
+        lines.append(f"vanished: {v['hex']} (index {v['index']}) - the {s['edges']} edges "
+                     "remove it entirely; it is still in labels.png")
+    lines.append(f"cleanup changed {rec['cleanup']['pixels_changed']} px in "
+                 f"{rec['cleanup']['passes']} passes")
+    lines.append(f"colors_id {rec['colors_id']}")
+    return lines
 
 
 if __name__ == "__main__":

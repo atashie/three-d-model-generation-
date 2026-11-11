@@ -17,6 +17,7 @@ import hashlib
 import io
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -441,3 +442,134 @@ def write_selection(intake: Intake, sel: Selection, out_dir: str | Path) -> dict
     except RecordError as e:
         raise SelectionError(str(e)) from None
     return record
+
+
+# --- Reading a selection folder back (tdmg flat, tdmg colors) ------------------------
+
+HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+@dataclass(frozen=True, eq=False)
+class VerifiedSelection:
+    """A tdmg select output folder, read and checked by read_selection. Arrays read-only.
+
+    record: selection.json as parsed. record_sha256: SHA-256 of its bytes as stored.
+    mask: H x W bool, from mask.png, whose pixel hash matches the record.
+    cutout_rgb: H x W x 3 uint8, the RGB of cutout.png (black outside the mask), and
+    cutout_pixels_sha256: pixels_sha256 of the decoded H x W x 4 RGBA; both None unless
+    read_selection was asked for the cutout.
+    """
+
+    record: dict
+    record_sha256: str
+    mask: np.ndarray
+    cutout_rgb: np.ndarray | None = None
+    cutout_pixels_sha256: str | None = None
+
+
+def _is_hex64(value) -> bool:
+    return isinstance(value, str) and HEX64.fullmatch(value) is not None
+
+
+def read_selection(selection_dir: str | Path, *, cutout: bool = False) -> VerifiedSelection:
+    """Read a tdmg select folder and verify it, or raise SelectionError. Nothing is written.
+
+    Checks: selection.json is UTF-8 JSON with schema RECORD_SCHEMA; the fields that identify
+    the selection are present and selection_id matches them (recomputed by
+    selection_identity); mask.png is a valid mask of the recorded size whose pixel hash is
+    mask_pixels_sha256. With cutout=True, also: the SHA-256 of cutout.png's bytes equals
+    outputs["cutout.png"], and the decoded image is RGBA of the image size whose alpha is
+    the mask (255 inside, 0 outside).
+
+    What it cannot check: selection_id does not cover the outputs block, so a cutout.png
+    edited together with its hash in selection.json passes (except for its alpha). Stages
+    that use the cutout record its pixel hash, so their records say exactly what they used.
+    """
+    selection_dir = Path(selection_dir)
+    record_path = selection_dir / "selection.json"
+    if not record_path.is_file():
+        raise SelectionError(f"{record_path} not found; give a tdmg select output folder")
+    raw = record_path.read_bytes()
+    try:
+        record = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as e:
+        raise SelectionError(f"{record_path} is not valid JSON: {e}") from None
+    if not isinstance(record, dict) or record.get("schema") != RECORD_SCHEMA:
+        raise SelectionError(f"{record_path} is not a {RECORD_SCHEMA} record")
+    _check_provenance(record, record_path)
+    w, h = record["input"]["width"], record["input"]["height"]
+    mask_path = selection_dir / "mask.png"
+    if not mask_path.is_file():
+        raise SelectionError(f"{mask_path} not found")
+    try:
+        mask = load_mask(mask_path, (h, w))
+    except SelectionError as e:
+        raise SelectionError(f"mask.png cannot be used: {e}") from None
+    if pixels_sha256(mask) != record["mask_pixels_sha256"]:
+        raise SelectionError("mask.png does not match selection.json")
+    mask.flags.writeable = False
+    rgb = digest = None
+    if cutout:
+        rgb, digest = _read_cutout(selection_dir, record, record_path, mask)
+    return VerifiedSelection(record=record, record_sha256=hashlib.sha256(raw).hexdigest(),
+                             mask=mask, cutout_rgb=rgb, cutout_pixels_sha256=digest)
+
+
+def _read_cutout(selection_dir: Path, record: dict, record_path: Path,
+                 mask: np.ndarray) -> tuple[np.ndarray, str]:
+    outputs = record.get("outputs")
+    expected = outputs.get("cutout.png") if isinstance(outputs, dict) else None
+    if not _is_hex64(expected):
+        raise SelectionError(f"{record_path} is missing or has invalid: outputs.cutout.png")
+    path = selection_dir / "cutout.png"
+    if not path.is_file():
+        raise SelectionError(f"{path} not found")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != expected:
+        raise SelectionError("cutout.png does not match selection.json")
+    with _open_checked(path, data) as im:
+        if im.mode != "RGBA":
+            raise SelectionError(f"cutout.png has mode {im.mode}, not RGBA")
+        rgba = np.asarray(im).copy()
+    if rgba.shape[:2] != mask.shape:
+        raise SelectionError(f"cutout.png size {rgba.shape[1]}x{rgba.shape[0]} does not "
+                             f"match the mask's {mask.shape[1]}x{mask.shape[0]}")
+    if not np.array_equal(rgba[..., 3], np.where(mask, 255, 0)):
+        raise SelectionError("cutout.png's transparency does not match mask.png")
+    rgb = np.ascontiguousarray(rgba[..., :3])
+    rgb.flags.writeable = False
+    return rgb, pixels_sha256(rgba)
+
+
+def _check_provenance(record: dict, record_path: Path) -> None:
+    """The fields that identify the selection are present, and selection_id matches them.
+
+    The id is recomputed with selection_identity, the definition write_selection uses, so
+    an edited control, instruction or input hash with the old id is refused.
+    """
+    size = record.get("input")
+    if not isinstance(size, dict):
+        raise SelectionError(f"{record_path} has no input block")
+    if not all(type(size.get(k)) is int and size[k] > 0 for k in ("width", "height")):
+        raise SelectionError(f"{record_path} has no valid input width and height")
+    interpretation = record.get("interpretation")
+    fields = {"algorithm": isinstance(record.get("algorithm"), str),
+              "controls": isinstance(record.get("controls"), dict),
+              "input.pixels_sha256": _is_hex64(size.get("pixels_sha256")),
+              "interpretation.text": isinstance(interpretation, dict)
+              and "text" in interpretation
+              and isinstance(interpretation["text"], (str, type(None))),
+              "mask_pixels_sha256": _is_hex64(record.get("mask_pixels_sha256")),
+              "selection_id": _is_hex64(record.get("selection_id"))}
+    bad = [name for name, ok in fields.items() if not ok]
+    if bad:
+        raise SelectionError(f"{record_path} is missing or has invalid: {', '.join(bad)}")
+    try:
+        recomputed = selection_identity(record["algorithm"], size["pixels_sha256"],
+                                        record["controls"], interpretation["text"])
+    except ValueError as e:          # NaN in the controls, or text UTF-8 cannot encode
+        raise SelectionError(f"selection.json is inconsistent: its identity cannot be "
+                             f"recomputed ({e})") from None
+    if recomputed != record["selection_id"]:
+        raise SelectionError("selection.json is inconsistent: selection_id does not match "
+                             "its algorithm, input pixels, controls and instructions")

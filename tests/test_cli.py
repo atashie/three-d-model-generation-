@@ -360,3 +360,122 @@ def test_flat_prints_smoothing_warnings_to_stderr_and_still_exits_0(tmp_path):
     record = json.loads((out / "flat.json").read_bytes())
     assert len(record["warnings"]) == 1                 # the stroke disappeared
     assert r.stderr == "".join(f"warning: {w}\n" for w in record["warnings"])
+
+
+# --- tdmg colors ----------------------------------------------------------------------
+
+def _colors(sel, out, *extra):
+    return runner.invoke(app, ["colors", str(sel), "--width-mm", "60", "--out", str(out),
+                               *extra])
+
+
+def test_colors_writes_outputs_and_prints_the_palette(tmp_path):
+    out = tmp_path / "colors"
+    r = _colors(_selection(tmp_path), out)
+    assert r.exit_code == 0, r.output
+    assert sorted(p.name for p in out.iterdir()) == ["colors.json", "labels.png",
+                                                    "regions.png"]
+    rec = json.loads((out / "colors.json").read_bytes())
+    text = _plain(r.stdout)
+    n = len(rec["palette"])
+    assert f"palette: {n} colors (asked 4), edges smooth" in text
+    for p in rec["palette"]:
+        line = f"{p['index']} {p['hex']} {p['share']:6.1%}"
+        assert " ".join(line.split()) + (" base" if p["base"] else "") in text
+    assert f"colors_id {rec['colors_id']}" in text
+    assert f"wrote {out / 'labels.png'}" in text
+    assert (f"wrote {out / 'regions.png'} - open regions.png to check the colors before "
+            "building geometry") in text
+    assert f"wrote {out / 'colors.json'}" in text
+    assert r.stderr == ""
+
+
+def test_colors_flags_and_config(tmp_path):
+    sel = _selection(tmp_path)
+    cfg = tmp_path / "c.yaml"
+    cfg.write_bytes(b"colors: 3\nedges: furry\n")
+    out = tmp_path / "colors"
+    r = _colors(sel, out, "--config", str(cfg), "--colors", "2", "--base", "auto")
+    assert r.exit_code == 0, r.output
+    rec = json.loads((out / "colors.json").read_bytes())
+    assert rec["settings"]["settings"] == {"colors": 2, "edges": "furry", "base": "auto"}
+    assert rec["settings"]["sources"] == {"colors": "flag", "edges": "config", "base": "flag"}
+    assert "edges furry" in _plain(r.stdout)
+
+
+def test_colors_numeric_base(tmp_path):
+    out = tmp_path / "colors"
+    r = _colors(_selection(tmp_path), out, "--colors", "2", "--base", "1")
+    assert r.exit_code == 0, r.output
+    assert json.loads((out / "colors.json").read_bytes())["base_index"] == 1
+
+
+@pytest.mark.parametrize("extra, message", [
+    (("--colors", "9"), "colors: must be between 2 and 4"),
+    (("--edges", "fuzzy"), "edges"),
+    (("--base", "7"), "base 7 is not a color index"),
+    (("--config", "missing.yaml"), "cannot read config file"),
+])
+def test_colors_bad_settings_exit_2_and_write_nothing(tmp_path, extra, message):
+    out = tmp_path / "colors"
+    r = _colors(_selection(tmp_path), out, *extra)
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and message in _plain(r.stderr)
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+    assert not out.exists()
+
+
+def test_colors_bad_base_text_is_a_usage_error(tmp_path):
+    r = _colors(_selection(tmp_path), tmp_path / "colors", "--base", "red")
+    assert r.exit_code == 2
+    assert "expects auto or a color index, got 'red'" in _plain(r.output)
+    assert not (tmp_path / "colors").exists()
+
+
+def test_colors_bad_width_and_input_exit_2(tmp_path):
+    sel = _selection(tmp_path)
+    r = runner.invoke(app, ["colors", str(sel), "--width-mm", "0", "--out",
+                            str(tmp_path / "a")])
+    assert r.exit_code == 2 and r.stderr.startswith("error: width_mm")
+    other = tmp_path / "other"
+    other.mkdir()
+    r = _colors(other, tmp_path / "b")
+    assert r.exit_code == 2 and "selection.json" in r.stderr
+    (sel / "mask.png").write_bytes((sel / "preview.png").read_bytes())
+    r = _colors(sel, tmp_path / "c")
+    assert r.exit_code == 2 and "mask.png" in r.stderr
+    for name in "abc":
+        assert not (tmp_path / name).exists()
+
+
+def test_colors_refuses_a_non_empty_out_folder(tmp_path):
+    out = tmp_path / "colors"
+    out.mkdir()
+    (out / "x.txt").write_text("x")
+    r = _colors(_selection(tmp_path), out)
+    assert r.exit_code == 2 and "not empty" in r.stderr
+    assert sorted(p.name for p in out.iterdir()) == ["x.txt"]
+
+
+def test_colors_reports_os_errors_without_a_traceback(tmp_path):
+    sel = _selection(tmp_path)
+    (tmp_path / "file.txt").write_text("not a folder")
+    r = _colors(sel, tmp_path / "file.txt" / "colors")
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and "file.txt" in r.stderr
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+
+
+def test_colors_help(tmp_path):
+    text = _plain(runner.invoke(app, ["colors", "--help"], prog_name="tdmg").output)
+    for option in ("--width-mm", "--out", "--colors", "--edges", "--base", "--config"):
+        assert option in text
+    assert "Usage: tdmg colors [OPTIONS] {SELECTION_DIR}" in text
+    assert "No checks run here, so there is no exit 1." in text
+
+
+def test_colors_without_width_is_a_usage_error(tmp_path):
+    r = runner.invoke(app, ["colors", str(_selection(tmp_path)), "--out",
+                            str(tmp_path / "colors")])
+    assert r.exit_code == 2
+    assert "Missing option '--width-mm'" in _plain(r.output)
