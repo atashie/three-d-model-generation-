@@ -103,3 +103,39 @@ PrusaSlicer run in `tdmg slice`.
 
 **Limits:** one PC, small models only. No model near the 1,000,000-triangle budget and
 no slower machine was timed.
+
+## Addendum: `F6.portability` through `tdmg slice`, 2026-11-11
+
+**Purpose:** portability plan Task 3 (`docs/plans/2026-11-11-portability-check.md`): run
+the implemented check (`slice-4`) on the owner's models and on the bad-file controls.
+Same PC, the pinned OrcaSlicer 2.5.0 and PrusaSlicer 2.9.7, full tree checks.
+
+**Controls** (`controls_portability.py` → `controls.txt`). The script builds minimal
+flat folders and calls `make_slice` with both slicers:
+
+| Case | OrcaSlicer | `F6.portability` | G-code |
+|---|---|---|---|
+| 20 mm cube | exit 0, 100 layers | PASS: 1 part, 12 facets, volume 8000.000488, 100 layers | written |
+| Cube with one face missing | exit 0, 10 layers (`F6.layer_count` FAIL) | FAIL: "reads model.stl as not manifold (open_edges 3)" | both files quarantined as `.failed` |
+| 300 × 20 × 5 mm box | exit −50 (`F6.slicer_exit` FAIL) | FAIL: "--export-gcode exited 0 but wrote no G-code: All objects are outside of the print volume." | none |
+
+The cube is NOT CERTIFIED only because its minimal flat folder has no F1/F2 checks; the
+script does not run `tdmg flat`.
+
+**Owner models.** `tdmg flat` was re-run with the current code
+(`artifacts/flat-runs/{roadie-tol30,oddie}-60x3-s4`, git-ignored). The STLs are
+byte-identical to the `-s3` ones, so the Roadie is the same file the owner printed.
+`tdmg slice` with both slicers (`artifacts/slice-runs/*-60x3-printable`):
+
+| Model | Verdict | Edge coverage, worst (allowance) | Overprint, worst | Portability |
+|---|---|---|---|---|
+| Roadie | **PRINTABLE** | 0.231 mm, first layer (0.275) | 0.013 mm | PASS: 1 part, 31,200 facets, 59.970630 × 49.404216 × 3, volume 2277.742188, 15 layers |
+| Oddie | **PRINTABLE** | 0.222 mm, first layer (0.275) | 0.013 mm | PASS: 1 part, 29,212 facets, 59.986743 × 65.870964 × 3, volume 5033.670898, 15 layers |
+
+Every required check is PASS; `F3.thin_regions` (information only) is UNKNOWN. The
+slice_ids are `7a9836d9…` (Roadie) and `33c470ac…` (Oddie).
+
+**What PRINTABLE does not mean:** the acceptance tolerance is still a hypothesis, no
+calibration print has been measured, and strength is not judged. Both slicers read STL
+with admesh, so this shows that a second slicer accepts and slices the file, not that an
+independent reader agrees.

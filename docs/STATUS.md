@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-10 (documentation audit after the F3 thin-wall policy). Phase 1
+**Last updated:** 2026-11-11 (F6.portability with PrusaSlicer 2.9.7; first PRINTABLE). Phase 1
 (R1, flat single-color) is under way, with three commands:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -8,13 +8,16 @@
   keeps the exact outline), and gates it.
 - **`tdmg slice`** (S9): slices it with a pinned, hash-verified OrcaSlicer 2.5.0 and the
   Bambu A1 profiles. It measures F6 and judges F3 from the printed G-code footprint
-  (`F3.printed_connectivity`, `F3.edge_coverage`, `F3.edge_overprint`).
+  (`F3.printed_connectivity`, `F3.edge_coverage`, `F3.edge_overprint`). With a pinned
+  PrusaSlicer 2.9.7 (`--prusaslicer-dir`), it also measures `F6.portability`.
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
-to 15 layers (about 8 minutes, 2.3 g and 4.3 g) and passes every F3 check. Both are **NOT
-CERTIFIED: F6.portability UNKNOWN** (no second slicer). The owner printed Roadie (Bambu
-Studio, matte PLA) and judged it "great" by eye; there are no caliper measurements. Not
-done yet: PrusaSlicer, loop or base, 3MF. The R4 backend is still open.
+to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
+every required check passed with the pinned slicers and the A1 profile. That is not a
+guarantee: the acceptance tolerance is still a hypothesis, nothing has been measured with
+calipers, and strength is not judged. The owner printed this same Roadie STL (Bambu
+Studio, matte PLA) and judged it "great" by eye. Not done yet: loop or base, 3MF. The R4
+backend is still open.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
 
@@ -25,7 +28,7 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 | Research | Landscape report (v2.1) and seven historical source notes; Windows/TripoSR/MakerLab results in `research/experiments/2026-11-g3-local-vs-hosted/`. Verification records in `research/verification/` (the 2026-11-10 ones cover selection, flat geometry, smoothing, OrcaSlicer on Windows and thin walls). Independent reviews in `research/reviews/` |
 | Plan | `docs/PLAN.md` v2.1, with dated factual notes from 2026-11-10. The owner's decisions are in its section 13. Phase 1 plans are in `docs/plans/` |
 | Phase 0 (foundations) | **Baseline and Windows extension verified.** Package `tdmg`, rules with checked citations, A1 printer profile and docs. Local checks and hosted CI pass on Windows, macOS and Linux |
-| Phase 1 (R1 flat single-color) | **In progress: three stages work; nothing is certified.** `tdmg select` (S0/S1); `tdmg flat` (S2–S4, S8: smoothed or exact outline, cleaning, manifold3d extrusion, gate on the written STL); `tdmg slice` (S9: pinned OrcaSlicer 2.5.0, F6 checks, F3 from the G-code; G-code from any FAIL is kept as `plate_1.gcode.failed`). Functionally tested, and run on the owner's two images on the Windows PC. Verdict for both: NOT CERTIFIED, F6.portability UNKNOWN. One owner print (Roadie, Bambu Studio's own slice, judged by eye). **Not built:** PrusaSlicer check, loop or base, text, 3MF, manifest. Records: `research/verification/2026-11-10-*` |
+| Phase 1 (R1 flat single-color) | **In progress: three stages work; the owner's two models are PRINTABLE.** `tdmg select` (S0/S1); `tdmg flat` (S2–S4, S8: smoothed or exact outline, cleaning, manifold3d extrusion, gate on the written STL); `tdmg slice` (S9: pinned OrcaSlicer 2.5.0, F6 checks, F3 from the G-code, `F6.portability` with pinned PrusaSlicer 2.9.7; G-code from any FAIL is kept as `.failed`). Functionally tested, and run on the owner's two images on the Windows PC. Verdict for both: PRINTABLE (2026-11-11), with the caveats above. One owner print (Roadie, Bambu Studio's own slice, judged by eye). **Not built:** loop or base, text, 3MF, manifest. Records: `research/verification/2026-11-10-*` and `2026-11-11-prusaslicer-windows/` |
 | Photo-to-3D backend (needed for R4) | TripoSR CPU test completed: ten measured runs, 32–35 seconds/model, 3.55–4.00 GiB peak working set. Repeated geometry matches exactly after sorting; OBJ bytes differ. All raw meshes fail topology checks; Roadie's background dominates its shape. See `research/experiments/2026-11-g3-local-vs-hosted/RESULTS-PC.md`. No backend chosen |
 
 ## Machines
@@ -33,34 +36,42 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 | Machine | Facts | What has been verified on it |
 |---|---|---|
 | M5 MacBook | Apple M5, arm64, 16 GB, macOS 26.3, no CUDA | Python 3.13 stack installed and functionally tested (`research/verification/2026-11-08-stack-smoke/`); all tests; wheel build and install. OrcaSlicer is not installed, so `tdmg slice` has not run a real slicer here |
-| PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, tests, lint, docs, wheel installation and geometry smoke checks passed. Optional import failures recorded in `research/verification/2026-11-09-pc-stack/README.md`. The pinned OrcaSlicer 2.5.0 is installed in `artifacts/tools/orcaslicer-2.5.0/` and run by `tdmg slice` |
+| PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, tests, lint, docs, wheel installation and geometry smoke checks passed. Optional import failures recorded in `research/verification/2026-11-09-pc-stack/README.md`. The pinned OrcaSlicer 2.5.0 is installed in `artifacts/tools/orcaslicer-2.5.0/` and the pinned PrusaSlicer 2.9.7 in `artifacts/tools/prusaslicer-2.9.7/`; both are run by `tdmg slice` |
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. `origin/main` is at `0cf75c9`. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI.
 
-Latest local validation (2026-11-10, Windows PC, after the F3 Codex review fixes, `slice-3`):
-`uv run pytest -q` gave **833 passed and 1 skipped**, both plain and with
-`CI=true GITHUB_ACTIONS=true`. The skipped test is the real-slicer test, which passed on its own
-with `TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 uv run pytest -m slicer`.
-`uv run ruff check .` and `uv run python scripts/gen_docs.py --check` passed.
+Latest local validation (2026-11-11, Windows PC, `slice-4` with `F6.portability`):
+`uv run pytest -q` gave **935 passed and 3 skipped**, both plain and with
+`CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
+passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
+uv run pytest -m slicer` command in `CLAUDE.md`. `uv run ruff check .`,
+`uv run python scripts/gen_docs.py --check` and both setup scripts' `--verify-only`
+passed. These commits are not yet pushed or CI-checked.
 
 ## Next steps, in order
 
-1. **F6 portability with PrusaSlicer.** It is the last blocker to PRINTABLE for the
-   owner's Roadie and Oddie. Pin and hash-verify PrusaSlicer 2.9.7 as was done for
-   OrcaSlicer, measure its CLI on Windows first, and record it in
-   `research/verification/`.
-2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
+1. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
-3. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
+2. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
    identity scheme.
-4. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
+3. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
    still a bit rough", acceptable for now. Options: a per-image `--smooth-px`, or a
    better source image.
-5. **R4 backend (open):** help the owner choose under their decision rule: a cheap
+4. **R4 backend (open):** help the owner choose under their decision rule: a cheap
    standard service, around $1 per model, beats a homemade pipeline if it does
    everything we need.
 
 ## Done so far (history)
+
+- **F6.portability (2026-11-11):** PrusaSlicer 2.9.7 pinned and hash-verified
+  (`profiles/slicers/prusaslicer-2.9.7.yaml`, `scripts/setup_prusaslicer.py`); its CLI
+  measured on Windows (`research/verification/2026-11-11-prusaslicer-windows/`). In
+  `tdmg slice` (`slice-4`), `F6.portability` checks PrusaSlicer's `--info` read of
+  `model.stl` (manifold, parts, facets, sizes, volume) and its full-height slice with the
+  A1 settings. Both slicers read STL with admesh, so for STL this shows a second slicer
+  accepts the file, not an independent reader; 3MF output must re-check. Controls: an
+  open cube and an outside-bed part FAIL it. Roadie and Oddie are PRINTABLE. Plan:
+  `docs/plans/2026-11-11-portability-check.md`.
 
 - **PC setup (2026-11-09):** completed locally, with optional failures documented in
   `research/verification/2026-11-09-pc-stack/README.md`. PyMeshLab, Open3D,

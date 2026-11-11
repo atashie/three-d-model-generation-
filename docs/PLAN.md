@@ -351,7 +351,7 @@ The dependency register records, for each entry, its licence and any obligations
   - The structured warnings file, `result.json`, is written on **Linux only**.
 
   None of this has been run on the M5 yet. The macOS adapter must be built and tested against real runs. On the Windows PC (2026-11-10), the pinned 2.5.0 portable release runs headless in `tdmg slice`, set up by `scripts/setup_orcaslicer.py`.
-- **PrusaSlicer 2.9.7** is the second checker (not installed yet, so `F6.portability` is UNKNOWN). Its 3MF reader is independent of the Bambu/Orca lineage, so passing both is the portability test.
+- **PrusaSlicer 2.9.7** is the second checker. Its 3MF reader is independent of the Bambu/Orca lineage, so passing both is the portability test for 3MF. *Note (2026-11-11):* on the Windows PC it is pinned and run by `tdmg slice` for `F6.portability` (`research/verification/2026-11-11-prusaslicer-windows/`). Both slicers read STL with admesh, so for STL the check shows only that a second slicer accepts and slices the file.
 - **Bambu Studio** is the owner's slicer, and the one their files must work in. Until its command line is automated here, the owner opens each phase's sample outputs in it by hand.
 - **OpenSCAD 2026.11**, once stable, is optional, for the BOSL2 hinge and joiner library.
 

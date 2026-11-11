@@ -72,13 +72,15 @@ not built.
 - Cookie-cutter defaults: [flat and relief pathways note](../../../research_notes/Image%20to%20printable%203D%20model%20landscape/image_to_flat_and_relief_pathways.md).
 - Hole, text and wall rules: [rules reference](../../reference/rules.md).
 - Slicing the owner's models: [OrcaSlicer record](../../../research/verification/2026-11-10-orcaslicer-windows/README.md) and the F3 results in the [thin-wall record](../../../research/verification/2026-11-10-thin-walls/README.md).
+- Portability and the first PRINTABLE verdicts: [PrusaSlicer record](../../../research/verification/2026-11-11-prusaslicer-windows/README.md).
 - The first print (owner report): [outline-smoothing record](../../../research/verification/2026-11-10-outline-smoothing/README.md), "First physical print".
 
 ## Open gaps
 
-- **Not certified:** the owner's Roadie and Oddie (60 × 3 mm, smoothed) give "NOT
-  CERTIFIED: F6.portability UNKNOWN". PrusaSlicer, the second slicer, is the last
-  missing check for them.
+- **PRINTABLE is not calibrated:** the owner's Roadie and Oddie (60 × 3 mm, smoothed)
+  are PRINTABLE with both pinned slicers (2026-11-11). The tolerance is still a
+  hypothesis and strength is not judged. For STL, both slicers share the admesh reader,
+  so 3MF output must re-check portability.
 - **One print, by eye only:** the owner printed the smoothed Roadie STL from
   `tdmg flat` in matte PLA, sliced in Bambu Studio with its standard settings (not
   `tdmg slice`'s G-code), and judged it "great". There are no caliper measurements, so

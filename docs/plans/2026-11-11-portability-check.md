@@ -22,7 +22,8 @@ approved installing PrusaSlicer on 2026-11-11. The evidence is
   cube gives 10 of 100.
 - **Repeatability:** only the line-1 timestamp differs between runs.
 
-**Status:** written 2026-11-11; not started.
+**Status:** written 2026-11-11. Tasks 1–3 done the same day; Task 4 in progress. See
+"Execution notes".
 
 ## Decisions
 
@@ -100,3 +101,24 @@ approved installing PrusaSlicer on 2026-11-11. The evidence is
 - Printing PrusaSlicer's G-code.
 - PrusaSlicer vendor profiles.
 - macOS and Linux setup.
+
+## Execution notes
+
+- **Tasks 1–2** (commits `2a736ec`, `b60e8f0`, `290ba52`, `c88f4f3`, `058cfbb`,
+  `b12f6c1`): the pin, `scripts/setup_prusaslicer.py` with code shared with the OrcaSlicer
+  setup in `scripts/_slicer_setup.py`, `src/tdmg/portability.py`, and `F6.portability` in
+  `tdmg slice` (`slice-4`), tested with `tests/fake_prusa.py` and a real-slicer test.
+- **Changes from the decisions above:**
+  - **Reader independence:** for STL, both slicers read with admesh. The check is worded
+    as "a second slicer accepts and slices the file", and 3MF must re-run it with
+    different readers.
+  - **File name:** the G-code is `prusaslicer.portability-only.gcode.txt` in the output
+    folder (not `portability/prusaslicer.gcode`), so that it is not mistaken for
+    printable G-code. It is quarantined as `.failed` like `plate_1.gcode`.
+  - **Z check:** every `;Z:` value must follow the expected sequence, not only the last.
+  - **Timeout:** each PrusaSlicer run is limited by a new rule, `slicer.prusa.timeout_s`
+    (300 s; the slowest measured run took 1.16 s).
+  - **`--skip-tree-check`** covers both slicers and caps the verdict at NOT CERTIFIED.
+- **Task 3:** see the addendum "`F6.portability` through `tdmg slice`" in
+  `research/verification/2026-11-11-prusaslicer-windows/README.md`. Roadie and Oddie are
+  PRINTABLE. The open cube and the outside-bed part FAIL `F6.portability`.

@@ -53,10 +53,11 @@ Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value,
 | F3 Printability geometry | Thin walls, small features, overhangs, trapped supports, stability |
 | F4 Structure-specific | Joint clearances, body count, connector fit, color regions |
 | F5 Resources | Triangle count (`slicer.orca.max_triangles_per_plate`), file size |
-| F6 Sliced output | Two slicers with different 3MF readers, OrcaSlicer and PrusaSlicer, accept the file and produce the expected objects |
+| F6 Sliced output | Two slicers, OrcaSlicer and PrusaSlicer, accept the file and produce the expected objects; for 3MF their readers must differ |
 
-If no slicer is installed, F6 is UNKNOWN, so nothing can be PRINTABLE. Today only
-OrcaSlicer is wired in, so `F6.portability` is UNKNOWN and nothing is PRINTABLE yet.
+If no slicer is installed, F6 is UNKNOWN, so nothing can be PRINTABLE. Without
+PrusaSlicer (`--prusaslicer-dir` or `TDMG_PRUSASLICER_DIR`), `F6.portability` is UNKNOWN,
+so the verdict is NOT CERTIFIED.
 
 **`tdmg slice` (S9, 2026-11-10)** slices a `tdmg flat` output with a pinned,
 hash-verified OrcaSlicer 2.5.0 and the Bambu A1 profiles. It replaces the placeholder
@@ -67,7 +68,19 @@ with measured F6 checks:
 - **F6.layer_count:** the layer count matches the expected count. This catches a
   truncated print; an open mesh slices with exit 0 to a fraction of its layers.
 - **F6.single_object:** one object in the slicer's statistics.
-- **F6.portability:** stays UNKNOWN until PrusaSlicer is added.
+- **F6.portability (2026-11-11):** a second pinned, hash-verified slicer, PrusaSlicer
+  2.9.7, must read `model.stl` as modelled and slice its full height. `--info` must report
+  a manifold mesh with no open edges, the record's part and facet counts, its sizes and
+  its volume within derived float bounds. `--export-gcode`, with the bed, nozzle, layer
+  and filament settings taken from the pinned A1 profile, must write G-code with the
+  expected layer count and Z heights. Its exit code 0 alone is not trusted: an
+  outside-bed part exits 0 with no G-code, and an open mesh exits 0 with a truncated one.
+  Both slicers read STL with the same library (admesh), so for STL this shows that a
+  second slicer accepts the file; it does not show that an independent reader agrees.
+  PrusaSlicer's output is kept as `prusaslicer.portability-only.gcode.txt`. It is
+  generic G-code, not for the A1: **never print it.** Each PrusaSlicer run is limited by
+  `slicer.prusa.timeout_s`. `--skip-tree-check` skips the full install check for both
+  slicers and caps the verdict at NOT CERTIFIED.
 
 It also measures F3 from the G-code (the thin-wall policy the owner approved,
 `docs/plans/2026-11-10-thin-wall-policy.md`). Each extruding move is modelled as a
@@ -88,9 +101,22 @@ corners strict (a corner sharper than about 62° can fail coverage). `F3.thin_re
 from the flat record is carried along as information only.
 
 The slice verdict requires every check of the flat record except `F6.slicer` and
-`F3.thin_regions`, plus the F3 and F6 checks above. While `F6.portability` is UNKNOWN it
-is NOT CERTIFIED; the owner's Roadie and Oddie (60 × 3 mm, smoothed) give "NOT
-CERTIFIED: F6.portability UNKNOWN".
+`F3.thin_regions`, plus the F3 and F6 checks above. With both slicers, the owner's
+Roadie and Oddie (60 × 3 mm, smoothed) are **PRINTABLE** (2026-11-11,
+`research/verification/2026-11-11-prusaslicer-windows/`).
+
+### What PRINTABLE means for you
+
+PRINTABLE means: every check this project requires passed, for this exact file, with
+these exact slicer versions and the A1 profile. Print `plate_1.gcode` on the A1, or open
+`model.stl` in Bambu Studio and slice it there. It is a strong "nothing we know how to
+measure is wrong", not a promise:
+
+- **Size accuracy is not proven.** The 0.2 mm tolerance in `acceptance.dimension.tolerance`
+  is a hypothesis until a print is measured with calipers.
+- **Strength is not judged.** A thin part can print and still snap.
+- **Other settings are not covered.** A different printer, nozzle, material profile or
+  slicer version is outside what was checked.
 
 The slicer does not validate meshes, so F1 still guards topology. When any required
 check FAILs, the G-code is written as `plate_1.gcode.failed` instead of `plate_1.gcode`;
