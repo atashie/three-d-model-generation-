@@ -72,6 +72,7 @@ from tdmg.color_config import (
     check_base,
     check_extraction_indices,
     edge_sigma_px,
+    palette_cap,
     resolve_color_config,
 )
 from tdmg.profiles import PrinterProfile
@@ -394,7 +395,8 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     check_base(settings["base"], k)
     base_index = 0 if settings["base"] == "auto" else settings["base"]
     ready = k <= settings["colors"]
-    reason = None if ready else not_ready_reason(k, settings["colors"], len(merges))
+    reason = None if ready else not_ready_reason(k, settings["colors"], len(merges),
+                                                palette_cap(printer))
     smoothed = smooth_labels(cleaned.labels, sigma, supersample)
     vanished = set(smoothed.vanished)
     to_final = index_map(extracted, cleaned)
@@ -490,12 +492,18 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     return json.loads(data)
 
 
-def not_ready_reason(n_final: int, colors: int, n_merges: int) -> str:
-    """Why a plan is not ready, for the record, the preview and the CLI."""
+def not_ready_reason(n_final: int, colors: int, n_merges: int, cap: int) -> str:
+    """Why a plan is not ready, for the record, the preview and the CLI.
+
+    cap: the printer's palette cap (tdmg.color_config.palette_cap). Raising colors is
+    suggested only when colors is below it; at the cap, merges are the only way.
+    """
     merged = f"after {n_merges} merge(s) and cleanup" if n_merges else "after cleanup"
-    return (f"{n_final} colors remain {merged}, but colors allows at most {colors}; add "
-            "merge pairs (by extraction index, from regions.png) to the config file, or "
-            "raise colors up to the printer's palette")
+    limit = f"{colors} (the printer's palette)" if colors >= cap else f"{colors}"
+    advice = ("add merge pairs (by extraction index, from regions.png) to the config file"
+              + ("" if colors >= cap else f", or raise colors up to the printer's palette "
+                                          f"({cap})"))
+    return f"{n_final} colors remain {merged}, but colors allows at most {limit}; {advice}"
 
 
 def _translate(merges, mapping) -> list[tuple[int, int]]:

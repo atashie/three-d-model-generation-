@@ -806,7 +806,7 @@ def test_not_ready_plan_is_written_and_says_why(not_ready, sel5):
     assert sorted(p.name for p in out.iterdir()) == sorted([*OUTPUT_FILES, "colors.json"])
     assert rec["ready"] is False
     assert len(rec["palette"]) == 5
-    assert rec["not_ready_reason"] == not_ready_reason(5, 4, 0)
+    assert rec["not_ready_reason"] == not_ready_reason(5, 4, 0, 4)
     assert rec["not_ready_reason"].startswith(
         "5 colors remain after cleanup, but colors allows at most 4")
     assert [e["final_index"] for e in rec["extraction"]["palette"]] == [0, 1, 2, 3, 4]
@@ -983,9 +983,29 @@ def test_owner_images_at_the_default_extraction(name, owner_selection, tmp_path)
     log = rec["cleanup"]
     assert (log["passes"], log["pixels_changed"], digest) == want["cleanup"]
     assert rec["ready"] is False
-    assert rec["not_ready_reason"] == not_ready_reason(len(want["final"]), 4, 0)
+    assert rec["not_ready_reason"] == not_ready_reason(len(want["final"]), 4, 0, 4)
     with pytest.raises(ColorsError, match="not ready"):
         verify_colors(out, SELECTIONS / name)
     shares = [f"{e['hex']} {e['share']:.1%}" for e in ext]
     print(f"\n{name}: make_colors {dt:.2f} s; extracted {shares}; final {want['final']}; "
           f"{rec['not_ready_reason']}; colors_id {rec['colors_id']}")
+
+
+def test_not_ready_reason_advises_raising_colors_only_below_the_cap():
+    at_cap = not_ready_reason(6, 4, 0, 4)
+    assert at_cap == ("6 colors remain after cleanup, but colors allows at most 4 (the "
+                      "printer's palette); add merge pairs (by extraction index, from "
+                      "regions.png) to the config file")
+    assert "raise colors" not in at_cap
+    below = not_ready_reason(5, 3, 1, 4)
+    assert below.startswith("5 colors remain after 1 merge(s) and cleanup, but colors allows "
+                            "at most 3; add merge pairs")
+    assert below.endswith("or raise colors up to the printer's palette (4)")
+
+
+def test_not_ready_at_and_below_the_cap_end_to_end(not_ready, sel5, tmp_path):
+    assert "raise colors" not in not_ready[0]["not_ready_reason"]       # colors 4 = cap
+    rec = run(sel5, tmp_path / "c3", flags={"extract": 5, "colors": 3, "edges": "exact"})
+    assert rec["ready"] is False
+    assert rec["not_ready_reason"] == not_ready_reason(5, 3, 0, 4)
+    assert "or raise colors up to the printer's palette (4)" in rec["not_ready_reason"]
