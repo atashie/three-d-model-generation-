@@ -1,0 +1,38 @@
+measure_palette.py at commit 89b5ec6; python 3.13.1, numpy 2.5.4, pillow 13.0.0, opencv 5.0.0
+flat.island.min_square_side = 2.0, nozzle = 0.4 mm -> island area 0.6400 mm^2; width 60.0 mm; MAX_ITER 1000; edge band 2.0 px
+CIELAB of white, black, red, green, blue: (255, 255, 255) -> (100.0000, -0.0000, 0.0000); (0, 0, 0) -> (0.0000, 0.0000, 0.0000); (255, 0, 0) -> (53.2408, 80.0925, 67.2032); (0, 255, 0) -> (87.7347, -86.1827, 83.1793); (0, 0, 255) -> (32.2970, 79.1875, -107.8602)
+all 16,777,216 sRGB colors: round trip sRGB->Lab->sRGB max error 0 levels; max |difference| from OpenCV float32 RGB2Lab: [0.1894, 0.4667, 0.3326] (L*, a*, b*)
+
+== roadie-tol30: mask sha256 0bf6bdc6d26f2a42, cutout sha256 7729c18cb7dd69d5
+   74768 masked px, 20789 unique colors, mm_per_px 0.100167, island area 63.79 px, edge-band px 9.0%
+   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)  iters  identical  label_sha256[:16]
+   kmeans    2    31.72   74.14     288    273     1.34%  0.053/0.051     14  True       422f4e3af0d20899
+   mediancut 2    33.35   71.28      69     52     0.48%  0.028/0.029      -  True       c05b10a9cabb3e04
+   kmeans    3    22.77   59.63     535    518     3.42%  0.049/0.049     12  True       c51a970965eff808
+   mediancut 3    23.49   69.48      30     11     0.06%  0.028/0.028      -  True       bde29fac101a42b5
+   kmeans    4    11.72   34.37      81     56     0.89%  0.047/0.049      9  True       a0c9528921f5f742
+   mediancut 4    20.21   69.43     588    553     3.25%  0.028/0.030      -  True       90da25123af032e2
+   palettes (hex, area share, share of that color's px in the edge band):
+   kmeans    2: #d10d0a 58.4% (edge 8%), #d0c89a 41.6% (edge 10%)
+   mediancut 2: #c4180c 63.4% (edge 11%), #e6e0ae 36.6% (edge 5%)
+   kmeans    3: #da0909 54.9% (edge 4%), #b5a9a4 34.8% (edge 19%), #eeef0a 10.3% (edge 0%)
+   mediancut 3: #e80707 49.5% (edge 0%), #fcf6c1 30.2% (edge 0%), #623b26 20.3% (edge 44%)
+   kmeans    4: #ed0707 46.9% (edge 0%), #ededed 23.2% (edge 2%), #5c271b 19.5% (edge 44%), #eeef0a 10.3% (edge 0%)
+   mediancut 4: #fa0506 37.6% (edge 0%), #fcf6c1 30.2% (edge 0%), #980b0b 17.2% (edge 14%), #5f4831 15.0% (edge 44%)
+
+== oddie: mask sha256 421bddd781ddadb7, cutout sha256 5a7bfc486f864011
+   298172 masked px, 5579 unique colors, mm_per_px 0.074720, island area 114.63 px, edge-band px 2.3%
+   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)  iters  identical  label_sha256[:16]
+   kmeans    2    33.60   46.40       4      0     0.00%  0.064/0.063      3  True       d505f23d0f49b0d0
+   mediancut 2    32.12   44.15     591    580     0.34%  0.061/0.061      -  True       6c3d7e07ac7c4a9d
+   kmeans    3    17.81   35.27      16      2     0.00%  0.064/0.066      5  True       2b212e3aa1bb520d
+   mediancut 3    30.49   42.64     607    595     0.34%  0.062/0.065      -  True       25a50f997d132992
+   kmeans    4    17.78   34.83      20      6     0.06%  0.068/0.064      4  True       c79dc11a690a2e5f
+   mediancut 4    28.10   42.64    2606   2581     1.28%  0.060/0.060      -  True       bece7bfdd229c2fb
+   palettes (hex, area share, share of that color's px in the edge band):
+   kmeans    2: #406e4a 97.9% (edge 2%), #dc4f47 2.1% (edge 0%)
+   mediancut 2: #60916e 50.1% (edge 0%), #2b4c28 49.9% (edge 4%)
+   kmeans    3: #337626 58.5% (edge 0%), #436279 39.4% (edge 6%), #dc4f47 2.1% (edge 0%)
+   mediancut 3: #294d28 49.3% (edge 4%), #58926e 48.5% (edge 0%), #dc554c 2.2% (edge 1%)
+   kmeans    4: #337626 58.5% (edge 0%), #436279 39.3% (edge 6%), #dc4f47 2.1% (edge 0%), #f5f1f2 0.1% (edge 1%)
+   mediancut 4: #58926e 48.1% (edge 0%), #2d552c 44.2% (edge 1%), #0a0e0a 5.4% (edge 30%), #dc554c 2.2% (edge 1%)
