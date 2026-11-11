@@ -68,6 +68,10 @@ spec review and a quality review, then the Codex critical review in Task 8.
      - **Final labels:** after the palette is rounded to hex, each pixel is reassigned
        to its nearest rounded palette color, so the preview, the ΔE and the labels
        agree.
+     - **Palette order after any step (decided 2026-11-11, Task 3 quality review):**
+       always by final area, re-sorted after cleanup, through one builder
+       (`from_labels`). A numeric `base` refers to that final order, which is the one
+       the preview shows.
      - **Port fidelity:** keep sorted unique colors, first-index ties, float64, and
        "an empty cluster keeps its centroid". The Task 1 label-map hashes become
        fixtures, in tests that skip when the owner images are absent.
