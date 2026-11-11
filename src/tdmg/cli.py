@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from tdmg import __version__
 from tdmg.flat import FlatError, make_flat
-from tdmg.portability import PRUSA_GCODE_NOTE
+from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, RECIPES
 from tdmg.rules import load_rules
@@ -25,7 +25,7 @@ from tdmg.selection import (
     write_selection,
 )
 from tdmg.slicer import SlicerError
-from tdmg.slicing import DO_NOT_PRINT, make_slice
+from tdmg.slicing import DO_NOT_PRINT, PRINT_THIS, PRUSA_DO_NOT_PRINT, make_slice
 
 app = typer.Typer(help="Image -> FDM-printable 3MF/STL. See docs/guide/00-start-here.md.",
                   no_args_is_help=True)
@@ -273,12 +273,14 @@ def slice_(
         "--slicer-dir", help="OrcaSlicer folder from scripts/setup_orcaslicer.py; default "
                              "$TDMG_ORCASLICER_DIR")] = None,
     timeout_s: Annotated[float | None, typer.Option(
-        "--timeout-s", help="Stop the slicer after this many seconds; default from rule "
-                            "slicer.orca.timeout_s")] = None,
+        "--timeout-s", help="Stop each slicer run after this many seconds; default from "
+                            "rules slicer.orca.timeout_s (OrcaSlicer) and "
+                            "slicer.prusa.timeout_s (each PrusaSlicer run)")] = None,
     skip_tree_check: Annotated[bool, typer.Option(
         "--skip-tree-check", help="Do not hash every file of the slicers' app folders "
                                   "(saves a few seconds per slicer); recorded as "
-                                  "app_tree_verified false")] = False,
+                                  "app_tree_verified false, and the verdict cannot be "
+                                  "PRINTABLE")] = False,
     prusaslicer_dir: Annotated[Path | None, typer.Option(
         "--prusaslicer-dir", help="PrusaSlicer folder from scripts/setup_prusaslicer.py, for "
                                   "F6.portability; default $TDMG_PRUSASLICER_DIR; without "
@@ -286,8 +288,10 @@ def slice_(
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
 
-    With PrusaSlicer configured, F6.portability checks that it reads and slices the
-    model too; its prusaslicer.gcode is generic G-code, never for the A1.
+    With PrusaSlicer configured, F6.portability checks that a second slicer
+    accepts model.stl as modelled and slices its full height (both read STL
+    with admesh); prusaslicer.portability-only.gcode.txt is generic G-code,
+    never for the A1.
 
     Exit codes:
       0  files written, and no check FAILed (UNKNOWN checks allowed)
@@ -310,6 +314,8 @@ def slice_(
     typer.echo(rec["certification"])     # the verdict, with the checks that block it
     if rec["certification_note"]:
         typer.echo(rec["certification_note"])     # what PRINTABLE means, and does not
+    if rec["certification"] == "PRINTABLE":
+        typer.echo(PRINT_THIS)
     if not rec["slicer"]["app_tree_verified"]:
         typer.echo("app tree not verified (--skip-tree-check)")
     code = rec["exit"]
@@ -328,10 +334,13 @@ def slice_(
     typer.echo(_portability_line(rec))
     typer.echo(f"slice_id {rec['slice_id']}")
     for name in rec["outputs"]:
-        typer.echo(f"wrote {out / name}")
+        evidence = name in (PRUSA_GCODE_NAME, PRUSA_FAILED_GCODE_NAME)
+        typer.echo(f"wrote {out / name}"
+                   + (" (portability evidence only; not for printing)" if evidence else ""))
     typer.echo(f"wrote {out / 'slice.json'}")
     if any(c["status"] == "FAIL" for c in rec["checks"]):
-        typer.echo(DO_NOT_PRINT)
+        prusa_written = PRUSA_FAILED_GCODE_NAME in rec["outputs"]
+        typer.echo(DO_NOT_PRINT + (PRUSA_DO_NOT_PRINT if prusa_written else ""))
         raise typer.Exit(1)
 
 

@@ -5,10 +5,12 @@ tests check them against that record where it has them.
 """
 
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 import trimesh
 
@@ -42,6 +44,11 @@ DLL = "app/PrusaSlicer-2.9.7/PrusaSlicer.dll"
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _tris(stl: bytes) -> np.ndarray:
+    mesh = trimesh.load(io.BytesIO(stl), file_type="stl", process=False)
+    return np.asarray(mesh.vertices, dtype=np.float64)[np.asarray(mesh.faces)]
 
 
 def _hash_lines(name: str) -> dict[str, str]:
@@ -279,6 +286,8 @@ def test_parse_info_reads_an_open_or_repaired_mesh():
     assert (info["manifold"], info["open_edges"]) == (False, 3)
     repaired = parse_info(ROADIE_INFO.replace("volume", "facets_reversed = 2\nvolume"))
     assert repaired["repairs"] == {"facets_reversed": 2}
+    zero = parse_info(ROADIE_INFO.replace("volume", "open_edges = 0\nvolume"))
+    assert (zero["manifold"], zero["open_edges"]) == (True, 0)
 
 
 @pytest.mark.parametrize(("text", "message"), [
@@ -302,8 +311,9 @@ def test_gcode_layers_and_hashes():
     for i in range(15):
         lines += [";LAYER_CHANGE", f";Z:{0.2 * (i + 1):.6g}", ";HEIGHT:0.2"]
     data = ("\n".join(lines) + "\n").encode()
-    assert gcode_layers(data) == {"layers": 15, "last_z_mm": 3.0}
-    assert gcode_layers(b"G28\n") == {"layers": 0, "last_z_mm": None}
+    assert gcode_layers(data) == {"layers": 15,
+                                  "z_mm": [float(f"{0.2 * (i + 1):.6g}") for i in range(15)]}
+    assert gcode_layers(b"G28\n") == {"layers": 0, "z_mm": []}
     with pytest.raises(SlicerError, match="Z"):
         gcode_layers(b";LAYER_CHANGE\n;Z:abc\n")
     other = data.replace(b"12:08:29", b"13:00:00")
@@ -336,7 +346,58 @@ def test_the_volume_bound_covers_the_measured_owner_models(name, reported):
     stl = (OWNER / name / "model.stl").read_bytes()
     record = json.loads((OWNER / name / "flat.json").read_bytes())["mesh"]
     error = abs(reported - record["volume_mm3"])
-    assert error <= volume_error_bound(stl)
+    bound = volume_error_bound(stl)
+    assert error <= bound <= 0.01 * record["volume_mm3"]     # sound, and still useful
+
+
+def _emulated_admesh_volume(stl: bytes) -> float:
+    """admesh's get_volume as volume_error_bound describes it, in numpy float32."""
+    f = np.float32
+    tri = _tris(stl)
+    t32 = tri.astype(f)
+    p0 = t32[0, 0]
+    cross = np.cross(t32[:, 1] - t32[:, 0], t32[:, 2] - t32[:, 0]).astype(f)
+    length = np.sqrt((cross.astype(np.float64) ** 2).sum(axis=1))
+    inverse = np.where(length < 1e-12, 0.0, 1 / np.where(length == 0, 1, length)).astype(f)
+    normal = (cross * inverse[:, None]).astype(f)
+    s = sum(np.cross(tri[:, i], tri[:, (i + 1) % 3]) for i in range(3)).astype(f)
+    area = (f(0.5) * np.einsum("ij,ij->i", normal, s).astype(f)).astype(f)
+    height = np.einsum("ij,ij->i", normal, (t32[:, 0] - p0).astype(f)).astype(f)
+    terms = ((area * height).astype(f) / f(3)).astype(f)
+    volume = f(0)
+    for term in terms:
+        volume = f(volume + term)
+    return float(volume)
+
+
+def test_the_emulation_reproduces_the_measured_cube():
+    stl = trimesh.creation.box((20, 20, 20)).export(file_type="stl")
+    assert f"{_emulated_admesh_volume(stl):.6f}" == "8000.000488"     # results.txt
+
+
+@pytest.mark.parametrize("seed", range(12))
+def test_the_volume_bound_holds_for_random_float32_meshes(seed):
+    rng = np.random.default_rng(seed)
+    kind = seed % 4
+    if kind == 0:
+        mesh = trimesh.creation.box(rng.uniform(0.2, 120, 3))
+    elif kind == 1:
+        mesh = trimesh.creation.icosphere(int(rng.integers(1, 4)), radius=rng.uniform(0.5, 40))
+    elif kind == 2:          # slivers: a thin cylinder with many sections
+        mesh = trimesh.creation.cylinder(radius=rng.uniform(0.05, 2),
+                                         height=rng.uniform(5, 250),
+                                         sections=int(rng.integers(200, 1500)))
+    else:
+        mesh = trimesh.creation.annulus(r_min=rng.uniform(1, 5), r_max=rng.uniform(6, 30),
+                                        height=rng.uniform(0.2, 5))
+    rotation = trimesh.transformations.random_rotation_matrix(rng.random(3))
+    mesh.apply_transform(rotation)
+    mesh.apply_translation(rng.uniform(-50, 250, 3))
+    stl = mesh.export(file_type="stl")
+    tri = _tris(stl)
+    exact = np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])).sum() / 6
+    error = abs(abs(_emulated_admesh_volume(stl)) - abs(exact))
+    assert error <= volume_error_bound(stl), (seed, error)
 
 
 def test_the_size_tolerance():

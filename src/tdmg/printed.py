@@ -326,7 +326,7 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     (even if it prints nothing), Z_HEIGHT values that do not strictly increase in file
     order, a first layer whose Z is not its LAYER_HEIGHT, or a layer whose Z is not the
     previous Z plus its LAYER_HEIGHT, within the precision those numbers are written with
-    (_z_tolerance). A layer's height is the first LAYER_HEIGHT after its Z_HEIGHT, as
+    (z_tolerance). A layer's height is the first LAYER_HEIGHT after its Z_HEIGHT, as
     OrcaSlicer writes it; later LAYER_HEIGHT lines in the layer are the bead heights of
     single features (a bridge is written 0.4 mm high) and do not change the layer.
 
@@ -464,7 +464,7 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                                "LAYER_HEIGHT")
     previous = 0.0
     for z, lay in layers.items():                        # file order, increasing
-        if abs(z - previous - lay.height) > _z_tolerance(z, previous, lay.height):
+        if abs(z - previous - lay.height) > z_tolerance(z, previous, lay.height):
             raise UnsupportedGcode(f"layer {z:g}: Z is not the previous Z ({previous:g}) "
                                    f"plus its LAYER_HEIGHT ({lay.height:g}): a gap or an "
                                    "overlap in the layers")
@@ -479,13 +479,14 @@ def _half_digit(v: float) -> float:
     return 0.5 * 10.0 ** (math.floor(math.log10(abs(v))) - (Z_SIG_DIGITS - 1))
 
 
-def _z_tolerance(z: float, previous: float, height: float) -> float:
+def z_tolerance(z: float, previous: float, height: float) -> float:
     """How far z - previous - height may be from 0 from how the three were written.
 
     The %g rounding of each of the three numbers, plus the float rounding of the height
     (see Z_SIG_DIGITS), doubled for the float64 arithmetic here, as flat's STL_COORD_RTOL
     does. For a 0.2 mm layer near z = 3 mm it is about 1e-6 mm: a numerical bound, far
-    below any layer height, so a missing or doubled layer cannot pass.
+    below any layer height, so a missing or doubled layer cannot pass. tdmg.portability
+    uses it for PrusaSlicer's ";Z:" lines, which are written with 6 significant digits too.
     """
     rounding = _half_digit(z) + _half_digit(previous) + _half_digit(height)
     return 2 * (rounding + (abs(z) + abs(previous) + abs(height)) * 2.0 ** -24)
@@ -1026,7 +1027,7 @@ def _truncation(analysis: Analysis, allowed: frozenset[int],
                 threshold: dict) -> CheckResult | None:
     """F3.edge_coverage FAIL when the G-code stops short of the model (or goes beyond it)."""
     n, last_z, top = analysis.layer_count, analysis.last_z, analysis.model_top
-    unprinted = top - last_z > analysis.last_height / 2 + _z_tolerance(top, last_z, 0.0)
+    unprinted = top - last_z > analysis.last_height / 2 + z_tolerance(top, last_z, 0.0)
     if n in allowed and not unprinted:
         return None
     measured = {"layers_printed": n, "layers_allowed": sorted(allowed), "last_z_mm": last_z,

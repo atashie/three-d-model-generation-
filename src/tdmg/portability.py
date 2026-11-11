@@ -10,6 +10,13 @@ code or profile file is part of this repo. Where a docstring says what PrusaSlic
 inside, it was read in its source at tag version_2.9.7 on 2026-11-11 (file and function
 named), and only the fact is restated here.
 
+What F6.portability shows for STL, and what it does not: a second slicer (PrusaSlicer
+2.9.7) accepts model.stl as modelled (its admesh read agrees with tdmg's trimesh read:
+parts, facets, sizes, volume) and slices its full height with the A1 bed, nozzle, layer and
+filament settings. OrcaSlicer and PrusaSlicer share the admesh STL reader, so for STL this
+is not a check by an independent reader; a 3MF output must re-run portability with truly
+different readers.
+
 PrusaSlicer is located only from --prusaslicer-dir or $TDMG_PRUSASLICER_DIR, never by
 searching the system, so an unpinned PrusaSlicer is never used by accident. When neither
 is given, locate_prusaslicer returns None and F6.portability stays UNKNOWN.
@@ -42,14 +49,14 @@ from pydantic import Field, model_validator
 from tdmg.checks import CheckResult
 from tdmg.flat import STL_COORD_RTOL
 from tdmg.paths import PROFILES_DIR
-from tdmg.printed import _z_tolerance
+from tdmg.printed import z_tolerance
 from tdmg.slicer import (
+    OUTPUT_TAIL_CHARS,
     AppTree,
     PinnedFile,
     Release,
     SlicerError,
     _Model,
-    output_tail,
     run_process,
     verify_app,
     verify_tree,
@@ -61,11 +68,19 @@ PRUSA_SETUP_SCRIPT = "scripts/setup_prusaslicer.py"
 SETUP_HINT = (f"pass --prusaslicer-dir DIR or set {PRUSA_ENV_VAR}; install it with "
               f"`uv run python {PRUSA_SETUP_SCRIPT} --dest DIR`")
 NOT_CONFIGURED = "PrusaSlicer is not configured: " + SETUP_HINT
-PRUSA_GCODE_NAME = "prusaslicer.gcode"
+PRUSA_TIMEOUT_RULE = "slicer.prusa.timeout_s"
+# Not a .gcode name, so no printer software offers it for printing by its extension.
+PRUSA_GCODE_NAME = "prusaslicer.portability-only.gcode.txt"
 PRUSA_FAILED_GCODE_NAME = PRUSA_GCODE_NAME + ".failed"
 PRUSA_GCODE_NOTE = (f"{PRUSA_GCODE_NAME} is generic G-code for a generic printer, not Bambu "
                     "firmware G-code and not for the A1: it is evidence of portability only; "
                     "never print it")
+PORTABILITY_MEANING = (
+    "a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read "
+    "agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full "
+    "height with the A1 bed, nozzle, layer and filament settings")
+SHARED_READER_NOTE = ("OrcaSlicer and PrusaSlicer share the admesh STL reader, so a 3MF output "
+                      "must re-run portability with truly different readers")
 # The settings passed on the command line, each from one key of the hash-checked OrcaSlicer
 # A1 profiles (plan Decision 2): (option, profile, key). The order is the measured one.
 SETTINGS = (("--bed-shape", "machine", "printable_area"),
@@ -268,30 +283,32 @@ class PrusaRun:
 
     def summary(self) -> dict:
         return {"returncode": self.returncode, "timed_out": self.timed_out,
-                "stdout_tail": output_tail(self.stdout.encode("utf-8")),
-                "stderr_tail": self.stderr}
+                "stdout_tail": self.stdout[-OUTPUT_TAIL_CHARS:], "stderr_tail": self.stderr}
 
 
 def _run(cmd_prefix: list[str], args: list[str], work: Path, timeout: float,
          hide: dict[str, str]) -> PrusaRun:
     """One run in the new folder work. Each path in hide is replaced by its placeholder in
-    the output kept, so the record holds no path from this machine (PrusaSlicer prints the
-    G-code's full path)."""
+    the whole output, before the tail is cut, so the record holds no path from this machine
+    and no part of one (PrusaSlicer prints the G-code's full path)."""
     work.mkdir()
     returncode, timed_out, out, err = run_process([*cmd_prefix, *args], work, timeout)
-    text, tail = out.decode("utf-8", errors="replace"), output_tail(err)
+    text = out.decode("utf-8", errors="replace")
+    errors = err.decode("utf-8", errors="replace")
     for path, placeholder in sorted(hide.items(), key=lambda kv: -len(kv[0])):
-        text, tail = text.replace(path, placeholder), tail.replace(path, placeholder)
-    return PrusaRun(returncode, timed_out, timeout, text, tail)
+        text, errors = text.replace(path, placeholder), errors.replace(path, placeholder)
+    return PrusaRun(returncode, timed_out, timeout, text, errors[-OUTPUT_TAIL_CHARS:])
 
 
 def run_portability(cmd_prefix: list[str], stl: Path, settings: dict[str, dict],
-                    workdir: Path, timeout: float) -> tuple[PrusaRun, PrusaRun, bytes | None]:
+                    workdir: Path, timeout: float, prusa: PrusaSlicer | None = None,
+                    ) -> tuple[PrusaRun, PrusaRun, bytes | None]:
     """Run --info and then --export-gcode on stl, each in its own new folder in workdir.
 
     cmd_prefix is [exe], or [sys.executable, fake_prusa.py] in tests; its program must be
-    an absolute path. Each run gets the full timeout. Returns both runs and the G-code's
-    bytes (None when none was written).
+    an absolute path. Each run gets the full timeout. The work folder, the model, the
+    program and, when given, the install's folder and exe are hidden in the output kept.
+    Returns both runs and the G-code's bytes (None when none was written).
     """
     if not Path(cmd_prefix[0]).is_absolute():
         raise SlicerError(f"the PrusaSlicer program {cmd_prefix[0]} must be an absolute path")
@@ -299,7 +316,11 @@ def run_portability(cmd_prefix: list[str], stl: Path, settings: dict[str, dict],
     if not work.is_dir() or any(work.iterdir()):
         raise SlicerError(f"PrusaSlicer work folder {work} must be an existing, empty folder")
     model = Path(stl).resolve()
-    hide = {str(work): "<work>", str(model): "<model.stl>"}
+    hide = {str(work): "<work>", str(model): "<model.stl>",
+            str(Path(cmd_prefix[0])): "<prusa-slicer-console.exe>"}
+    if prusa is not None:
+        hide |= {str(prusa.root): "<prusaslicer-dir>",
+                 str(prusa.exe): "<prusa-slicer-console.exe>"}
     info = _run(cmd_prefix, info_args(model), work / "info", timeout, hide)
     gcode_path = work / "gcode" / PRUSA_GCODE_NAME
     gcode_run = _run(cmd_prefix, gcode_args(model, gcode_path, settings), work / "gcode",
@@ -368,13 +389,16 @@ def parse_info(text: str) -> dict:
 
 
 def gcode_layers(data: bytes) -> dict:
-    """{layers: the ";LAYER_CHANGE" lines, last_z_mm: the last ";Z:" value or None}.
+    """{layers: the number of ";LAYER_CHANGE" lines, z_mm: every ";Z:" value in order}.
 
-    PrusaSlicer writes ";LAYER_CHANGE" then ";Z:<print_z>" at each layer
-    (GCodeGenerator::process_layer in src/libslic3r/GCode.cpp). SlicerError when a ";Z:"
-    value is not a finite number.
+    PrusaSlicer writes ";LAYER_CHANGE" and then ";Z:<print_z>" for each layer
+    (src/libslic3r/GCode.cpp, about line 2647), print_z through
+    float_to_string_decimal_point, which on Windows is std::to_chars with
+    chars_format::general and precision 6 (bundled_deps/localesutils/LocalesUtils.cpp,
+    line 89): 6 significant digits, the precision z_tolerance assumes. SlicerError when a
+    ";Z:" value is not a finite number.
     """
-    layers, last_z = 0, None
+    layers, zs = 0, []
     for raw in data.split(b"\n"):
         line = raw.rstrip(b"\r")
         if line == b";LAYER_CHANGE":
@@ -382,12 +406,13 @@ def gcode_layers(data: bytes) -> dict:
         elif line.startswith(b";Z:"):
             text = line[3:].decode("ascii", errors="replace")
             try:
-                last_z = float(text)
+                z = float(text)
             except ValueError:
-                last_z = math.nan
-            if not math.isfinite(last_z):
+                z = math.nan
+            if not math.isfinite(z):
                 raise SlicerError(f"the G-code has a ;Z: line {text!r} that is not a number")
-    return {"layers": layers, "last_z_mm": last_z}
+            zs.append(z)
+    return {"layers": layers, "z_mm": zs}
 
 
 def prusa_gcode_hashes(data: bytes) -> dict:
@@ -474,7 +499,13 @@ def volume_error_bound(stl: bytes) -> float:
     - height: |dh| <= w (delta (1 + u) + u + gamma_3 (1 + gamma_2)(1 + u)) (a - p rounded,
       a 3-term dot product);
     - area: |dA| <= A (delta + (1 + gamma_2)(u + gamma_3 (1 + u))) + 16 u64 M^2 (s rounded
-      to float32, the dot product, and the double sum's rounding, u64 = 2^-53);
+      to float32, the dot product, and the double sum's rounding, u64 = 2^-53). The
+      products in s are exact: a float32 times a float32 has at most 48 significant bits,
+      which a double holds. Only the differences and sums round: each component of s is
+      three differences of two products (each at most M^2, so each difference at most
+      2 M^2) added twice, so it is off by at most 3 u64 2 M^2 + 2 u64 3 (2 M^2) = 18 u64 M^2,
+      the vector by sqrt(3) x 18 u64 M^2 = 31.2 u64 M^2, and the area (half of n . s) by
+      half of that, rounded up to 16 u64 M^2. It is negligible next to the float32 terms;
     - term: |dt| <= (|dA| (|h| + |dh|) + A |dh|) / 3 + gamma_2 (A + |dA|)(|h| + |dh|) / 3.
     Then the sum: each addition rounds its result S_k by at most u |S_k|, and |S_k| is at
     most |exact partial sum| + the term bounds so far + the error so far, which gives
@@ -488,7 +519,12 @@ def volume_error_bound(stl: bytes) -> float:
     emulating get_volume in numpy float32 gave PrusaSlicer's printed volumes exactly for
     the 20 mm cube (8000.000488), the Roadie (2277.742188) and the Oddie (5033.670898).
     The bound is a worst case: 2.8 mm3 (1.2e-3 relative) for the Roadie and 8.8 mm3
-    (1.8e-3) for the Oddie, where the measured errors are 6e-7 and 4.4e-6 relative.
+    (1.8e-3) for the Oddie, where the measured errors are 6e-7 and 4.4e-6 relative. Of it,
+    the summation term E_N and the per-facet terms are of the same size for these models
+    (Roadie 1.4 and 1.4 mm3, Oddie 3.7 and 5.2 mm3, 2026-11-11): the sum dominates for a
+    model whose partial sums are large next to its facets' own errors, and sliver facets
+    (large delta) make the per-facet terms grow. A random check of the bound against a
+    float32 emulation of get_volume is in tests/test_portability.py.
     """
     tri = _triangles(stl)
     a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
@@ -560,7 +596,7 @@ def _ran(name: str, run: PrusaRun, timeout_rule: str | None) -> tuple[str | None
 
 
 def _info_failure(info: dict, exp: Expected) -> str | None:
-    if not info["manifold"] or info["open_edges"]:
+    if not info["manifold"] or info["open_edges"] is not None:     # any line, even 0
         return f"PrusaSlicer reads model.stl as not manifold (open_edges {info['open_edges']})"
     if info["repairs"]:
         found = ", ".join(f"{k} {v}" for k, v in info["repairs"].items())
@@ -587,9 +623,11 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
     PASS only if --info exits 0 and reads a manifold, unrepaired mesh with flat.json's
     parts, facets, sizes and volume (within size_tolerance_mm and volume_tolerance_mm3),
     and --export-gcode exits 0 and writes a non-empty G-code whose ";LAYER_CHANGE" count is
-    allowed and whose last ";Z:" is the expected top, first_layer + (layers - 1) x layer
-    (PrusaSlicer stacks whole layers: generate_object_layers in src/libslic3r/Slicing.cpp),
-    within the Z tolerance F3 uses for the same comparison. Otherwise FAIL, naming the first
+    allowed, with one ";Z:" per layer, and whose i-th ";Z:" (from 0) is
+    first_layer + i x layer (PrusaSlicer stacks whole layers: generate_object_layers in
+    src/libslic3r/Slicing.cpp), each within z_tolerance, the Z tolerance F3 uses. So the
+    last one is the expected top. An open_edges line, even "open_edges = 0", is a FAIL,
+    as the plan says. Otherwise FAIL, naming the first
     condition that failed. Output that cannot be read is a FAIL, not UNKNOWN: a configured,
     verified second reader that does not confirm the file has not passed it.
     """
@@ -599,16 +637,17 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
             parsed = parse_info(info_run.stdout)
         except SlicerError as err:
             info_problem = f"cannot read --info: {err}"
-    layers = {"layers": None, "last_z_mm": None}
+    layers = {"layers": None, "z_mm": []}
     gcode_problem = None
     if gcode:
         try:
             layers = gcode_layers(gcode)
         except SlicerError as err:
             gcode_problem = f"cannot read the G-code: {err}"
-    n, last_z = layers["layers"], layers["last_z_mm"]
+    n, zs = layers["layers"], layers["z_mm"]
+    last_z = zs[-1] if zs else None
     top = exp.first_layer_mm + (n - 1) * exp.layer_mm if n else None
-    z_tol = _z_tolerance(top, last_z, 0.0) if top is not None and last_z is not None else None
+    z_tol = z_tolerance(top, last_z, 0.0) if top is not None and last_z is not None else None
 
     reason, rule = _ran("--info", info_run, timeout_rule)
     if reason is None:
@@ -626,9 +665,14 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
     if reason is None and n not in exp.layer_counts:
         reason = (f"the G-code has {n} layers, not one of {exp.layer_counts}: it is "
                   "truncated, as an open mesh slices")
-    if reason is None and (last_z is None or abs(last_z - top) > z_tol):
-        reason = (f"its last ;Z: is {last_z:g} mm, not {top:g} mm" if last_z is not None
-                  else "the G-code has no ;Z: line")
+    if reason is None and len(zs) != n:
+        reason = f"the G-code has {len(zs)} ;Z: lines for {n} layers"
+    if reason is None:
+        for i, z in enumerate(zs):
+            want = exp.first_layer_mm + i * exp.layer_mm
+            if abs(z - want) > z_tolerance(want, z, 0.0):
+                reason = f"its ;Z: at layer {i + 1} of {n} is {z:g} mm, not {want:g} mm"
+                break
 
     measured = {"parts": parsed and parsed["parts"], "facets": parsed and parsed["facets"],
                 "size_mm": parsed and parsed["size_mm"],
@@ -640,9 +684,7 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
                  "top_z_mm": top}
     if reason is None:
         check = CheckResult("F6.portability", "PASS", measured, threshold, None,
-                            "PrusaSlicer 2.9.7 read model.stl with flat.json's parts, facets, "
-                            "size and volume, and sliced all of it with the A1 settings; "
-                            + PRUSA_GCODE_NOTE)
+                            f"{PORTABILITY_MEANING}. {SHARED_READER_NOTE}. {PRUSA_GCODE_NOTE}")
     else:
         check = CheckResult("F6.portability", "FAIL", measured, threshold, rule,
                             f"PrusaSlicer 2.9.7: {reason}")

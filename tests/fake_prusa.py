@@ -20,6 +20,9 @@ Its behaviour comes from the JSON file in $TDMG_FAKE_PRUSA_CONTROL, if set:
     gcode        write the G-code (default true)
     layers       the number of layers written (default: the STL's height)
     last_z       the text of the last ";Z:" line (default: the layer's height)
+    z            {"<layer number, from 1>": text, or null to leave that ";Z:" line out}
+    gcode_empty  write an empty G-code file
+    stderr_cwd_pad  write the working folder's path to stderr, then this many "y"
     stdout       text printed to stdout by --export-gcode (default: "Slicing result exported
                  to OUT.gcode", with the full path, as the real one prints)
     stderr       text written to stderr by both forms
@@ -79,8 +82,9 @@ def _gcode(stl: Path, settings: dict, control: dict) -> str:
         top = f"{first + i * layer:.6g}"
         if i == n - 1 and "last_z" in control:
             top = str(control["last_z"])
-        out += [";LAYER_CHANGE", f";Z:{top}", f";HEIGHT:{layer:g}", f"G1 Z{top}",
-                "G1 X10 Y10 E1"]
+        z = control.get("z", {}).get(str(i + 1), top)
+        out += [";LAYER_CHANGE", *([] if z is None else [f";Z:{z}"]), f";HEIGHT:{layer:g}",
+                f"G1 Z{top}", "G1 X10 Y10 E1"]
     return "\n".join(out) + "\n"
 
 
@@ -89,6 +93,9 @@ def main(argv: list[str]) -> int:
     control = json.loads(Path(env).read_text()) if env and Path(env).is_file() else {}
     if "stderr" in control:
         sys.stderr.write(control["stderr"])
+        sys.stderr.flush()
+    if "stderr_cwd_pad" in control:
+        sys.stderr.write(os.getcwd() + "\n" + "y" * control["stderr_cwd_pad"])
         sys.stderr.flush()
     time.sleep(control.get("sleep", 0))
     if len(argv) == 2 and argv[0] == "--info":
@@ -108,7 +115,9 @@ def main(argv: list[str]) -> int:
                          else _info(stl, control))
         return control.get("info_exit", 0)
     sys.stdout.write(control.get("stdout", f"Slicing result exported to {out}\n"))
-    if control.get("gcode", True):
+    if control.get("gcode_empty"):
+        out.write_bytes(b"")
+    elif control.get("gcode", True):
         out.write_bytes(_gcode(stl, settings, control).encode())
     return control.get("gcode_exit", 0)
 

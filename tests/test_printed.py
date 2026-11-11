@@ -578,7 +578,7 @@ def test_a_feature_height_does_not_change_the_layer():
 
 def test_the_z_tolerance_is_the_printed_precision():
     # %g with six significant digits: 3 is exact to 5e-6, 0.2 and 2.8 to 5e-7 and 5e-6.
-    assert tdmg.printed._z_tolerance(3.0, 2.8, 0.2) < 1e-4
+    assert tdmg.printed.z_tolerance(3.0, 2.8, 0.2) < 1e-4
     text = START + "".join(layer(round(0.2 * (i + 1), 6), GOOD) for i in range(150))
     assert len(parse(text)) == 150                       # 30 mm of 0.2 mm layers
 

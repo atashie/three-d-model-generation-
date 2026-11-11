@@ -32,13 +32,14 @@ import tdmg.slicing
 from tdmg.cli import app
 from tdmg.flat import flat_identity, make_flat
 from tdmg.paths import REPO_ROOT
-from tdmg.portability import PRUSA_GCODE_NOTE, load_prusa_pin
+from tdmg.portability import PORTABILITY_MEANING, PRUSA_GCODE_NOTE, load_prusa_pin
 from tdmg.printed import model_section
 from tdmg.records import canonical_json
 from tdmg.rules import load_rules
 from tdmg.selection import SelectionSpec, select_subject, write_selection
-from tdmg.slicer import Slicer, SlicerError, load_pin, platform_key
+from tdmg.slicer import OUTPUT_TAIL_CHARS, Slicer, SlicerError, load_pin, platform_key
 from tdmg.slicing import (
+    DO_NOT_PRINT,
     PRINTABLE_MEANING,
     RECORD_SCHEMA,
     SLICE_ALGORITHM_VERSION,
@@ -153,6 +154,8 @@ def test_record_contents(flat_dir, fake, tmp_path):
     z = stl_z_range((flat_dir / "model.stl").read_bytes())
     assert z == (0.0, 3.0)                         # 3.0 is exact in float32
     assert record["params"] == {"timeout_s": {"value": 300, "rule": "slicer.orca.timeout_s"},
+                                "prusaslicer_timeout_s": {"value": 300,
+                                                          "rule": "slicer.prusa.timeout_s"},
                                 "thickness_mm": 3.0,
                                 "stl_z_mm": {"min": 0.0, "max": 3.0, "extent": 3.0},
                                 "expected_layer_counts": [15]}
@@ -921,6 +924,7 @@ def test_roadie_slices_with_the_real_slicer(tmp_path, monkeypatch):
 # --- F6.portability with the fake PrusaSlicer ---------------------------------------------
 
 FAKE_PRUSA = REPO_ROOT / "tests" / "fake_prusa.py"
+PRUSA_FILE = "prusaslicer.portability-only.gcode.txt"     # generic G-code, never printed
 PRUSA_PIN = load_prusa_pin()
 PRUSA_TOP = "PrusaSlicer-2.9.7/"
 PRUSA_APP = {PRUSA_TOP + "prusa-slicer-console.exe": b"pexe",
@@ -935,7 +939,8 @@ PRUSA_SETTINGS = {
                              "key": "initial_layer_print_height"},
     "--filament-diameter": {"value": "1.75", "profile": "filament", "key": "filament_diameter"}}
 PRUSA_GCODE_COMMAND = ["<prusa-slicer-console.exe>", "--export-gcode", "<model.stl>", "-o",
-                       "<prusaslicer.gcode>", "--bed-shape", "0x0,256x0,256x256,0x256",
+                       "<prusaslicer.portability-only.gcode.txt>", "--bed-shape",
+                       "0x0,256x0,256x256,0x256",
                        "--max-print-height", "256", "--nozzle-diameter", "0.4",
                        "--layer-height", "0.2", "--first-layer-height", "0.2",
                        "--filament-diameter", "1.75"]
@@ -981,6 +986,14 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
     check = by_id(record)["F6.portability"]
     assert check["status"] == "PASS", check
     assert "generic G-code" in check["note"] and "not for the A1" in check["note"]
+    # What it shows for STL, and what it does not: both slicers read STL with admesh.
+    assert PORTABILITY_MEANING in check["note"]
+    assert PORTABILITY_MEANING == (
+        "a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read "
+        "agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full "
+        "height with the A1 bed, nozzle, layer and filament settings")
+    assert "share the admesh STL reader" in check["note"]
+    assert "3MF output must re-run portability" in check["note"]
     mesh = json.loads((flat_dir / "flat.json").read_bytes())["mesh"]
     port = record["portability"]
     assert port["configured"] is True and port["reason"] is None
@@ -1006,12 +1019,12 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
     assert (gcode_part["returncode"], gcode_part["timed_out"]) == (0, False)
     assert (gcode_part["layers"], gcode_part["last_z_mm"]) == (15, 3.0)
     assert gcode_part["expected_top_mm"] == pytest.approx(3.0)
-    assert (gcode_part["file"], gcode_part["quarantined"]) == ("prusaslicer.gcode", False)
-    assert gcode_part["sha256"] == record["outputs"]["prusaslicer.gcode"]
+    assert (gcode_part["file"], gcode_part["quarantined"]) == (PRUSA_FILE, False)
+    assert gcode_part["sha256"] == record["outputs"]["prusaslicer.portability-only.gcode.txt"]
     assert gcode_part["normalised_lines"] == 1
     assert "not for the A1" in port["note"] and "never print" in port["note"]
     assert sorted(p.name for p in out.iterdir()) == [
-        "plate_1.gcode", "plate_1.statistics.json", "prusaslicer.gcode", "slice.json"]
+        "plate_1.gcode", "plate_1.statistics.json", PRUSA_FILE, "slice.json"]
     # Only F3 (the fake OrcaSlicer G-code has no layers) blocks certification now.
     assert record["certification"] == ("NOT CERTIFIED: F3.printed_connectivity UNKNOWN, "
                                        "F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN")
@@ -1021,7 +1034,7 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
     # PrusaSlicer prints the G-code's full path; the record keeps it as a placeholder only.
     assert "tdmg-slice-" not in text
     assert gcode_part["stdout_tail"].strip() == ("Slicing result exported to "
-                                                 f"<work>{os.sep}gcode{os.sep}prusaslicer.gcode")
+                                                 f"<work>{os.sep}gcode{os.sep}{PRUSA_FILE}")
 
 
 @pytest.mark.parametrize(("control", "reason"), [
@@ -1040,7 +1053,13 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
      "--export-gcode exited 0 but wrote no G-code"),
     ({"gcode_exit": 1}, "--export-gcode exited 1"),
     ({"layers": 10}, "10 layers, not one of [15]"),
-    ({"last_z": "2.8"}, "last ;Z: is 2.8 mm, not 3 mm")])
+    ({"last_z": "2.8"}, "its ;Z: at layer 15 of 15 is 2.8 mm, not 3 mm"),
+    # The plan: an open_edges line at all, even 0, is a FAIL.
+    ({"info": {"open_edges": 0}}, "not manifold (open_edges 0)"),
+    ({"gcode_empty": True}, "--export-gcode wrote an empty G-code"),
+    # An uneven Z sequence with the right count and top, and a missing ;Z: line.
+    ({"z": {"5": "1.1"}}, "its ;Z: at layer 5 of 15 is 1.1 mm, not 1 mm"),
+    ({"z": {"7": None}}, "the G-code has 14 ;Z: lines for 15 layers")])
 def test_portability_fails_and_names_the_first_failed_condition(flat_dir, fake, prusa,
                                                                  tmp_path, control, reason):
     out = tmp_path / "slice"
@@ -1051,10 +1070,10 @@ def test_portability_fails_and_names_the_first_failed_condition(flat_dir, fake, 
     assert "F6.portability FAIL" in record["certification"]
     names = {p.name for p in out.iterdir()}
     # A FAIL quarantines both G-codes, under the same rule as the main one.
-    assert "plate_1.gcode" not in names and "prusaslicer.gcode" not in names
+    assert "plate_1.gcode" not in names and "prusaslicer.portability-only.gcode.txt" not in names
     assert "plate_1.gcode.failed" in names
     if record["portability"]["gcode"]["file"] is not None:
-        assert "prusaslicer.gcode.failed" in names
+        assert "prusaslicer.portability-only.gcode.txt.failed" in names
         assert record["portability"]["gcode"]["quarantined"] is True
 
 
@@ -1078,6 +1097,37 @@ def test_a_slow_prusaslicer_is_stopped(flat_dir, fake, prusa, tmp_path):
         "note"]
     assert record["portability"]["info"]["timed_out"] is True
     assert record["portability"]["gcode"]["timed_out"] is True
+    # An explicit --timeout-s names no rule, for either slicer.
+    assert check["rule"] is None
+    assert record["params"]["prusaslicer_timeout_s"] == {"value": 4.0, "rule": None}
+
+
+def test_prusaslicer_runs_use_their_own_timeout_rule(flat_dir, fake, prusa, tmp_path,
+                                                     monkeypatch):
+    rules = load_rules()
+    short = rules["slicer.prusa.timeout_s"].model_copy(update={"default": 0.5})
+    monkeypatch.setattr(tdmg.slicing, "load_rules",
+                        lambda: {**rules, "slicer.prusa.timeout_s": short})
+    record = make_slice(flat_dir, tmp_path / "slice", fake(), prusaslicer_dir=prusa(sleep=30))
+    checks = by_id(record)
+    assert checks["F6.slicer_exit"]["status"] == "PASS"          # OrcaSlicer keeps 300 s
+    assert checks["F6.portability"]["status"] == "FAIL"
+    assert "--info was stopped after the 0.5 s timeout" in checks["F6.portability"]["note"]
+    assert checks["F6.portability"]["rule"] == "slicer.prusa.timeout_s"
+    assert record["params"]["prusaslicer_timeout_s"] == {"value": 0.5,
+                                                         "rule": "slicer.prusa.timeout_s"}
+
+
+def test_paths_are_hidden_before_the_output_is_cut(flat_dir, fake, prusa, tmp_path):
+    # The fake writes its working folder's path, then enough text that the kept tail
+    # starts inside that path. Hiding paths after cutting would leave part of it.
+    pad = OUTPUT_TAIL_CHARS - 40
+    record = make_slice(flat_dir, tmp_path / "slice", fake(),
+                        prusaslicer_dir=prusa(stderr_cwd_pad=pad))
+    tail = record["portability"]["info"]["stderr_tail"]
+    assert tail.endswith("y" * pad) and "<work>" in tail
+    text = (tmp_path / "slice" / "slice.json").read_text(encoding="utf-8")
+    assert "tdmg-slice-" not in text and str(prusa.root) not in text
 
 
 def test_portability_is_part_of_slice_id(flat_dir, fake, prusa, tmp_path):
@@ -1162,12 +1212,14 @@ def test_printable_when_every_required_check_passes(square_flat, fake, prusa, tm
     assert record["certification"] == "PRINTABLE"
     note = record["certification_note"]
     assert note == PRINTABLE_MEANING
+    assert PORTABILITY_MEANING in note and "share the admesh STL reader" in note
+    assert "independent" not in note
     for phrase in ("every required gate check passed", "pinned slicers", "A1 profile",
                    "acceptance.dimension.tolerance", "still a hypothesis",
                    "no calibration print", "strength is not judged"):
         assert phrase in note, phrase
     assert (record["gcode"]["file"], record["gcode"]["quarantined"]) == ("plate_1.gcode", False)
-    assert record["portability"]["gcode"]["file"] == "prusaslicer.gcode"
+    assert record["portability"]["gcode"]["file"] == "prusaslicer.portability-only.gcode.txt"
 
 
 def test_cli_printable(square_flat, fake, prusa, tmp_path):
@@ -1182,7 +1234,34 @@ def test_cli_printable(square_flat, fake, prusa, tmp_path):
     assert portability.startswith("portability: PrusaSlicer 2.9.7 PASS - 1 part, ")
     assert "15 layers" in portability
     assert PRUSA_GCODE_NOTE in r.stdout
-    assert f"wrote {out / 'prusaslicer.gcode'}" in r.stdout
+    assert ("print plate_1.gcode on the A1 (or slice model.stl in Bambu Studio); "
+            "prusaslicer.portability-only.gcode.txt is not for printing") in lines
+    assert (f"wrote {out / PRUSA_FILE} (portability evidence only; not for printing)"
+            in lines)
+    assert f"wrote {out / 'plate_1.gcode'}" in lines
+
+
+def test_skip_tree_check_caps_the_certification(square_flat, fake, prusa, tmp_path):
+    root = fake(gcode_text=_square_gcode(square_flat))
+    record = make_slice(square_flat, tmp_path / "a", root, prusaslicer_dir=prusa(),
+                        check_tree=False)
+    assert all(c["status"] == "PASS" for c in record["checks"]
+               if c["id"] in SLICE_REQUIRED_CHECKS)
+    assert record["certification"] == "NOT CERTIFIED: app tree not verified (--skip-tree-check)"
+    assert record["verdict"] == "NOT CERTIFIED"
+    assert record["certification_note"] is None
+    # Other reasons follow it.
+    failed = make_slice(square_flat, tmp_path / "b", root, prusaslicer_dir=prusa(layers=10),
+                        check_tree=False)
+    assert failed["certification"] == ("NOT CERTIFIED: app tree not verified "
+                                       "(--skip-tree-check), F6.portability FAIL")
+    # The exit code is unchanged: 0 unless a check FAILed.
+    r = _slice(square_flat, tmp_path / "c", "--slicer-dir", str(root), "--prusaslicer-dir",
+               str(prusa()), "--skip-tree-check")
+    assert r.exit_code == 0, r.output
+    lines = r.stdout.splitlines()
+    assert lines[0] == "NOT CERTIFIED: app tree not verified (--skip-tree-check)"
+    assert not any(line.startswith("print plate_1.gcode") for line in lines)
 
 
 def test_cli_portability_line_when_not_configured_or_failed(flat_dir, fake, prusa, tmp_path):
@@ -1194,7 +1273,14 @@ def test_cli_portability_line_when_not_configured_or_failed(flat_dir, fake, prus
     assert r.exit_code == 1, r.output
     assert "portability: PrusaSlicer 2.9.7 FAIL - " in r.stdout
     assert "F6.portability FAIL" in r.stdout
-    assert "prusaslicer.gcode.failed" in r.stdout
+    assert "prusaslicer.portability-only.gcode.txt.failed" in r.stdout
+    assert (DO_NOT_PRINT + " (and PrusaSlicer's as "
+            "prusaslicer.portability-only.gcode.txt.failed)") in r.stdout
+    # Outside the bed PrusaSlicer writes no G-code, so the message does not name one.
+    r = _slice(flat_dir, tmp_path / "c", "--slicer-dir", str(fake()), "--prusaslicer-dir",
+               str(prusa(gcode=False)))
+    assert r.exit_code == 1, r.output
+    assert DO_NOT_PRINT in r.stdout and "PrusaSlicer's as" not in r.stdout
 
 
 def test_cli_help_documents_the_prusaslicer_option():
@@ -1227,4 +1313,4 @@ def test_roadie_is_portable_with_the_real_prusaslicer(tmp_path):
     assert port["slicer"]["app_tree_verified"] is True
     assert port["gcode"]["layers"] == 15 and port["gcode"]["last_z_mm"] == 3.0
     assert port["info"]["parsed"]["manifold"] is True
-    assert (out / "prusaslicer.gcode").is_file()
+    assert (out / "prusaslicer.portability-only.gcode.txt").is_file()

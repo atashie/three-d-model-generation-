@@ -23,17 +23,24 @@ gives a different slice_id.
 F6.portability runs PrusaSlicer 2.9.7 (tdmg.portability;
 docs/plans/2026-11-11-portability-check.md) when --prusaslicer-dir or
 $TDMG_PRUSASLICER_DIR gives its folder, with every setting passed explicitly from the
-hash-checked OrcaSlicer A1 profiles. Without it, F6.portability is UNKNOWN. Its G-code is
-kept as prusaslicer.gcode, generic G-code that is evidence of portability only and never
-for the A1; a FAIL quarantines it as prusaslicer.gcode.failed, as for plate_1.gcode.
+hash-checked OrcaSlicer A1 profiles. Without it, F6.portability is UNKNOWN. For STL it
+shows that a second slicer accepts the model as modelled and slices its full height
+(tdmg.portability.PORTABILITY_MEANING); both slicers share the admesh STL reader, so a 3MF
+output must re-run portability with truly different readers. Its G-code is kept as
+prusaslicer.portability-only.gcode.txt, generic G-code that is evidence of portability
+only and never for the A1 (not a .gcode name, so no printer software offers it); a FAIL
+quarantines it as prusaslicer.portability-only.gcode.txt.failed, as for plate_1.gcode.
 write_outputs takes plain file names only, so it sits beside plate_1.gcode rather than in
-a portability/ subfolder as the plan suggested.
+a portability/ subfolder as the plan suggested. Each PrusaSlicer run is limited by rule
+slicer.prusa.timeout_s; an explicit timeout_s applies to both slicers.
 
 The record's verdict combines the flat record's checks, minus its placeholder F6.slicer,
 with the F3 and F6 checks of this run, and requires all of them except F3.thin_regions.
 The certification line names the required checks that are not PASS. When every one
 passes it is PRINTABLE, and certification_note says what that means and what it does
-not (PRINTABLE_MEANING).
+not (PRINTABLE_MEANING). A run with an unverified app tree (check_tree=False) is never
+PRINTABLE: its certification starts "NOT CERTIFIED: app tree not verified
+(--skip-tree-check)".
 
 Check-to-use gaps: the STL and the three profiles are read once, hashed, and both
 slicers run on copies of exactly those bytes in a temporary folder. The exes, their
@@ -62,9 +69,12 @@ from tdmg.checks import CheckResult, verdict
 from tdmg.flat import FLAT_REQUIRED_CHECKS, STL_COORD_RTOL, flat_identity
 from tdmg.flat import RECORD_SCHEMA as FLAT_SCHEMA
 from tdmg.portability import (
+    PORTABILITY_MEANING,
     PRUSA_FAILED_GCODE_NAME,
     PRUSA_GCODE_NAME,
     PRUSA_GCODE_NOTE,
+    PRUSA_TIMEOUT_RULE,
+    SHARED_READER_NOTE,
     Expected,
     PrusaSlicer,
     command_templates,
@@ -131,7 +141,10 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   amounts checked against the filament profile.
 # slice-4 (2026-11-11): F6.portability measured with the pinned PrusaSlicer 2.9.7 when it
 #   is configured (UNKNOWN otherwise); slice_id adds its identity, the explicit settings
-#   and its commands; the record has "portability" and "certification_note".
+#   and its commands; the record has "portability" and "certification_note". Revised
+#   before it was pushed: an unverified app tree caps the certification, each PrusaSlicer
+#   run has its own timeout rule, its G-code is a .gcode.txt file, every ";Z:" is checked
+#   and any open_edges line FAILs.
 SLICE_ALGORITHM_VERSION = "slice-4"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
@@ -150,13 +163,18 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 COMMAND_TEMPLATE = ["<orca-slicer.exe>", *slicer_args(
     Path("<model.stl>"), {k: Path(f"<{k}.json>") for k in PROFILE_KINDS},
     Path("<outdir>"), Path(f"<{LOG_NAME}>"))]
-DO_NOT_PRINT = (f"a check FAILed: do not print this G-code; it is kept as {FAILED_GCODE_NAME}"
-                f" (and PrusaSlicer's as {PRUSA_FAILED_GCODE_NAME})")
+DO_NOT_PRINT = f"a check FAILed: do not print this G-code; it is kept as {FAILED_GCODE_NAME}"
+# Added to DO_NOT_PRINT only when PrusaSlicer wrote its G-code.
+PRUSA_DO_NOT_PRINT = f" (and PrusaSlicer's as {PRUSA_FAILED_GCODE_NAME})"
+TREE_NOT_VERIFIED = "app tree not verified (--skip-tree-check)"
 PRINTABLE_MEANING = (
     "PRINTABLE means every required gate check passed for this file with the pinned slicers "
-    "(OrcaSlicer 2.5.0 and, for portability, PrusaSlicer 2.9.7) and the A1 profile. It is "
-    "not a guarantee: the acceptance tolerance (acceptance.dimension.tolerance) is still a "
-    "hypothesis, no calibration print has been measured, and strength is not judged.")
+    "(OrcaSlicer 2.5.0 and, for portability, PrusaSlicer 2.9.7) and the A1 profile; for "
+    f"portability, {PORTABILITY_MEANING}. {SHARED_READER_NOTE}. It is not a guarantee: the "
+    "acceptance tolerance (acceptance.dimension.tolerance) is still a hypothesis, no "
+    "calibration print has been measured, and strength is not judged.")
+PRINT_THIS = (f"print {GCODE_NAME} on the A1 (or slice model.stl in Bambu Studio); "
+              f"{PRUSA_GCODE_NAME} is not for printing")
 REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or Bambu "
           "Studio's) and check the layers and the first layer. Time and weight are the "
           "slicer's estimates for the A1 0.20 mm Standard and PLA Basic profiles, not "
@@ -168,7 +186,9 @@ REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or B
           "of this run is required, except F3.thin_regions, which is information only. "
           "F6.portability runs PrusaSlicer 2.9.7 when --prusaslicer-dir or "
           "TDMG_PRUSASLICER_DIR is given; without it, it is UNKNOWN and the verdict is NOT "
-          f"CERTIFIED. {PRUSA_GCODE_NOTE}. PRINTABLE, when every required check passes, is "
+          f"CERTIFIED. For STL it shows that {PORTABILITY_MEANING}. {SHARED_READER_NOTE}. "
+          f"{PRUSA_GCODE_NOTE}. With --skip-tree-check the verdict is NOT CERTIFIED. "
+          "PRINTABLE, when every required check passes, is "
           "explained in certification_note: the tolerance is still a hypothesis, no "
           "calibration print has been measured and strength is not judged.")
 
@@ -212,23 +232,27 @@ def allowed_layer_counts(stl: bytes, process_profile: dict) -> set[int]:
                                  storage_error_mm=2 * STL_COORD_RTOL * zabs)
 
 
-def certification(checks: list[CheckResult], required: set[str] | frozenset[str]) -> str:
-    """"PRINTABLE", or "NOT CERTIFIED: " and each required check that is not PASS.
+def certification(checks: list[CheckResult], required: set[str] | frozenset[str],
+                  trees_verified: bool = True) -> str:
+    """"PRINTABLE", or "NOT CERTIFIED: " and each reason.
 
-    Checks are named with their status in check order; a required check that is absent
-    is named "missing" at the end.
+    When a slicer's app tree was not verified (trees_verified False), the first reason is
+    TREE_NOT_VERIFIED: what ran was not checked, so it cannot be PRINTABLE. Then each
+    required check that is not PASS, with its status, in check order; a required check that
+    is absent is named "missing" at the end.
     """
-    if verdict(checks, set(required)) == "PRINTABLE":
+    if trees_verified and verdict(checks, set(required)) == "PRINTABLE":
         return "PRINTABLE"
-    named = [f"{c.id} {c.status}" for c in checks if c.id in required and c.status != "PASS"]
+    named = [] if trees_verified else [TREE_NOT_VERIFIED]
+    named += [f"{c.id} {c.status}" for c in checks if c.id in required and c.status != "PASS"]
     present = {c.id for c in checks}
     named += [f"{cid} missing" for cid in sorted(set(required) - present)]
     return "NOT CERTIFIED: " + ", ".join(named)
 
 
-def _timeout(timeout_s, rules) -> dict:
+def _timeout(timeout_s, rules, rule: str = TIMEOUT_RULE) -> dict:
     if timeout_s is None:
-        return {"value": rules[TIMEOUT_RULE].default, "rule": TIMEOUT_RULE}
+        return {"value": rules[rule].default, "rule": rule}
     try:
         value = float(timeout_s)
     except (TypeError, ValueError):
@@ -435,6 +459,7 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     flat_dir = Path(flat_dir)
     rules = load_rules()
     timeout = _timeout(timeout_s, rules)
+    prusa_timeout = _timeout(timeout_s, rules, PRUSA_TIMEOUT_RULE)
     flat, flat_raw, stl = _read_flat(flat_dir)
     # F3.thin_regions stays in the record as information; the note says so.
     previous = [replace(c, note=f"{c.note}; {THIN_REGIONS_NOTE}" if c.note else
@@ -509,9 +534,10 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         else:
             (base / "prusa").mkdir()
             info_run, gcode_run, prusa_gcode = run_portability(
-                prusa_command(prusa), model, settings, base / "prusa", timeout["value"])
+                prusa_command(prusa), model, settings, base / "prusa",
+                prusa_timeout["value"], prusa)
             portability, measurements = portability_check(info_run, gcode_run, prusa_gcode,
-                                                          expected, timeout["rule"])
+                                                          expected, prusa_timeout["rule"])
         checks = f3 + f6 + [portability]
         quarantined = any(c.status == "FAIL" for c in previous + checks
                           if c.id in SLICE_REQUIRED_CHECKS)
@@ -570,7 +596,9 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
                       **(prusa_gcode_hashes(prusa_gcode) if written else
                          {"sha256": None, "normalised_sha256": None,
                           "normalised_lines": None})}}
-    cert = certification(all_checks, SLICE_REQUIRED_CHECKS)
+    trees_verified = (slicer_identity["app_tree_verified"]
+                      and (prusa is None or prusa.identity()["app_tree_verified"]))
+    cert = certification(all_checks, SLICE_REQUIRED_CHECKS, trees_verified)
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": SLICE_ALGORITHM_VERSION,
@@ -578,7 +606,8 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         "links": {"flat_id": flat["flat_id"], "flat_record_sha256": flat_record_sha256,
                   "model_stl_sha256": flat["outputs"]["model.stl"],
                   "selection_id": flat["selection"]["selection_id"]},
-        "params": {"timeout_s": timeout, "thickness_mm": thickness,
+        "params": {"timeout_s": timeout, "prusaslicer_timeout_s": prusa_timeout,
+                   "thickness_mm": thickness,
                    "stl_z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
                    "expected_layer_counts": sorted(allowed)},
         "slicer": {"name": pin.name, "version": pin.version, "pin": pin.id,
@@ -590,7 +619,7 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         "stats": stats,
         "printed": printed,
         "checks": [c.as_dict() for c in all_checks],
-        "verdict": verdict(all_checks, set(SLICE_REQUIRED_CHECKS)),
+        "verdict": "PRINTABLE" if cert == "PRINTABLE" else "NOT CERTIFIED",
         "certification": cert,
         "certification_note": PRINTABLE_MEANING if cert == "PRINTABLE" else None,
         "portability": portability_record,
