@@ -73,7 +73,8 @@ def test_furry_edge_rule_exists_with_its_unit_and_default():
     ("color.outline.thin_share", "fraction", 0.38, "primary"),
     ("color.shade.max_hue_diff_deg", "deg", 5.5, "primary"),
     ("color.shade.min_chroma", "cielab_chroma", 8.5, "primary"),
-    ("color.outline.keep_width", "mm", 0.6, "unverified"),
+    ("color.outline.keep_width", "mm", 0.45, "unverified"),
+    ("color.outline.keep_area_width_ratio", "ratio", 2.0, "primary"),
 ])
 def test_extraction_outline_and_shade_rules(rule_id, unit, default, provenance):
     rule = RULES[rule_id]

@@ -27,11 +27,13 @@ from tdmg.rules import load_rules
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
 NO_FLAGS = {"colors": None, "edges": None, "base": None}
-# The Task 7b keys at their defaults (settings as resolved, as recorded, and their sources).
-NEW = {"extract": 6, "outlines": "drop", "outline_color": "auto", "merge": ()}
+# The Task 7b and 7e-b keys at their defaults (settings as resolved, as recorded, and their
+# sources).
+NEW = {"extract": 6, "outlines": "drop", "outline_color": "auto", "merge": (),
+       "outline_width_mm": 0.45}
 NEW_PLAIN = {**NEW, "merge": []}
 NEW_SOURCES = {"extract": "rule", "outlines": "default", "outline_color": "default",
-               "merge": "default"}
+               "merge": "default", "outline_width_mm": "rule"}
 
 
 def _resolve(flags=None, path=None, printer=A1):
@@ -329,7 +331,8 @@ def test_resolved_config_copies_its_inputs():
 
 def test_keys_come_from_the_model():
     assert KEYS == tuple(ColorConfig.model_fields) == (
-        "colors", "extract", "edges", "base", "outlines", "outline_color", "merge")
+        "colors", "extract", "edges", "base", "outlines", "outline_color", "merge",
+        "outline_width_mm")
 
 
 def test_a_missing_rule_is_a_clear_error():
@@ -371,10 +374,11 @@ def test_a_bad_extract_rule_value_is_refused():
 
 def test_new_keys_precedence_flag_over_file_over_default(tmp_path):
     path = _config(tmp_path, "extract: 7\noutlines: keep\noutline_color: none\n"
-                             "merge: [[5, 1], [6, 1]]\n")
+                             "merge: [[5, 1], [6, 1]]\noutline_width_mm: 0.5\n")
     r = _resolve(path=path)
     assert (r.settings["extract"], r.settings["outlines"], r.settings["outline_color"],
-            r.settings["merge"]) == (7, "keep", "none", ((5, 1), (6, 1)))
+            r.settings["merge"], r.settings["outline_width_mm"]) == (
+        7, "keep", "none", ((5, 1), (6, 1)), 0.5)
     assert {k: r.sources[k] for k in NEW} == {k: "config" for k in NEW}
     r = _resolve({"extract": 8, "outlines": "drop"}, path)
     assert (r.settings["extract"], r.settings["outlines"]) == (8, "drop")
@@ -517,3 +521,55 @@ def test_extract_default_is_at_least_colors():
     assert _resolve({"colors": 3}, printer=eight).settings["extract"] == 6
     with pytest.raises(ColorConfigError, match="extract 6 is below colors 8"):
         _resolve({"extract": 6}, printer=eight)        # given explicitly: never raised
+
+
+# ---- Task 7e-b: outline_width_mm -----------------------------------------------------------
+
+def test_outline_width_defaults_to_the_keep_width_rule():
+    r = _resolve()
+    assert r.settings["outline_width_mm"] == RULES["color.outline.keep_width"].default == 0.45
+    assert r.sources["outline_width_mm"] == "rule"
+    rules = copy.deepcopy(RULES)
+    rid = "color.outline.keep_width"
+    rules[rid] = rules[rid].model_copy(update={"default": 0.7})
+    assert resolve_color_config(NO_FLAGS, None, rules, A1).settings["outline_width_mm"] == 0.7
+
+
+@pytest.mark.parametrize("text, value", [("1", 1.0), ("0.5", 0.5), ("0.41", 0.41)])
+def test_outline_width_from_the_file_is_a_float(tmp_path, text, value):
+    r = _resolve(path=_config(tmp_path, f"outline_width_mm: {text}\n"))
+    assert r.settings["outline_width_mm"] == value
+    assert type(r.settings["outline_width_mm"]) is float
+    assert r.sources["outline_width_mm"] == "config"
+
+
+@pytest.mark.parametrize("text, message", [
+    ("0.4", (r"outline_width_mm \(0.4 mm\) must be wider than flat.sliver.opening_width "
+             r"\(0.4 mm\): cleanup removes strips at or below that width")),
+    ("0.3", "must be wider than flat.sliver.opening_width"),
+    ("0", "outline_width_mm must be a finite number of mm above 0"),
+    ("-1", "outline_width_mm must be a finite number of mm above 0"),
+    (".inf", "outline_width_mm must be a finite number of mm above 0"),
+    (".nan", "outline_width_mm must be a finite number of mm above 0"),
+    ("true", "outline_width_mm must be a finite number of mm above 0"),
+    ("'0.5'", "outline_width_mm must be a finite number of mm above 0"),
+    ("[0.5]", "outline_width_mm must be a finite number of mm above 0"),
+])
+def test_a_bad_outline_width_is_refused_with_an_explanation(tmp_path, text, message):
+    with pytest.raises(ColorConfigError, match=message):
+        _resolve(path=_config(tmp_path, f"outline_width_mm: {text}\n"))
+
+
+def test_an_outline_width_rule_at_the_opening_or_in_another_unit_is_refused():
+    rid = "color.outline.keep_width"
+    rules = copy.deepcopy(RULES)
+    rules[rid] = rules[rid].model_copy(update={"default": 0.4})
+    with pytest.raises(ColorConfigError, match="must be wider than"):
+        resolve_color_config(NO_FLAGS, None, rules, A1)
+    rules[rid] = rules[rid].model_copy(update={"default": 0.45, "unit": "px"})
+    with pytest.raises(ColorConfigError, match="must be in 'mm'"):
+        resolve_color_config(NO_FLAGS, None, rules, A1)
+    # Given explicitly, the rule is not needed.
+    rules = {k: v for k, v in RULES.items() if k != rid}
+    r = resolve_color_config({"outline_width_mm": 0.5}, None, rules, A1)
+    assert r.settings["outline_width_mm"] == 0.5

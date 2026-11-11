@@ -102,15 +102,39 @@
 
 - id: color.outline.keep_width
   kind: hypothesis
-  summary: "Width of the uniform outline band that `outlines: keep` draws along every border between colors and inside the outer edge, in the darkest outline-family color."
+  summary: "Default width of the band that `outlines: keep` draws in the darkest outline-family color: it redraws the drawing's own lines (the ridge of the family's thin strokes) and runs inside the outer edge. The config key outline_width_mm overrides it."
   unit: mm
-  default: 0.6
+  default: 0.45
   scales_with_model: false
   applies_to: {color: [C2]}
   evidence:
-    - ref: docs/plans/2026-11-11-color-palette.md
-      locator: "a round starting value above it, and the owner judges it in the preview."
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "I think a touch finer would be good (0.4 mm?)."
       provenance: unverified
       validation: untested
-      claim: Our own starting value, stated in the plan. It must exceed flat.sliver.opening_width (0.4 mm), because the region cleanup removes strips at or below that width; 0.6 mm is a round number above it. No measurement or print supports it yet.
-  notes: In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width or cleanup removes the band it draws; tests/test_rules.py checks that it does.
+      claim: "The owner's verbatim answer on the 0.6 mm band in the Task 7d previews (judged by eye on a screen, not printed): a little finer, about 0.4 mm. A preference, not a measurement."
+    - ref: docs/plans/2026-11-11-color-palette.md
+      locator: "0.45 mm is the finest step above it."
+      provenance: unverified
+      validation: untested
+      claim: "Our own choice, stated in the plan: 0.4 mm equals flat.sliver.opening_width, and the region cleanup removes strips at or below that width, so the band must be wider; 0.45 mm is the finest 0.05 mm step above it. No measurement or print supports it yet."
+  notes: In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width or cleanup removes the band it draws; tests/test_rules.py checks that it does, and tdmg.color_config refuses an outline_width_mm at or below it. It replaces the first value, 0.6 mm (a round starting value, Task 7c), after the owner's Task 7d review. At 0.45 mm a band is only about one bead (0.42 mm) wide, so whether it prints cleanly is untested.
+
+- id: color.outline.keep_area_width_ratio
+  kind: hypothesis
+  summary: "When the outline family is dropped, a wide area of the core color (a 4-connected component of the core's pixels that its own opening keeps) stays in the core color only if its inscribed width (2 x the largest distance from its pixels to the nearest pixel outside it) is at least this many times the family's stroke width (the 90th percentile of 2 x that distance on the ridge of the family's thin strokes). Other wide areas take the nearest non-family color."
+  unit: ratio
+  default: 2.0
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "12 px, which lies between 6.3 px and 18.9 px (1.05 and 3.15 times the p90 of 6.0 px)."
+      provenance: primary
+      validation: untested
+      claim: "Our own software measurement (no print) on Roadie at 60 mm: the family's stroke width (p90) is 6.0 px; the pupil, the one area the owner wants kept, is 18.9 px wide (3.15 times); every other wide family remnant is 6.3 px or less (1.05 times), and every other one with core pixels 6.0 px or less. 2.0 lies in that gap. One positive example on one image."
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "no wide family pixel, so there is nothing to measure here."
+      provenance: primary
+      validation: untested
+      claim: "Oddie, the owner's second image, has no wide outline-family pixel, so it does not test this rule."
+  notes: "A ratio of two widths, so it does not depend on the print width or the image's resolution, unlike a width in mm (the 7e-a record notes that at 120 mm a fixed 1.25 mm threshold would sit close to Roadie's strokes). The 7e-a widths were measured on components of the union of all members' wide pixels; the rule measures components of the core's own wide pixels, which are subsets of those, so their widths are no larger. The width is read on the pixel grid (about 1 px above the true width). With no family stroke, no wide area is kept. One positive example, Roadie's pupil; nothing else supports the value."

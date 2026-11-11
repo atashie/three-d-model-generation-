@@ -29,6 +29,10 @@ The keys (Task 7b added extract, outlines, outline_color and merge):
   color's pixels take the `into` color. A `from` appears once, never equals its `into`,
   and is never also an `into` (no chains). A `from` is never in the outline family; an
   `into` may be the family's core (its darkest color), but no other member.
+- outline_width_mm (Task 7e-b): the width of the band that `outlines: keep` draws, in mm,
+  a finite number wider than the cleanup's opening (flat.sliver.opening_width), since
+  cleanup removes strips at or below it (default: the rule color.outline.keep_width,
+  source "rule"). It is part of the plan's identity under drop too, where it is unused.
 Extraction indices are the order quantize gives (largest area first), which the preview
 shows. The checks that need the extracted palette (an index below the number of colors the
 image gave, no merge from the outline family) are in check_extraction_indices; it runs
@@ -47,7 +51,8 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
 
-from tdmg.color import merge_problem
+from tdmg.color import ColorError, merge_problem
+from tdmg.color_outline import KEEP_WIDTH_RULE, check_outline_width
 from tdmg.profiles import PrinterProfile
 from tdmg.rules import Rule
 
@@ -60,7 +65,10 @@ DEFAULTS = {"edges": "smooth", "base": "auto", "outlines": "drop", "outline_colo
             "merge": ()}
 PROFILE_DEFAULT = "colors"                         # defaults to the profile's palette cap
 EXTRACT_RULE = "color.extract.default_count"
-RULE_DEFAULTS = {"extract": EXTRACT_RULE}          # defaults to the rule's value
+# Keys that default to a rule's value, and the unit each rule must be in.
+RULE_DEFAULTS = {"extract": EXTRACT_RULE, "outline_width_mm": KEEP_WIDTH_RULE}
+RULE_DEFAULT_UNITS = {"extract": "count", "outline_width_mm": "mm"}
+OPENING_RULE = "flat.sliver.opening_width"
 SMOOTH_RULE = "flat.smooth.sigma_px"
 FURRY_RULE = "color.edges.furry_sigma_px"
 
@@ -70,6 +78,9 @@ Base = Literal["auto"] | Index
 Outlines = Literal["drop", "keep"]
 OutlineColor = Literal["auto", "none"] | Annotated[list[Index], Field(min_length=1)]
 MergePair = Annotated[list[Index], Field(min_length=2, max_length=2)]
+# Strict: an int or a float, not a bool or a string; finite and above 0 here, and wider
+# than the opening in check_outline_width_setting (which needs the rules).
+OutlineWidth = Annotated[float, Field(strict=True, allow_inf_nan=False, gt=0)]
 Source = Literal["flag", "config", "profile", "rule", "default"]
 
 
@@ -87,6 +98,7 @@ class ColorConfig(BaseModel):
     outlines: Outlines | None = None
     outline_color: OutlineColor | None = None
     merge: list[MergePair] | None = None
+    outline_width_mm: OutlineWidth | None = None
 
     @field_validator("colors")
     @classmethod
@@ -197,6 +209,9 @@ def _validate(data: dict, cap: int, where: str) -> ColorConfig:
             elif key == "merge":
                 msg = ("merge must be a list of [from, into] pairs of extraction indices, "
                        f"each 0 or more (got {given!r})")
+            elif key == "outline_width_mm":
+                msg = ("outline_width_mm must be a finite number of mm above 0 "
+                       f"(got {given!r})")
             else:
                 msg = f"{key}: {err['msg']} (got {err['input']!r})"
             problems.setdefault(key, msg)
@@ -290,8 +305,10 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
         elif key == PROFILE_DEFAULT:
             settings[key], sources[key] = cap, "profile"
         elif key in RULE_DEFAULTS:
-            # extract: at least colors, so the default never conflicts with it.
-            value = max(_rule_default(key, rules, cap), settings["colors"])
+            value = _rule_default(key, rules, cap)
+            if key == "extract":
+                # At least colors, so the default never conflicts with it.
+                value = max(value, settings["colors"])
             settings[key], sources[key] = value, "rule"
         else:
             settings[key], sources[key] = DEFAULTS[key], "default"
@@ -306,15 +323,39 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
     check_extraction_indices(settings["outline_color"], settings["merge"],
                              settings["extract"])
     edge_sigma_px(settings["edges"], rules)
+    check_outline_width_setting(settings["outline_width_mm"], rules)
     return ResolvedColorConfig(settings=settings, sources=sources, config_sha256=sha)
 
 
+def check_outline_width_setting(width_mm, rules: dict) -> float:
+    """outline_width_mm checked against the opening rule (flat.sliver.opening_width, in
+    mm, from rules: a registry or {rule id: value}): it must be wider, since cleanup
+    removes strips at or below that width and would remove the band. Returns it as a
+    float; raises ColorConfigError."""
+    if OPENING_RULE not in rules:
+        raise ColorConfigError(f"outline_width_mm needs rule {OPENING_RULE}, which is not in "
+                               "the rules")
+    opening = rules[OPENING_RULE]
+    if isinstance(opening, Rule):
+        if opening.unit != "mm":
+            raise ColorConfigError(f"{OPENING_RULE} must be in 'mm', got {opening.unit!r}")
+        opening = opening.default
+    try:
+        return check_outline_width(width_mm, float(opening), OPENING_RULE)
+    except ColorError as e:
+        raise ColorConfigError(str(e)) from None
+
+
 def _rule_default(key: str, rules: dict[str, Rule], cap: int):
-    """The default of `key` from its rule, validated like a setting."""
+    """The default of `key` from its rule (in RULE_DEFAULT_UNITS[key]), validated like a
+    setting."""
     rule_id = RULE_DEFAULTS[key]
     if rule_id not in rules:
         raise ColorConfigError(f"the default for {key} needs rule {rule_id}, which is not in "
                                "the rules registry")
+    if rules[rule_id].unit != RULE_DEFAULT_UNITS[key]:
+        raise ColorConfigError(f"rule {rule_id} must be in {RULE_DEFAULT_UNITS[key]!r}, got "
+                               f"{rules[rule_id].unit!r}")
     return getattr(_validate({key: rules[rule_id].default}, cap, f"rule {rule_id}"), key)
 
 

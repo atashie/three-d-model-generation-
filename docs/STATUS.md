@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-11 (F6.portability with PrusaSlicer 2.9.7; first PRINTABLE). Phase 1
+**Last updated:** 2026-11-11 (color Task 7e-b; earlier: F6.portability, first PRINTABLE). Phase 1
 (R1, flat single-color) is under way, with three commands:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -52,17 +52,26 @@ passed. These commits are pushed; for CI see above.
 
 1. **R2 color (owner's next request, 2026-11-11):** design agreed in
    `docs/plans/2026-11-11-color-design.md`. Executing `docs/plans/2026-11-11-color-palette.md`
-   (step 1: `tdmg.color` and `tdmg colors`). Task 7c (2026-11-11, Windows PC) adds outline
-   detection (thinness rule), drop and keep, and shade-pair flags (`tdmg.color_outline`).
-   `keep` now redraws the drawn lines at 0.6 mm after the merges.
-   - At the defaults, Roadie is ready with 4 colors.
-   - Oddie is not ready with 5 colors (both shade pairs flagged); it is ready once its
-     blues are merged.
-   - Oddie with keep and the blue merge has 5 colors, so it is not ready.
+   (step 1: `tdmg.color` and `tdmg colors`).
+   - **Done:**
+     - Task 7c added outline detection, drop and keep, and the shade-pair flags
+       (`tdmg.color_outline`).
+     - Task 7d recorded the owner's review.
+     - Task 7e-a measured what survives drop.
+     - Task 7e-b (2026-11-11, Windows PC):
+       - Drop keeps only core areas at least `color.outline.keep_area_width_ratio`
+         strokes wide. On Roadie, that is only the pupil.
+       - Shading tones take the nearest color.
+       - Keep skips stroke specks, and its width is the config key `outline_width_mm`
+         (default 0.45 mm).
+       - The preview shows the smoothed outer outline on a mid-grey checker.
+   - **Next:** the owner reviews `artifacts/colors-review-3/`. **Open:** at 0.45 mm,
+     cleanup removes 13.6% (Roadie) and 28.6% (Oddie) of the kept band, and most inner
+     lines break. At 0.5 mm they stay whole. The extra 0.5 mm previews are in the same
+     folder. Decide the default width with the owner.
 
    This is functionally tested and run on the owner's images; the rules are untested
-   hypotheses. Next: Task 7d, the owner reviews the `-v2` previews in
-   `artifacts/colors-runs/`.
+   hypotheses.
 2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
 3. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID

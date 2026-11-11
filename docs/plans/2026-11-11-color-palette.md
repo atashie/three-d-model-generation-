@@ -479,3 +479,42 @@ of the outline and shading previews". The controller's response, Task 7e:
       - **Oddie's color count** stays the owner's choice through merges; the owner
         prefers preview 6 (kept outline, blues and greens merged).
 7e-c. **New previews,** then the owner's review again.
+
+### Task 7e-b result (2026-11-11, Windows PC)
+
+**Built:**
+- **Drop** (in `tdmg.color_outline`, method `outline-thin-share/3`):
+  - The wide pixels of non-core family members (shading tones) take the nearest
+    non-family color.
+  - The core keeps a wide area only if the area's inscribed width is at least
+    `color.outline.keep_area_width_ratio` (2.0, a new hypothesis rule) times the family's
+    stroke width. Other wide areas take the nearest non-family color.
+  - The record lists each wide area with its size, its width and whether it was kept.
+- **Keep:**
+  - Stroke specks below the island area are not drawn.
+  - The band width is the config key `outline_width_mm`. Its default is
+    `color.outline.keep_width`, now 0.45 mm, and a value at or below the opening width is
+    refused.
+  - Both the drop and keep changes apply to the drop step that `keep` also runs.
+- **Preview:**
+  - The outer outline is smoothed as R1 builds it.
+  - The background is a mid-grey checker.
+  - A legend line says how to choose the base.
+- **Record:** schema `tdmg.colors/3`. `verify_colors` re-checks each wide area's kept flag
+  against the ratio rule.
+
+**On the owner's images** (pins in `tests/test_colors.py`):
+- **Roadie, drop:** only the pupil stays dark.
+- **Oddie:** has no wide outline area.
+- **Holes:** nothing was added for holes.
+
+**Open: the 0.45 mm band does not survive cleanup well.** Cleanup removes 13.6% of
+Roadie's band and 28.6% of Oddie's. By eye, most inner lines are lost or broken. At 0.5 mm
+the loss is 1.7% and 0.3%, and the lines look whole. See the research README's Task 7e-b
+addendum. The controller and the owner should choose between:
+- raising the default to 0.5 mm;
+- keeping 0.45 mm.
+
+**Correction to "0.45 mm is the finest step above it" (the Task 7d section above):**
+0.45 mm is above the opening, but by less than one pixel at these scales. That is not
+enough margin for diagonal and curved lines.

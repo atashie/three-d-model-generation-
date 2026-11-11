@@ -17,26 +17,35 @@ from tdmg.color import (
 )
 from tdmg.color_outline import (
     KEEP_NO_EFFECT_NOTE,
+    KEEP_RATIO_RULE,
     KEEP_WIDTH_RULE,
     OUTLINE_METHOD,
+    STROKE_WIDTH_PERCENTILE,
     THIN_SHARE_RULE,
     ShadePair,
     detect_outline_family,
     handle_outlines,
+    inscribed_width_px,
+    keeps_wide_area,
     shade_pairs,
     stroke_band,
     stroke_ridge,
+    stroke_specks,
+    stroke_width_px,
+    wide_core_components,
 )
 from tdmg.profiles import load_printer
 from tdmg.rules import load_rules
 
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
-# 0.1 mm/px: the opening is 0.4 mm = 4 px (exactly 4.0 in float); the kept band is
-# 0.6 mm = 5.999... px in float (0.6 / 0.1), so W/2 and W round as for 6 px.
+# 0.1 mm/px: the opening is 0.4 mm = 4 px (exactly 4.0 in float), the island area
+# 0.64 mm2 = 64 px; a kept band of 0.6 mm (passed as width_mm in the band tests below,
+# which were written for it) is 5.999... px in float (0.6 / 0.1), so W/2 and W round as for
+# 6 px.
 LIMITS = printable_limits_px(0.1, RULES, A1)
 T = RULES[THIN_SHARE_RULE].default
-W_PX = RULES[KEEP_WIDTH_RULE].default / 0.1
+RATIO = RULES[KEEP_RATIO_RULE].default
 
 RED, WHITE, BLACK, DARKRED = (200, 30, 30), (240, 240, 240), (10, 10, 10), (110, 20, 20)
 HEX = {"red": "#c81e1e", "white": "#f0f0f0", "black": "#0a0a0a", "darkred": "#6e1414"}
@@ -82,9 +91,9 @@ def idx(q, name):
     return q.hex.index(HEX[name])
 
 
-def run(q, outline_color="auto", outlines="drop", rules=RULES, limits=LIMITS):
+def run(q, outline_color="auto", outlines="drop", rules=RULES, limits=LIMITS, width_mm=None):
     return handle_outlines(q, outline_color=outline_color, outlines=outlines, limits=limits,
-                           rules=rules)
+                           rules=rules, width_mm=width_mm)
 
 
 # --- detection -----------------------------------------------------------------------------
@@ -116,8 +125,9 @@ def test_drop_removes_thin_strokes_and_keeps_the_wide_area_in_the_core_color(q):
     out, res = run(q)
     b, d = idx(q, "black"), idx(q, "darkred")
     assert res.family == tuple(sorted((b, d))) and res.core == b
-    assert res.found_by == "auto" and res.method == OUTLINE_METHOD == "outline-thin-share/2"
-    assert res.thresholds == ((THIN_SHARE_RULE, T),)
+    assert res.found_by == "auto" and res.method == OUTLINE_METHOD == "outline-thin-share/3"
+    assert res.thresholds == ((THIN_SHARE_RULE, T), (KEEP_RATIO_RULE, RATIO))
+    assert res.specks is None
     assert res.keep_width_mm is None and res.keep_width_px is None and res.band is None
     assert res.remap[d] is None and res.remap[b] is not None       # the core is kept
     assert set(out.hex) == {HEX["red"], HEX["white"], HEX["black"]}
@@ -173,11 +183,14 @@ def test_thin_pixels_tie_to_the_lowest_label():
 # --- keep: the drawing's own lines, redrawn at width W after the merges ---------------------
 
 def test_keep_returns_the_band_of_the_drawn_lines_and_the_outer_edge(q):
-    out, res = run(q, outlines="keep")
-    assert res.keep_width_mm == RULES[KEEP_WIDTH_RULE].default
-    assert res.keep_width_px == RULES[KEEP_WIDTH_RULE].default / LIMITS.mm_per_px
-    assert res.thresholds == ((THIN_SHARE_RULE, T), (KEEP_WIDTH_RULE, res.keep_width_mm))
-    assert res.method == "outline-thin-share/2"
+    out, res = run(q, outlines="keep", width_mm=0.6)
+    assert res.keep_width_mm == 0.6 and res.keep_width_px == 0.6 / LIMITS.mm_per_px
+    # The width is a setting now (outline_width_mm), not a threshold.
+    assert res.thresholds == ((THIN_SHARE_RULE, T), (KEEP_RATIO_RULE, RATIO))
+    assert res.method == "outline-thin-share/3"
+    # The pupil's four rounded-off corners (3 px each) are thin, so they are strokes, and
+    # specks: they are not redrawn.
+    assert res.specks == (4, 12)
     assert tuple(res.core_rgb) == BLACK and not res.band.flags.writeable
     # The band is returned, not painted: out is the drop's result.
     dropped, _ = run(q)
@@ -281,7 +294,7 @@ def drawing():
 def draw_plan(**settings):
     from tdmg.color_plan import plan_colors
     s = {"colors": 4, "extract": 4, "edges": "exact", "base": "auto", "outlines": "keep",
-         "outline_color": "auto", "merge": (), **settings}
+         "outline_color": "auto", "merge": (), "outline_width_mm": 0.6, **settings}
     return plan_colors(*drawing(), s, LIMITS, RULES)
 
 
@@ -337,7 +350,7 @@ def test_an_explicit_list_is_the_family(q):
     d = idx(q, "darkred")
     out, res = run(q, outline_color=[d])
     assert res.family == (d,) and res.core == d and res.found_by == "config"
-    assert res.thresholds == ()
+    assert res.thresholds == ((KEEP_RATIO_RULE, RATIO),)
     assert HEX["darkred"] not in out.hex and HEX["black"] in out.hex
     assert out.counts[out.hex.index(HEX["black"])] == (q.labels == idx(q, "black")).sum()
 
@@ -401,3 +414,175 @@ def test_shade_pairs_use_only_the_candidates_and_the_shortest_hue_way():
     assert [(p.i, p.j) for p in pairs] == [(0, 1)]
     assert pairs[0].dh_deg == pytest.approx(2.86, abs=0.01)
     assert shade_pairs(lab, ["#a", "#b", "#c"], [1], 5.5, 8.5) == ()
+
+
+# --- Task 7e-b: what survives drop, stroke specks under keep --------------------------------
+
+def pupil_and_tip(fringe_block: bool = False):
+    """100 x 120, all subject. Red left (0..57), a 4 px black line (58..61), white right
+    (62..119). A 14 x 14 black pupil inside the red (rows 30..43, columns 15..28), and a
+    6 x 6 black widening of the line on its red side (rows 70..75, columns 52..57), like a
+    line's dark tip: with the line it is 6 x 10 px, wide for the 4 px opening. With
+    fringe_block, a 1 px dark red fringe on the white side of the line (column 62) and an
+    8 x 8 dark red block inside the white (rows 10..17, columns 90..97): a shading tone
+    with a wide area."""
+    rgb = np.zeros((100, 120, 3), np.uint8)
+    rgb[:, :58] = RED
+    rgb[:, 58:62] = BLACK
+    rgb[:, 62:] = WHITE
+    rgb[30:44, 15:29] = BLACK
+    rgb[70:76, 52:58] = BLACK
+    if fringe_block:
+        rgb[:, 62] = DARKRED
+        rgb[10:18, 90:98] = DARKRED
+    return rgb, np.ones((100, 120), bool)
+
+
+def test_stroke_width_is_the_p90_of_twice_the_ridge_distance():
+    strokes, _ = strokes_image((4,))
+    # A straight 4 px stroke: its two middle pixels are 2 px from the nearest non-stroke
+    # centre, so it reads 4.
+    assert stroke_width_px(strokes) == 4.0
+    assert STROKE_WIDTH_PERCENTILE == 90
+    assert stroke_width_px(np.zeros((5, 5), bool)) is None
+    # A 1 px line of 9 px (ridge: all 9, each 2) and a 5 x 5 blob (ridge: its centre, 3 px
+    # from outside, so 6): numpy's linear p90 of nine 2s and one 6 is 2 + 0.1 x 4 = 2.4.
+    s = np.zeros((20, 40), bool)
+    s[2, 2:11] = True
+    s[10:15, 20:25] = True
+    ridge = stroke_ridge(s)
+    assert ridge[12, 22] and ridge[2].sum() == 9 and ridge.sum() == 10
+    assert stroke_width_px(s) == pytest.approx(2.4)
+
+
+def test_inscribed_width_counts_the_frame_and_reads_about_one_px_over():
+    comp = np.zeros((30, 30), bool)
+    comp[5:19, 5:19] = True                # 14 x 14: the middle pixels are 7 px from outside
+    assert inscribed_width_px(comp) == 14.0
+    comp = np.zeros((30, 30), bool)
+    comp[0:5, 0:5] = True                  # at the image corner: the frame is outside
+    assert inscribed_width_px(comp) == 6.0
+    one = np.zeros((5, 5), bool)
+    one[2, 2] = True
+    assert inscribed_width_px(one) == 2.0
+
+
+@pytest.mark.parametrize("ins, sw, ratio, kept", [
+    (14.0, 4.0, 3.5, True),                # exactly ratio x stroke: kept (>=)
+    (14.0, 4.0, 3.5000001, False),
+    (8.0, 4.0, 2.0, True), (7.9, 4.0, 2.0, False),
+    (1.0, 4.0, 0.0, True),                 # ratio 0 keeps every wide area
+    (99.0, None, 2.0, False),              # no family stroke: nothing is kept
+])
+def test_the_ratio_rule_edges(ins, sw, ratio, kept):
+    assert keeps_wide_area(ins, sw, ratio) is kept
+
+
+def test_drop_keeps_the_pupil_but_not_a_lines_wide_tip():
+    q = as_quantized(*pupil_and_tip())
+    out, res = run(q)
+    b = idx(q, "black")
+    assert res.family == (b,) and res.core == b
+    assert res.stroke_width_px == 4.0
+    assert res.thresholds[-1] == (KEEP_RATIO_RULE, RATIO) and RATIO == 2.0
+    pupil, tip = res.wide_components                      # largest first
+    assert pupil.area_px > tip.area_px
+    assert pupil.inscribed_px == 14.0 and pupil.kept
+    assert abs(pupil.centroid[0] - 36.5) < 1 and abs(pupil.centroid[1] - 21.5) < 1
+    assert tip.inscribed_px == 6.0 and not tip.kept      # 6 < 2 x 4
+    core = out.hex.index(HEX["black"])
+    red, white = out.hex.index(HEX["red"]), out.hex.index(HEX["white"])
+    lab = out.labels
+    assert (lab[32:42, 17:27] == core).all()             # the pupil stays
+    assert (lab == core).sum() == pupil.area_px
+    # The tip took the nearest non-family color: red, on its red side.
+    assert (lab[70:76, 52:58] == red).all()
+    assert set(np.unique(lab[60:90, 58:62]).tolist()) <= {red, white}
+
+
+def test_drop_sends_a_shading_tones_wide_area_to_the_nearest_color_not_the_core():
+    q = as_quantized(*pupil_and_tip(fringe_block=True))
+    out, res = run(q)
+    b, d = idx(q, "black"), idx(q, "darkred")
+    assert res.family == tuple(sorted((b, d))) and res.core == b
+    assert HEX["darkred"] not in out.hex
+    white = out.hex.index(HEX["white"])
+    assert (out.labels[10:18, 90:98] == white).all()     # not the core
+    # The fringe widens the drawn line to 5 px (S reads 6), so the threshold is 12: the
+    # pupil (14) is still kept, the tip (6) not; the core's components only.
+    assert res.stroke_width_px == 6.0
+    assert [(c.inscribed_px, c.kept) for c in res.wide_components] == [(14.0, True),
+                                                                       (6.0, False)]
+
+
+def test_with_no_family_stroke_no_wide_area_is_kept():
+    # At 0.6 mm/px the opening is 0.67 px, so a 20 x 20 square has no thin pixel at all.
+    limits = printable_limits_px(0.6, RULES, A1)
+    rgb = np.zeros((60, 60, 3), np.uint8)
+    rgb[:] = RED
+    rgb[20:40, 20:40] = BLACK
+    q = as_quantized(rgb, np.ones((60, 60), bool))
+    out, res = run(q, outline_color=[idx(q, "black")], limits=limits)
+    assert res.stroke_width_px is None
+    assert [(c.area_px, c.kept) for c in res.wide_components] == [(400, False)]
+    assert out.hex == (HEX["red"],) and res.remap[idx(q, "black")] is None
+
+
+def test_wide_core_components_are_four_connected_and_ordered_by_size():
+    m = np.zeros((20, 20), bool)
+    m[2:6, 2:6] = True                           # 16 px, inscribed 4
+    m[6:9, 6:9] = True                           # 9 px, inscribed 4; diagonal contact only
+    m[12:18, 12:18] = True                       # 36 px, inscribed 6
+    comps, keep = wide_core_components(m, 2.5, 2.0)            # threshold 5
+    assert [(c.area_px, c.inscribed_px, c.kept) for c in comps] == [
+        (36, 6.0, True), (16, 4.0, False), (9, 4.0, False)]
+    assert keep.sum() == 36 and keep[12:18, 12:18].all()
+    assert wide_core_components(np.zeros((4, 4), bool), 2.0, 2.0)[0] == ()
+
+
+def test_stroke_specks_are_small_eight_connected_components():
+    s = np.zeros((40, 40), bool)
+    s[5, 5] = True
+    s[6, 6] = True                               # diagonal: one speck of 2 px
+    s[20, 0:39] = True                           # a 39 px line
+    specks = stroke_specks(s, 39)
+    assert specks[5, 5] and specks[6, 6] and not specks[20].any()
+    assert stroke_specks(s, 40)[20, 0:39].all()   # strict: 39 < 40
+    assert not stroke_specks(np.zeros((4, 4), bool), 10).any()
+
+
+def test_keep_does_not_draw_stroke_specks():
+    # The cartoon plus an isolated 2 x 2 black speck in the white, far from every line and
+    # from the outer edge: below the island area (64 px at 0.1 mm/px), so it is not redrawn.
+    rgb, mask = cartoon()
+    rgb[70:72, 90:92] = BLACK
+    q = as_quantized(rgb, mask)
+    out, res = run(q, outlines="keep", width_mm=0.6)
+    assert res.specks == (5, 16)                 # the speck and the pupil's four corners
+    assert not res.band[66:76, 86:96].any()
+    white = out.hex.index(HEX["white"])
+    assert (out.labels[70:72, 90:92] == white).all()     # dropped like any thin pixel
+    assert res.band[70, 59]                      # the drawn line is still redrawn
+    assert "5 stroke speck(s)" in res.notes[-1]
+
+
+def test_keep_takes_its_width_from_the_setting_and_refuses_one_at_the_opening(q):
+    _, res = run(q, outlines="keep", width_mm=0.8)
+    assert (res.keep_width_mm, res.keep_width_px) == (0.8, 0.8 / LIMITS.mm_per_px)
+    _, res = run(q, outlines="keep")
+    assert res.keep_width_mm == RULES[KEEP_WIDTH_RULE].default == 0.45
+    for bad in (0.4, 0.3):
+        with pytest.raises(ColorError, match="must be wider than flat.sliver.opening_width"):
+            run(q, outlines="keep", width_mm=bad)
+    for bad in (math.nan, math.inf, True, "0.5"):
+        with pytest.raises(ColorError, match="outline_width_mm must be a finite number"):
+            run(q, outlines="keep", width_mm=bad)
+    _, res = run(q, width_mm=0.3)                # under drop the width is not used
+    assert res.keep_width_mm is None and res.band is None
+
+
+def test_a_negative_ratio_rule_is_refused(q):
+    rules = copy.deepcopy(RULES)
+    rules[KEEP_RATIO_RULE] = rules[KEEP_RATIO_RULE].model_copy(update={"default": -1.0})
+    with pytest.raises(ColorError, match="must be 0 or more"):
+        run(q, rules=rules)

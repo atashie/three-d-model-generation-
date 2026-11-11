@@ -680,3 +680,69 @@ existing rule, so no new number is needed.
   midpoint of the gap would be 1.28 mm², so the island area is inside the gap.
 - **What it removes:** the 3 interior specks (S11, S22 and S23) and the 28 edge specks.
   The edge band covers the edge specks anyway.
+
+## Addendum, 2026-11-11: Task 7e-b, the new drop and keep rules, and the review-3 previews
+
+**Setup:** Windows PC, the Task 7e-b working tree (outline method `outline-thin-share/3`,
+record schema `tdmg.colors/3`), printer bambu-a1, 60 mm, the same two selections. The
+previews are in the git-ignored `artifacts/colors-review-3/`; the runs are in
+`artifacts/colors-runs/*-v3/` with the configs in `artifacts/colors-runs/configs/`. All four
+required runs are ready and pass `verify_colors`.
+
+**What changed** (the controller's 7e-b decisions):
+- Under drop, the wide pixels of non-core family members take the nearest non-family
+  color. A 4-connected component of the core's wide pixels keeps the core color only if
+  its inscribed width is at least 2.0 (new rule `color.outline.keep_area_width_ratio`)
+  times the family's stroke width (p90 of 2 x EDT on `stroke_ridge(S)`).
+- Under keep, stroke components below the island area are not drawn, and the band width is
+  the config key `outline_width_mm` (default from `color.outline.keep_width`, now 0.45 mm).
+- The preview shows the outer outline smoothed with `flat.smooth.sigma_px`, a mid-grey
+  checker background (grey 112 and 144), and a legend line on how to choose the base.
+
+**Measured** (software only, no print):
+
+| Run | Stroke width | Core wide areas kept | Final colors | Cleanup |
+|---|---|---|---|---|
+| Roadie, drop | 6.0 px | 1 of 22: the pupil, 421 px, 18.87 px across (next widest 6.0 px) | red 58.9%, white 27.9%, yellow 12.7%, dark 0.6% | 57 px, 3 passes |
+| Roadie, keep, 0.45 mm (4.49 px) | 6.0 px | the pupil | red 43.7%, dark 24.8%, white 22.0%, yellow 9.5% | 3225 px, 5 passes |
+| Oddie, keep, merges [[3, 1], [2, 0]], 0.45 mm (6.02 px) | 4.0 px | none (no wide area) | green 56.6%, blue 32.4%, black 8.9%, red 2.1% | 10758 px, 5 passes |
+| Oddie, drop, merge [[3, 1]] | 4.0 px | none | green 37.3%, blue 34.9%, light green 25.7%, red 2.2% | 7660 px, 3 passes |
+
+Under keep on Roadie, 31 stroke specks (102 px) were not drawn; on Oddie, none.
+
+**Finding: at 0.45 mm, cleanup removes much of the kept band.** I measured the band pixels
+that are not in the core color after cleanup (`band_survival.py`, an inline script in the
+session scratchpad, not committed):
+
+| Image | 0.45 mm | 0.5 mm | 0.6 mm |
+|---|---|---|---|
+| Roadie (0.1002 mm/px) | 2795 of 20580 px lost (13.6%) | 412 of 23808 (1.7%) | 0 of 28028 |
+| Oddie, blues merged (0.0747 mm/px) | 10554 of 36916 (28.6%) | 130 of 42073 (0.3%) | 0 of 49954 |
+
+The band is about W px across, and the cleanup opening is 0.4 mm. At 0.45 mm the margin
+is under one pixel, so diagonal and curved runs of the band fail the opening. By eye:
+- `3-oddie-kept-blues-and-greens-merged.png`: the outer black edge stays, but almost every
+  inner line (leaf edges and veins, the arm and foot outlines, most of the mouth outline)
+  is gone or broken into dashes, so the leaves fuse.
+- `2-roadie-outline-kept.png`: the outer band stays, but many inner lines (red against
+  white and yellow, the mouth, the shoes) are missing or broken.
+
+For comparison I made two extra previews at `outline_width_mm: 0.5`
+(`extra-roadie-outline-kept-0.5mm.png`, `extra-oddie-kept-blues-and-greens-merged-0.5mm.png`;
+configs `keep-w050.yaml`, `keep-merge-blues-greens-w050.yaml`). In both, the lines are
+continuous by eye. The 0.45 mm default was not changed: that is the controller's and the
+owner's decision.
+
+**Seen by eye in the four required previews:**
+1. **Roadie, drop:** the pupil is the only dark area. There are no dark crest or tail tips,
+   no dark mouth and no chest dot. The edges are smooth. The white areas (eye white, chest,
+   cuffs, shoes) stand out clearly on the grey checker.
+2. **Roadie, keep:** the band is finer than in review 2, and red is the largest color
+   again. The inner lines are broken (see the finding above).
+3. **Oddie, kept, blues and greens merged:** 4 colors, ready. Inner lines lost (see the
+   finding above).
+4. **Oddie, dropped, blues merged:** as in review 2, with smooth outer edges on the grey
+   background.
+
+**Holes:** no hole rule was added (7e-a found none). The owner should confirm on these
+previews that no gap remains.

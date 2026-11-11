@@ -26,6 +26,7 @@ from tdmg.color import (
 )
 from tdmg.color_outline import (
     KEEP_NO_EFFECT_NOTE,
+    KEEP_RATIO_RULE,
     KEEP_WIDTH_RULE,
     OUTLINE_METHOD,
     SHADE_CHROMA_RULE,
@@ -77,10 +78,11 @@ TOP_KEYS = {"schema", "tdmg_version", "algorithm", "colors_id", "identity", "inp
             "ready", "not_ready_reason", "extraction", "outline", "merges", "shade_pairs"}
 # The settings at their defaults, as recorded, and their sources.
 DEFAULT_SETTINGS = {"colors": 4, "extract": 6, "edges": "smooth", "base": "auto",
-                    "outlines": "drop", "outline_color": "auto", "merge": []}
+                    "outlines": "drop", "outline_color": "auto", "merge": [],
+                    "outline_width_mm": 0.45}
 DEFAULT_SOURCES = {"colors": "profile", "extract": "rule", "edges": "default",
                    "base": "default", "outlines": "default", "outline_color": "default",
-                   "merge": "default"}
+                   "merge": "default", "outline_width_mm": "rule"}
 
 
 def write_sel(folder, rgba=None, spec=None):
@@ -201,7 +203,7 @@ def test_outputs_and_record_schema(done, sel):
     assert sorted(p.name for p in out.iterdir()) == sorted([*OUTPUT_FILES, "colors.json"])
     assert json.loads((out / "colors.json").read_bytes()) == rec
     assert set(rec) == TOP_KEYS
-    assert rec["schema"] == RECORD_SCHEMA == "tdmg.colors/2"
+    assert rec["schema"] == RECORD_SCHEMA == "tdmg.colors/3"
     assert rec["algorithm"] == COLORS_ALGORITHM_VERSION == "colors-2"
     for name in OUTPUT_FILES:
         assert rec["outputs"][name] == hashlib.sha256((out / name).read_bytes()).hexdigest()
@@ -249,9 +251,13 @@ def test_outputs_and_record_schema(done, sel):
     assert rec["preview"]["outer_outline"] == OUTER_OUTLINE
 
 
-def test_preview_says_the_outer_outline_is_smoothed_later():
-    assert OUTER_OUTLINE == "outer outline: image pixels (smoothed when the model is built)"
-    assert OUTER_OUTLINE in tdmg.colors.legend_rows("smooth")
+def test_preview_legend_says_the_outline_is_smoothed_and_how_to_choose_the_base():
+    assert OUTER_OUTLINE.startswith("outer outline: smoothed as the model will be built")
+    assert "grey checker: background" in OUTER_OUTLINE
+    assert tdmg.colors.BASE_HINT == ("base: auto = the largest color (index 0); set base: N "
+                                     "in the config file to choose another")
+    assert tdmg.colors.legend_rows("smooth")[1:] == [OUTER_OUTLINE, tdmg.colors.BASE_HINT,
+                                                     tdmg.colors.FINAL_HEADING]
 
 
 def test_the_record_matches_the_library_functions(done, sel):
@@ -331,7 +337,8 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeyp
     base = done[0]["colors_id"]
     rules = copy.deepcopy(RULES)
     rid = "flat.sliver.opening_width"
-    rules[rid] = rules[rid].model_copy(update={"default": 0.5})
+    # Below the default outline_width_mm (0.45 mm), which must stay wider than it.
+    rules[rid] = rules[rid].model_copy(update={"default": 0.42})
     sigma_rules = copy.deepcopy(RULES)
     sid = "flat.smooth.sigma_px"
     sigma_rules[sid] = sigma_rules[sid].model_copy(update={"default": 2.0})
@@ -350,6 +357,7 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeyp
         "outlines": _id(sel, tmp_path, "keep", flags={"outlines": "keep"}),
         "outline_color": _id(sel, tmp_path, "none", flags={"outline_color": "none"}),
         "merge": _id(sel, tmp_path, "m", flags={"merge": [[3, 0]]}),
+        "outline width": _id(sel, tmp_path, "ow", flags={"outline_width_mm": 0.5}),
         "outline method": _id(sel, tmp_path, "om", monkeypatch=monkeypatch),
     }
     assert base not in ids.values()
@@ -390,13 +398,16 @@ def test_colors_id_is_the_hash_of_the_stored_identity(done):
                           "nozzle_diameter_mm", "rules", "supersample"}
     # One value per rule used, from the registry: both cleanup rules (the island rule's
     # own value, not the derived area), the edges rule, the thin share (outline_color is
-    # auto) and the two shade rules. Sigma is hashed only here. The keep width is not used
-    # (outlines drop).
+    # auto), the wide-area ratio (there is a family) and the two shade rules. Sigma is
+    # hashed only here. The keep width rule only gives settings.outline_width_mm its
+    # default, so it is hashed there.
     lim, sm = rec["limits"], rec["smoothing"]
     assert ident["rules"] == {
         r: RULES[r].default for r in (lim["opening_rule"], lim["island_rule"],
-                                      sm["edge_rule"], THIN_SHARE_RULE, SHADE_HUE_RULE,
-                                      SHADE_CHROMA_RULE)}
+                                      sm["edge_rule"], THIN_SHARE_RULE, KEEP_RATIO_RULE,
+                                      SHADE_HUE_RULE, SHADE_CHROMA_RULE)}
+    assert KEEP_WIDTH_RULE not in ident["rules"]
+    assert ident["settings"]["outline_width_mm"] == RULES[KEEP_WIDTH_RULE].default
     assert ident["rules"][sm["edge_rule"]] == sm["sigma_px"]
 
 
@@ -461,7 +472,7 @@ def _swap_counts(r):
     (lambda r: r["identity"]["rules"].update({"flat.sliver.opening_width": 0.5}),
      "colors_id does not match"),
     (lambda r: r.pop("identity"), "identity"),
-    (lambda r: r.update(schema="tdmg.colors/1"), "not a tdmg.colors/2 record"),
+    (lambda r: r.update(schema="tdmg.colors/1"), "not a tdmg.colors/3 record"),
     (lambda r: r["palette"].pop(), "final_index is not the final palette entry"),
     (lambda r: r["palette"][1].update(index=5), "palette indices are not 0..k-1"),
     (lambda r: r["palette"][0].update(hex="#000000"), "is not its rgb"),
@@ -818,7 +829,8 @@ def test_record_extraction_outline_merges_and_ready(done):
     out = rec["outline"]
     assert out["family"] == [2] and out["core"] == 2 and out["family_hex"] == ["#f0f0f0"]
     assert out["core_hex"] == "#f0f0f0" and out["found_by"] == "auto"
-    assert out["thresholds"] == {THIN_SHARE_RULE: 0.38} and out["keep_width"] is None
+    assert out["thresholds"] == {THIN_SHARE_RULE: 0.38, KEEP_RATIO_RULE: 2.0}
+    assert out["keep_width"] is None and out["specks_not_drawn"] is None
     assert [i for i, t in enumerate(out["thinness"]) if t > 0.38] == [2]
     assert out["method"] == OUTLINE_METHOD and len(out["notes"]) == 1
     assert out["notes"][0].startswith("outlines: drop: ")
@@ -948,7 +960,8 @@ def test_an_explicit_outline_list_is_the_family(sel, tmp_path):
     out = tmp_path / "out"
     rec = run(sel, out, flags={"outline_color": [3]})
     o = rec["outline"]
-    assert (o["found_by"], o["family"], o["core"], o["thresholds"]) == ("config", [3], 3, {})
+    assert (o["found_by"], o["family"], o["core"], o["thresholds"]) == (
+        "config", [3], 3, {KEEP_RATIO_RULE: 2.0})
     assert THIN_SHARE_RULE not in rec["identity"]["rules"]
     verify_colors(out, sel)
 
@@ -960,13 +973,17 @@ def test_outline_none_and_keep_are_recorded(sel, tmp_path):
             o["keep_width"], o["thresholds"], o["notes"]) == (
         "keep", "none", "none", [], None, None, {}, [KEEP_NO_EFFECT_NOTE])
     assert KEEP_WIDTH_RULE not in rec["identity"]["rules"]
+    assert (o["stroke_width_px"], o["wide_components"], o["specks_not_drawn"]) == (
+        None, [], None)
     out = tmp_path / "auto"
     rec = run(sel, out, flags={"outlines": "keep"})
     o = rec["outline"]
-    assert o["keep_width"] == {"mm": 0.6, "px": 0.6 / rec["mm_per_px"]}
-    assert o["thresholds"] == {THIN_SHARE_RULE: 0.38, KEEP_WIDTH_RULE: 0.6}
-    assert rec["identity"]["rules"][KEEP_WIDTH_RULE] == 0.6
-    assert o["notes"][1].startswith("outlines: keep: a 0.6 mm (")
+    assert o["keep_width"] == {"mm": 0.45, "px": 0.45 / rec["mm_per_px"]}
+    assert o["thresholds"] == {THIN_SHARE_RULE: 0.38, KEEP_RATIO_RULE: 2.0}
+    assert KEEP_WIDTH_RULE not in rec["identity"]["rules"]
+    assert rec["identity"]["settings"]["outline_width_mm"] == 0.45
+    assert set(o["specks_not_drawn"]) == {"count", "px"}
+    assert o["notes"][1].startswith("outlines: keep: a 0.45 mm (")
     verify_colors(out, sel)
 
 
@@ -1082,32 +1099,39 @@ def test_verify_colors_checks_the_new_identity_types(done, sel, tmp_path, change
 
 # The owner's images at 60 mm with the defaults (extract 6, colors 4, smooth, outline_color
 # auto, outlines drop, no merges), and three variants. Measured on the Windows PC,
-# 2026-11-11 (Task 7c); the previews were checked by eye (STATUS and the plan's Task 7c
-# result). The extracted palettes equal the N = 6 rows of the Task 7a record
-# (outline-shade.txt), and so do the thinness values to the 0.1% shown there.
+# 2026-11-11 (Task 7c; the Roadie runs and Oddie keep re-measured in Task 7e-b, outline
+# method /3, outline_width_mm 0.45). The extracted palettes equal the N = 6 rows of the
+# Task 7a record (outline-shade.txt), and so do the thinness values to the 0.1% shown
+# there.
 # - Roadie, drop: the outline family is the core #451812 and its red and grey fringes; the
-#   thin strokes go, the pupil (and a few wide dark tips) stay in the core: 4 colors, ready.
-# - Roadie, keep: the same drop, then (after the merges) a 0.6 mm (5.99 px) band in the
-#   core along the drawn lines and inside the outer edge. The band is then the largest
-#   color, so base auto is the core.
+#   thin strokes and the fringes' wide pixels go; of the core's 22 wide areas only the
+#   pupil (421 px, 18.87 px across against 2 x the 6.0 px stroke width) stays: 4 colors,
+#   ready, the core 0.6%.
+# - Roadie, keep: the same drop, then (after the merges) a 0.45 mm (4.49 px) band in the
+#   core along the drawn lines (31 specks, 102 px, not drawn) and inside the outer edge.
+#   Red is the largest color again (43.7%; the core 24.8%). Cleanup removes 2795 of the
+#   band's 20580 px (13.6%), since 0.45 mm is close to the 0.4 mm opening.
 # - Oddie, default: the black lines are the family (thin 100%, no wide area): 5 colors, not
 #   ready, and both shade pairs flagged (greens 0-2, blues 1-3).
 # - Oddie with merge [[3, 1]] (the blue shadow into the blue body): 4 colors, ready; the
 #   green pair is still flagged.
 # - Oddie, keep with merge [[3, 1]]: the lines (leaf edges and veins, arms, feet) come back
-#   as an 8.03 px band in the black core, with no line on the old shading border; the black
-#   is a fifth color, so it is not ready.
+#   as a 6.02 px (0.45 mm) band in the black core, with no line on the old shading border;
+#   the black is a fifth color, so it is not ready. Cleanup removes 10554 of the band's
+#   36916 px (28.6%).
 OWNER_RUNS = {
     "roadie-drop": ("roadie-tol30", {}, {
         "family": [2, 3, 5], "core": 3,
         "final": ["#f60606", "#f5f5f5", "#f0f10a", "#451812"],
         "to_final": [0, 1, None, 3, 2, None],
-        "cleanup": (4, 1098, "a14128e883f598f1"), "ready": True, "pairs": []}),
+        "cleanup": (3, 57, "4ccd3620d07f982d"), "ready": True, "pairs": [],
+        "kept_wide": [421]}),
     "roadie-keep": ("roadie-tol30", {"outlines": "keep"}, {
         "family": [2, 3, 5], "core": 3,
-        "final": ["#451812", "#f60606", "#f5f5f5", "#f0f10a"],
-        "to_final": [1, 2, None, 0, 3, None],
-        "cleanup": (4, 355, "7c28d3b6b2b45188"), "ready": True, "pairs": []}),
+        "final": ["#f60606", "#451812", "#f5f5f5", "#f0f10a"],
+        "to_final": [0, 2, None, 1, 3, None],
+        "cleanup": (5, 3225, "3764cc882ec73e6a"), "ready": True, "pairs": [],
+        "kept_wide": [421]}),
     "oddie-default": ("oddie", {}, {
         "family": [4], "core": 4,
         "final": ["#25561b", "#48a835", "#547e9d", "#395266", "#dd4f47"],
@@ -1121,9 +1145,9 @@ OWNER_RUNS = {
         "cleanup": (3, 7660, "1b10c29696824627"), "ready": True, "pairs": [[0, 2]]}),
     "oddie-keep-merge-blues": ("oddie", {"merge": [[3, 1]], "outlines": "keep"}, {
         "family": [4], "core": 4,
-        "final": ["#547e9d", "#25561b", "#48a835", "#0d100d", "#dd4f47"],
-        "to_final": [1, 0, 2, None, 3, 4],
-        "cleanup": (4, 365, "b6e562b39221a111"), "ready": False, "pairs": [[0, 2]]}),
+        "final": ["#25561b", "#547e9d", "#48a835", "#0d100d", "#dd4f47"],
+        "to_final": [0, 1, 2, None, 3, 4],
+        "cleanup": (6, 10846, "83070252286e484d"), "ready": False, "pairs": [[0, 2]]}),
 }
 OWNER_EXTRACTED = {
     "roadie-tol30": ["#f60606", "#f5f5f5", "#960a0a", "#451812", "#f0f10a", "#746c5b"],
@@ -1154,6 +1178,9 @@ def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_p
     log = rec["cleanup"]
     assert (log["passes"], log["pixels_changed"], digest) == want["cleanup"], PARITY
     assert [[p["i"], p["j"]] for p in rec["shade_pairs"]] == want["pairs"], PARITY
+    # Task 7e-b: on Roadie only the pupil keeps the core's color; Oddie has no wide area.
+    assert [c["area_px"] for c in o["wide_components"] if c["kept"]] == (
+        want.get("kept_wide", [])), PARITY
     assert rec["ready"] is want["ready"]
     if want["ready"]:
         verify_colors(out, SELECTIONS / name)
@@ -1356,7 +1383,7 @@ def test_verify_colors_checks_the_outline_and_shade_rules_in_the_identity(
 def test_verify_colors_checks_the_kept_band_width(cartoon_done, tmp_path):
     out = tmp_path / "keep"
     rec = run(cartoon_done[2], out, width_mm=11.0, flags={"outlines": "keep"})
-    assert rec["outline"]["keep_width"] == {"mm": 0.6, "px": 0.6 / rec["mm_per_px"]}
+    assert rec["outline"]["keep_width"] == {"mm": 0.45, "px": 0.45 / rec["mm_per_px"]}
     verify_colors(out, cartoon_done[2])
     for change, message in (
             (lambda r: r["outline"]["keep_width"].update(px=6.5), "outline.keep_width.px"),
@@ -1423,3 +1450,153 @@ def test_keep_merge_into_a_core_with_no_wide_area_is_recorded_and_verified(tmp_p
     assert ext[1]["fate"] == "merged" and ext[core]["fate"] == "final"
     assert rec["ready"] is True
     verify_colors(out, sel)
+
+
+# --- Task 7e-b: the drop's wide areas in the record; the preview ----------------------------
+
+def test_cartoon_record_has_the_stroke_width_and_the_wide_components(cartoon_done):
+    rec = cartoon_done[0]
+    o = rec["outline"]
+    assert o["method"] == "outline-thin-share/3"
+    assert isinstance(o["stroke_width_px"], float) and o["stroke_width_px"] > 0
+    comps = o["wide_components"]
+    assert [c["kept"] for c in comps] == [True]                  # the pupil only
+    c = comps[0]
+    assert set(c) == {"area_px", "inscribed_px", "centroid", "kept"}
+    assert c["inscribed_px"] >= 2.0 * o["stroke_width_px"]
+    assert abs(c["centroid"][0] - 45.5) < 1 and abs(c["centroid"][1] - 30.5) < 1
+    assert o["specks_not_drawn"] is None and o["keep_width"] is None
+    assert "1 at least 2 x the stroke width" in o["notes"][0]
+
+
+def _wide(r):
+    return r["outline"]["wide_components"]
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda r: _wide(r)[0].update(kept=False), r"wide_components\[0\].kept"),
+    (lambda r: _wide(r)[0].update(inscribed_px=1.0), r"wide_components\[0\].kept"),
+    (lambda r: r["outline"].update(stroke_width_px=100.0), r"wide_components\[0\].kept"),
+    (lambda r: r["outline"].update(stroke_width_px=None), r"wide_components\[0\].kept"),
+    (lambda r: r["outline"].update(stroke_width_px=-1.0), "stroke_width_px must be null"),
+    (lambda r: r["outline"].update(stroke_width_px=True), "stroke_width_px must be null"),
+    (lambda r: _wide(r)[0].pop("centroid"), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r)[0].update(area_px=0), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r)[0].update(kept=1), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r).append({**_wide(r)[0], "area_px": 10 ** 6}), "largest first"),
+    (lambda r: r["outline"].update(wide_components={}), "must be a list"),
+    (lambda r: r["outline"].update(specks_not_drawn={"count": 0, "px": 0}),
+     "specks_not_drawn"),
+    (lambda r: r["outline"].update(keep_width={"mm": 0.45, "px": 4.5}), "outline.keep_width"),
+])
+def test_verify_colors_checks_the_wide_components(cartoon_done, tmp_path, change, message):
+    d = _copy(cartoon_done[1], tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, cartoon_done[2])
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda i: i["rules"].pop(KEEP_RATIO_RULE), "identity.rules must hold exactly"),
+    (lambda i: i["rules"].update({KEEP_RATIO_RULE: 100.0}), "outline.thresholds"),
+    (lambda i: i["settings"].update(outline_width_mm=0.4),
+     "must be wider than flat.sliver.opening_width"),
+    (lambda i: i["settings"].update(outline_width_mm="0.5"),
+     "identity.settings.outline_width_mm is invalid"),
+    (lambda i: i["settings"].pop("outline_width_mm"), "identity.settings must hold exactly"),
+])
+def test_verify_colors_checks_the_ratio_rule_and_the_outline_width(cartoon_done, tmp_path,
+                                                                   change, message):
+    d = _copy(cartoon_done[1], tmp_path, "colors")
+    _edit_record(d, _edit_identity(change))
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, cartoon_done[2])
+
+
+def test_keep_records_the_specks_and_the_width_from_the_config(cartoon_done, tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_bytes(b"outlines: keep\noutline_width_mm: 0.8\n")
+    out = tmp_path / "keep"
+    rec = run(cartoon_done[2], out, width_mm=11.0, config_path=cfg)
+    o = rec["outline"]
+    assert rec["identity"]["settings"]["outline_width_mm"] == 0.8
+    assert rec["settings"]["sources"]["outline_width_mm"] == "config"
+    assert o["keep_width"] == {"mm": 0.8, "px": 0.8 / rec["mm_per_px"]}
+    # The pupil's four rounded-off corners are thin, so they are specks (not redrawn).
+    assert o["specks_not_drawn"] == {"count": 4, "px": 12}
+    verify_colors(out, cartoon_done[2])
+    for change, message in (
+            (lambda r: r["outline"].update(specks_not_drawn=None), "specks_not_drawn"),
+            (lambda r: r["outline"]["specks_not_drawn"].update(px=0), "specks_not_drawn"),
+            (lambda r: r["outline"]["specks_not_drawn"].update(count=-1), "specks_not_drawn"),
+            (lambda r: r["outline"]["keep_width"].update(mm=0.45), "outline.keep_width")):
+        d = _copy(out, tmp_path, f"s{abs(hash(message + str(id(change))))}")
+        _edit_record(d, change)
+        with pytest.raises(ColorsError, match=message):
+            verify_colors(d, cartoon_done[2])
+
+
+def test_the_preview_background_is_a_mid_grey_checker():
+    from tdmg.colors import BACKGROUND_SHADES, background
+    from tdmg.selection import CHECKER_CELL_PX, CHECKER_SHADES
+    assert BACKGROUND_SHADES == (112, 144)
+    # Far from white (the owner's white is 245) and from tdmg select's light checker.
+    assert max(BACKGROUND_SHADES) < min(CHECKER_SHADES) - 50
+    b = background(20, 20)
+    assert b.shape == (20, 20, 3) and (b[..., 0] == b[..., 2]).all()
+    assert tuple(b[0, 0]) == (144,) * 3 and tuple(b[0, CHECKER_CELL_PX]) == (112,) * 3
+    assert tuple(b[CHECKER_CELL_PX, CHECKER_CELL_PX]) == (144,) * 3
+
+
+def test_regions_png_shows_the_background_outside_the_subject(done):
+    rec, out = done
+    img = np.array(Image.open(out / "regions.png"))
+    h, w = rec["input"]["height_px"], rec["input"]["width_px"]
+    p = PREVIEW_SCALE
+    board = tdmg.colors.background(h * p, w * p)
+    left, right = img[:h * p, :w * p], img[:h * p, w * p:2 * w * p]
+    assert np.array_equal(left[0, 0], board[0, 0]) and np.array_equal(right[0, 0], board[0, 0])
+    assert rec["preview"]["background"] == {"checker_shades": [112, 144], "cell_px": 8}
+    assert rec["preview"]["outer_outline_smoothing"] == {"rule": "flat.smooth.sigma_px",
+                                                         "sigma_px": 2.5}
+
+
+def test_the_smoothed_outer_outline_keeps_a_straight_edge_and_rounds_a_corner():
+    from tdmg.colors import outline_preview_mask
+    mask = np.zeros((60, 80), bool)
+    mask[10:50, 10:70] = True
+    m = outline_preview_mask(mask, 2.5)
+    p = PREVIEW_SCALE
+    assert m.shape == (60 * p, 80 * p)
+    big = np.repeat(np.repeat(mask, p, axis=0), p, axis=1)
+    # Along the middle of each straight edge, exactly the enlarged mask.
+    assert np.array_equal(m[20 * p:40 * p, :], big[20 * p:40 * p, :])     # image rows 20..39
+    assert np.array_equal(m[:, 25 * p:55 * p], big[:, 25 * p:55 * p])     # columns 25..54
+    # The corner is rounded: the corner pixel of the mask is outside the smoothed outline.
+    assert big[10 * p, 10 * p] and not m[10 * p, 10 * p]
+    assert (m & ~big).sum() == 0               # a convex shape only loses its corners
+
+
+def test_the_right_panel_fills_a_notch_the_smoothing_closes(tmp_path):
+    # A 1 px notch in the subject's edge: smoothing at 2.5 px closes it, so the right panel
+    # shows a color there (the nearest one), not the background, while the left panel
+    # (the cutout) still shows the background.
+    rgba = np.zeros((80, 120, 4), np.uint8)
+    rgba[10:70, 10:110] = (200, 30, 30, 255)
+    rgba[10:70, 60:110] = (30, 30, 200, 255)
+    rgba[30, 109] = 0                          # one pixel of the right edge removed
+    sel = write_sel(tmp_path / "sel", rgba, SelectionSpec(keep_at=((40, 40),)))
+    rec = run(sel, tmp_path / "out", flags={"outline_color": "none"})
+    mask = read_selection(sel).mask
+    r, c = 30, 109
+    assert not mask[r, c]
+    img = np.array(Image.open(tmp_path / "out" / "regions.png"))
+    h, w = mask.shape
+    p = PREVIEW_SCALE
+    right = img[:h * p, w * p:2 * w * p]
+    left = img[:h * p, :w * p]
+    board = tdmg.colors.background(h * p, w * p)
+    y, x = r * p, c * p
+    assert np.array_equal(left[y, x], board[y, x])
+    blue = next(e["rgb"] for e in rec["palette"] if e["hex"] == "#1e1ec8")
+    assert right[y, x].tolist() == blue

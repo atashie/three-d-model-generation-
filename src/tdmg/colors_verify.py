@@ -26,12 +26,14 @@ from tdmg.color_config import (
     ColorConfig,
     ColorConfigError,
     check_extraction_indices,
+    check_outline_width_setting,
 )
 from tdmg.color_outline import (
-    KEEP_WIDTH_RULE,
+    KEEP_RATIO_RULE,
     SHADE_CHROMA_RULE,
     SHADE_HUE_RULE,
     THIN_SHARE_RULE,
+    keeps_wide_area,
     outline_core,
     shade_pairs,
 )
@@ -97,8 +99,10 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        outlines drop or keep, outline_color auto, none or a list, merge a list of valid
        pairs), supersample an int >= 1, width_mm finite and above 0, the rules exactly the
        two cleanup rules, the edges preset's rule (none for exact), the two shade rules,
-       the thin share when outline_color is auto, and the keep width when outlines is keep
-       and the family is not empty; each a finite number, and the sigma finite and >= 0.
+       the thin share when outline_color is auto, and the wide-area ratio
+       (color.outline.keep_area_width_ratio) when the family is not empty; each a finite
+       number, and the sigma finite and >= 0. settings.outline_width_mm is wider than the
+       identity's opening width (flat.sliver.opening_width).
        As when resolving: extract >= colors, and check_extraction_indices against
        extraction.n_extracted (an int 1..extract), outline.family (sorted, distinct indices
        below it) and outline.core.
@@ -116,8 +120,12 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        the list (config), empty (none), or exactly the indices whose recorded thinness is
        above the thin share (auto); thinness has one number from 0 to 1 per extracted color; family_hex
        is the family's colors; the core is outline_core of the family on the recorded Lab
-       (the darkest member), with its hex; keep_width is set exactly when the keep width
-       rule is used. The merges' from_hex and into_hex are the extraction's colors. Each
+       (the darkest member), with its hex; keep_width and specks_not_drawn are set exactly
+       under keep with a family, keep_width.mm being settings.outline_width_mm. Without a
+       family, stroke_width_px is null and wide_components empty; each wide component is
+       kept exactly when the ratio rule (keeps_wide_area) says so on its recorded
+       inscribed width and the recorded stroke width, and they are ordered largest
+       first. The merges' from_hex and into_hex are the extraction's colors. Each
        merged_into is the merge setting's; each fate is one of FATES, with final exactly
        when final_index is set, merged exactly when merged_into is set, outline only for
        an index in outline.family (and always for a family member other than the core),
@@ -192,7 +200,7 @@ def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str 
     want = ({OPENING_RULE, ISLAND_RULE, SHADE_HUE_RULE, SHADE_CHROMA_RULE}
             | ({edge_rule} if edge_rule else set())
             | ({THIN_SHARE_RULE} if settings["outline_color"] == "auto" else set())
-            | ({KEEP_WIDTH_RULE} if settings["outlines"] == "keep" and family else set()))
+            | ({KEEP_RATIO_RULE} if family else set()))
     if not isinstance(rules, dict) or set(rules) != want:
         raise ColorsError(f"identity.rules must hold exactly {', '.join(sorted(want))}")
     for rule_id, value in rules.items():
@@ -204,6 +212,10 @@ def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str 
         sigma = sigma_or_zero(0.0 if edge_rule is None else rules[edge_rule])
     except SmoothingError as e:
         raise ColorsError(f"identity.rules: {e}") from None
+    try:
+        check_outline_width_setting(settings["outline_width_mm"], rules)
+    except ColorConfigError as e:
+        raise ColorsError(f"identity.settings: {e}") from None
     return settings, width, supersample, sigma, edge_rule
 
 
@@ -255,7 +267,7 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
                                   settings["outline_color"]),
         "outline.method": (record["outline"]["method"], ident["methods"]["outline"]),
         "outline.thresholds": (record["outline"]["thresholds"],
-                               {r: ident["rules"][r] for r in (THIN_SHARE_RULE, KEEP_WIDTH_RULE)
+                               {r: ident["rules"][r] for r in (THIN_SHARE_RULE, KEEP_RATIO_RULE)
                                 if r in ident["rules"]}),
         "merges": ([[m["from"], m["into"]] for m in record["merges"]], settings["merge"]),
     }
@@ -395,7 +407,8 @@ def _check_extraction_palette(record: dict) -> None:
 
 def _check_outline(record: dict, settings: dict, rules: dict) -> None:
     """The outline block: found_by and the family against outline_color, thinness, the
-    auto family, family_hex, the core (the darkest member) and keep_width."""
+    auto family, family_hex, the core (the darkest member), keep_width, specks_not_drawn,
+    stroke_width_px and the wide components' kept flags."""
     outline = record["outline"]
     ext = record["extraction"]["palette"]
     family = outline["family"]
@@ -427,11 +440,53 @@ def _check_outline(record: dict, settings: dict, rules: dict) -> None:
                           "family member")
     if outline["core_hex"] != (None if core is None else ext[core]["hex"]):
         raise _inconsistent("outline.core_hex")
-    keep = KEEP_WIDTH_RULE in rules
+    keep = settings["outlines"] == "keep" and bool(family)
     kw = outline["keep_width"]
     if (kw is None) == keep or (keep and (set(kw) != {"mm", "px"}
-                                          or kw["mm"] != rules[KEEP_WIDTH_RULE])):
+                                          or kw["mm"] != settings["outline_width_mm"])):
         raise _inconsistent("outline.keep_width")
+    sp = outline["specks_not_drawn"]
+    if (sp is None) == keep or (keep and (
+            set(sp) != {"count", "px"}
+            or not all(type(sp[k]) is int and sp[k] >= 0 for k in ("count", "px"))
+            or (sp["count"] == 0) != (sp["px"] == 0))):
+        raise ColorsError("colors.json is inconsistent: outline.specks_not_drawn must be a "
+                          "count and a pixel total under keep with a family, else null")
+    _check_wide_components(outline, rules)
+
+
+def _check_wide_components(outline: dict, rules: dict) -> None:
+    """stroke_width_px and wide_components: empty without a family; otherwise each kept
+    flag is the ratio rule's decision on the recorded widths, largest first."""
+    sw, comps = outline["stroke_width_px"], outline["wide_components"]
+    if sw is not None and (isinstance(sw, bool) or not isinstance(sw, numbers.Real)
+                           or not math.isfinite(sw) or sw < 0):
+        raise ColorsError("colors.json is inconsistent: outline.stroke_width_px must be null "
+                          "or a finite number of at least 0")
+    if not isinstance(comps, list):
+        raise ColorsError("colors.json is inconsistent: outline.wide_components must be a list")
+    if not outline["family"]:
+        if sw is not None or comps:
+            raise ColorsError("colors.json is inconsistent: with no outline family there is "
+                              "no stroke width and no wide component")
+        return
+    ratio = rules[KEEP_RATIO_RULE]
+    areas = []
+    for n, c in enumerate(comps):
+        ins = c["inscribed_px"]
+        if (set(c) != {"area_px", "inscribed_px", "centroid", "kept"}
+                or type(c["area_px"]) is not int or c["area_px"] < 1
+                or isinstance(ins, bool) or not isinstance(ins, numbers.Real)
+                or not math.isfinite(ins) or type(c["kept"]) is not bool):
+            raise ColorsError(f"colors.json is inconsistent: outline.wide_components[{n}] "
+                              "must hold area_px, inscribed_px, centroid and kept")
+        if c["kept"] != keeps_wide_area(ins, sw, ratio):
+            raise ColorsError(f"colors.json is inconsistent: outline.wide_components[{n}].kept "
+                              f"is not what {KEEP_RATIO_RULE} gives on its widths")
+        areas.append(c["area_px"])
+    if areas != sorted(areas, reverse=True):
+        raise ColorsError("colors.json is inconsistent: outline.wide_components are not "
+                          "largest first")
 
 
 def _check_fates(record: dict, settings: dict, palette: list) -> None:

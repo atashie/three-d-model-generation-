@@ -407,10 +407,11 @@ def test_colors_flags_and_config(tmp_path):
     rec = json.loads((out / "colors.json").read_bytes())
     assert rec["settings"]["settings"] == {
         "colors": 2, "extract": 3, "edges": "furry", "base": "auto", "outlines": "drop",
-        "outline_color": "none", "merge": [[2, 0]]}
+        "outline_color": "none", "merge": [[2, 0]], "outline_width_mm": 0.45}
     assert rec["settings"]["sources"] == {
         "colors": "flag", "extract": "flag", "edges": "config", "base": "flag",
-        "outlines": "flag", "outline_color": "config", "merge": "config"}
+        "outlines": "flag", "outline_color": "config", "merge": "config",
+        "outline_width_mm": "rule"}
     m = rec["merges"][0]
     assert f"merged: 2 {m['from_hex']} into 0 {m['into_hex']}" in _plain(r.stdout)
     assert "edges furry" in _plain(r.stdout)
@@ -500,7 +501,9 @@ def test_colors_help(tmp_path):
                    "--outlines", "--config"):
         assert option in text
     assert "--outline-color" not in text and "--merge" not in text   # config file only
-    assert "outline_color and merge (by extraction index) are set in this file only" in text
+    assert ("outline_color, merge (by extraction index) and outline_width_mm (the kept "
+            "outline's width; default the rule color.outline.keep_width) are set in this "
+            "file only") in text
     assert "Usage: tdmg colors [OPTIONS] {SELECTION_DIR}" in text
     assert "1 files written, but the plan is not ready" in text
 

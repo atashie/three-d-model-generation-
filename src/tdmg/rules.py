@@ -29,7 +29,7 @@ Provenance = Literal["primary", "secondary", "unverified"]
 Validation = Literal["untested", "measured", "source-tested", "peer-reviewed", "calibrated"]
 RULE_ID = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)+$")
 UNITS = {"mm", "mm2", "deg", "px", "x_nozzle", "triangles", "bool", "alpha8", "rgb8_distance",
-         "count", "fraction", "cielab_chroma",
+         "count", "fraction", "ratio", "cielab_chroma",
          "s"}
 ATTRIBUTE_KEYS = {"geometry": "G", "articulation": "A", "color": "C", "assembly": "L"}
 

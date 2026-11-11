@@ -26,7 +26,7 @@ A1 = load_printer("bambu-a1")
 # 0.6 mm/px: opening 0.67 px, island 1.8 px^2, so the stripes survive cleanup.
 LIMITS = printable_limits_px(0.6, RULES, A1)
 SETTINGS = {"colors": 4, "extract": 5, "edges": "exact", "base": "auto", "outlines": "drop",
-            "outline_color": "auto", "merge": ()}
+            "outline_color": "auto", "merge": (), "outline_width_mm": 0.45}
 STRIPES = [((200, 30, 30), 30), ((30, 30, 200), 25), ((30, 200, 30), 20),
            ((240, 240, 240), 15), ((20, 20, 20), 10)]
 
@@ -90,7 +90,11 @@ def test_explicit_outline_indices_are_checked_against_the_real_extraction_first(
         plan(extract=8, outline_color=(6,))
     p = plan(extract=8, outline_color=(4,))       # the black stripe, named by the owner
     assert p.outline.family == (4,) and p.outline.found_by == "config"
-    assert p.outline.core == 4 and p.fate[4] == "final"      # a wide stripe: kept as core
+    # A wide stripe with no thin pixel: the family has no stroke, so no wide area is kept
+    # (color.outline.keep_area_width_ratio, Task 7e-b) and the stripe takes its neighbour.
+    assert p.outline.core == 4 and p.fate[4] == "outline"
+    assert p.outline.stroke_width_px is None
+    assert [c.kept for c in p.outline.wide_components] == [False]
 
 
 def test_merge_beyond_the_real_extraction_is_refused():
@@ -125,9 +129,9 @@ def _fake_outline(family, core, removed, recolor=None):
                           n_requested=q.n_requested, n_distinct_colors=q.n_distinct_colors)
         return out, OutlineResult(family=family, core=core, thinness=(0.0,) * len(q.hex),
                                   found_by="auto", method=OUTLINE_METHOD, remap=out.remap,
-                                  thresholds=(), keep_width_mm=None, keep_width_px=None,
-                                  band=None, core_rgb=None,
-                                  notes=())
+                                  thresholds=(), stroke_width_px=None, wide_components=(),
+                                  keep_width_mm=None, keep_width_px=None, specks=None,
+                                  band=None, core_rgb=None, notes=())
     return fake
 
 

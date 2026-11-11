@@ -103,7 +103,8 @@ def shade_candidates(n: int, outline_remap, core, merges) -> list[int]:
 def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
                 rules: dict[str, Rule]) -> ColorPlan:
     """The pipeline in the module docstring. settings: the resolved settings
-    (tdmg.color_config); extract, outline_color, outlines and merge are read here. limits:
+    (tdmg.color_config); extract, outline_color, outlines, outline_width_mm and merge are
+    read here. limits:
     printable_limits_px at the plan's scale. rules: the registry; the outline rules are read
     by handle_outlines, the two shade rules here. Raises ColorError (bad input) or
     ColorConfigError (an index the extraction does not have, a merge from the outline
@@ -116,7 +117,7 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
     check_extraction_indices(outline_color, merge, n)
     outlined, outline = handle_outlines(extracted, outline_color=outline_color,
                                         outlines=settings["outlines"], limits=limits,
-                                        rules=rules)
+                                        rules=rules, width_mm=settings["outline_width_mm"])
     check_extraction_indices(outline_color, merge, n, outline.family, outline.core)
     merges = tuple((int(a), int(b)) for a, b in merge)
     core_gone = outline.core is not None and outline.remap[outline.core] is None

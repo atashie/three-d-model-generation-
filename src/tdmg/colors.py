@@ -43,6 +43,7 @@ from pathlib import Path
 
 import numpy as np
 import scipy
+import shapely
 from PIL import Image, ImageDraw, ImageFont
 
 from tdmg import __version__
@@ -55,6 +56,7 @@ from tdmg.color import (
     printable_limits_px,
 )
 from tdmg.color_config import (
+    SMOOTH_RULE,
     ColorConfigError,
     check_base,
     edge_sigma_px,
@@ -73,14 +75,22 @@ from tdmg.records import (
     record_text,
     write_outputs,
 )
-from tdmg.selection import SelectionError, checker, pixels_sha256, read_selection
-from tdmg.smoothing import LABELS_METHOD, SUPERSAMPLE, SmoothingError, smooth_labels
+from tdmg.selection import CHECKER_CELL_PX, SelectionError, pixels_sha256, read_selection
+from tdmg.smoothing import (
+    LABELS_METHOD,
+    SUPERSAMPLE,
+    SmoothingError,
+    smooth_labels,
+    smooth_outline,
+)
 
 # colors-2 (Tasks 7b and 7c, unreleased): extraction at `extract`, the outline step, the
 # owner's merges, the shade-pair flags and the ready flag. tdmg.colors/2 adds the
-# extraction, outline, merges, shade_pairs and ready fields.
+# extraction, outline, merges, shade_pairs and ready fields; tdmg.colors/3 (Task 7e-b)
+# adds the outline_width_mm setting and the outline block's stroke_width_px,
+# wide_components and specks_not_drawn (the changed outline step is methods.outline).
 COLORS_ALGORITHM_VERSION = "colors-2"
-RECORD_SCHEMA = "tdmg.colors/2"
+RECORD_SCHEMA = "tdmg.colors/3"
 RECORD_NAME = "colors.json"
 OUTPUT_FILES = ("labels.png", "regions.png")
 LABELS_OUTSIDE = 255   # labels.png value outside the mask; palette indices are below it
@@ -105,7 +115,17 @@ MARGIN_PX = 4
 TEXT_X_PX = MARGIN_PX + SWATCH_PX + 6
 LEGEND = ("left: cutout. right: final colors with the {edges} edges. "
           "black/white dashes: changed by cleanup")
-OUTER_OUTLINE = "outer outline: image pixels (smoothed when the model is built)"
+OUTER_OUTLINE = ("outer outline: smoothed as the model will be built. grey checker: "
+                 "background, not part of the model")
+BASE_HINT = ("base: auto = the largest color (index 0); set base: N in the config file to "
+             "choose another")
+# The background behind the subject (Task 7e-b): a checker of two mid greys. The owner read
+# white areas (cuffs, eye white) on tdmg select's light-grey checker (200/235) as empty
+# spots; the 7e-a record found no hole there. Mid greys (L* about 47 and 60) are far from
+# white and black, carry no hue (the owner's images have blue-grey tones, so a blue-grey
+# background could be confused with them), and the checker pattern marks them as
+# background. Display only, not a threshold.
+BACKGROUND_SHADES = (112, 144)
 FINAL_HEADING = "final colors (base uses these indices):"
 EXTRACTED_HEADING = ("extracted colors ({n}): outline_color and merge in the config file use "
                      "these indices")
@@ -117,7 +137,43 @@ MERGE_HINT = ("to merge two colors, add merge: [[from, into]] to the config file
 def legend_rows(edges: str) -> list[str]:
     """The legend lines above the swatches in regions.png, ending with the final palette's
     heading."""
-    return [LEGEND.format(edges=edges), OUTER_OUTLINE, FINAL_HEADING]
+    return [LEGEND.format(edges=edges), OUTER_OUTLINE, BASE_HINT, FINAL_HEADING]
+
+
+def background(h: int, w: int) -> np.ndarray:
+    """H x W x 3 uint8: the preview's background, a checker of BACKGROUND_SHADES in cells
+    of tdmg select's CHECKER_CELL_PX; the top-left cell uses BACKGROUND_SHADES[1]."""
+    rows = (np.arange(h) // CHECKER_CELL_PX % 2).astype(bool)
+    cols = (np.arange(w) // CHECKER_CELL_PX % 2).astype(bool)
+    cell = rows[:, None] ^ cols[None, :]
+    grey = np.where(cell, np.uint8(BACKGROUND_SHADES[0]), np.uint8(BACKGROUND_SHADES[1]))
+    return grey[..., None].repeat(3, axis=2)
+
+
+def outline_preview_mask(mask: np.ndarray, sigma_px: float) -> np.ndarray:
+    """(H P, W P) bool, P = PREVIEW_SCALE: the preview pixels whose centre lies inside
+    the R1-smoothed outer outline, smooth_outline(mask, sigma_px) (tdmg.smoothing; tdmg
+    flat builds its outline with it at flat.smooth.sigma_px), in its pixel-cell
+    coordinates. Preview pixel (row a, column b) has its centre at ((b + 0.5) / P,
+    (a + 0.5) / P) in image pixels; shapely's contains_xy (exact; a centre on the outline
+    counts as outside) decides. A straight axis-aligned edge stays on its cell edge under
+    the blur, and no centre lies on a cell edge, so along such an edge this is exactly the
+    enlarged mask. Not shown: tdmg flat's later clean (its opening and island removal in
+    mm), which removes only features narrower than the opening width."""
+    h, w = mask.shape
+    p = PREVIEW_SCALE
+    region = smooth_outline(mask, sigma_px)
+    out = np.zeros((h * p, w * p), bool)
+    minx, miny, maxx, maxy = region.bounds
+    c0, c1 = max(math.floor(minx * p) - 1, 0), min(math.ceil(maxx * p) + 1, w * p)
+    r0, r1 = max(math.floor(miny * p) - 1, 0), min(math.ceil(maxy * p) + 1, h * p)
+    if c0 >= c1 or r0 >= r1:
+        return out
+    shapely.prepare(region)
+    xs = (np.arange(c0, c1) + 0.5) / p
+    ys = (np.arange(r0, r1) + 0.5) / p
+    out[r0:r1, c0:c1] = shapely.contains_xy(region, xs[None, :], ys[:, None])
+    return out
 
 
 def not_ready_line(reason: str) -> str:
@@ -151,12 +207,15 @@ def colors_identity(*, methods: dict, selection_id: str, cutout_pixels_sha256: s
 
     methods: the algorithm versions (colors, quantize, outline, cleanup, labels). settings:
     the resolved values of every key (colors, extract, edges, base, outlines,
-    outline_color, merge), not their sources: the same values from a flag, a file or a
-    default give the same plan. The extraction default's rule is therefore not hashed
-    separately; its value is settings.extract. printer: the profile id (as flat_identity's params
+    outline_color, merge, outline_width_mm), not their sources: the same values from a
+    flag, a file or a default give the same plan. The rules that only give a setting's
+    default (color.extract.default_count, color.outline.keep_width) are therefore not
+    hashed separately; their values are settings.extract and settings.outline_width_mm. printer: the profile id (as flat_identity's params
     hold it). rules: {rule id: registry value} for every rule used: the two cleanup rules
-    (the island rule's own min_square_side, not the derived area) and the edges preset's
-    rule, if any. The edges sigma is hashed only there; `exact` has no rule and sigma 0
+    (the island rule's own min_square_side, not the derived area), the edges preset's
+    rule, if any, the outline rules that decided the plan (the thin share under auto, the
+    wide-area ratio with a family) and the two shade rules. The preview's outer outline
+    (flat.smooth.sigma_px) is display only and not part of it. The edges sigma is hashed only there; `exact` has no rule and sigma 0
     by definition. supersample: the fine map's factor. The environment is never part of it.
     """
     return {"methods": dict(methods), "selection_id": selection_id,
@@ -303,21 +362,25 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
                    fine: np.ndarray, supersample: int, changed: np.ndarray,
                    edges: str, vanished: set[int], extracted: list[dict],
                    outline: dict, shade: list[dict],
-                   not_ready_reason: str | None) -> np.ndarray:
+                   not_ready_reason: str | None, outer: np.ndarray) -> np.ndarray:
     """The review preview: two panels side by side, then the swatch strip.
 
     fine is smooth_labels' fine map at supersample s (its shape is (H s, W s)); vanished
-    holds the palette indices that smoothing removed.
+    holds the palette indices that smoothing removed. outer: outline_preview_mask, the
+    preview pixels inside the R1-smoothed outer outline.
 
-    Left: the cutout, PREVIEW_SCALE x nearest, on tdmg select's preview checkerboard
-    outside the mask. Right: the final palette colors from the smoothed fine map
-    (_fine_to_preview), inside the mask only (the image mask, enlarged by nearest; the R1
-    outline is smoothed in design step 2 (geometry), not here), on the same checkerboard.
+    Left: the cutout, PREVIEW_SCALE x nearest, on the preview background (background(),
+    a mid-grey checker) outside the mask. Right: the final palette colors from the
+    smoothed fine map (_fine_to_preview) inside the smoothed outer outline (outer), on the
+    same background outside it: so subject pixels outside the smoothed outline show as
+    background, and background pixels inside it show the fine map's color there (the
+    nearest labelled pixel's color, as smooth_labels fills OUTSIDE).
     Pixels whose color cleanup changed (changed_mask) are outlined on the right: the inner
     edge of the changed region, enlarged, drawn in black and white dashes of
     CHANGED_DASH_PX along the diagonals, so it shows on any color. Below: the legend rows
-    (legend_rows; they say that the outer outline is the image's pixel outline, smoothed in
-    design step 2, and end with the final palette's heading), then one row per final
+    (legend_rows; they say that the outer outline is smoothed as the model will be built,
+    what the background is and how to choose the base, and end with the final palette's
+    heading), then one row per final
     palette entry with its swatch, index, hex code, area share, and whether it is the base
     or vanished in smoothing. Then, separated by a heading row (EXTRACTED_HEADING), one row
     per extracted color (the extraction record's palette): its swatch, extraction index,
@@ -328,10 +391,10 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
     h, w = mask.shape
     p = PREVIEW_SCALE
     big_mask = _enlarge(mask, p)
-    board = checker(h * p, w * p)[..., None].repeat(3, axis=2)
+    board = background(h * p, w * p)
     left = np.where(big_mask[..., None], _enlarge(cutout_rgb, p), board)
     pal = np.array([e["rgb"] for e in palette], np.uint8)
-    right = np.where(big_mask[..., None], pal[_fine_to_preview(fine, h, w, supersample)],
+    right = np.where(outer[..., None], pal[_fine_to_preview(fine, h, w, supersample)],
                      board)
     edge = _inner_edge(_enlarge(changed, p))
     yy, xx = np.nonzero(edge)
@@ -472,8 +535,14 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         "core": core, "core_hex": None if core is None else extracted.hex[core],
         "thinness": list(outline.thinness),
         "thresholds": dict(outline.thresholds),
+        "stroke_width_px": outline.stroke_width_px,
+        "wide_components": [{"area_px": c.area_px, "inscribed_px": c.inscribed_px,
+                             "centroid": list(c.centroid), "kept": c.kept}
+                            for c in outline.wide_components],
         "keep_width": (None if outline.keep_width_mm is None else
                        {"mm": outline.keep_width_mm, "px": outline.keep_width_px}),
+        "specks_not_drawn": (None if outline.specks is None else
+                             {"count": outline.specks[0], "px": outline.specks[1]}),
         "method": outline.method, "notes": list(outline.notes)}
     shade_record = shade_pair_records(plan.shade_pairs)
     extraction_palette = [
@@ -488,10 +557,13 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     palette = [{"index": i, "hex": cleaned.hex[i], "rgb": cleaned.rgb[i].tolist(),
                 "lab": cleaned.lab[i].tolist(), "share": cleaned.shares[i],
                 "count": cleaned.counts[i], "base": i == base_index} for i in range(k)]
+    # The preview's outer outline is R1's smoothed one (Task 7e-b); display only, so its
+    # sigma is recorded under "preview", not in the identity.
+    outer_sigma = float(rules[SMOOTH_RULE].default)
     regions = _regions_image(sel.cutout_rgb, sel.mask, palette, smoothed.fine,
                              smoothed.supersample, changed_mask(plan.banded, cleaned),
                              settings["edges"], vanished, extraction_palette, outline_record,
-                             shade_record, reason)
+                             shade_record, reason, outline_preview_mask(sel.mask, outer_sigma))
     files = {"labels.png": png_bytes(labels8), "regions.png": png_bytes(regions)}
 
     methods = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
@@ -502,7 +574,7 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     if edge_rule is not None:
         used_rules[edge_rule] = sigma
     # The outline and shade rules that decided this plan (outline.thresholds holds the
-    # first two when they were used).
+    # thin share and the wide-area ratio when they were used).
     used_rules.update(dict(outline.thresholds))
     used_rules.update(dict(plan.shade_rules))
     record_settings = resolved.as_record()
@@ -537,9 +609,10 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         "extraction": {"extract": settings["extract"], "n_extracted": n_ext,
                        "palette": extraction_palette},
         # The outline step: the family (extraction indices and hexes), its core (the
-        # darkest member, which keeps the wide areas and draws the kept band), every
-        # extracted color's thinness, the thresholds used (rule id: value) and the kept
-        # band's width.
+        # darkest member, which keeps the wide areas that pass the ratio rule and draws
+        # the kept band), every extracted color's thinness, the thresholds used (rule id:
+        # value), the family's stroke width, the core's wide areas (area, inscribed width,
+        # centroid, kept), the kept band's width and the stroke specks it left out.
         "outline": outline_record,
         "merges": [{"from": a, "from_hex": extracted.hex[a], "into": b,
                     "into_hex": extracted.hex[b]} for a, b in merges],
@@ -563,8 +636,12 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         "methods": methods,
         "preview": {"scale": PREVIEW_SCALE,
                     "right_panel": "final colors from the fine map, nearest fine pixel to "
-                                   "each preview pixel centre; image mask outside",
+                                   "each preview pixel centre, inside the smoothed outer "
+                                   "outline; background outside it",
                     "outer_outline": OUTER_OUTLINE,
+                    "outer_outline_smoothing": {"rule": SMOOTH_RULE, "sigma_px": outer_sigma},
+                    "background": {"checker_shades": list(BACKGROUND_SHADES),
+                                   "cell_px": CHECKER_CELL_PX},
                     "changed_outline": "inner edge of the pixels cleanup changed, black and "
                                        "white dashes"},
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
