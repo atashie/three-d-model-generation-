@@ -479,3 +479,28 @@ differences; I have not measured them myself:
 - **The eye white** is smaller.
 - **A dot:** one isolated thin speck, about 15.7 px from the edge at (300, 486), becomes a
   small dot.
+
+## Addendum: owner review of the outline and shading previews (plan Task 7d), 2026-11-11
+
+**What was reviewed:** the previews in the git-ignored `artifacts/colors-review-2/`:
+1. Roadie, outline dropped;
+2. Roadie, outline kept;
+3. Oddie, dropped, not ready;
+4. Oddie, dropped, blues merged;
+5. Oddie, kept, blues merged (5 colors);
+6. Oddie, kept, blues and greens merged.
+
+The owner's answers, verbatim:
+
+1. "teh "kept" version looks good, but could use some smoothing around the edges; teh
+   "dropped" version is has remnant black outlines - ideally only the black of the eye
+   would remain but I still spot black outlines around the tail feathers and head
+   feathers and a bit in the mouth and a bit on the chest. Also, "empty" spots (like
+   between the ankles and shoes, or between the beek and eye) should be filled in but it
+   looks like there are some gaps."
+2. "make it a choice for the user, but yes black base if fine in this case."
+3. "they all look good, except they have more than 4 colors in many cases - so these
+   wouldn't work for ams; i personally prefer 6, but I don't think there is a way to
+   standardize this decision."
+4. "I think a touch finer would be good (0.4 mm?)."
+5. "drop them".

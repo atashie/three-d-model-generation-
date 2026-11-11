@@ -445,3 +445,37 @@ the first version" overstated it. The controller's review found three difference
   the family (an explicit `outline_color` list)?
 - Isolated thin specks of a family color become small dots about W across. Keep them, or
   drop them?
+
+### Task 7d: the owner's review and what follows (2026-11-11)
+
+The owner's answers are recorded verbatim in the research README's addendum "owner review
+of the outline and shading previews". The controller's response, Task 7e:
+
+7e-a. **Measure first** on Roadie and Oddie, to tell what should survive `drop` from
+      what should not. The owner wants only the pupil kept on Roadie, not the feather
+      tips, the mouth shading or the chest dot.
+      - **Per wide outline-color component:** its area; whether it touches the outer
+        edge; which colors enclose it; its compactness; and whether it belongs to the
+        core or to a fringe (shading) tone.
+      - **Holes in the mask:** enclosed non-subject areas, with their count, area and
+        neighbouring colors.
+      - **Stroke specks under `keep`:** component sizes.
+      - Find simple rules with margins, or report that none separate the cases.
+7e-b. **Implement:**
+      - **The preview** shows the R1-smoothed outer outline (the owner judges edges from
+        it).
+      - **`holes: fill | keep`,** default fill. Holes take the neighbouring color, and
+        design step 2 must build from the filled mask, which the record holds.
+      - **Under `drop`:** wide pixels of non-core family members (shading tones such as
+        Roadie's dark red) take the nearest non-family color. The core's wide
+        components are kept only if they pass the rule from 7e-a.
+      - **Under `keep`:** stroke specks below the 7e-a rule are not drawn.
+      - **A config key `outline_width_mm`,** default 0.45 mm. The owner asked for "a
+        touch finer (0.4 mm?)", but 0.4 mm is exactly `flat.sliver.opening_width`, and
+        cleanup removes strips at or below it. 0.45 mm is the finest step above it.
+        Update the rule's value and evidence.
+      - **`base`** stays the owner's choice (auto = the largest). The preview says how
+        to change it.
+      - **Oddie's color count** stays the owner's choice through merges; the owner
+        prefers preview 6 (kept outline, blues and greens merged).
+7e-c. **New previews,** then the owner's review again.
