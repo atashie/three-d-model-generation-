@@ -81,3 +81,25 @@ install PrusaSlicer 2.9.7).
 These equal the values pinned in `profiles/slicers/prusaslicer-2.9.7.yaml`. The
 implementer, working separately, also re-extracted the hash-checked zip and got the same
 tree hash.
+
+## Addendum: run times, 2026-11-11
+
+**Purpose:** evidence for the rule `slicer.prusa.timeout_s`, the wall-clock limit on each
+PrusaSlicer run in `tdmg slice`.
+
+- **Method:** `time_prusa.py` → `timing.txt`. It runs the measured command forms, `--info`
+  and `--export-gcode` with the explicit A1 settings above, 5 times each on the 20 mm cube
+  and the owner's two smoothed 60 × 3 mm models. Each run is timed with
+  `time.perf_counter` around `subprocess.run`, so process start is included. Same PC, same
+  pinned install.
+- **Result:** every run exited 0. The slowest single run took 1.16 s (the Roadie's
+  `--export-gcode`).
+
+| Model | `--info` (min–max, s) | `--export-gcode` (min–max, s) |
+|---|---|---|
+| 20 mm cube | 0.12–0.28 | 0.18–0.20 |
+| Roadie, 31,200 facets | 0.16–0.67 | 1.09–1.16 |
+| Oddie, 29,212 facets | 0.15–0.17 | 0.85–0.91 |
+
+**Limits:** one PC, small models only. No model near the 1,000,000-triangle budget and
+no slower machine was timed.

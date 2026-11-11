@@ -1,0 +1,37 @@
+run 1 cube info: returncode 0, 0.28 s
+run 1 cube gcode: returncode 0, 0.19 s
+run 1 roadie-tol30-60x3-s3 info: returncode 0, 0.16 s
+run 1 roadie-tol30-60x3-s3 gcode: returncode 0, 1.16 s
+run 1 oddie-60x3-s3 info: returncode 0, 0.16 s
+run 1 oddie-60x3-s3 gcode: returncode 0, 0.91 s
+run 2 cube info: returncode 0, 0.12 s
+run 2 cube gcode: returncode 0, 0.19 s
+run 2 roadie-tol30-60x3-s3 info: returncode 0, 0.64 s
+run 2 roadie-tol30-60x3-s3 gcode: returncode 0, 1.12 s
+run 2 oddie-60x3-s3 info: returncode 0, 0.16 s
+run 2 oddie-60x3-s3 gcode: returncode 0, 0.85 s
+run 3 cube info: returncode 0, 0.12 s
+run 3 cube gcode: returncode 0, 0.20 s
+run 3 roadie-tol30-60x3-s3 info: returncode 0, 0.65 s
+run 3 roadie-tol30-60x3-s3 gcode: returncode 0, 1.10 s
+run 3 oddie-60x3-s3 info: returncode 0, 0.15 s
+run 3 oddie-60x3-s3 gcode: returncode 0, 0.89 s
+run 4 cube info: returncode 0, 0.12 s
+run 4 cube gcode: returncode 0, 0.18 s
+run 4 roadie-tol30-60x3-s3 info: returncode 0, 0.67 s
+run 4 roadie-tol30-60x3-s3 gcode: returncode 0, 1.09 s
+run 4 oddie-60x3-s3 info: returncode 0, 0.15 s
+run 4 oddie-60x3-s3 gcode: returncode 0, 0.91 s
+run 5 cube info: returncode 0, 0.14 s
+run 5 cube gcode: returncode 0, 0.19 s
+run 5 roadie-tol30-60x3-s3 info: returncode 0, 0.63 s
+run 5 roadie-tol30-60x3-s3 gcode: returncode 0, 1.11 s
+run 5 oddie-60x3-s3 info: returncode 0, 0.17 s
+run 5 oddie-60x3-s3 gcode: returncode 0, 0.86 s
+summary cube info: 5 runs, min 0.12 s, max 0.28 s
+summary cube gcode: 5 runs, min 0.18 s, max 0.20 s
+summary roadie-tol30-60x3-s3 info: 5 runs, min 0.16 s, max 0.67 s
+summary roadie-tol30-60x3-s3 gcode: 5 runs, min 1.09 s, max 1.16 s
+summary oddie-60x3-s3 info: 5 runs, min 0.15 s, max 0.17 s
+summary oddie-60x3-s3 gcode: 5 runs, min 0.85 s, max 0.91 s
+slowest run: 1.16 s

@@ -49,3 +49,11 @@ def test_slicer_timeout_rule_exists_with_its_unit_and_default():
     rule = RULES["slicer.orca.timeout_s"]
     assert (rule.unit, rule.default, rule.kind) == ("s", 300, "hypothesis")
     assert rule.best_validation == "untested"
+
+
+def test_prusaslicer_timeout_rule_exists_with_its_unit_and_default():
+    rule = RULES["slicer.prusa.timeout_s"]
+    assert (rule.unit, rule.default, rule.kind) == ("s", 300, "hypothesis")
+    assert rule.best_validation == "untested"
+    assert [e.ref for e in rule.evidence] == [
+        "research/verification/2026-11-11-prusaslicer-windows/README.md"]

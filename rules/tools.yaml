@@ -1,5 +1,5 @@
 # Limits and measured behaviour of specific tools (kind: tool_limit), and settings for
-# running them (slicer.orca.timeout_s, a hypothesis).
+# running them (slicer.orca.timeout_s and slicer.prusa.timeout_s, hypotheses).
 - id: slicer.orca.max_triangles_per_plate
   kind: tool_limit
   summary: Triangle limit per plate declared by OrcaSlicer's --mtcpp option (default value); used here as our F5 budget.
@@ -31,6 +31,19 @@
       validation: untested
       claim: "OrcaSlicer 2.5.0 on the owner's Windows PC took 0.2-0.5 s per run on a 20 mm cube and the owner's two 60 x 3 mm models (the Roadie STL has 31,200 triangles). 300 s is about 600 times the slowest measured run: room for models near the 1,000,000-triangle budget and slower machines, while a hung slicer is still stopped. The margin is a guess; no large model or slow machine was timed."
   notes: Bounds a hung or runaway slicer; it is not a performance target. Raise it, with evidence, if a legitimate model is ever stopped by it.
+
+- id: slicer.prusa.timeout_s
+  kind: hypothesis
+  summary: Wall-clock limit for each PrusaSlicer run (--info, then --export-gcode) in tdmg slice's F6.portability; a run still going after this long is stopped and F6.portability FAILs.
+  unit: s
+  default: 300
+  evidence:
+    - ref: research/verification/2026-11-11-prusaslicer-windows/README.md
+      locator: "The slowest single run took 1.16 s"
+      provenance: primary
+      validation: untested
+      claim: "PrusaSlicer 2.9.7 on the owner's Windows PC took 0.12-1.16 s per run (5 repeats of --info and --export-gcode each) on a 20 mm cube and the owner's two 60 x 3 mm models (up to 31,200 facets). 300 s is about 260 times the slowest measured run: room for models near the 1,000,000-triangle budget and slower machines, while a hung slicer is still stopped. The margin is a guess; no large model or slow machine was timed."
+  notes: Bounds a hung or runaway slicer; it is not a performance target. An explicit --timeout-s replaces both this rule and slicer.orca.timeout_s. Raise it, with evidence, if a legitimate model is ever stopped by it.
 
 - id: vectorize.opencv.contour_offset_px
   kind: tool_limit
