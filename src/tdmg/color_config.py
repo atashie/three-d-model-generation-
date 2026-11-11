@@ -7,9 +7,9 @@ the config file's SHA-256 are returned for the record.
 
 The config file is YAML, read with yaml.safe_load. It must be a mapping of known keys to
 valid values; anything else is refused with a message naming the key. Duplicate keys are
-refused too, because yaml.safe_load would silently keep the last one. An empty file (or one
-holding only comments) means "no settings": every key takes its default, and the file's
-hash is still recorded. Keys for later steps (min_glue_piece, face) are refused as unknown
+refused too, because yaml.safe_load would silently keep the last one, and so are null
+values, non-scalar keys and merge keys (<<). An empty file (or one holding only comments)
+means "no settings": every key takes its default, and the file's hash is still recorded. Keys for later steps (min_glue_piece, face) are refused as unknown
 until those steps add them.
 """
 
@@ -99,11 +99,16 @@ def _validate(data: dict, cap: int, where: str) -> ColorConfig:
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
-    """yaml.SafeLoader that refuses a mapping with the same key twice."""
+    """yaml.SafeLoader that refuses repeated keys, non-scalar keys and merge keys (<<)."""
 
     def construct_mapping(self, node, deep=False):
         seen = set()
         for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise ColorConfigError("merge keys (<<) are not supported; write each "
+                                       "setting out")
+            if not isinstance(key_node, yaml.ScalarNode):
+                raise ColorConfigError("a key must be a plain name, not a list or mapping")
             key = self.construct_object(key_node, deep=deep)
             if key in seen:
                 raise ColorConfigError(f"duplicate key {key!r}")
@@ -112,7 +117,12 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 def read_config(path: str | Path) -> tuple[dict, str]:
-    """The file's settings as a plain mapping, and the SHA-256 of its bytes."""
+    """The file's settings as a plain mapping, and the SHA-256 of its bytes as stored.
+
+    The file must be UTF-8; a leading UTF-8 byte-order mark is accepted (and hashed, since
+    the hash is of the bytes). A null value (`colors: ~`, `edges: null`, or `base:` with
+    nothing after it) is refused: in the file, a key is either set or left out.
+    """
     path = Path(path)
     try:
         data = path.read_bytes()
@@ -120,7 +130,7 @@ def read_config(path: str | Path) -> tuple[dict, str]:
         raise ColorConfigError(f"cannot read config file {path}: {e.strerror or e}") from None
     where = f"config file {path.name}"
     try:
-        text = data.decode("utf-8")
+        text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise ColorConfigError(f"{where} is not UTF-8 text") from None
     try:
@@ -138,6 +148,10 @@ def read_config(path: str | Path) -> tuple[dict, str]:
     bad = [k for k in raw if not isinstance(k, str)]
     if bad:
         raise ColorConfigError(f"{where}: unknown key {bad[0]!r} (known keys: {', '.join(KEYS)})")
+    nulls = [k for k, v in raw.items() if v is None]
+    if nulls:
+        raise ColorConfigError(f"{where}: {nulls[0]} is null; give it a value or leave the "
+                               "key out")
     return raw, hashlib.sha256(data).hexdigest()
 
 

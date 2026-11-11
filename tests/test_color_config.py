@@ -221,3 +221,35 @@ def test_exact_is_no_blur_and_needs_no_rule():
 def test_unknown_preset_is_refused():
     with pytest.raises(ColorConfigError, match="edges"):
         edge_sigma_px("hairy", RULES)
+
+
+def test_a_complex_key_is_refused(tmp_path):
+    with pytest.raises(ColorConfigError, match="key"):
+        _resolve(path=_config(tmp_path, "? [a]\n: 1\n"))
+
+
+def test_a_merge_key_is_refused_with_a_clear_message(tmp_path):
+    with pytest.raises(ColorConfigError, match="merge keys"):
+        _resolve(path=_config(tmp_path, "<<: {colors: 3}\nedges: smooth\n"))
+
+
+@pytest.mark.parametrize("text, key", [
+    ("colors: ~\n", "colors"), ("edges: null\n", "edges"), ("base: null\n", "base"),
+    ("colors:\n", "colors"),
+])
+def test_an_explicit_null_in_the_file_is_refused(tmp_path, text, key):
+    with pytest.raises(ColorConfigError, match=f"{key}.*null"):
+        _resolve(path=_config(tmp_path, text))
+
+
+def test_none_in_the_flags_still_means_not_given():
+    assert _resolve({"colors": None, "edges": None, "base": None}).sources["colors"] == "profile"
+
+
+def test_a_utf8_bom_is_accepted_and_hashed_as_written(tmp_path):
+    path = tmp_path / "color.yaml"
+    data = b"\xef\xbb\xbfcolors: 3\n"
+    path.write_bytes(data)
+    r = _resolve(path=path)
+    assert r.settings["colors"] == 3 and r.sources["colors"] == "config"
+    assert r.config_sha256 == hashlib.sha256(data).hexdigest()
