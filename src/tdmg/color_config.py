@@ -27,11 +27,12 @@ The keys (Task 7b added extract, outlines, outline_color and merge):
   auto): the outline family.
 - merge: a list of [from, into] pairs of extraction indices (default: none). Each `from`
   color's pixels take the `into` color. A `from` appears once, never equals its `into`,
-  and is never also an `into` (no chains).
+  and is never also an `into` (no chains). A `from` is never in the outline family; an
+  `into` may be the family's core (its darkest color), but no other member.
 Extraction indices are the order quantize gives (largest area first), which the preview
 shows. The checks that need the extracted palette (an index below the number of colors the
-image gave, no merge touching the outline family) are in check_extraction_indices; it runs
-against `extract` when resolving, and again after quantize.
+image gave, no merge from the outline family) are in check_extraction_indices; it runs
+against `extract` when resolving, after quantize, and after the outline step.
 """
 
 from __future__ import annotations
@@ -318,25 +319,34 @@ def _rule_default(key: str, rules: dict[str, Rule], cap: int):
 
 
 def check_extraction_indices(outline_color, merge, n_extracted: int,
-                             family=()) -> None:
+                             family=None, core=None) -> None:
     """Refuse extraction indices the extraction does not have, and merges that touch the
     outline family.
 
     n_extracted: the number of extracted colors; after quantize it can be below `extract`,
     when the image has fewer distinct colors. family: the outline family's extraction
-    indices (an explicit outline_color list is always part of it). merge's own structure
-    (merge_problem) is checked again here, for direct callers.
+    indices, or None before the outline step has found it; core: its kept core (the
+    darkest member, tdmg.color.outline_core), None when the family is empty. merge's own
+    structure (merge_problem) is checked again here, for direct callers.
+
+    A merge's `from` must be outside the family (and outside an explicit outline_color
+    list, which is always part of it). Its `into` may be the core (decided 2026-11-11, plan
+    Task 7c: a color can be merged into the outline's darkest color, which stays in wide
+    areas) but no other family member. Before the outline step (family None) the core is
+    not known yet, so an `into` in an explicit list is checked only on the second call.
     """
     def which() -> str:
         return (f"the extraction has {n_extracted} colors (indices 0 to {n_extracted - 1}); "
                 "choose indices from the preview's extracted colors")
-    family = set(family)
+    known = family is not None
+    family = set(family or ())
+    listed = set()
     if isinstance(outline_color, (list, tuple)):
         bad = [i for i in outline_color if not 0 <= i < n_extracted]
         if bad:
             raise ColorConfigError(f"outline_color {bad[0]} is not an extraction index: "
                                    + which())
-        family |= set(outline_color)
+        listed = set(outline_color)
     merges = [tuple(p) for p in merge]
     problem = merge_problem(merges)
     if problem:
@@ -346,10 +356,15 @@ def check_extraction_indices(outline_color, merge, n_extracted: int,
             if not 0 <= i < n_extracted:
                 raise ColorConfigError(f"merge [{a}, {b}]: {i} is not an extraction index: "
                                        + which())
-            if i in family:
-                raise ColorConfigError(
-                    f"merge [{a}, {b}]: color {i} is in the outline family, which the "
-                    "outline handling replaces; merge only colors outside it")
+        if a in family | listed:
+            raise ColorConfigError(
+                f"merge [{a}, {b}]: color {a} is in the outline family, which the outline "
+                "handling replaces; merge only colors outside it")
+        if known and b in family | listed and b != core:
+            raise ColorConfigError(
+                f"merge [{a}, {b}]: color {b} is in the outline family but is not its core"
+                + ("" if core is None else f" ({core})")
+                + "; merge into a color outside the family or into the core")
 
 
 def check_base(base: str | int, n_colors: int) -> None:

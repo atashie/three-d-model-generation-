@@ -537,5 +537,36 @@ def test_colors_keep_without_an_outline_family_says_it_has_no_effect(tmp_path):
     r = _colors(_selection(tmp_path), tmp_path / "colors", "--outlines", "keep")
     assert r.exit_code == 0, r.output
     text = _plain(r.stdout)
-    assert "outline: outline detection is not implemented yet" in text
+    assert "outline: family" not in text                 # auto finds none in this image
     assert "outline: outlines: keep has no effect: no outline color" in text
+
+
+def test_colors_reports_the_outline_family_and_shade_pairs(tmp_path):
+    # tests/test_color_outline.py's cartoon with two greens of one hue for its two fills.
+    from test_color_outline import cartoon
+    rgb, mask = cartoon(fringe=False)
+    rgb[(rgb == (200, 30, 30)).all(-1)] = (37, 86, 27)
+    rgb[(rgb == (240, 240, 240)).all(-1)] = (72, 168, 53)
+    rgba = np.dstack([rgb, np.where(mask, 255, 0).astype(np.uint8)])
+    img = _img(tmp_path, rgba, "cartoon.png")
+    sel = tmp_path / "sel"
+    r = runner.invoke(app, ["select", str(img), "--out", str(sel), "--keep-at", "30,70"])
+    assert r.exit_code == 0, r.output
+    out = tmp_path / "colors"
+    r = runner.invoke(app, ["colors", str(sel), "--width-mm", "11", "--out", str(out),
+                            "--colors", "2"])
+    rec = json.loads((out / "colors.json").read_bytes())
+    text = _plain(r.stdout)
+    assert r.exit_code == 1, r.output                    # 3 colors left, at most 2
+    o = rec["outline"]
+    assert o["family"] == [2] and o["core"] == 2
+    assert (f"outline: family [2] (thinness above 0.38); core 2 {o['core_hex']}; outlines "
+            "drop") in text
+    assert "outline core (thin" in text and "kept as final" in text
+    p = rec["shade_pairs"][0]
+    assert (p["i"], p["j"]) == (0, 1)
+    assert (f"shade pair (flagged, not merged): 0 {p['hex_i']} and 1 {p['hex_j']}, hue "
+            f"difference {p['dh_deg']:.1f} deg; to merge, add merge: [[1, 0]] to the config "
+            "file") in text
+    assert "final 0; shade pair with 1" in text
+    assert "consider merge: [[1, 0]]" in text

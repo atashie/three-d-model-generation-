@@ -51,8 +51,14 @@ passed. These commits are pushed; for CI see above.
 ## Next steps, in order
 
 1. **R2 color (owner's next request, 2026-11-11):** design agreed in
-   `docs/plans/2026-11-11-color-design.md`. Next: execute `docs/plans/2026-11-11-color-palette.md`, its step 1
-   (`tdmg.color` and `tdmg colors`, with previews for the owner to review).
+   `docs/plans/2026-11-11-color-design.md`. Executing `docs/plans/2026-11-11-color-palette.md`
+   (step 1: `tdmg.color` and `tdmg colors`). Task 7c (2026-11-11, Windows PC) adds outline
+   detection (thinness rule), drop and keep, and shade-pair flags; at the defaults Roadie
+   is ready with 4 colors and Oddie is not ready with 5 (both shade pairs flagged), ready
+   once its blues are merged. Functionally tested and run on the owner's images; the
+   rules are untested hypotheses. Next: Task 7d, the owner reviews the previews in
+   `artifacts/colors-runs/` (`roadie-tol30-60-drop`, `-keep`, `oddie-60-default`,
+   `oddie-60-merge-blues`).
 2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
 3. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID

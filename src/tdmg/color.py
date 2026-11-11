@@ -41,10 +41,11 @@ Region cleanup (CLEANUP_METHOD), `clean_regions(q, limits)` (Decision 4): see it
 docstring. It moves labels only, never palette colors. Its limits are the R1 rules'
 printing sizes, converted to pixels by `printable_limits_px`.
 
-Extraction steps (plan Task 7b): `handle_outlines` is the seam for the outline family
-(Task 7b does no outline handling; Task 7c fills it in) and `apply_merges` applies the
-owner's explicit (from, into) merges. Like the cleanup, they move labels only, never
-palette colors. Every step builds its result with from_labels, whose `remap` records each
+Extraction steps (plan Tasks 7b and 7c): `handle_outlines` finds the outline family
+(`detect_outline_family`, the thinness rule) and drops it or redraws it as one uniform band
+(`keep_band`); `apply_merges` applies the owner's explicit (from, into) merges; and
+`shade_pairs` flags likely shade pairs for the owner (reported, never applied). Like the
+cleanup, they move labels only, never palette colors. Every step builds its result with from_labels, whose `remap` records each
 old palette index's new index, so indices are followed through the steps by index, never
 by color. tdmg.color_plan.plan_colors chains the steps.
 
@@ -614,6 +615,22 @@ def open_mask(mask: np.ndarray, width_px: float) -> np.ndarray:
     return keep
 
 
+def _d2_nearest(region: np.ndarray, ty: np.ndarray, tx: np.ndarray) -> np.ndarray:
+    """Exact squared Euclidean distance, in pixel-centre units (int64), from each pixel
+    (ty[n], tx[n]) to the nearest pixel of region (bool (H, W), with at least one True).
+
+    scipy.ndimage.distance_transform_edt (return_indices) on ~region gives a nearest pixel
+    of region for each pixel; the squared distance to it is recomputed here as an exact
+    integer. Which of several equally near pixels EDT returns is deterministic for a scipy
+    build but not specified by scipy; the squared distance does not depend on that choice.
+    Pixels beyond the image are not considered.
+    """
+    iy, ix = ndimage.distance_transform_edt(~region, return_distances=False,
+                                            return_indices=True)
+    return ((iy[ty, tx].astype(np.int64) - ty) ** 2
+            + (ix[ty, tx].astype(np.int64) - tx) ** 2)
+
+
 def _thin_step(labels: np.ndarray, limits: Limits,
                cache: dict | None = None) -> tuple[int, np.ndarray, bool]:
     """One thin step on labels (int32 (H, W), changed in place).
@@ -668,10 +685,7 @@ def _thin_step(labels: np.ndarray, limits: Limits,
     best_c = own.copy()
     own_d2 = np.full(len(ty), far, np.int64)
     for c, core_c in cores:
-        iy, ix = ndimage.distance_transform_edt(~core_c, return_distances=False,
-                                                return_indices=True)
-        d2 = ((iy[ty, tx].astype(np.int64) - ty) ** 2
-              + (ix[ty, tx].astype(np.int64) - tx) ** 2)
+        d2 = _d2_nearest(core_c, ty, tx)
         closer = d2 < best                       # strict: the lowest index wins a tie
         best = np.where(closer, d2, best)
         best_c = np.where(closer, c, best_c)
@@ -882,18 +896,7 @@ def changed_mask(before: Quantized, after: Quantized) -> np.ndarray:
     return a != b
 
 
-# --- Extraction: outline handling and the owner's merges (plan Task 7b) --------------------
-
-# Task 7b only: the outline handling is a seam that Task 7c fills in. This method name says
-# that no outline handling is done, so a plan made before 7c can never share an id with
-# one made after it.
-OUTLINE_METHOD = "outline-not-implemented/0"
-OUTLINE_PLACEHOLDER_NOTE = ("outline detection is not implemented yet (plan Task 7c): auto "
-                            "finds no outline family, so the outline colors stay as "
-                            "ordinary colors")
-KEEP_NO_EFFECT_NOTE = ("outlines: keep has no effect: no outline color (outline_color is "
-                       "none, or auto found none; until plan Task 7c auto finds none)")
-
+# --- Extraction: the owner's merges (plan Task 7b) ----------------------------------------
 
 def merge_problem(merges) -> str | None:
     """What is wrong with a list of (from, into) index pairs, or None.
@@ -956,56 +959,323 @@ def apply_merges(q: Quantized, merges) -> Quantized:
                        dropped=q.dropped)
 
 
+# --- The outline family: detection, drop and keep (plan Task 7c) ---------------------------
+
+OUTLINE_METHOD = "outline-thin-share/1"
+THIN_SHARE_RULE = "color.outline.thin_share"
+KEEP_WIDTH_RULE = "color.outline.keep_width"
+SHADE_METHOD = "shade-hue-chroma/1"
+SHADE_HUE_RULE = "color.shade.max_hue_diff_deg"
+SHADE_CHROMA_RULE = "color.shade.min_chroma"
+# The units the code assumes; _rule_value refuses a rule in another one.
+OUTLINE_RULE_UNITS = {THIN_SHARE_RULE: "fraction", KEEP_WIDTH_RULE: "mm",
+                      SHADE_HUE_RULE: "deg", SHADE_CHROMA_RULE: "cielab_chroma"}
+KEEP_NO_EFFECT_NOTE = ("outlines: keep has no effect: no outline color (outline_color is "
+                       "none, or auto found none)")
+
+
+def rule_value(rules, rule_id: str) -> float:
+    """A Task 7c rule's default as a float, after checking that it is in the unit the code
+    uses (OUTLINE_RULE_UNITS). Raises ColorError if it is missing, in another unit, or not
+    finite."""
+    if rule_id not in rules:
+        raise ColorError(f"rule {rule_id} is not in the rules registry")
+    rule = rules[rule_id]
+    if rule.unit != OUTLINE_RULE_UNITS[rule_id]:
+        raise ColorError(f"{rule_id} must be in {OUTLINE_RULE_UNITS[rule_id]!r}, got "
+                         f"{rule.unit!r}")
+    value = float(rule.default)
+    if not math.isfinite(value):
+        raise ColorError(f"{rule_id} must be finite, got {value}")
+    return value
+
+
+def _opened(q: Quantized, limits: Limits) -> tuple[tuple[float, ...], list[np.ndarray]]:
+    """Each color's thinness and the pixels its own opening keeps (open_mask of its mask
+    at limits.min_width_px)."""
+    thin, kept = [], []
+    for c in range(len(q.hex)):
+        m = q.labels == c
+        k = open_mask(m, limits.min_width_px)
+        kept.append(k)
+        n = int(m.sum())
+        thin.append(1.0 - int(k[m].sum()) / n if n else 0.0)
+    return tuple(thin), kept
+
+
+def detect_outline_family(q: Quantized, limits: Limits, thin_share: float
+                          ) -> tuple[tuple[int, ...], tuple[float, ...]]:
+    """The outline family by the thinness rule (color.outline.thin_share), and every
+    color's thinness.
+
+    A color's thinness is the share of its pixels that its own opening does not keep:
+    1 - |open_mask(labels == c, limits.min_width_px) and (labels == c)| / |labels == c|,
+    the opening of R1 (flat.sliver.opening_width) at the plan's scale. The family is every
+    color with thinness > thin_share (strict), ascending. Measured in Task 7a on the
+    owner's images: outline-family colors 66-100%, other colors at most 10%. Raises
+    ColorError unless thin_share is a number from 0 to 1.
+    """
+    if (isinstance(thin_share, bool) or not isinstance(thin_share, (int, float, np.floating))
+            or not 0.0 <= float(thin_share) <= 1.0):
+        raise ColorError(f"thin_share must be a number from 0 to 1, got {thin_share!r}")
+    thin, _ = _opened(q, limits)
+    return tuple(i for i, t in enumerate(thin) if t > thin_share), thin
+
+
+def keep_band(labels: np.ndarray, core: int, width_px: float) -> np.ndarray:
+    """The pixels of the kept outline band (bool, the shape of labels): `outlines: keep`.
+
+    labels: int (H, W), palette indices or OUTSIDE; core: the core's palette index (its
+    own pixels are never part of a border); width_px: the band width W in pixels.
+
+    Distances are Euclidean, between pixel centres, in pixels (exact integer squares,
+    _d2_nearest). A labelled pixel p of a non-core color a is in the band when
+    d_a(p) - 1/2 <= W / 2, where d_a(p) is the distance from p to the nearest pixel of a
+    different non-core color (OUTSIDE excluded). Any labelled pixel p is in the band when
+    d_out(p) - 1/2 <= W, where d_out(p) is the distance to the nearest pixel outside the
+    labels: an OUTSIDE pixel or a pixel of the one-pixel frame beyond the image. On a
+    straight axis-aligned border, d - 1/2 is exactly the distance from p's centre to the
+    shared pixel edge, so the band is the pixels whose centre is within W/2 of the border
+    on each side (2 * floor(W/2 + 1/2) pixels across, centred on it, within one pixel of
+    W), and the pixels whose centre is within W of the outer edge, inside it
+    (floor(W + 1/2) pixels). Holes (OUTSIDE pixels inside the subject) count as outside.
+    Along curves and diagonals the same rule is applied to pixel centres; the band's width
+    there is not claimed to be exactly W.
+    """
+    labels = np.asarray(labels)
+    inside = labels != OUTSIDE
+    band = np.zeros(labels.shape, bool)
+    if not inside.any():
+        return band
+    half = (width_px / 2 + 0.5) ** 2
+    noncore = inside & (labels != core)
+    for c in np.unique(labels[noncore]):
+        mine = labels == c
+        other = noncore & ~mine
+        if not other.any():
+            continue
+        ty, tx = np.nonzero(mine)
+        sel = _d2_nearest(other, ty, tx) <= half
+        band[ty[sel], tx[sel]] = True
+    padded = np.pad(inside, 1, constant_values=False)
+    ty, tx = np.nonzero(inside)
+    sel = _d2_nearest(~padded, ty + 1, tx + 1) <= (width_px + 0.5) ** 2
+    band[ty[sel], tx[sel]] = True
+    return band
+
+
 @dataclass(frozen=True)
 class OutlineResult:
     """What handle_outlines did.
 
     family: the outline family, as extraction indices (q's indices), ascending.
+    core: the darkest family member (lowest L*, ties to the lowest index), or None when
+      the family is empty. Its color is the one the family's wide areas (and the kept
+      band) take.
+    thinness: every extracted color's thinness (detect_outline_family), reported whatever
+      outline_color is.
     found_by: "none" (outline_color none), "auto" (detection) or "config" (a list).
     method: OUTLINE_METHOD.
     remap: for each extraction index, its index in the returned colors, or None if the
-      outline handling removed it (Task 7b: the identity, since nothing is changed).
+      outline handling removed it (only family members are ever removed).
+    thresholds: ((rule id, value), ...) for the rules that decided the result: the thin
+      share under auto, and the keep width under keep with a family.
+    keep_width_mm, keep_width_px: the band width W under keep with a family, else None.
     notes: sentences for the record and the CLI (possibly none).
     """
 
     family: tuple[int, ...]
+    core: int | None
+    thinness: tuple[float, ...]
     found_by: str
     method: str
     remap: tuple[int | None, ...]
+    thresholds: tuple[tuple[str, float], ...]
+    keep_width_mm: float | None
+    keep_width_px: float | None
     notes: tuple[str, ...]
 
 
-def _detect_outline_family_placeholder(q: Quantized) -> tuple[int, ...]:
-    """PLACEHOLDER for plan Task 7c, which replaces it with the thinness rule
-    (color.outline.thin_share). Until then `auto` finds no outline family."""
-    return ()
+def _family_from_list(outline_color, k: int) -> tuple[int, ...]:
+    if not isinstance(outline_color, (list, tuple)) or not outline_color:
+        raise ColorError(f"outline_color must be auto, none or a non-empty list of "
+                         f"extraction indices, got {outline_color!r}")
+    for i in outline_color:
+        if isinstance(i, bool) or not isinstance(i, (int, np.integer)):
+            raise ColorError(f"outline_color must list extraction indices, got {i!r}")
+        if not 0 <= int(i) < k:
+            raise ColorError(f"outline_color {int(i)} is not an index of the {k} extracted "
+                             "colors")
+    if len({int(i) for i in outline_color}) != len(outline_color):
+        raise ColorError("outline_color lists an index more than once")
+    return tuple(sorted(int(i) for i in outline_color))
 
 
-def handle_outlines(q: Quantized, *, outline_color, outlines: str
-                    ) -> tuple[Quantized, OutlineResult]:
-    """The outline step between quantize and the merges: the seam Task 7c fills in.
+def outline_core(family, lab) -> int | None:
+    """The darkest family member: the lowest L* (lab[i][0]), ties to the lowest index; None
+    for an empty family."""
+    return min(family, key=lambda i: (float(lab[i][0]), i)) if family else None
+
+
+def handle_outlines(q: Quantized, *, outline_color, outlines: str, limits: Limits,
+                    rules) -> tuple[Quantized, OutlineResult]:
+    """The outline step between quantize and the merges (plan Task 7c).
 
     q: the extracted colors (quantize's result). outline_color: "auto", "none" or a list of
-    extraction indices; outlines: "drop" or "keep". Returns the colors after outline
-    handling and an OutlineResult.
+    extraction indices; outlines: "drop" or "keep"; limits: printable_limits_px at the
+    plan's scale; rules: the registry (the thin share is read under auto, the keep width
+    under keep with a family). Returns the colors after outline handling and an
+    OutlineResult.
 
-    Task 7b: no outline handling is implemented. "none" and "auto" (through
-    _detect_outline_family_placeholder, which finds nothing) return q itself with an empty
-    family and the identity remap; an explicit list is refused with ColorError, because
-    acting on it is Task 7c. With no family, `keep` has no effect, and a note says so
-    (KEEP_NO_EFFECT_NOTE).
+    1. The family: none -> empty; auto -> detect_outline_family with the rule
+       color.outline.thin_share; a list -> those indices (refused unless each is an index
+       of q, once). Every color's thinness is computed either way.
+    2. With an empty family nothing changes: q itself is returned with the identity remap
+       (under keep, a note says it has no effect).
+    3. The core is outline_core: the family member with the lowest L* (ties: lowest
+       index).
+    4. Drop. For each family member f, its thin pixels are its pixels that its OWN opening
+       does not keep (open_mask(labels == f, min_width_px)); each member separately, since
+       a fringe tone and the line core are each thin even where together they are wide.
+       Each thin pixel takes the color of the nearest pixel of a non-family color (exact
+       squared distance between pixel centres; ties to the lowest index of q, as in the
+       cleanup's thin step). The family's other pixels (kept by their member's opening:
+       wide areas such as a pupil) take the core's color. Refused if every color is in
+       the family.
+    5. Keep: after the drop, the pixels of keep_band(labels, core, W) take the core's
+       color, W = color.outline.keep_width / limits.mm_per_px. The keep width must exceed
+       the cleanup's opening width (flat.sliver.opening_width), or cleanup would remove the
+       band.
+    The palette colors are not changed; the result is built by from_labels from the new
+    labels and q.rgb, so family members left with no pixel are removed (remap None).
     """
+    if not isinstance(q, Quantized):
+        raise ColorError(f"q must be a Quantized, got {type(q).__name__}")
     if outlines not in ("drop", "keep"):
         raise ColorError(f"outlines must be drop or keep, got {outlines!r}")
-    identity = tuple(range(len(q.hex)))
-    if outline_color in ("none", "auto"):
-        if outline_color == "none":
-            family, notes = (), ()
-        else:
-            family, notes = _detect_outline_family_placeholder(q), (OUTLINE_PLACEHOLDER_NOTE,)
-        if outlines == "keep" and not family:
-            notes += (KEEP_NO_EFFECT_NOTE,)
-        return q, OutlineResult(family=family, found_by=outline_color, method=OUTLINE_METHOD,
-                                remap=identity, notes=notes)
-    raise ColorError("outline_color as a list of indices is not implemented yet (plan Task "
-                     "7c); use auto or none")
+    if not isinstance(limits, Limits):
+        raise ColorError(f"limits must be a Limits, got {type(limits).__name__}")
+    k = len(q.hex)
+    if isinstance(outline_color, str) and outline_color not in ("auto", "none"):
+        raise ColorError(f"outline_color must be auto, none or a non-empty list of "
+                         f"extraction indices, got {outline_color!r}")
+    thin, kept = _opened(q, limits)
+    thresholds: list[tuple[str, float]] = []
+    if outline_color == "none":
+        family, found_by = (), "none"
+    elif outline_color == "auto":
+        t = rule_value(rules, THIN_SHARE_RULE)
+        family, _ = detect_outline_family(q, limits, t)
+        found_by = "auto"
+        thresholds.append((THIN_SHARE_RULE, t))
+    else:
+        family, found_by = _family_from_list(outline_color, k), "config"
+    identity = tuple(range(k))
+    if not family:
+        notes = (KEEP_NO_EFFECT_NOTE,) if outlines == "keep" else ()
+        return q, OutlineResult(family=(), core=None, thinness=thin, found_by=found_by,
+                                method=OUTLINE_METHOD, remap=identity,
+                                thresholds=tuple(thresholds), keep_width_mm=None,
+                                keep_width_px=None, notes=notes)
+    if len(family) == k:
+        raise ColorError("every extracted color is in the outline family, so no color is "
+                         "left for its pixels; set outline_color to none or a shorter list")
+    core = outline_core(family, q.lab)
+    width_mm = width_px = None
+    if outlines == "keep":
+        width_mm = rule_value(rules, KEEP_WIDTH_RULE)
+        if not width_mm > limits.opening_width_mm:
+            raise ColorError(f"{KEEP_WIDTH_RULE} ({width_mm} mm) must be wider than "
+                             f"{limits.opening_rule} ({limits.opening_width_mm} mm), or "
+                             "cleanup removes the band")
+        width_px = width_mm / limits.mm_per_px
+        thresholds.append((KEEP_WIDTH_RULE, width_mm))
+
+    labels = np.array(q.labels, np.int64)
+    thin_px = np.zeros(labels.shape, bool)
+    wide_px = np.zeros(labels.shape, bool)
+    for f in family:
+        m = q.labels == f
+        thin_px |= m & ~kept[f]
+        wide_px |= m & kept[f]
+    ty, tx = np.nonzero(thin_px)
+    best = np.full(len(ty), np.iinfo(np.int64).max, np.int64)
+    best_c = np.full(len(ty), OUTSIDE, np.int64)
+    for c in range(k):                           # ascending: the lowest index wins a tie
+        if c in family:
+            continue
+        d2 = _d2_nearest(q.labels == c, ty, tx)
+        closer = d2 < best
+        best = np.where(closer, d2, best)
+        best_c = np.where(closer, c, best_c)
+    labels[ty, tx] = best_c
+    labels[wide_px] = core
+    hx = q.hex[core]
+    notes = [(f"outlines: drop: {len(ty)} thin pixel(s) of the outline family took the "
+              f"nearest other color; {int(wide_px.sum())} wide pixel(s) took the core "
+              f"{hx}")]
+    if outlines == "keep":
+        band = keep_band(labels, core, width_px)
+        labels[band] = core
+        notes.append(f"outlines: keep: a {width_mm} mm ({width_px:.2f} px) band in the "
+                     f"core {hx} was drawn along every border and inside the outer edge "
+                     f"({int(band.sum())} px)")
+    out = from_labels(labels, q.rgb, iterations=q.iterations, converged=q.converged,
+                      n_requested=q.n_requested, n_distinct_colors=q.n_distinct_colors,
+                      dropped=q.dropped)
+    return out, OutlineResult(family=family, core=core, thinness=thin, found_by=found_by,
+                              method=OUTLINE_METHOD, remap=out.remap,
+                              thresholds=tuple(thresholds), keep_width_mm=width_mm,
+                              keep_width_px=width_px, notes=tuple(notes))
+
+
+# --- Shade pairs (plan Task 7c): flagged for the owner, never applied ----------------------
+
+@dataclass(frozen=True)
+class ShadePair:
+    """A likely shade pair: extraction indices i < j, their hex codes, the shorter hue
+    difference dh_deg (degrees), their CIELAB chromas, and dl = L*_j - L*_i. merge is the
+    suggested (from, into): the later index (no larger extracted area) into the earlier."""
+
+    i: int
+    j: int
+    hex_i: str
+    hex_j: str
+    dh_deg: float
+    chroma_i: float
+    chroma_j: float
+    dl: float
+
+    @property
+    def merge(self) -> tuple[int, int]:
+        return (self.j, self.i)
+
+
+def shade_pairs(lab, hexes, candidates, max_hue_diff_deg: float, min_chroma: float
+                ) -> tuple[ShadePair, ...]:
+    """Pairs of candidate colors that look like two shades of one color (SHADE_METHOD).
+
+    lab: per extraction index, (L*, a*, b*) floats; hexes: per extraction index;
+    candidates: the extraction indices to compare (tdmg.color_plan passes the colors left
+    after the outline step and the merges, without the core). Computed with Python floats
+    (math), so the result can be recomputed from the record's Lab values:
+    C* = hypot(a*, b*); h = degrees(atan2(b*, a*)) mod 360; dh is the shorter way round,
+    min(|h_i - h_j|, 360 - |h_i - h_j|). A pair (i < j) is flagged when
+    dh < max_hue_diff_deg and both C* > min_chroma (all strict). Ordered by (i, j).
+    """
+    cand = sorted({int(c) for c in candidates})
+    info = {}
+    for c in cand:
+        L, a, b = (float(v) for v in lab[c])
+        info[c] = (L, math.hypot(a, b), math.degrees(math.atan2(b, a)) % 360.0)
+    out = []
+    for n, i in enumerate(cand):
+        for j in cand[n + 1:]:
+            li, ci, hi = info[i]
+            lj, cj, hj = info[j]
+            d = abs(hi - hj)
+            dh = min(d, 360.0 - d)
+            if dh < max_hue_diff_deg and ci > min_chroma and cj > min_chroma:
+                out.append(ShadePair(i=i, j=j, hex_i=hexes[i], hex_j=hexes[j], dh_deg=dh,
+                                     chroma_i=ci, chroma_j=cj, dl=lj - li))
+    return tuple(out)

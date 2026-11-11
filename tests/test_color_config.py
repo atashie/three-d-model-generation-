@@ -458,7 +458,6 @@ def test_extract_equal_to_colors_is_accepted():
     ("merge: [[6, 0]]\n", r"merge \[6, 0\]: 6 is not an extraction index"),
     ("merge: [[0, 9]]\n", r"merge \[0, 9\]: 9 is not an extraction index"),
     ("outline_color: [4]\nmerge: [[4, 0]]\n", "color 4 is in the outline family"),
-    ("outline_color: [4]\nmerge: [[1, 4]]\n", "color 4 is in the outline family"),
 ])
 def test_indices_are_checked_against_extract_when_resolving(tmp_path, text, message):
     with pytest.raises(ColorConfigError, match=message):
@@ -478,6 +477,22 @@ def test_check_extraction_indices_after_quantize():
     check_extraction_indices("none", [[1, 0]], 4)
     with pytest.raises(ColorConfigError, match="no chains"):
         check_extraction_indices("auto", [(1, 0), (2, 1)], 4)
+
+
+def test_merge_into_the_outline_core_is_allowed_from_a_member_refused(tmp_path):
+    # Decided 2026-11-11 (plan Task 7c): into may be the kept core; from never a member.
+    # When resolving, the core is not known yet, so an into in the list is not refused.
+    r = _resolve(path=_config(tmp_path, "outline_color: [4]\nmerge: [[1, 4]]\n"))
+    assert r.settings["merge"] == ((1, 4),)
+    check_extraction_indices([4], [[1, 4]], 6, family=(4,), core=4)
+    check_extraction_indices("auto", [[1, 3]], 6, family=(3, 4), core=3)
+    with pytest.raises(ColorConfigError, match=r"merge \[1, 4\]: color 4 is in the outline "
+                                               r"family but is not its core \(3\)"):
+        check_extraction_indices("auto", [[1, 4]], 6, family=(3, 4), core=3)
+    with pytest.raises(ColorConfigError, match="color 3 is in the outline family, which"):
+        check_extraction_indices("auto", [[3, 1]], 6, family=(3, 4), core=3)
+    with pytest.raises(ColorConfigError, match="color 4 is in the outline family, which"):
+        check_extraction_indices([4], [[4, 1]], 6)
 
 
 def test_merge_problem_is_none_for_good_pairs():

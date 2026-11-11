@@ -19,11 +19,16 @@ import tdmg.colors
 from tdmg.color import (
     CLEANUP_METHOD,
     KEEP_NO_EFFECT_NOTE,
+    KEEP_WIDTH_RULE,
     METHOD,
     OUTLINE_METHOD,
-    OUTLINE_PLACEHOLDER_NOTE,
     OUTSIDE,
+    SHADE_CHROMA_RULE,
+    SHADE_HUE_RULE,
+    SHADE_METHOD,
+    THIN_SHARE_RULE,
     clean_regions,
+    handle_outlines,
     printable_limits_px,
     quantize,
 )
@@ -68,7 +73,7 @@ TOP_KEYS = {"schema", "tdmg_version", "algorithm", "colors_id", "identity", "inp
             "width_mm", "mm_per_px", "printer", "limits", "palette", "base_index",
             "quantize", "cleanup", "smoothing", "methods", "preview", "outputs",
             "environment", "review",
-            "ready", "not_ready_reason", "extraction", "outline", "merges"}
+            "ready", "not_ready_reason", "extraction", "outline", "merges", "shade_pairs"}
 # The settings at their defaults, as recorded, and their sources.
 DEFAULT_SETTINGS = {"colors": 4, "extract": 6, "edges": "smooth", "base": "auto",
                     "outlines": "drop", "outline_color": "auto", "merge": []}
@@ -218,8 +223,8 @@ def test_outputs_and_record_schema(done, sel):
     assert rec["limits"]["opening_rule"] == "flat.sliver.opening_width"
     assert rec["limits"]["mm_per_px"] == rec["mm_per_px"]
     assert rec["methods"] == {"colors": "colors-2", "quantize": METHOD,
-                              "outline": OUTLINE_METHOD, "cleanup": CLEANUP_METHOD,
-                              "labels": LABELS_METHOD}
+                              "outline": OUTLINE_METHOD, "shade": SHADE_METHOD,
+                              "cleanup": CLEANUP_METHOD, "labels": LABELS_METHOD}
     assert set(rec["quantize"]) == {"iterations", "converged", "n_requested",
                                     "n_distinct_colors", "dropped", "palette_hex"}
     assert set(rec["cleanup"]) == {"passes", "cap_hit", "thin_pixels_reassigned",
@@ -252,7 +257,10 @@ def test_the_record_matches_the_library_functions(done, sel):
     rec, out = done
     v = read_selection(sel, cutout=True)
     q = quantize(v.cutout_rgb, v.mask, 6)
-    cleaned, log = clean_regions(q, printable_limits_px(rec["mm_per_px"], RULES, A1))
+    limits = printable_limits_px(rec["mm_per_px"], RULES, A1)
+    outlined, _ = handle_outlines(q, outline_color="auto", outlines="drop", limits=limits,
+                                  rules=RULES)
+    cleaned, log = clean_regions(outlined, limits)
     assert [p["hex"] for p in rec["palette"]] == list(cleaned.hex)
     assert rec["quantize"]["palette_hex"] == list(q.hex)
     assert rec["cleanup"]["pixels_changed"] == log.pixels_changed
@@ -380,12 +388,14 @@ def test_colors_id_is_the_hash_of_the_stored_identity(done):
                           "mask_pixels_sha256", "settings", "width_mm", "printer",
                           "nozzle_diameter_mm", "rules", "supersample"}
     # One value per rule used, from the registry: both cleanup rules (the island rule's
-    # own value, not the derived area) and the edges rule. Sigma is hashed only here.
+    # own value, not the derived area), the edges rule, the thin share (outline_color is
+    # auto) and the two shade rules. Sigma is hashed only here. The keep width is not used
+    # (outlines drop).
     lim, sm = rec["limits"], rec["smoothing"]
     assert ident["rules"] == {
-        lim["opening_rule"]: RULES[lim["opening_rule"]].default,
-        lim["island_rule"]: RULES[lim["island_rule"]].default,
-        sm["edge_rule"]: RULES[sm["edge_rule"]].default}
+        r: RULES[r].default for r in (lim["opening_rule"], lim["island_rule"],
+                                      sm["edge_rule"], THIN_SHARE_RULE, SHADE_HUE_RULE,
+                                      SHADE_CHROMA_RULE)}
     assert ident["rules"][sm["edge_rule"]] == sm["sigma_px"]
 
 
@@ -643,10 +653,16 @@ def test_base_out_of_range_after_cleanup_is_refused(tmp_path):
     rgba[5:55, 5:55] = (200, 30, 30, 255)
     rgba[30, 30] = (30, 30, 200, 255)
     sel = write_sel(tmp_path / "sel", rgba)
-    rec = run(sel, tmp_path / "ok", width_mm=5.0, flags={"colors": 2})
+    # The speck is thin, so auto would take it as an outline color; none leaves it to
+    # cleanup, which this test is about.
+    rec = run(sel, tmp_path / "ok", width_mm=5.0, flags={"colors": 2, "outline_color": "none"})
     assert len(rec["palette"]) == 1 and rec["cleanup"]["dropped_hex"]
     with pytest.raises(ColorsError, match=r"base 1 is not a color index of a 1-color palette"):
-        run(sel, tmp_path / "out", width_mm=5.0, flags={"colors": 2, "base": 1})
+        run(sel, tmp_path / "out", width_mm=5.0,
+            flags={"colors": 2, "base": 1, "outline_color": "none"})
+    # Under auto the speck is an outline color, dropped by the outline step instead.
+    rec = run(sel, tmp_path / "auto", width_mm=5.0, flags={"colors": 2})
+    assert len(rec["palette"]) == 1 and rec["outline"]["family"] == [1]
     assert not (tmp_path / "out").exists()
 
 
@@ -697,7 +713,7 @@ def test_changed_pixels_are_outlined(tmp_path):
     rgba[30, 10:50] = (30, 30, 200, 255)
     out = tmp_path / "out"
     rec = run(write_sel(tmp_path / "sel", rgba), out, width_mm=5.0,
-              flags={"colors": 2, "edges": "exact"})
+              flags={"colors": 2, "edges": "exact", "outline_color": "none"})
     assert rec["cleanup"]["pixels_changed"] == 40
     img = np.array(Image.open(out / "regions.png"))
     s = PREVIEW_SCALE
@@ -735,7 +751,9 @@ def test_owner_images(name, owner_selection, tmp_path):
     owner_selection(name)                     # skips if absent, fails if not the Task 1 files
     out = tmp_path / name
     t0 = time.perf_counter()
-    rec = run(SELECTIONS / name, out, flags={"colors": 4, "extract": 4, "edges": "smooth"})
+    # outline_color none: the Task 6 pins were measured with no outline handling.
+    rec = run(SELECTIONS / name, out, flags={"colors": 4, "extract": 4, "edges": "smooth",
+                                             "outline_color": "none"})
     dt = time.perf_counter() - t0
     labels = np.array(Image.open(out / "labels.png")).astype(np.int32)
     labels[labels == LABELS_OUTSIDE] = OUTSIDE
@@ -794,10 +812,16 @@ def test_record_extraction_outline_merges_and_ready(done):
     for e in ext["palette"]:
         assert e["merged_into"] is None and e["fate"] == "final"
         assert rec["palette"][e["final_index"]]["hex"] == e["hex"]
-    assert rec["outline"] == {"outlines": "drop", "outline_color": "auto", "found_by": "auto",
-                              "family": [], "method": OUTLINE_METHOD,
-                              "notes": [OUTLINE_PLACEHOLDER_NOTE]}
-    assert rec["merges"] == []
+    # The test selection's white (its shoes and a 1 px ring) is mostly thin, so auto takes
+    # it as the outline family; its wide shoe areas stay, as the core.
+    out = rec["outline"]
+    assert out["family"] == [2] and out["core"] == 2 and out["family_hex"] == ["#f0f0f0"]
+    assert out["core_hex"] == "#f0f0f0" and out["found_by"] == "auto"
+    assert out["thresholds"] == {THIN_SHARE_RULE: 0.38} and out["keep_width"] is None
+    assert [i for i, t in enumerate(out["thinness"]) if t > 0.38] == [2]
+    assert out["method"] == OUTLINE_METHOD and len(out["notes"]) == 1
+    assert out["notes"][0].startswith("outlines: drop: ")
+    assert rec["merges"] == [] and rec["shade_pairs"] == []
     assert rec["identity"]["settings"] == DEFAULT_SETTINGS
 
 
@@ -857,8 +881,9 @@ def test_not_ready_preview_lists_extracted_colors_and_the_reason(not_ready):
     for p in rec["palette"]:
         top, left, bottom, right = swatch_box(p["index"], h)
         assert (img[top:bottom, left:right] == p["rgb"]).all(), p
-    # Rows: legend (3), final colors, the extraction heading, extracted colors, not ready.
-    rows = len(tdmg.colors.legend_rows("")) + k + 1 + len(rec["extraction"]["palette"]) + 1
+    # Rows: legend (3), final colors, the extraction heading, extracted colors, the merge
+    # hint, not ready.
+    rows = len(tdmg.colors.legend_rows("")) + k + 1 + len(rec["extraction"]["palette"]) + 2
     assert img.shape[0] == PREVIEW_SCALE * (h + ROW_PX * rows)
 
 
@@ -867,7 +892,7 @@ def test_ready_preview_has_no_reason_row(done):
     img = np.array(Image.open(out / "regions.png"))
     h = rec["input"]["height_px"]
     rows = (len(tdmg.colors.legend_rows("")) + len(rec["palette"]) + 1
-            + len(rec["extraction"]["palette"]))
+            + len(rec["extraction"]["palette"]) + 1)
     assert img.shape[0] == PREVIEW_SCALE * (h + ROW_PX * rows)
 
 
@@ -879,19 +904,30 @@ def test_merge_index_beyond_the_extraction_is_refused(sel, tmp_path):
     assert not (tmp_path / "out").exists()
 
 
-def test_an_explicit_outline_list_is_refused_until_task_7c(sel, tmp_path):
-    with pytest.raises(ColorsError, match="not implemented yet"):
-        run(sel, tmp_path / "out", flags={"outline_color": [3]})
-    assert not (tmp_path / "out").exists()
+def test_an_explicit_outline_list_is_the_family(sel, tmp_path):
+    out = tmp_path / "out"
+    rec = run(sel, out, flags={"outline_color": [3]})
+    o = rec["outline"]
+    assert (o["found_by"], o["family"], o["core"], o["thresholds"]) == ("config", [3], 3, {})
+    assert THIN_SHARE_RULE not in rec["identity"]["rules"]
+    verify_colors(out, sel)
 
 
 def test_outline_none_and_keep_are_recorded(sel, tmp_path):
     rec = run(sel, tmp_path / "out", flags={"outline_color": "none", "outlines": "keep"})
-    assert rec["outline"] == {"outlines": "keep", "outline_color": "none", "found_by": "none",
-                              "family": [], "method": OUTLINE_METHOD,
-                              "notes": [KEEP_NO_EFFECT_NOTE]}
-    rec = run(sel, tmp_path / "auto", flags={"outlines": "keep"})
-    assert rec["outline"]["notes"] == [OUTLINE_PLACEHOLDER_NOTE, KEEP_NO_EFFECT_NOTE]
+    o = rec["outline"]
+    assert (o["outlines"], o["outline_color"], o["found_by"], o["family"], o["core"],
+            o["keep_width"], o["thresholds"], o["notes"]) == (
+        "keep", "none", "none", [], None, None, {}, [KEEP_NO_EFFECT_NOTE])
+    assert KEEP_WIDTH_RULE not in rec["identity"]["rules"]
+    out = tmp_path / "auto"
+    rec = run(sel, out, flags={"outlines": "keep"})
+    o = rec["outline"]
+    assert o["keep_width"] == {"mm": 0.6, "px": 0.6 / rec["mm_per_px"]}
+    assert o["thresholds"] == {THIN_SHARE_RULE: 0.38, KEEP_WIDTH_RULE: 0.6}
+    assert rec["identity"]["rules"][KEEP_WIDTH_RULE] == 0.6
+    assert o["notes"][1].startswith("outlines: keep: a 0.6 mm (")
+    verify_colors(out, sel)
 
 
 def _set_ready(r):
@@ -945,6 +981,7 @@ def _two_final_colors_share_one_extraction(r):
     # Final entry 1 is no longer any extraction entry's final index (entry 1 now says 0).
     e = r["extraction"]["palette"][1]
     e["final_index"], e["hex"] = 0, r["palette"][0]["hex"]
+    e["rgb"], e["lab"] = r["palette"][0]["rgb"], r["palette"][0]["lab"]
     r["quantize"]["palette_hex"][1] = e["hex"]
 
 
@@ -993,7 +1030,8 @@ def test_verify_colors_refuses_a_not_ready_plan_marked_ready(not_ready, sel5, tm
     (lambda i: i["settings"].pop("extract"), "identity.settings must hold exactly"),
     (lambda i: i["settings"].update(extract=3), "extract 3 is below colors 4"),
     (lambda i: i["settings"].update(merge=[[7, 0]]), "7 is not an extraction index"),
-    (lambda i: i["settings"].update(outline_color=[9]), "outline_color 9"),
+    (lambda i: (i["settings"].update(outline_color=[9]), i["rules"].pop(THIN_SHARE_RULE)),
+     "outline_color 9"),
 ])
 def test_verify_colors_checks_the_new_identity_types(done, sel, tmp_path, change, message):
     d = _copy(done[1], tmp_path, "colors")
@@ -1002,53 +1040,85 @@ def test_verify_colors_checks_the_new_identity_types(done, sel, tmp_path, change
         verify_colors(d, sel)
 
 
-# The owner's images at the defaults (extract 6, colors 4, smooth, outline_color auto with
-# Task 7b's placeholder, no merges), 60 mm. Measured on the Windows PC, 2026-11-11. The
-# extracted palettes equal the N = 6 rows of the Task 7a record (outline-shade.txt). Without
-# outline handling, cleanup removes Oddie's black lines (#0d100d) but keeps Roadie's three
-# outline colors, so neither plan is ready.
-OWNER_DEFAULT = {
-    "roadie-tol30": {
-        "extracted": ["#f60606", "#f5f5f5", "#960a0a", "#451812", "#f0f10a", "#746c5b"],
-        "final": ["#f60606", "#f5f5f5", "#f0f10a", "#960a0a", "#451812", "#746c5b"],
-        "to_final": [0, 1, 3, 4, 2, 5],
-        "cleanup": (4, 18709, "0c8133f41e369083"),
-    },
-    "oddie": {
-        "extracted": ["#25561b", "#547e9d", "#48a835", "#395266", "#0d100d", "#dd4f47"],
+# The owner's images at 60 mm with the defaults (extract 6, colors 4, smooth, outline_color
+# auto, outlines drop, no merges), and three variants. Measured on the Windows PC,
+# 2026-11-11 (Task 7c); the previews were checked by eye (STATUS and the plan's Task 7c
+# result). The extracted palettes equal the N = 6 rows of the Task 7a record
+# (outline-shade.txt), and so do the thinness values to the 0.1% shown there.
+# - Roadie, drop: the outline family is the core #451812 and its red and grey fringes; the
+#   thin strokes go, the pupil (and a few wide dark tips) stay in the core: 4 colors, ready.
+# - Roadie, keep: the same, then a 0.6 mm (5.99 px) band in the core along every border and
+#   inside the outer edge. The band is then the largest color, so base auto is the core.
+# - Oddie, default: the black lines are the family (thin 100%, no wide area): 5 colors, not
+#   ready, and both shade pairs flagged (greens 0-2, blues 1-3).
+# - Oddie with merge [[3, 1]] (the blue shadow into the blue body): 4 colors, ready; the
+#   green pair is still flagged.
+OWNER_RUNS = {
+    "roadie-drop": ("roadie-tol30", {}, {
+        "family": [2, 3, 5], "core": 3,
+        "final": ["#f60606", "#f5f5f5", "#f0f10a", "#451812"],
+        "to_final": [0, 1, None, 3, 2, None],
+        "cleanup": (4, 1098, "a14128e883f598f1"), "ready": True, "pairs": []}),
+    "roadie-keep": ("roadie-tol30", {"outlines": "keep"}, {
+        "family": [2, 3, 5], "core": 3,
+        "final": ["#451812", "#f60606", "#f5f5f5", "#f0f10a"],
+        "to_final": [1, 2, None, 0, 3, None],
+        "cleanup": (4, 290, "c60bee06a18e80b4"), "ready": True, "pairs": []}),
+    "oddie-default": ("oddie", {}, {
+        "family": [4], "core": 4,
         "final": ["#25561b", "#48a835", "#547e9d", "#395266", "#dd4f47"],
         "to_final": [0, 2, 1, 3, None, 4],
-        "cleanup": (4, 20385, "cfd188d8ce81ce71"),
-    },
+        "cleanup": (5, 10259, "a8b7de8a6d3cc898"), "ready": False,
+        "pairs": [[0, 2], [1, 3]]}),
+    "oddie-merge-blues": ("oddie", {"merge": [[3, 1]]}, {
+        "family": [4], "core": 4,
+        "final": ["#25561b", "#547e9d", "#48a835", "#dd4f47"],
+        "to_final": [0, 1, 2, None, None, 3],
+        "cleanup": (3, 7660, "1b10c29696824627"), "ready": True, "pairs": [[0, 2]]}),
+}
+OWNER_EXTRACTED = {
+    "roadie-tol30": ["#f60606", "#f5f5f5", "#960a0a", "#451812", "#f0f10a", "#746c5b"],
+    "oddie": ["#25561b", "#547e9d", "#48a835", "#395266", "#0d100d", "#dd4f47"],
 }
 
 
-@pytest.mark.parametrize("name", ["roadie-tol30", "oddie"])
-def test_owner_images_at_the_default_extraction(name, owner_selection, tmp_path):
+@pytest.mark.parametrize("run_name", list(OWNER_RUNS))
+def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_path):
     from conftest import SELECTIONS
+    from test_smooth_labels import PARITY
 
+    name, flags, want = OWNER_RUNS[run_name]
     owner_selection(name)                     # skips if absent, fails if not the Task 1 files
-    out = tmp_path / name
+    out = tmp_path / run_name
     t0 = time.perf_counter()
-    rec = run(SELECTIONS / name, out)
+    rec = run(SELECTIONS / name, out, flags=flags)
     dt = time.perf_counter() - t0
-    want = OWNER_DEFAULT[name]
     ext = rec["extraction"]["palette"]
-    assert [e["hex"] for e in ext] == want["extracted"]
-    assert [p["hex"] for p in rec["palette"]] == want["final"]
-    assert [e["final_index"] for e in ext] == want["to_final"]
+    o = rec["outline"]
+    assert [e["hex"] for e in ext] == OWNER_EXTRACTED[name], PARITY
+    assert (o["family"], o["core"]) == (want["family"], want["core"]), PARITY
+    assert [p["hex"] for p in rec["palette"]] == want["final"], PARITY
+    assert [e["final_index"] for e in ext] == want["to_final"], PARITY
     labels = np.array(Image.open(out / "labels.png")).astype(np.int32)
     labels[labels == LABELS_OUTSIDE] = OUTSIDE
     digest = hashlib.sha256(labels.tobytes()).hexdigest()[:16]
     log = rec["cleanup"]
-    assert (log["passes"], log["pixels_changed"], digest) == want["cleanup"]
-    assert rec["ready"] is False
-    assert rec["not_ready_reason"] == not_ready_reason(len(want["final"]), 4, 0, 4)
-    with pytest.raises(ColorsError, match="not ready"):
+    assert (log["passes"], log["pixels_changed"], digest) == want["cleanup"], PARITY
+    assert [[p["i"], p["j"]] for p in rec["shade_pairs"]] == want["pairs"]
+    assert rec["ready"] is want["ready"]
+    if want["ready"]:
         verify_colors(out, SELECTIONS / name)
-    shares = [f"{e['hex']} {e['share']:.1%}" for e in ext]
-    print(f"\n{name}: make_colors {dt:.2f} s; extracted {shares}; final {want['final']}; "
-          f"{rec['not_ready_reason']}; colors_id {rec['colors_id']}")
+    else:
+        pairs = rec["shade_pairs"]
+        assert rec["not_ready_reason"] == not_ready_reason(
+            len(want["final"]), 4, len(flags.get("merge", [])), 4, outline=True,
+            suggestions=[(p["j"], p["i"], p["hex_j"], p["hex_i"]) for p in pairs])
+        assert "consider merge: [[3, 1]] (#395266 into #547e9d)" in rec["not_ready_reason"]
+        with pytest.raises(ColorsError, match="not ready"):
+            verify_colors(out, SELECTIONS / name)
+    thin = [f"{e['hex']} {t:.1%}" for e, t in zip(ext, o["thinness"], strict=True)]
+    print(f"\n{run_name}: make_colors {dt:.2f} s; thinness {thin}; final {want['final']}; "
+          f"ready {rec['ready']}; {rec['not_ready_reason']}; colors_id {rec['colors_id']}")
 
 
 def test_not_ready_reason_advises_raising_colors_only_below_the_cap():
@@ -1086,7 +1156,7 @@ def test_cleanup_fate_is_recorded(tmp_path):
     rgba[30, 30] = (30, 30, 200, 255)
     sel = write_sel(tmp_path / "sel", rgba)
     out = tmp_path / "out"
-    rec = run(sel, out, width_mm=5.0, flags={"colors": 2})
+    rec = run(sel, out, width_mm=5.0, flags={"colors": 2, "outline_color": "none"})
     ext = rec["extraction"]["palette"]
     assert [(e["fate"], e["final_index"]) for e in ext] == [("final", 0), ("cleanup", None)]
     assert ext[1]["hex"] in rec["cleanup"]["dropped_hex"]
@@ -1096,3 +1166,171 @@ def test_cleanup_fate_is_recorded(tmp_path):
     with pytest.raises(ColorsError, match="fate 'cleanup' but its hex is not in "
                                           "cleanup.dropped_hex"):
         verify_colors(d, sel)
+
+
+# --- Task 7c: the outline block, shade pairs, the preview's flags ---------------------------
+
+def green_cartoon() -> np.ndarray:
+    """tests/test_color_outline.py's cartoon (a thin black line and ring, a dark red fringe,
+    a wide black pupil) with two greens of one hue as its fills: an outline family of two
+    colors and one shade pair. At 11 mm over 110 px, 0.1 mm/px."""
+    from test_color_outline import cartoon
+    rgb, mask = cartoon()
+    rgb[(rgb == (200, 30, 30)).all(-1)] = (37, 86, 27)
+    rgb[(rgb == (240, 240, 240)).all(-1)] = (72, 168, 53)
+    return np.dstack([rgb, np.where(mask, 255, 0).astype(np.uint8)])
+
+
+@pytest.fixture(scope="module")
+def cartoon_done(tmp_path_factory):
+    d = tmp_path_factory.mktemp("cartoon")
+    sel = write_sel(d / "sel", green_cartoon(), SelectionSpec(keep_at=((30, 70),)))
+    out = d / "out"
+    return run(sel, out, width_mm=11.0), out, sel
+
+
+def test_cartoon_record_has_the_family_core_and_a_flagged_pair(cartoon_done):
+    rec, out, sel = cartoon_done
+    ext = rec["extraction"]["palette"]
+    hexes = [e["hex"] for e in ext]
+    black, fringe = hexes.index("#0a0a0a"), hexes.index("#6e1414")
+    o = rec["outline"]
+    assert o["family"] == sorted([black, fringe]) and o["core"] == black
+    assert o["family_hex"] == [hexes[i] for i in o["family"]] and o["core_hex"] == "#0a0a0a"
+    assert ext[fringe]["fate"] == "outline" and ext[black]["fate"] == "final"
+    assert rec["ready"] is True and len(rec["palette"]) == 3
+    p = rec["shade_pairs"]
+    assert [(x["i"], x["j"], x["merge"]) for x in p] == [(0, 1, [1, 0])]
+    assert set(p[0]) == {"i", "hex_i", "j", "hex_j", "dh_deg", "chroma_i", "chroma_j", "dl",
+                         "merge"}
+    assert rec["methods"]["shade"] == SHADE_METHOD
+    assert rec["identity"]["rules"][SHADE_HUE_RULE] == 5.5
+    assert rec["identity"]["rules"][SHADE_CHROMA_RULE] == 8.5
+    verify_colors(out, sel)
+
+
+def test_extracted_text_marks_outline_members_core_and_shade_partners(cartoon_done):
+    rec = cartoon_done[0]
+    ext = rec["extraction"]["palette"]
+    o, shade = rec["outline"], rec["shade_pairs"]
+    texts = [tdmg.colors.extracted_text(e, o, shade) for e in ext]
+    core, fringe = o["core"], next(i for i in o["family"] if i != o["core"])
+    assert texts[core] == (f"outline core (thin {o['thinness'][core]:.0%}), kept as final "
+                           f"{ext[core]['final_index']}")
+    assert texts[fringe] == "outline (thin 100%)"
+    assert texts[0] == f"final {ext[0]['final_index']}; shade pair with 1"
+    assert texts[1].endswith("; shade pair with 0")
+    gone = {**ext[core], "fate": "outline", "final_index": None}
+    assert tdmg.colors.extracted_text(gone, o, shade).endswith("no wide area left")
+
+
+def test_preview_ends_the_extraction_panel_with_the_merge_hint():
+    assert "add merge: [[from, into]] to the config file" in tdmg.colors.MERGE_HINT
+    assert "never merged for you" in tdmg.colors.MERGE_HINT
+
+
+def test_not_ready_reason_lists_the_flagged_pairs_as_merges():
+    r = not_ready_reason(5, 4, 0, 4, outline=True,
+                         suggestions=[(2, 0, "#48a835", "#25561b"), (3, 1, "#395266", "#547e9d")])
+    assert r == ("5 colors remain after outline handling and cleanup, but colors allows at "
+                 "most 4 (the printer's palette); add merge pairs (by extraction index, from "
+                 "regions.png) to the config file; flagged shade pairs: consider merge: "
+                 "[[2, 0]] (#48a835 into #25561b); consider merge: [[3, 1]] (#395266 into "
+                 "#547e9d)")
+
+
+def test_not_ready_cartoon_suggests_the_flagged_pair(cartoon_done, tmp_path):
+    rec = run(cartoon_done[2], tmp_path / "c2", width_mm=11.0, flags={"colors": 2})
+    p = rec["shade_pairs"][0]
+    assert rec["ready"] is False
+    assert rec["not_ready_reason"].endswith(
+        f"; flagged shade pairs: consider merge: [[1, 0]] ({p['hex_j']} into {p['hex_i']})")
+
+
+def _fringe(r):
+    o = r["outline"]
+    return next(i for i in o["family"] if i != o["core"])
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda r: r["outline"]["thinness"].__setitem__(0, 0.9), "whose thinness is above"),
+    (lambda r: r["outline"]["thinness"].pop(), "outline.thinness must hold"),
+    (lambda r: r["outline"]["thinness"].__setitem__(0, 1.5), "outline.thinness must hold"),
+    (lambda r: r["outline"].update(family_hex=["#000000", "#000000"]), "outline.family_hex"),
+    # Caught first by the fates: the real core (final) is now a non-core member.
+    (lambda r: r["outline"].update(core=_fringe(r)), "member other than the core"),
+    (lambda r: r["outline"].update(core=0), "outline.core is not in outline.family"),
+    (lambda r: r["outline"].update(core_hex="#000000"), "outline.core_hex"),
+    (lambda r: r["outline"].update(thresholds={}), "outline.thresholds"),
+    (lambda r: r["outline"].update(keep_width={"mm": 0.6, "px": 6.0}), "outline.keep_width"),
+    (lambda r: r["extraction"]["palette"][0]["lab"].__setitem__(0, 40.0),
+     "lab is not the CIELAB of its rgb"),
+    (lambda r: r["extraction"]["palette"][0].update(rgb=[1, 2, 3]), "rgb is not three ints"),
+    (lambda r: r["extraction"]["palette"][_fringe(r)].update(fate="cleanup"),
+     "an outline-family member other than the core"),
+    (lambda r: r["shade_pairs"][0].update(dh_deg=1.0), "shade_pairs are not the pairs"),
+    (lambda r: r["shade_pairs"].clear(), "shade_pairs are not the pairs"),
+    (lambda r: r["shade_pairs"].append(dict(r["shade_pairs"][0])), "shade_pairs are not"),
+])
+def test_verify_colors_refuses_edited_outline_and_shade_fields(cartoon_done, tmp_path, change,
+                                                                message):
+    d = _copy(cartoon_done[1], tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, cartoon_done[2])
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda i: i["rules"].pop(SHADE_HUE_RULE), "identity.rules must hold exactly"),
+    (lambda i: i["rules"].pop(THIN_SHARE_RULE), "identity.rules must hold exactly"),
+    (lambda i: i["rules"].update({KEEP_WIDTH_RULE: 0.6}), "identity.rules must hold exactly"),
+    (lambda i: i["rules"].update({SHADE_HUE_RULE: 0.1}), "shade_pairs are not the pairs"),
+    (lambda i: i["rules"].update({THIN_SHARE_RULE: 0.99}), "outline.thresholds"),
+    (lambda i: i["methods"].update(shade="x"), "methods"),
+])
+def test_verify_colors_checks_the_outline_and_shade_rules_in_the_identity(
+        cartoon_done, tmp_path, change, message):
+    d = _copy(cartoon_done[1], tmp_path, "colors")
+    _edit_record(d, _edit_identity(change))
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, cartoon_done[2])
+
+
+def test_verify_colors_checks_the_kept_band_width(cartoon_done, tmp_path):
+    out = tmp_path / "keep"
+    rec = run(cartoon_done[2], out, width_mm=11.0, flags={"outlines": "keep"})
+    assert rec["outline"]["keep_width"] == {"mm": 0.6, "px": 0.6 / rec["mm_per_px"]}
+    verify_colors(out, cartoon_done[2])
+    for change, message in (
+            (lambda r: r["outline"]["keep_width"].update(px=6.5), "outline.keep_width.px"),
+            (lambda r: r["outline"]["keep_width"].update(mm=0.7), "outline.keep_width"),
+            (lambda r: r["outline"].update(keep_width=None), "outline.keep_width")):
+        d = _copy(out, tmp_path, f"k{abs(hash(message + str(id(change))))}")
+        _edit_record(d, change)
+        with pytest.raises(ColorsError, match=message):
+            verify_colors(d, cartoon_done[2])
+
+
+def test_verify_colors_checks_the_core_is_the_darkest_member(tmp_path):
+    # Without the pupil the core keeps no wide area, so every member's fate is outline and
+    # only the darkest-member check can catch a wrong core.
+    from test_color_outline import PUPIL
+    rgba = green_cartoon()
+    rgba[PUPIL] = (37, 86, 27, 255)
+    sel = write_sel(tmp_path / "sel", rgba, SelectionSpec(keep_at=((30, 70),)))
+    out = tmp_path / "out"
+    rec = run(sel, out, width_mm=11.0)
+    o = rec["outline"]
+    assert len(o["family"]) == 2
+    assert all(rec["extraction"]["palette"][i]["fate"] == "outline" for i in o["family"])
+    verify_colors(out, sel)
+    d = _copy(out, tmp_path, "edited")
+    _edit_record(d, _fringe_as_core)
+    with pytest.raises(ColorsError, match="outline.core is not the darkest family member"):
+        verify_colors(d, sel)
+
+
+def _fringe_as_core(r):
+    o = r["outline"]
+    o["core"] = _fringe(r)
+    o["core_hex"] = r["extraction"]["palette"][o["core"]]["hex"]

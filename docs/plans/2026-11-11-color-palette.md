@@ -335,3 +335,59 @@ shade indicators"):
   the merge and ready plumbing, the identity, the record and `verify_colors`.
 - **7c:** outline detection, drop and keep, shade-pair flags, and the preview's
   extraction panel.
+
+**Decision, 2026-11-11 (controller, during Task 7c):** a merge's `into` may be the outline
+core (the family's darkest color, which keeps the wide areas). A merge's `from` must still be
+outside the family, and no other family member may be an `into`. When the config is
+resolved, the core is not known yet, so an `into` in an explicit `outline_color` list is
+checked again after the outline step. A merge into a core left with no pixel is refused.
+
+### Task 7c result (2026-11-11, Windows PC)
+
+**Built** (in `tdmg.color`, pure functions):
+- `detect_outline_family`: the thinness rule.
+- `handle_outlines`:
+  - **Drop:** each member's own thin pixels take the nearest non-family color. The wide
+    pixels take the core's color.
+  - **Keep:** after the drop, `keep_band` draws a band in the core's color. The band
+    covers pixels whose centre is within W/2 of a border between two non-core colors, and
+    pixels within W of the outside.
+- `shade_pairs`: hue and chroma flags among the colors left after the outline step and
+  the merges, without the core.
+
+The record holds the outline block, `shade_pairs` and the rules used. `verify_colors`
+recomputes the auto family from the recorded thinness, the core, and the shade pairs from
+the recorded Lab. The Lab itself is checked against the rgb. The preview marks the outline
+members, the core and the shade partners, and adds a merge hint. When a plan is not ready,
+its reason lists each flagged pair as "consider merge".
+
+**The owner's images, 60 mm, defaults** (pinned in `tests/test_colors.py`). Every
+thinness value equals the Task 7a record.
+
+| Run | Outline family (core) | Final colors | Ready |
+|---|---|---|---|
+| Roadie, drop | 2, 3, 5 (3 `#451812`) | red, white, yellow, dark core 1.6% | yes |
+| Roadie, keep | same | dark core 38.4%, red, white, yellow | yes |
+| Oddie, default | 4 (`#0d100d`, no wide area) | 2 greens, 2 blues, red | no: 5 colors; pairs [[2, 0]] and [[3, 1]] flagged |
+| Oddie, `merge: [[3, 1]]` | same | 2 greens, blue, red | yes; the green pair is still flagged |
+
+**Measured on the keep band** (Roadie, W = 0.6 mm = 5.99 px): twice the distance transform
+on the band's ridge has a median of 6.3 px and a 10th–90th percentile range of 6.0–7.2 px.
+The larger values are at junctions. On a synthetic straight border the band is exactly
+2 × floor(W/2 + 1/2) px wide, and that band survives cleanup (tests).
+
+**Seen in the previews, by eye:**
+- **Roadie, drop:** the outline is gone and the pupil is kept in the dark core. A few
+  small dark tips also stay, at the crest and tail ends and one dot by the belly: wide
+  areas of the outline color in the source.
+- **Roadie, keep:** a uniform dark band runs along every border and the outer edge. The
+  band is the largest color, so `base: auto` is now the dark core.
+- **Oddie:** the black lines are gone, and so are the leaf veins, which were lines.
+
+**Open for the owner (Task 7d):**
+- Is 0.6 mm right for the kept band?
+- Under `keep`, should the base stay the largest color, now the outline?
+- Should the small dark tips on Roadie stay?
+- **A side effect of `auto`:** a speck or a 1 px line in a color of its own is "thin", so
+  it joins the outline family. Its pixels then go to the nearest color, which cleanup
+  would also have done. Its fate in the record is then "outline", not "cleanup".

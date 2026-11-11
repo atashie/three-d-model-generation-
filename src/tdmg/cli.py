@@ -11,7 +11,7 @@ import typer
 from pydantic import ValidationError
 
 from tdmg import __version__
-from tdmg.colors import ColorsError, extracted_fate, make_colors
+from tdmg.colors import ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
@@ -426,12 +426,23 @@ def _colors_lines(rec: dict) -> list[str]:
     ext = rec["extraction"]
     lines = [(f"extracted: {ext['n_extracted']} colors (asked {ext['extract']}); "
               "outline_color and merge use these indices")]
+    o = rec["outline"]
     for e in ext["palette"]:
-        lines.append(f"  {e['index']} {e['hex']} {e['share']:6.1%}  {extracted_fate(e)}")
-    for note in rec["outline"]["notes"]:
+        lines.append(f"  {e['index']} {e['hex']} {e['share']:6.1%}  "
+                     f"{extracted_text(e, o, rec['shade_pairs'])}")
+    if o["family"]:
+        how = {"auto": f"thinness above {o['thresholds'].get('color.outline.thin_share')}",
+               "config": "outline_color in the config"}[o["found_by"]]
+        lines.append(f"outline: family {o['family']} ({how}); core {o['core']} "
+                     f"{o['core_hex']}; outlines {o['outlines']}")
+    for note in o["notes"]:
         lines.append(f"outline: {note}")
     for m in rec["merges"]:
         lines.append(f"merged: {m['from']} {m['from_hex']} into {m['into']} {m['into_hex']}")
+    for p in rec["shade_pairs"]:
+        lines.append(f"shade pair (flagged, not merged): {p['i']} {p['hex_i']} and {p['j']} "
+                     f"{p['hex_j']}, hue difference {p['dh_deg']:.1f} deg; to merge, add "
+                     f"merge: [{p['merge']}] to the config file")
     lines.append(f"palette: {len(rec['palette'])} colors (at most {s['colors']}), edges "
                  f"{s['edges']}, {rec['mm_per_px']:.4f} mm/px")
     for p in rec["palette"]:

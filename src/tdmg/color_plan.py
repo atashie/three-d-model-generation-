@@ -1,6 +1,6 @@
 """The pure color pipeline of `tdmg colors` (docs/plans/2026-11-11-color-palette.md,
-Task 7b): from the cutout's pixels and the resolved settings to the final palette, with
-no I/O. tdmg.colors reads the selection, calls plan_colors, then writes the record and
+Tasks 7b and 7c): from the cutout's pixels and the resolved settings to the final palette,
+with no I/O. tdmg.colors reads the selection, calls plan_colors, then writes the record and
 the preview.
 
 plan_colors runs, in order:
@@ -9,10 +9,13 @@ plan_colors runs, in order:
 2. check_extraction_indices against the real number of extracted colors (an image with
    fewer distinct colors gives fewer than `extract`), before the outline step reads any
    index.
-3. handle_outlines: the outline family and its handling (Task 7b: a seam that does
-   nothing; Task 7c fills it in, and adds the shade-pair flags here).
-4. check_extraction_indices again, now with the family; then apply_merges.
-5. clean_regions: the final palette.
+3. handle_outlines: the outline family (auto: the thinness rule; none; or a list), dropped
+   or redrawn as one band (outlines: drop or keep).
+4. check_extraction_indices again, now with the family and its core (a merge may go into
+   the core, never from a family member); then apply_merges.
+5. shade_pairs among the colors left after steps 3 and 4, without the core: flagged for the
+   owner, never applied.
+6. clean_regions: the final palette.
 Each step's result carries an explicit old -> new index array (Quantized.remap, and
 OutlineResult.remap for step 3); they are composed to give each extracted color its fate
 and final index. Colors (hex) are only a cross-check: every final palette entry must be
@@ -25,21 +28,28 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from tdmg.color import (
+    SHADE_CHROMA_RULE,
+    SHADE_HUE_RULE,
     CleanupLog,
     ColorError,
     Limits,
     OutlineResult,
     Quantized,
+    ShadePair,
     apply_merges,
     clean_regions,
     handle_outlines,
     quantize,
+    rule_value,
+    shade_pairs,
 )
-from tdmg.color_config import check_extraction_indices
+from tdmg.color_config import ColorConfigError, check_extraction_indices
 from tdmg.rules import Rule
 
 # What became of an extracted color: still in the final palette; merged by the owner into
-# another; part of the outline family (Task 7c); removed by the region cleanup.
+# another; removed by the outline handling (an outline-family member); removed by the
+# region cleanup. The outline core, when it keeps wide areas, follows the same remaps as any
+# other color, so its fate is final (or cleanup).
 FATES = ("final", "merged", "outline", "cleanup")
 
 
@@ -48,9 +58,11 @@ class ColorPlan:
     """Every stage of plan_colors, and each extracted color's fate.
 
     extracted: quantize's result. outlined, outline: handle_outlines' result. merges: the
-    (from, into) pairs by extraction index, as given. merged: after apply_merges. cleaned,
-    log: clean_regions' result, the final palette. fate and final_index: one entry per
-    extraction index; final_index is set exactly when the fate is "final".
+    (from, into) pairs by extraction index, as given. merged: after apply_merges.
+    shade_pairs: the flagged pairs (extraction indices), with the two thresholds used,
+    shade_rules ((rule id, value), ...). cleaned, log: clean_regions' result, the final
+    palette. fate and final_index: one entry per extraction index; final_index is set
+    exactly when the fate is "final".
     """
 
     extracted: Quantized
@@ -58,47 +70,68 @@ class ColorPlan:
     outline: OutlineResult
     merges: tuple[tuple[int, int], ...]
     merged: Quantized
+    shade_pairs: tuple[ShadePair, ...]
+    shade_rules: tuple[tuple[str, float], ...]
     cleaned: Quantized
     log: CleanupLog
     fate: tuple[str, ...]
     final_index: tuple[int | None, ...]
 
 
+def shade_candidates(n: int, outline_remap, core, merges) -> list[int]:
+    """The extraction indices compared for shade pairs: kept by the outline step, not the
+    core, and not merged away."""
+    froms = {a for a, _ in merges}
+    return [i for i in range(n)
+            if outline_remap[i] is not None and i != core and i not in froms]
+
+
 def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
                 rules: dict[str, Rule]) -> ColorPlan:
     """The pipeline in the module docstring. settings: the resolved settings
     (tdmg.color_config); extract, outline_color, outlines and merge are read here. limits:
-    printable_limits_px at the plan's scale. rules: the registry; Task 7c reads the outline
-    and shade rules from it (Task 7b uses none). Raises ColorError (bad input, an outline
-    list until Task 7c) or ColorConfigError (an index the extraction does not have).
+    printable_limits_px at the plan's scale. rules: the registry; the outline rules are read
+    by handle_outlines, the two shade rules here. Raises ColorError (bad input) or
+    ColorConfigError (an index the extraction does not have, a merge from the outline
+    family or into a member other than the core, or into a core the outline step left
+    with no pixel).
     """
     extracted = quantize(cutout_rgb, mask, settings["extract"])
     n = len(extracted.hex)
     outline_color, merge = settings["outline_color"], settings["merge"]
     check_extraction_indices(outline_color, merge, n)
     outlined, outline = handle_outlines(extracted, outline_color=outline_color,
-                                        outlines=settings["outlines"])
-    check_extraction_indices(outline_color, merge, n, outline.family)
+                                        outlines=settings["outlines"], limits=limits,
+                                        rules=rules)
+    check_extraction_indices(outline_color, merge, n, outline.family, outline.core)
     merges = tuple((int(a), int(b)) for a, b in merge)
+    for a, b in merges:
+        if b == outline.core and outline.remap[b] is None:
+            raise ColorConfigError(
+                f"merge [{a}, {b}]: color {b}, the outline core, has no pixel left after the "
+                "outline handling (it has no wide area); merge into another color")
     merged = apply_merges(outlined, _translate(merges, outline.remap))
+    hue, chroma = rule_value(rules, SHADE_HUE_RULE), rule_value(rules, SHADE_CHROMA_RULE)
+    pairs = shade_pairs(extracted.lab.tolist(), extracted.hex,
+                        shade_candidates(n, outline.remap, outline.core, merges), hue, chroma)
     cleaned, log = clean_regions(merged, limits)
 
     into = dict(merges)
     fate, final = [], []
     for i in range(n):
-        if i in outline.family:
+        r = outline.remap[i]
+        if r is None:
+            # A guard: the outline step only ever removes family members.
+            if i not in outline.family:
+                raise ColorError(f"extracted color {i} was removed by the outline handling "
+                                 "but is not in the outline family")
             fate.append("outline")
             final.append(None)
         elif i in into:
             fate.append("merged")
             final.append(None)
         else:
-            # A guard: a color outside the family that the outline step removed. Task 7b
-            # removes none; Task 7c must give such a color its own fate if it can happen.
-            if outline.remap[i] is None:
-                raise ColorError(f"extracted color {i} was removed by the outline handling "
-                                 "but is not in the outline family")
-            j = merged.remap[outline.remap[i]]
+            j = merged.remap[r]
             j = None if j is None else cleaned.remap[j]
             fate.append("final" if j is not None else "cleanup")
             final.append(j)
@@ -107,15 +140,18 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
             raise ColorError(f"final color {k} ({h}) is not the final index of an extracted "
                              "color with the same color")
     return ColorPlan(extracted=extracted, outlined=outlined, outline=outline, merges=merges,
-                     merged=merged, cleaned=cleaned, log=log, fate=tuple(fate),
-                     final_index=tuple(final))
+                     merged=merged, shade_pairs=pairs,
+                     shade_rules=((SHADE_HUE_RULE, hue), (SHADE_CHROMA_RULE, chroma)),
+                     cleaned=cleaned, log=log, fate=tuple(fate), final_index=tuple(final))
 
 
 def _translate(merges, remap) -> list[tuple[int, int]]:
     """Merge pairs from extraction indices to the indices after the outline step.
 
-    A guard: merges never touch the outline family (check_extraction_indices), and the
-    outline step only removes family colors, so a None here means a bug in that step.
+    A guard: a merge's from is never in the outline family and its into is outside it or
+    the core (check_extraction_indices), the outline step only removes family members, and
+    plan_colors refuses a merge into a removed core first; so a None here means a bug in
+    that step.
     """
     out = []
     for a, b in merges:

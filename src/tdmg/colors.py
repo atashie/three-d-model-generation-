@@ -1,5 +1,5 @@
 """`tdmg colors`: the color plan of a selected subject, for review
-(docs/plans/2026-11-11-color-palette.md, Decisions 1, 2, 6, 7 and 8; Tasks 6 and 7b).
+(docs/plans/2026-11-11-color-palette.md, Decisions 1, 2, 6, 7 and 8; Tasks 6, 7b and 7c).
 
 make_colors reads a verified tdmg select folder (tdmg.selection.read_selection, with the
 cutout), resolves the settings (tdmg.color_config: flags, then the config file, then the
@@ -8,15 +8,17 @@ defaults), and then:
 1. mm_per_px = width_mm / the mask's exact bounding-box width in pixels (mask_mm_per_px),
    and printable_limits_px at that scale.
 2. tdmg.color_plan.plan_colors, the pure pipeline: quantize to `extract` colors (the
-   extraction indices that outline_color and merge use), the outline step (Task 7b: a
-   seam that does nothing; Task 7c fills it in), the owner's merges, and clean_regions,
+   extraction indices that outline_color and merge use), the outline step (the family
+   found by the thinness rule or named in the config, dropped or redrawn as one band),
+   the owner's merges, the shade-pair flags (reported, never applied), and clean_regions,
    which gives the final palette, re-sorted by final area. It also gives each extracted
    color's fate and final index.
 3. The base color: `auto` is index 0 (the largest area after cleanup); a number must be an
    index of the final palette (check_base), ready or not.
 4. Ready: the plan is ready when the final palette has at most `colors` colors. When it
-   has more, every output is still written, with ready false and the reason, so the
-   owner can choose merges from the preview; verify_colors refuses such a plan.
+   has more, every output is still written, with ready false and the reason (which lists
+   the flagged shade pairs as merges to consider), so the owner can choose merges from
+   the preview; verify_colors refuses such a plan.
 5. smooth_labels(cleaned labels, the edges preset's sigma, supersample): the fine map, used
    here for the preview only. Design step 2 (geometry) recomputes it from labels.png and
    the recorded sigma.
@@ -49,12 +51,20 @@ from tdmg import __version__
 from tdmg.color import (
     CLEANUP_METHOD,
     ISLAND_RULE,
+    KEEP_WIDTH_RULE,
     METHOD,
     OPENING_RULE,
     OUTSIDE,
+    SHADE_CHROMA_RULE,
+    SHADE_HUE_RULE,
+    SHADE_METHOD,
+    THIN_SHARE_RULE,
     ColorError,
     changed_mask,
+    outline_core,
     printable_limits_px,
+    shade_pairs,
+    srgb_to_lab,
 )
 from tdmg.color_config import (
     FURRY_RULE,
@@ -89,8 +99,9 @@ from tdmg.smoothing import (
     smooth_labels,
 )
 
-# colors-2 (Task 7b): extraction at `extract`, the outline seam, the owner's merges and
-# the ready flag. tdmg.colors/2 adds the extraction, outline, merges and ready fields.
+# colors-2 (Tasks 7b and 7c, unreleased): extraction at `extract`, the outline step, the
+# owner's merges, the shade-pair flags and the ready flag. tdmg.colors/2 adds the
+# extraction, outline, merges, shade_pairs and ready fields.
 COLORS_ALGORITHM_VERSION = "colors-2"
 RECORD_SCHEMA = "tdmg.colors/2"
 RECORD_NAME = "colors.json"
@@ -103,8 +114,8 @@ REVIEW = "Open regions.png to check the colors before building geometry."
 # see whether an edge is smooth or furry on the owner's ~800-1000-px images (the smoothed
 # edge is drawn from the 4x fine map). The preview is 2 * PREVIEW_SCALE * W wide and
 # PREVIEW_SCALE * (H + ROW_PX * strip rows) tall, where the strip has the legend rows, one
-# row per final color, a heading and one row per extracted color, and a last row when the
-# plan is not ready (_regions_image).
+# row per final color, a heading, one row per extracted color and the merge hint, and a
+# last row when the plan is not ready (_regions_image).
 PREVIEW_SCALE = 2
 CHANGED_DASH_PX = 3                       # dash length of the cleanup outline
 CHANGED_DASH = ((0, 0, 0), (255, 255, 255))   # black and white, visible on any color
@@ -121,6 +132,8 @@ OUTER_OUTLINE = "outer outline: image pixels (smoothed when the model is built)"
 FINAL_HEADING = "final colors (base uses these indices):"
 EXTRACTED_HEADING = ("extracted colors ({n}): outline_color and merge in the config file use "
                      "these indices")
+MERGE_HINT = ("to merge two colors, add merge: [[from, into]] to the config file (extraction "
+              "indices); shade pairs are only flagged, never merged for you")
 
 
 def legend_rows(edges: str) -> list[str]:
@@ -275,6 +288,7 @@ def _strip(rows: list[tuple[tuple[int, int, int] | None, str]], width: int) -> n
 def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict],
                    fine: np.ndarray, supersample: int, changed: np.ndarray,
                    edges: str, vanished: set[int], extracted: list[dict],
+                   outline: dict, shade: list[dict],
                    not_ready_reason: str | None) -> np.ndarray:
     """The review preview: two panels side by side, then the swatch strip.
 
@@ -293,8 +307,9 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
     palette entry with its swatch, index, hex code, area share, and whether it is the base
     or vanished in smoothing. Then, separated by a heading row (EXTRACTED_HEADING), one row
     per extracted color (the extraction record's palette): its swatch, extraction index,
-    hex code, share of the extraction and its fate (extracted_fate). When the plan is not
-    ready, a last row gives the reason (not_ready_line).
+    hex code, share of the extraction, its fate and flags (extracted_text, from the
+    record's outline block and shade pairs), then the merge hint (MERGE_HINT). When the
+    plan is not ready, a last row gives the reason (not_ready_line).
     """
     h, w = mask.shape
     p = PREVIEW_SCALE
@@ -318,7 +333,8 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
     rows.append((None, EXTRACTED_HEADING.format(n=len(extracted))))
     for e in extracted:
         rows.append((e["rgb"], f"{e['index']}  {e['hex']}  {e['share']:6.1%}  "
-                               + extracted_fate(e)))
+                               + extracted_text(e, outline, shade)))
+    rows.append((None, MERGE_HINT))
     if not_ready_reason is not None:
         rows.append((None, not_ready_line(not_ready_reason)))
     strip = _enlarge(_strip(rows, 2 * w), p)
@@ -330,6 +346,36 @@ def extracted_fate(e: dict) -> str:
     the CLI."""
     return {"final": f"final {e['final_index']}", "merged": f"merged into {e['merged_into']}",
             "outline": "outline color", "cleanup": "dropped by cleanup"}[e["fate"]]
+
+
+def extracted_text(e: dict, outline: dict, shade: list[dict]) -> str:
+    """An extracted color's fate and flags, for the preview and the CLI: outline-family
+    members say so, with their thinness (the core: "outline core, kept as final i" when its
+    wide areas remain), and a color in a flagged shade pair names its partners."""
+    i = e["index"]
+    if i in outline["family"]:
+        thin = f"thin {outline['thinness'][i]:.0%}"
+        if i != outline["core"]:
+            text = f"outline ({thin})"
+        elif e["fate"] == "final":
+            text = f"outline core ({thin}), kept as final {e['final_index']}"
+        elif e["fate"] == "outline":
+            text = f"outline core ({thin}), no wide area left"
+        else:
+            text = f"outline core ({thin}), {extracted_fate(e)}"
+    else:
+        text = extracted_fate(e)
+    partners = sorted(p["j"] if p["i"] == i else p["i"] for p in shade if i in (p["i"], p["j"]))
+    if partners:
+        text += "; shade pair with " + ", ".join(str(k) for k in partners)
+    return text
+
+
+def shade_pair_records(pairs) -> list[dict]:
+    """The record's shade_pairs entries (tdmg.color.ShadePair, by extraction index)."""
+    return [{"i": p.i, "hex_i": p.hex_i, "j": p.j, "hex_j": p.hex_j, "dh_deg": p.dh_deg,
+             "chroma_i": p.chroma_i, "chroma_j": p.chroma_j, "dl": p.dl,
+             "merge": list(p.merge)} for p in pairs]
 
 
 # --- make_colors ------------------------------------------------------------------------
@@ -384,10 +430,24 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     ready = k <= settings["colors"]
     reason = None if ready else not_ready_reason(
         k, settings["colors"], len(merges), palette_cap(printer),
-        outline=bool(outline.family))
+        outline=bool(outline.family),
+        suggestions=[(p.j, p.i, p.hex_j, p.hex_i) for p in plan.shade_pairs])
     smoothed = smooth_labels(cleaned.labels, sigma, supersample)
     vanished = set(smoothed.vanished)
     into = dict(merges)
+    core = outline.core
+    outline_record = {
+        "outlines": settings["outlines"],
+        "outline_color": _json_plain(settings["outline_color"]),
+        "found_by": outline.found_by, "family": list(outline.family),
+        "family_hex": [extracted.hex[i] for i in outline.family],
+        "core": core, "core_hex": None if core is None else extracted.hex[core],
+        "thinness": list(outline.thinness),
+        "thresholds": dict(outline.thresholds),
+        "keep_width": (None if outline.keep_width_mm is None else
+                       {"mm": outline.keep_width_mm, "px": outline.keep_width_px}),
+        "method": outline.method, "notes": list(outline.notes)}
+    shade_record = shade_pair_records(plan.shade_pairs)
     extraction_palette = [
         {"index": i, "hex": extracted.hex[i], "rgb": extracted.rgb[i].tolist(),
          "lab": extracted.lab[i].tolist(), "share": extracted.shares[i],
@@ -402,15 +462,21 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
                 "count": cleaned.counts[i], "base": i == base_index} for i in range(k)]
     regions = _regions_image(sel.cutout_rgb, sel.mask, palette, smoothed.fine,
                              smoothed.supersample, changed_mask(merged, cleaned),
-                             settings["edges"], vanished, extraction_palette, reason)
+                             settings["edges"], vanished, extraction_palette, outline_record,
+                             shade_record, reason)
     files = {"labels.png": png_bytes(labels8), "regions.png": png_bytes(regions)}
 
     methods = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
-               "outline": outline.method, "cleanup": CLEANUP_METHOD, "labels": LABELS_METHOD}
+               "outline": outline.method, "shade": SHADE_METHOD, "cleanup": CLEANUP_METHOD,
+               "labels": LABELS_METHOD}
     used_rules = {limits.opening_rule: float(rules[limits.opening_rule].default),
                   limits.island_rule: float(rules[limits.island_rule].default)}
     if edge_rule is not None:
         used_rules[edge_rule] = sigma
+    # The outline and shade rules that decided this plan (outline.thresholds holds the
+    # first two when they were used).
+    used_rules.update(dict(outline.thresholds))
+    used_rules.update(dict(plan.shade_rules))
     record_settings = resolved.as_record()
     limits_record = _json_plain(dataclasses.asdict(limits))
     identity = colors_identity(
@@ -435,17 +501,24 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         "palette": palette, "base_index": base_index,
         "ready": ready, "not_ready_reason": reason,
         # The extracted colors, by extraction index (the indices outline_color and merge
-        # use). fate: final (final_index is its index in the final palette), merged
-        # (merged_into: the extraction index it went to), outline (in outline.family) or
-        # cleanup (cleanup removed it); final_index is null unless the fate is final.
+        # use). fate, followed through the steps' index arrays: final (final_index is its
+        # index in the final palette; this includes the outline core when its wide areas
+        # remain), merged (merged_into: the extraction index it went to), outline (an
+        # outline-family member that the outline handling removed) or cleanup (cleanup
+        # removed it); final_index is null unless the fate is final.
         "extraction": {"extract": settings["extract"], "n_extracted": n_ext,
                        "palette": extraction_palette},
-        "outline": {"outlines": settings["outlines"],
-                    "outline_color": record_settings["settings"]["outline_color"],
-                    "found_by": outline.found_by, "family": list(outline.family),
-                    "method": outline.method, "notes": list(outline.notes)},
+        # The outline step: the family (extraction indices and hexes), its core (the
+        # darkest member, which keeps the wide areas and draws the kept band), every
+        # extracted color's thinness, the thresholds used (rule id: value) and the kept
+        # band's width.
+        "outline": outline_record,
         "merges": [{"from": a, "from_hex": extracted.hex[a], "into": b,
                     "into_hex": extracted.hex[b]} for a, b in merges],
+        # Likely shade pairs among the colors left after the outline step and the merges
+        # (the core excluded), by extraction index; flagged for the owner, never applied.
+        # merge: the suggested [from, into].
+        "shade_pairs": shade_record,
         # The extraction (quantize at extract colors). dropped: palette colors the final
         # nearest reassignment left empty.
         "quantize": {"iterations": extracted.iterations, "converged": extracted.converged,
@@ -481,13 +554,14 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
 
 
 def not_ready_reason(n_final: int, colors: int, n_merges: int, cap: int, *,
-                     outline: bool = False) -> str:
+                     outline: bool = False, suggestions=()) -> str:
     """Why a plan is not ready, for the record, the preview and the CLI.
 
     cap: the printer's palette cap (tdmg.color_config.palette_cap). Raising colors is
     suggested only when colors is below it; at the cap, merges are the only way. outline:
-    whether an outline family was handled (named among the steps; Task 7c also adds the
-    flagged shade pairs to this message).
+    whether an outline family was handled (named among the steps). suggestions: the
+    flagged shade pairs as (from, into, from_hex, into_hex) merges, by extraction index;
+    each is listed as "consider merge: [[from, into]] (#from into #into)".
     """
     steps = (["outline handling"] if outline else []) + (
         [f"{n_merges} merge(s)"] if n_merges else []) + ["cleanup"]
@@ -496,7 +570,12 @@ def not_ready_reason(n_final: int, colors: int, n_merges: int, cap: int, *,
     advice = ("add merge pairs (by extraction index, from regions.png) to the config file"
               + ("" if colors >= cap else f", or raise colors up to the printer's palette "
                                           f"({cap})"))
-    return f"{n_final} colors remain after {after}, but colors allows at most {limit}; {advice}"
+    flagged = "; ".join(f"consider merge: [[{a}, {b}]] ({ha} into {hb})"
+                        for a, b, ha, hb in suggestions)
+    if flagged:
+        flagged = "; flagged shade pairs: " + flagged
+    return (f"{n_final} colors remain after {after}, but colors allows at most {limit}; "
+            f"{advice}{flagged}")
 
 
 # --- verify_colors: reading a colors folder back (design step 2, geometry) ---------------
@@ -544,26 +623,36 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        an int, extract an int 2..MAX_EXTRACT, edges a preset, base auto or a non-bool int,
        outlines drop or keep, outline_color auto, none or a list, merge a list of valid
        pairs), supersample an int >= 1, width_mm finite and above 0, the rules exactly the
-       two cleanup rules plus the edges preset's rule (none for exact), each a finite
-       number, and the sigma finite and >= 0. As when resolving: extract >= colors, and
-       check_extraction_indices against extraction.n_extracted (an int 1..extract) and
-       outline.family (sorted, distinct indices below it).
+       two cleanup rules, the edges preset's rule (none for exact), the two shade rules,
+       the thin share when outline_color is auto, and the keep width when outlines is keep
+       and the family is not empty; each a finite number, and the sigma finite and >= 0.
+       As when resolving: extract >= colors, and check_extraction_indices against
+       extraction.n_extracted (an int 1..extract), outline.family (sorted, distinct indices
+       below it) and outline.core.
     3. The record fields that repeat the identity equal it: input hashes, settings,
        width_mm, printer, methods (and algorithm), limits (rule ids, nozzle, opening width,
        island area), smoothing (supersample, edge_rule, sigma_px), the extraction count
        (extraction.extract, quantize.n_requested), outline (outlines, outline_color,
-       method) and the merges' pairs.
+       method, thresholds) and the merges' pairs.
     4. The palette: indices 0..k-1; each hex is the "#rrggbb" of its rgb (ints 0..255);
        counts do not increase; base_index and the base flags agree with settings.base;
-       k is at most settings.colors (as ready says). The outline: found_by matches
-       outline_color (auto, none, or config for a list), and a list is inside the family.
-       The merges' from_hex and into_hex are the extraction's colors. The extraction
-       palette: indices 0..n-1; its hex codes are quantize.palette_hex; each merged_into is
-       the merge setting's; each fate is one of FATES, with final exactly when final_index
-       is set, merged exactly when merged_into is set, outline only for an index in
-       outline.family, and cleanup only for a hex in cleanup.dropped_hex; each final_index
-       is a final palette index with the same hex; and every final palette entry is the
-       final_index of at least one extraction entry with the same hex.
+       k is at most settings.colors (as ready says). The extraction palette: indices
+       0..n-1; its hex codes are quantize.palette_hex and each is the "#rrggbb" of its rgb;
+       each lab is srgb_to_lab of its rgb, exactly. The outline: found_by matches
+       outline_color (auto, none, or config for a list); the family is the list (config),
+       empty (none), or exactly the indices whose recorded thinness is above the thin
+       share (auto); thinness has one number from 0 to 1 per extracted color; family_hex
+       is the family's colors; the core is outline_core of the family on the recorded Lab
+       (the darkest member), with its hex; keep_width is set exactly when the keep width
+       rule is used. The merges' from_hex and into_hex are the extraction's colors. Each
+       merged_into is the merge setting's; each fate is one of FATES, with final exactly
+       when final_index is set, merged exactly when merged_into is set, outline only for
+       an index in outline.family (and always for a family member other than the core),
+       and cleanup only for a hex in cleanup.dropped_hex; each final_index is a final
+       palette index with the same hex; and every final palette entry is the final_index
+       of at least one extraction entry with the same hex. The shade pairs are what
+       tdmg.color.shade_pairs gives again on the recorded Lab, for the colors whose fate
+       is final or cleanup other than the core, with the identity's two shade rules.
     5. The outputs are exactly labels.png and regions.png, and each file's SHA-256 is the
        record's. With check_preview (the default), regions.png is decoded and its pixels
        must hash to regions_pixels_sha256; design step 2 passes False and skips the decode.
@@ -573,12 +662,14 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
     7. mm_per_px is mask_mm_per_px(labelled pixels, width_mm), and it equals the record's
        mm_per_px and limits.mm_per_px exactly; limits.min_width_px and min_area_px equal
        the arithmetic of tdmg.color.printable_limits_px on the identity's rule values,
-       nozzle and that scale (the same float operations, so equality is exact).
+       nozzle and that scale (the same float operations, so equality is exact); so does
+       outline.keep_width.px, as the keep width over that scale.
     8. The selection (read_selection, with the cutout): its selection_id, mask and cutout
        pixel hashes are the identity's, and labels.png is 255 exactly outside its mask.
 
-    What it cannot check: other record fields (such as the cleanup log and the palette's
-    Lab values) are as the record says; only a rerun of make_colors reproduces them.
+    What it cannot check: other record fields (such as the cleanup log, the final
+    palette's Lab values and the thinness values themselves) are as the record says; only a
+    rerun of make_colors reproduces them.
     OSError (an unreadable file) propagates; the CLI maps it to exit 2, as for colors.
     """
     colors_dir = Path(colors_dir)
@@ -605,9 +696,9 @@ def _inconsistent(field: str) -> ColorsError:
     return ColorsError(f"colors.json is inconsistent: {field} does not match the identity")
 
 
-def _identity_values(ident: dict) -> tuple[dict, float, int, float, str | None]:
+def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str | None]:
     """Check the identity's types; return its settings, width, supersample, sigma and the
-    edges rule id."""
+    edges rule id. family: the record's outline family (whether the keep width is used)."""
     settings = ident["settings"]
     if not isinstance(settings, dict) or set(settings) != set(SETTING_KEYS):
         raise ColorsError(f"identity.settings must hold exactly {', '.join(SETTING_KEYS)}")
@@ -624,7 +715,10 @@ def _identity_values(ident: dict) -> tuple[dict, float, int, float, str | None]:
         raise ColorsError(f"identity.{e}") from None
     edge_rule = EDGE_RULES[settings["edges"]]
     rules = ident["rules"]
-    want = {OPENING_RULE, ISLAND_RULE} | ({edge_rule} if edge_rule else set())
+    want = ({OPENING_RULE, ISLAND_RULE, SHADE_HUE_RULE, SHADE_CHROMA_RULE}
+            | ({edge_rule} if edge_rule else set())
+            | ({THIN_SHARE_RULE} if settings["outline_color"] == "auto" else set())
+            | ({KEEP_WIDTH_RULE} if settings["outlines"] == "keep" and family else set()))
     if not isinstance(rules, dict) or set(rules) != want:
         raise ColorsError(f"identity.rules must hold exactly {', '.join(sorted(want))}")
     for rule_id, value in rules.items():
@@ -652,9 +746,11 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
     if record["not_ready_reason"] is not None:
         raise ColorsError("colors.json is inconsistent: ready is true but there is a "
                           "not_ready_reason")
-    settings, width_mm, supersample, sigma, edge_rule = _identity_values(ident)
+    outline = record["outline"]
+    settings, width_mm, supersample, sigma, edge_rule = _identity_values(ident,
+                                                                         outline["family"])
     _check_extraction_settings(settings, record["extraction"]["n_extracted"],
-                               record["outline"]["family"])
+                               outline["family"], outline["core"])
     inp, sm, lim = record["input"], record["smoothing"], record["limits"]
     rules = ident["rules"]
     nozzle = ident["nozzle_diameter_mm"]
@@ -684,6 +780,9 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
         "outline.outline_color": (record["outline"]["outline_color"],
                                   settings["outline_color"]),
         "outline.method": (record["outline"]["method"], ident["methods"]["outline"]),
+        "outline.thresholds": (record["outline"]["thresholds"],
+                               {r: ident["rules"][r] for r in (THIN_SHARE_RULE, KEEP_WIDTH_RULE)
+                                if r in ident["rules"]}),
         "merges": ([[m["from"], m["into"]] for m in record["merges"]], settings["merge"]),
     }
     for field, (got, want) in duplicates.items():
@@ -696,6 +795,8 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
         raise ColorsError(f"colors.json is inconsistent: ready is true but the palette has "
                           f"{k} colors, more than colors {settings['colors']}")
     _check_extraction(record, settings, palette)
+    _check_outline(record, settings, rules)
+    _check_shade_pairs(record, rules)
     data = _verified_outputs(colors_dir, record, check_preview)
     labels8 = _decode(data["labels.png"], "labels.png", "L")
     if labels8.shape != (inp["height_px"], inp["width_px"]):
@@ -716,7 +817,10 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
             ("mm_per_px", record["mm_per_px"], mm_per_px),
             ("limits.mm_per_px", lim["mm_per_px"], mm_per_px),
             ("limits.min_width_px", lim["min_width_px"], opening_mm / mm_per_px),
-            ("limits.min_area_px", lim["min_area_px"], island_mm2 / mm_per_px ** 2)):
+            ("limits.min_area_px", lim["min_area_px"], island_mm2 / mm_per_px ** 2),
+            *((("outline.keep_width.px", outline["keep_width"]["px"],
+                outline["keep_width"]["mm"] / mm_per_px),)
+              if outline["keep_width"] is not None else ())):
         if got != want:
             raise ColorsError(f"colors.json is inconsistent: {field} is not what width_mm, "
                               "the rules and labels.png give")
@@ -750,9 +854,9 @@ def _check_palette(palette: list, base_index, base) -> int:
     return want
 
 
-def _check_extraction_settings(settings: dict, n_extracted, family) -> None:
-    """extract >= colors, and the setting indices against the recorded extraction size and
-    outline family, as make_colors checked them (tdmg.color_config)."""
+def _check_extraction_settings(settings: dict, n_extracted, family, core) -> None:
+    """extract >= colors, and the setting indices against the recorded extraction size,
+    outline family and core, as make_colors checked them (tdmg.color_config)."""
     if settings["extract"] < settings["colors"]:
         raise ColorsError(f"identity.settings: extract {settings['extract']} is below colors "
                           f"{settings['colors']}")
@@ -764,9 +868,11 @@ def _check_extraction_settings(settings: dict, n_extracted, family) -> None:
             or not all(type(i) is int and 0 <= i < n_extracted for i in family)):
         raise ColorsError("colors.json is inconsistent: outline.family must be sorted, "
                           "distinct extraction indices")
+    if core is not None and core not in family:
+        raise ColorsError("colors.json is inconsistent: outline.core is not in outline.family")
     try:
         check_extraction_indices(settings["outline_color"], settings["merge"], n_extracted,
-                                 family)
+                                 family, core)
     except ColorConfigError as e:
         raise ColorsError(f"identity.settings: {e}") from None
 
@@ -780,9 +886,12 @@ def _check_extraction(record: dict, settings: dict, palette: list) -> None:
     want_found_by = oc if oc in ("auto", "none") else "config"
     if outline["found_by"] != want_found_by:
         raise _inconsistent("outline.found_by")
-    if isinstance(oc, list) and not set(oc) <= set(outline["family"]):
-        raise ColorsError("colors.json is inconsistent: outline.family does not hold every "
-                          "index of outline_color")
+    if isinstance(oc, list) and sorted(oc) != outline["family"]:
+        raise ColorsError("colors.json is inconsistent: outline.family is not the "
+                          "outline_color list")
+    if oc == "none" and outline["family"] != []:
+        raise ColorsError("colors.json is inconsistent: outline.family is not empty but "
+                          "outline_color is none")
     if [e["index"] for e in ext] != list(range(len(ext))) or (
             record["extraction"]["n_extracted"] != len(ext)):
         raise ColorsError("colors.json is inconsistent: extraction indices are not 0..n-1")
@@ -790,6 +899,16 @@ def _check_extraction(record: dict, settings: dict, palette: list) -> None:
         raise ColorsError("colors.json is inconsistent: the extraction palette is not "
                           "quantize.palette_hex")
     hexes = [e["hex"] for e in ext]
+    for e in ext:
+        rgb = e["rgb"]
+        if (not isinstance(rgb, list) or len(rgb) != 3
+                or not all(type(v) is int and 0 <= v <= 255 for v in rgb)
+                or e["hex"] != "#" + "".join(f"{v:02x}" for v in rgb)):
+            raise ColorsError(f"colors.json is inconsistent: extraction entry {e['index']}'s "
+                              "rgb is not three ints 0..255 with its hex")
+        if e["lab"] != srgb_to_lab(np.array([rgb], np.uint8))[0].tolist():
+            raise ColorsError(f"colors.json is inconsistent: extraction entry {e['index']}'s "
+                              "lab is not the CIELAB of its rgb")
     for m in record["merges"]:
         for end in ("from", "into"):
             if m[f"{end}_hex"] != hexes[m[end]]:
@@ -811,6 +930,8 @@ def _check_extraction(record: dict, settings: dict, palette: list) -> None:
             why = "merged_into is not set" if fate == "merged" else "merged_into is set"
         elif fate == "outline" and i not in outline["family"]:
             why = "it is not in outline.family"
+        elif fate != "outline" and i in outline["family"] and i != outline["core"]:
+            why = "it is an outline-family member other than the core"
         elif fate == "cleanup" and e["hex"] not in dropped:
             why = "its hex is not in cleanup.dropped_hex"
         if why:
@@ -824,6 +945,52 @@ def _check_extraction(record: dict, settings: dict, palette: list) -> None:
         if not any(e["final_index"] == k and e["hex"] == p["hex"] for e in ext):
             raise ColorsError(f"colors.json is inconsistent: final color {k} ({p['hex']}) is "
                               "not the final_index of an extraction entry with the same hex")
+
+
+def _check_outline(record: dict, settings: dict, rules: dict) -> None:
+    """The outline block: thinness, the auto family, family_hex, the core and keep_width."""
+    outline = record["outline"]
+    ext = record["extraction"]["palette"]
+    family = outline["family"]
+    thin = outline["thinness"]
+    if not isinstance(thin, list) or len(thin) != len(ext) or not all(
+            not isinstance(t, bool) and isinstance(t, numbers.Real) and 0 <= t <= 1
+            for t in thin):
+        raise ColorsError("colors.json is inconsistent: outline.thinness must hold one "
+                          "number from 0 to 1 per extracted color")
+    if outline["found_by"] == "auto":
+        t = rules[THIN_SHARE_RULE]
+        if family != [i for i, v in enumerate(thin) if v > t]:
+            raise ColorsError("colors.json is inconsistent: outline.family is not the colors "
+                              f"whose thinness is above {THIN_SHARE_RULE} ({t})")
+    if outline["family_hex"] != [ext[i]["hex"] for i in family]:
+        raise _inconsistent("outline.family_hex")
+    core = outline_core(family, [e["lab"] for e in ext])
+    if outline["core"] != core:
+        raise ColorsError("colors.json is inconsistent: outline.core is not the darkest "
+                          "family member")
+    if outline["core_hex"] != (None if core is None else ext[core]["hex"]):
+        raise _inconsistent("outline.core_hex")
+    keep = KEEP_WIDTH_RULE in rules
+    kw = outline["keep_width"]
+    if (kw is None) == keep or (keep and (set(kw) != {"mm", "px"}
+                                          or kw["mm"] != rules[KEEP_WIDTH_RULE])):
+        raise _inconsistent("outline.keep_width")
+
+
+def _check_shade_pairs(record: dict, rules: dict) -> None:
+    """The shade pairs are recomputed from the extraction palette's Lab (checked to be the
+    CIELAB of its rgb) and the identity's shade rules."""
+    ext = record["extraction"]["palette"]
+    core = record["outline"]["core"]
+    candidates = [e["index"] for e in ext
+                  if e["fate"] in ("final", "cleanup") and e["index"] != core]
+    want = shade_pair_records(shade_pairs([e["lab"] for e in ext], [e["hex"] for e in ext],
+                                          candidates, rules[SHADE_HUE_RULE],
+                                          rules[SHADE_CHROMA_RULE]))
+    if record["shade_pairs"] != _json_plain(want):
+        raise ColorsError("colors.json is inconsistent: shade_pairs are not the pairs the "
+                          "extraction palette and the shade rules give")
 
 
 def _verified_outputs(colors_dir: Path, record: dict, check_preview: bool) -> dict[str, bytes]:

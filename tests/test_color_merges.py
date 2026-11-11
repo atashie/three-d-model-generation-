@@ -1,4 +1,4 @@
-"""tdmg.color: the owner's merges, index tracking (Quantized.remap) and the outline seam
+"""tdmg.color: the owner's merges, index tracking (Quantized.remap) and the outline step
 (docs/plans/2026-11-11-color-palette.md, Task 7b)."""
 
 import numpy as np
@@ -7,7 +7,6 @@ import pytest
 from tdmg.color import (
     KEEP_NO_EFFECT_NOTE,
     OUTLINE_METHOD,
-    OUTLINE_PLACEHOLDER_NOTE,
     OUTSIDE,
     ColorError,
     OutlineResult,
@@ -157,33 +156,29 @@ def test_clean_regions_remap_follows_its_palette(q5):
             assert cleaned.hex[j] == q5.hex[i]
 
 
-# --- the outline seam (Task 7c fills it in) ---------------------------------------------
+# --- the outline step on five 1-pixel-tall stripes (tests/test_color_outline.py has the
+# --- detection, drop and keep cases) --------------------------------------------------
+
+def _limits():
+    from tdmg.color import printable_limits_px
+    from tdmg.profiles import load_printer
+    from tdmg.rules import load_rules
+    return printable_limits_px(0.1, load_rules(), load_printer("bambu-a1")), load_rules()
+
 
 @pytest.mark.parametrize("outlines", ["drop", "keep"])
 def test_outline_none_does_nothing(q5, outlines):
-    out, res = handle_outlines(q5, outline_color="none", outlines=outlines)
+    limits, rules = _limits()
+    out, res = handle_outlines(q5, outline_color="none", outlines=outlines, limits=limits,
+                               rules=rules)
     assert out is q5
     notes = (KEEP_NO_EFFECT_NOTE,) if outlines == "keep" else ()
-    assert res == OutlineResult(family=(), found_by="none", method=OUTLINE_METHOD,
-                                remap=(0, 1, 2, 3, 4), notes=notes)
-
-
-@pytest.mark.parametrize("outlines", ["drop", "keep"])
-def test_outline_auto_is_a_placeholder_that_finds_nothing(q5, outlines):
-    out, res = handle_outlines(q5, outline_color="auto", outlines=outlines)
-    assert out is q5 and res.family == () and res.found_by == "auto"
-    assert res.method == OUTLINE_METHOD == "outline-not-implemented/0"
-    assert res.remap == (0, 1, 2, 3, 4)
-    assert res.notes[0] == OUTLINE_PLACEHOLDER_NOTE and "not implemented" in res.notes[0]
-    assert res.notes[1:] == ((KEEP_NO_EFFECT_NOTE,) if outlines == "keep" else ())
-    assert "keep has no effect: no outline color" in KEEP_NO_EFFECT_NOTE
-
-
-def test_an_explicit_outline_list_is_refused_until_task_7c(q5):
-    with pytest.raises(ColorError, match="not implemented yet"):
-        handle_outlines(q5, outline_color=[4], outlines="drop")
+    assert (res.family, res.core, res.found_by, res.method, res.remap, res.notes) == (
+        (), None, "none", OUTLINE_METHOD, (0, 1, 2, 3, 4), notes)
+    assert isinstance(res, OutlineResult) and len(res.thinness) == 5
 
 
 def test_a_bad_outlines_value_is_refused(q5):
+    limits, rules = _limits()
     with pytest.raises(ColorError, match="outlines must be drop or keep"):
-        handle_outlines(q5, outline_color="none", outlines="hide")
+        handle_outlines(q5, outline_color="none", outlines="hide", limits=limits, rules=rules)

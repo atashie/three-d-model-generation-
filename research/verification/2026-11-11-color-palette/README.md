@@ -423,3 +423,33 @@ merge, as the owner decided.
   must still handle them.
 - Oddie's mouth has a darker upper-right part in the cutout. It gets no cluster of its
   own at any N from 4 to 7 (by eye).
+
+## Addendum, 2026-11-11: Task 7c on the owner's images
+
+**Setup:** Windows PC, `tdmg colors` at git HEAD after Task 7c, 60 mm, defaults (extract 6,
+colors 4, smooth, `outline_color: auto`, `outlines: drop`). The outputs are in the
+git-ignored `artifacts/colors-runs/` (`roadie-tol30-60-drop`, `roadie-tol30-60-keep`,
+`oddie-60-default`, `oddie-60-merge-blues`). The thinness values that `tdmg.color` records
+equal the N = 6 rows of `outline-shade.txt`:
+- Roadie: 93.9%, 87.4% and 96.3% for the family; 4.7%, 3.7% and 2.7% for the others.
+- Oddie: 100% for the black; 9.9% at most for the others.
+
+**Results:**
+- **Roadie, drop:** the family is 2, 3 and 5; the core is 3 `#451812`. The final colors
+  are red, white, yellow and the core (1.6%, mostly the pupil). The plan is ready.
+- **Roadie, keep:** the same family. The 0.6 mm (5.99 px) band is 38.4% of the subject.
+  Twice the distance transform on the band's ridge gives a median of 6.3 px (10th–90th
+  percentile 6.0–7.2 px). Axis-aligned runs of the band are mostly 6–8 px, longer where a
+  border is diagonal.
+- **Oddie, default:** the family is 4, the black lines. No wide area is left, so the core
+  is removed. 5 colors remain and the plan is not ready. Flagged:
+  - the greens 0–2: dh 0.19°, C* 40.9 and 69.9;
+  - the blues 1–3: dh 1.48°, C* 21.9 and 15.0.
+- **Oddie, `merge: [[3, 1]]`:** 4 colors; the plan is ready.
+
+**Seen by eye** (my judgement of the four previews):
+- **Roadie, drop:** the outline is gone and the pupil stays dark. The crest and tail tips
+  keep small dark ends, and so does one dot at the belly's edge.
+- **Roadie, keep:** the band looks uniform along the borders and the outer edge.
+- **Oddie:** the lines and leaf veins are gone. A dotted dark fringe remains along parts of
+  the outer edge; this is the fringe noted in Surprises above.
