@@ -991,7 +991,8 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
     assert PORTABILITY_MEANING == (
         "a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read "
         "agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full "
-        "height with the A1 bed, nozzle, layer and filament settings")
+        "height, with extrusion on every layer, given the A1 bed, nozzle, layer and filament "
+        "settings (its other settings are PrusaSlicer's defaults)")
     assert "share the admesh STL reader" in check["note"]
     assert "3MF output must re-run portability" in check["note"]
     mesh = json.loads((flat_dir / "flat.json").read_bytes())["mesh"]
@@ -1059,7 +1060,13 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
     ({"gcode_empty": True}, "--export-gcode wrote an empty G-code"),
     # An uneven Z sequence with the right count and top, and a missing ;Z: line.
     ({"z": {"5": "1.1"}}, "its ;Z: at layer 5 of 15 is 1.1 mm, not 1 mm"),
-    ({"z": {"7": None}}, "the G-code has 14 ;Z: lines for 15 layers")])
+    ({"z": {"7": None}}, "the G-code has 14 ;Z: lines for 15 layers"),
+    # Codex review 2026-11-11, finding 1: markers alone must not pass.
+    ({"truncate": True}, "does not end with '; prusaslicer_config = end': it is incomplete"),
+    ({"no_extrusion": [15]}, "layer 15 of 15 has no extruding move"),
+    ({"no_extrusion": list(range(1, 16))}, "layer 1 of 15 has no extruding move"),
+    ({"move_z": {"9": "2.000"}}, "layer 9 of 15 extrudes at Z 2 mm, not at its 1.8 mm"),
+    ({"move_z": {"3": "0.6015"}}, "more than the 3 decimals")])
 def test_portability_fails_and_names_the_first_failed_condition(flat_dir, fake, prusa,
                                                                  tmp_path, control, reason):
     out = tmp_path / "slice"

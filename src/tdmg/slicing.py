@@ -22,8 +22,11 @@ gives a different slice_id.
 
 F6.portability runs PrusaSlicer 2.9.7 (tdmg.portability;
 docs/plans/2026-11-11-portability-check.md) when --prusaslicer-dir or
-$TDMG_PRUSASLICER_DIR gives its folder, with every setting passed explicitly from the
-hash-checked OrcaSlicer A1 profiles. Without it, F6.portability is UNKNOWN. For STL it
+$TDMG_PRUSASLICER_DIR gives its folder. The bed shape and height, nozzle diameter, layer
+and first-layer heights and filament diameter are passed explicitly from the hash-checked
+OrcaSlicer A1 profiles; every other setting is PrusaSlicer 2.9.7's default (Codex review
+2026-11-11, finding 3: for example 20% infill, no elephant-foot compensation and the
+Arachne perimeter generator, where the A1 profile has 15%, 0.075 mm and classic). Without it, F6.portability is UNKNOWN. For STL it
 shows that a second slicer accepts the model as modelled and slices its full height
 (tdmg.portability.PORTABILITY_MEANING); both slicers share the admesh STL reader, so a 3MF
 output must re-run portability with truly different readers. Its G-code is kept as
@@ -144,7 +147,9 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   and its commands; the record has "portability" and "certification_note". Revised
 #   before it was pushed: an unverified app tree caps the certification, each PrusaSlicer
 #   run has its own timeout rule, its G-code is a .gcode.txt file, every ";Z:" is checked
-#   and any open_edges line FAILs.
+#   and any open_edges line FAILs. After the Codex review (2026-11-11), still before the
+#   push: PrusaSlicer's G-code must be complete and extrude on every layer at its height,
+#   and the volume bound covers admesh's zeroed normals.
 SLICE_ALGORITHM_VERSION = "slice-4"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"

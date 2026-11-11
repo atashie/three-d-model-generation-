@@ -9,8 +9,9 @@ Everything is checked against profiles/slicers/prusaslicer-2.9.7.yaml:
 2. extract it into a fresh DIR/app/ and check the console exe, PrusaSlicer.dll and the whole
    app tree (every file) against the pin.
 --verify-only checks the same hashes, including the whole app tree, without downloading.
-No profile is installed: tdmg slice passes every PrusaSlicer setting on the command line,
-taken from the pinned OrcaSlicer A1 profiles. The download, extraction and checks are
+No profile is installed: tdmg slice passes the bed, nozzle, layer and filament settings on
+the command line, taken from the pinned OrcaSlicer A1 profiles; every other setting is
+PrusaSlicer's default. The download, extraction and checks are
 shared with scripts/setup_orcaslicer.py (scripts/_slicer_setup.py).
 
 PrusaSlicer is AGPL-3.0. Its files are only downloaded to DIR (git-ignored under
