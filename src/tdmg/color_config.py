@@ -5,19 +5,22 @@ config file, then the defaults. Each source is validated in full, so a bad value
 is refused even when a flag overrides it. The resolved settings, the source of each one and
 the config file's SHA-256 are returned for the record.
 
-The config file is YAML, read with yaml.safe_load. It must be a mapping of known keys to
-valid values; anything else is refused with a message naming the key. Duplicate keys are
-refused too, because yaml.safe_load would silently keep the last one, and so are null
-values, non-scalar keys and merge keys (<<). An empty file (or one holding only comments)
-means "no settings": every key takes its default, and the file's hash is still recorded. Keys for later steps (min_glue_piece, face) are refused as unknown
-until those steps add them.
+The config file is YAML, read with a yaml.SafeLoader subclass (safe types only). It must
+be a mapping of known keys to valid values; anything else is refused with a message naming
+the key. The loader also refuses duplicate keys (yaml.safe_load would silently keep the
+last one), non-scalar keys and merge keys (<<); null values are refused after loading.
+An empty file (or one holding only comments) means "no settings": every key takes its
+default, and the file's hash is still recorded. Keys for later steps (min_glue_piece, face)
+are refused as unknown until those steps add them.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Annotated, Literal
 
 import yaml
@@ -28,13 +31,14 @@ from tdmg.rules import Rule
 
 # One color is R1 (tdmg flat), not a multicolor print, so a palette has at least two.
 MIN_COLORS = 2
-KEYS = ("colors", "edges", "base")
-DEFAULTS = {"edges": "smooth", "base": "auto"}     # colors defaults to the profile's cap
+DEFAULTS = {"edges": "smooth", "base": "auto"}
+PROFILE_DEFAULT = "colors"                         # defaults to the profile's palette cap
 SMOOTH_RULE = "flat.smooth.sigma_px"
 FURRY_RULE = "color.edges.furry_sigma_px"
 
 Edges = Literal["smooth", "furry", "exact"]
 Base = Literal["auto"] | Annotated[StrictInt, Field(ge=0)]
+Source = Literal["flag", "config", "profile", "default"]
 
 
 class ColorConfigError(ValueError):
@@ -58,11 +62,28 @@ class ColorConfig(BaseModel):
         return v
 
 
+KEYS = tuple(ColorConfig.model_fields)
+# Every key needs a default, so a key added to ColorConfig without one fails at import.
+if set(DEFAULTS) | {PROFILE_DEFAULT} != set(KEYS) or PROFILE_DEFAULT in DEFAULTS:
+    raise RuntimeError(f"color defaults {sorted(DEFAULTS)} + {PROFILE_DEFAULT!r} do not "
+                       f"match the ColorConfig keys {list(KEYS)}")
+
+
 @dataclass(frozen=True)
 class ResolvedColorConfig:
-    settings: dict          # colors, edges, base
-    sources: dict           # per key: "flag", "config", "profile" or "default"
+    """The settings used, the source of each, and the config file's hash. Read-only."""
+    settings: Mapping[str, str | int]       # colors, edges, base
+    sources: Mapping[str, Source]
     config_sha256: str | None
+
+    def __post_init__(self):
+        object.__setattr__(self, "settings", MappingProxyType(dict(self.settings)))
+        object.__setattr__(self, "sources", MappingProxyType(dict(self.sources)))
+
+    def as_record(self) -> dict:
+        """Plain, independent dicts for the record (canonical_json cannot take a proxy)."""
+        return {"settings": dict(self.settings), "sources": dict(self.sources),
+                "config_sha256": self.config_sha256}
 
 
 def palette_cap(printer: PrinterProfile) -> int:
@@ -92,6 +113,8 @@ def _validate(data: dict, cap: int, where: str) -> ColorConfig:
                 msg = f"unknown key {key!r} (known keys: {', '.join(KEYS)})"
             elif key == "base":
                 msg = f"base must be auto or a color index, 0 or more (got {err['input']!r})"
+            elif err["type"] == "value_error":        # our own validator's message, unprefixed
+                msg = f"{key}: {err['ctx']['error']} (got {err['input']!r})"
             else:
                 msg = f"{key}: {err['msg']} (got {err['input']!r})"
             problems.setdefault(key, msg)
@@ -121,7 +144,9 @@ def read_config(path: str | Path) -> tuple[dict, str]:
 
     The file must be UTF-8; a leading UTF-8 byte-order mark is accepted (and hashed, since
     the hash is of the bytes). A null value (`colors: ~`, `edges: null`, or `base:` with
-    nothing after it) is refused: in the file, a key is either set or left out.
+    nothing after it) is refused: in the file, a key is either set or left out. Anchors and
+    aliases (&name, *name) are accepted: they only repeat a value, which is then validated
+    like any other.
     """
     path = Path(path)
     try:
@@ -134,7 +159,8 @@ def read_config(path: str | Path) -> tuple[dict, str]:
     except UnicodeDecodeError:
         raise ColorConfigError(f"{where} is not UTF-8 text") from None
     try:
-        # A SafeLoader subclass: yaml.safe_load plus the duplicate-key refusal.
+        # A SafeLoader subclass: safe types only, and duplicate, merge (<<) and non-scalar
+        # keys refused.
         raw = yaml.load(text, Loader=_UniqueKeyLoader)
     except ColorConfigError as e:
         raise ColorConfigError(f"{where}: {e}") from None
@@ -175,10 +201,13 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
             settings[key], sources[key] = getattr(from_flags, key), "flag"
         elif getattr(from_file, key) is not None:
             settings[key], sources[key] = getattr(from_file, key), "config"
-        elif key == "colors":
+        elif key == PROFILE_DEFAULT:
             settings[key], sources[key] = cap, "profile"
         else:
             settings[key], sources[key] = DEFAULTS[key], "default"
+    # Cleanup only shrinks the palette, so a base at or above colors can never be valid.
+    # check_base is applied again to the final palette.
+    check_base(settings["base"], settings["colors"])
     edge_sigma_px(settings["edges"], rules)
     return ResolvedColorConfig(settings=settings, sources=sources, config_sha256=sha)
 
@@ -188,8 +217,9 @@ def check_base(base: str | int, n_colors: int) -> None:
     if base == "auto":
         return
     if isinstance(base, bool) or not isinstance(base, int) or not 0 <= base < n_colors:
-        raise ColorConfigError(f"base {base!r} is not a color index of this palette "
-                               f"(0 to {n_colors - 1}); choose one from the preview or use auto")
+        raise ColorConfigError(f"base {base!r} is not a color index of a {n_colors}-color "
+                               f"palette (0 to {n_colors - 1}); choose one from the preview or "
+                               "use auto")
 
 
 def edge_sigma_px(edges: str, rules: dict[str, Rule]) -> tuple[float, str | None]:
@@ -197,9 +227,14 @@ def edge_sigma_px(edges: str, rules: dict[str, Rule]) -> tuple[float, str | None
 
     smooth reuses the outline-smoothing rule; exact is no blur by definition, so no rule.
     """
+    # Values from a config or flag are already checked by the Edges Literal; this check
+    # guards direct callers.
     if edges == "exact":
         return 0.0, None
     rule_id = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE}.get(edges)
     if rule_id is None:
         raise ColorConfigError(f"edges {edges!r} is not a preset (smooth, furry or exact)")
+    if rule_id not in rules:
+        raise ColorConfigError(f"edges {edges!r} needs rule {rule_id}, which is not in the "
+                               "rules registry")
     return float(rules[rule_id].default), rule_id

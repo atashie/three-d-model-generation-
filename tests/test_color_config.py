@@ -8,8 +8,11 @@ import pytest
 import yaml
 
 from tdmg.color_config import (
+    KEYS,
     MIN_COLORS,
+    ColorConfig,
     ColorConfigError,
+    ResolvedColorConfig,
     check_base,
     edge_sigma_px,
     palette_cap,
@@ -224,7 +227,7 @@ def test_unknown_preset_is_refused():
 
 
 def test_a_complex_key_is_refused(tmp_path):
-    with pytest.raises(ColorConfigError, match="key"):
+    with pytest.raises(ColorConfigError, match="plain name"):
         _resolve(path=_config(tmp_path, "? [a]\n: 1\n"))
 
 
@@ -253,3 +256,75 @@ def test_a_utf8_bom_is_accepted_and_hashed_as_written(tmp_path):
     r = _resolve(path=path)
     assert r.settings["colors"] == 3 and r.sources["colors"] == "config"
     assert r.config_sha256 == hashlib.sha256(data).hexdigest()
+
+
+# ---- review additions ----------------------------------------------------------------------
+
+def test_base_from_the_file_is_recorded_as_config(tmp_path):
+    r = _resolve(path=_config(tmp_path, "base: 2\n"))
+    assert (r.settings["base"], r.sources["base"]) == (2, "config")
+
+
+@pytest.mark.parametrize("flags, path_text", [
+    ({"base": 4}, None), ({"colors": 2, "base": 2}, None), (None, "colors: 3\nbase: 3\n"),
+    ({"colors": 2}, "base: 3\n"),
+])
+def test_base_at_or_above_colors_is_refused_when_resolving(tmp_path, flags, path_text):
+    path = _config(tmp_path, path_text) if path_text else None
+    with pytest.raises(ColorConfigError, match="base .* is not a color index"):
+        _resolve(flags, path)
+
+
+def test_colors_1_from_flags_gives_the_range_message():
+    with pytest.raises(ColorConfigError, match="colors: must be between 2 and 4"):
+        _resolve({"colors": 1})
+
+
+def test_a_profile_cap_below_the_minimum_is_refused():
+    with pytest.raises(ColorConfigError, match="at least 2"):
+        palette_cap(_printer_with_slots(1))
+
+
+def test_a_quoted_merge_key_is_an_ordinary_unknown_key(tmp_path):
+    with pytest.raises(ColorConfigError, match="unknown key '<<'"):
+        _resolve(path=_config(tmp_path, "'<<': 3\n"))
+
+
+def test_anchors_and_aliases_are_accepted(tmp_path):
+    assert _resolve(path=_config(tmp_path, "colors: &n 3\n")).settings["colors"] == 3
+    # The alias resolves to 3, which is then refused as a base for a 3-color palette.
+    with pytest.raises(ColorConfigError, match="base 3"):
+        _resolve(path=_config(tmp_path, "colors: &n 3\nbase: *n\n"))
+
+
+def test_resolved_config_is_immutable_and_gives_plain_dicts_for_the_record(tmp_path):
+    r = _resolve(path=_config(tmp_path, "edges: furry\n"))
+    with pytest.raises(TypeError):
+        r.settings["colors"] = 2
+    with pytest.raises(TypeError):
+        r.sources["colors"] = "flag"
+    rec = r.as_record()
+    assert rec == {"settings": {"colors": 4, "edges": "furry", "base": "auto"},
+                   "sources": {"colors": "profile", "edges": "config", "base": "default"},
+                   "config_sha256": r.config_sha256}
+    assert type(rec["settings"]) is dict and type(rec["sources"]) is dict
+    rec["settings"]["colors"] = 2           # a copy: the resolved config is unchanged
+    assert r.settings["colors"] == 4
+
+
+def test_resolved_config_copies_its_inputs():
+    settings = {"colors": 3, "edges": "smooth", "base": "auto"}
+    r = ResolvedColorConfig(settings=settings, sources={k: "flag" for k in KEYS},
+                            config_sha256=None)
+    settings["colors"] = 2
+    assert r.settings["colors"] == 3
+
+
+def test_keys_come_from_the_model():
+    assert KEYS == tuple(ColorConfig.model_fields) == ("colors", "edges", "base")
+
+
+def test_a_missing_rule_is_a_clear_error():
+    rules = {k: v for k, v in RULES.items() if k != "color.edges.furry_sigma_px"}
+    with pytest.raises(ColorConfigError, match="color.edges.furry_sigma_px"):
+        edge_sigma_px("furry", rules)
