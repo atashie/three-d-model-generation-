@@ -282,3 +282,55 @@ So two settings, extraction and merges, are added before Task 8:
 - **Snapping to owned filaments** (the owner chose suggestions for now).
 - **Dithering, gradients and more than the profile's cap.**
 - **Interpreting free text:** config keys only.
+
+### Task 7a result and the owner's follow-up decisions (2026-11-11)
+
+**Measured** (`research/verification/2026-11-11-color-palette/`, addendum "outline and
+shade indicators"):
+- **Outlines:** a thinness rule finds the outline as a *family* of colors, a dark core
+  plus fringe tones where the line meets each fill. The share of a color's pixels
+  removed by the printable opening is 66–100% for outline colors and at most 10% for
+  real ones.
+- **Shade pairs:** they are separable only after the outline family is removed. Both
+  colors are chromatic and their hue angles differ by less than about 5.5°.
+- **Extraction:** Oddie needs N = 6 for its lines and both shade pairs to be extracted.
+- **The pupil:** Roadie's pupil has the outline color.
+
+**Owner decisions (answers to two questions):**
+- **Pupil:** "Keep wide areas (Recommended)". Only thin strokes of the outline colors
+  are outline. Wide areas (kept by the printable opening) stay as a real feature, in
+  the darkest outline color.
+- **Extraction:** "Extract 6 by default (Recommended)".
+
+**Design for 7b–7c, decided by the controller from the above:**
+- **The pipeline:**
+  1. quantize to `extract` colors;
+  2. the outline family is `outline_color` (`auto` = every color with thinness > T;
+     `none`; or a list of extraction indices);
+  3. under `drop`, the thin pixels of the family take the nearest non-family color (by
+     exact distance, with cleanup's tie rule); the family's remaining wide pixels take
+     its darkest member's color;
+  4. under `keep`, the same, and then a band of width W in the darkest family color is
+     drawn along every border between colors (centred on the border) and inside the
+     outer edge;
+  5. the owner's `merge` pairs are applied;
+  6. the shade pairs among the remaining colors are flagged (reported, never applied);
+  7. cleanup and smoothing run as before.
+- **Too many colors:** if more than `colors` (now the maximum of final colors) remain,
+  the outputs are still written with `ready: false` and the reason (the flagged pairs to
+  consider merging). The CLI exits 1 (files written, not usable), and `verify_colors`
+  refuses a plan that is not ready.
+- **Indices:** the config's indices (`outline_color`, `merge`) are extraction indices,
+  which the preview shows with their flags. The record maps extracted colors to final
+  ones.
+- **New rules, all hypotheses from two images:**
+  - the extraction default (6);
+  - the outline thinness threshold T (0.38, the gap midpoint);
+  - the shade hue threshold H (5.5°);
+  - the chroma floor (8.5);
+  - the kept-outline width W. It starts at the printable minimum, `flat.sliver.opening_width`,
+    so that it prints; the owner judges it in the preview.
+- **7b:** the config keys (`extract`, `outlines`, `outline_color`, `merge`), the rules,
+  the merge and ready plumbing, the identity, the record and `verify_colors`.
+- **7c:** outline detection, drop and keep, shade-pair flags, and the preview's
+  extraction panel.
