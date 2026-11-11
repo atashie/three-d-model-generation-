@@ -504,3 +504,179 @@ The owner's answers, verbatim:
    standardize this decision."
 4. "I think a touch finer would be good (0.4 mm?)."
 5. "drop them".
+
+## Addendum, 2026-11-11: Task 7e-a, what survives drop, holes and inlets, stroke specks
+
+**Setup:** Windows PC, git `45d4c0d`, no library change. The script is
+`measure_wide_holes.py` (its docstring defines every term and column); its output is
+`wide-holes.txt`. It runs `tdmg.color_plan.plan_colors` with the `tdmg colors` defaults
+(extract 6, `outline_color: auto`, `outlines: drop`, no merge), printer bambu-a1, 60 mm, on
+`artifacts/selection-runs/roadie-tol30` and `artifacts/selection-runs/oddie`. The previews
+are in the git-ignored `artifacts/wide-holes-runs/` (`<name>-wide.png`, `-holes.png`,
+`-strokes.png`, `-rules.png`). At 60 mm, 1 px is 0.1002 mm on Roadie and 0.0747 mm on
+Oddie.
+
+Command: `uv run python research/verification/2026-11-11-color-palette/measure_wide_holes.py
+artifacts/wide-holes-runs artifacts/selection-runs/roadie-tol30 artifacts/selection-runs/oddie`
+
+### 1. Wide outline-color components under drop
+
+- **Roadie:** 1630 wide family pixels in 42 components (W1 to W42). 662 of them are non-core
+  (21 components, N1 to N21).
+- **Oddie:** no wide family pixel, so there is nothing to measure here.
+
+The current cleanup keeps these W components in the core color (the "final" column):
+- W1, W2, W3, W4, W5, W7, W8, W9 and W17: 100% each.
+- W26: 26%.
+- All the others: 0%.
+
+**My by-eye identification** (from `roadie-tol30-wide.png`; the controller should check it).
+Survivors of the current cleanup are in bold.
+
+| Owner's word | Components | Members |
+|---|---|---|
+| pupil | **W1**: 421 px, 4.22 mm², inscribed 18.9 px = 1.89 mm, no exterior contact | core only |
+| head feathers | **W2**, **W3**, **W17**, **W26**, W14, W27, W23, W16 | core: W2, W17, W14, W23, W16. `#960a0a`: W3, W26, W27 |
+| tail feathers | **W7**, **W9**, W18, W19, W21, W30, W12 | core: W9, W18, W21, W12. `#960a0a`: W7, W19, W30 |
+| mouth | **W5**, **W8**, W6, W10, W24, W33, W36, W37, W29 | `#960a0a`: W5, W6, W10, W36, W37. core: W8, W24, W33, W29 |
+| chest (right edge of the white) | **W4**, W15, W31, W34 | `#746c5b`: W4. `#960a0a`: W31. core: W15, W34 |
+| eye-beak junction | W22, W28 | `#746c5b`: W22. core: W28 |
+| legs and feet | W11, W13, W20, W25, W32, W35, W38 to W42 | mixed |
+
+The survivors are exactly the places the owner named: the head and tail tips, the mouth and
+the chest dot.
+
+**What separates the pupil from the rest (Roadie only):**
+- **Inscribed width** (2 × the maximum EDT; this reads about 1 px over the true width):
+  - W1 is 18.9 px (1.89 mm).
+  - All 41 other W components are 6.3 px (0.63 mm, W5) or less.
+  - Every other W component with core pixels is 6.0 px (0.60 mm) or less.
+- **Area:** W1 is 4.22 mm². The next largest are W2 at 0.79 mm² (core) and W3 at 0.75 mm²
+  (non-core).
+- **Exterior contact** does not separate them:
+  - W1 does not touch the exterior.
+  - The core survivors W2, W8, W9 and W17 all touch it.
+  - The non-core survivors W3, W5 and W7 do not touch it, and neither do some removed core
+    pieces (W28, W33).
+- **Compactness** does not separate them: W1 is 0.454, and the others are 0.337 to 0.675.
+- **The family's stroke width:** 2 × EDT on `stroke_ridge(S)` has a median of 4.0 px
+  (0.40 mm) and a p90 of 6.0 px (0.60 mm). S is the set of family thin pixels. The remnants
+  are as wide as the drawn strokes; the pupil is about 3 × wider.
+
+### 2. Holes and inlets
+
+- **Holes:** 0 on both images, with 4-connectivity and with 8-connectivity of the outside.
+- **No background shows inside the subject in the owner's preview.** In the right panel of
+  `artifacts/colors-review-2/1-roadie-outline-dropped.png` (2 × scale), 0 checkerboard
+  pixels (grey 200 or 235) are inside the mask, and all 2,349,376 pixels outside the mask
+  are checkerboard.
+  - I checked this with an inline script, which is not in the committed script. It compared
+    `np.kron(mask, ones((2, 2)))` with the panel, columns 1672 to 3343.
+- **Inlets:** I closed the mask (`not open_mask(not mask, w)`) and then filled holes.
+  - The area this encloses grows gradually with w. No pocket jumps to its full area at a
+    small w, as a pocket behind a narrow inlet would.
+  - The Roadie pockets of island size or more at 2.0 mm are these:
+    - P1, between the tail and the legs: 4120 px at 2.0 mm, but only 220 px at 1.25 mm.
+    - P2 to P5, P7 and P8: the notches between the crest feathers and between the tail
+      feathers.
+    - P6: the open mouth.
+    - P9: a notch at the chest.
+  - On Oddie, the pockets are concavities along the dark-blue arms and feet.
+- **The places the owner named.** These are my by-eye picks; the owner did not mark them.
+  "Enclosed" is the largest area that the closing encloses within 12 px of the point.
+
+  | Place | The point is | Enclosed at 0.4 mm | Enclosed at 2.0 mm |
+  |---|---|---|---|
+  | Forehead-beak wedge next to the eye (236, 507) | exterior | 1 px | 13 px |
+  | Right foot: wedge between the cuff and the shoe (526, 627) | exterior | 4 px | 56 px |
+  | Left foot: inside the cuff (560, 330) | a mask pixel, final color `#f5f5f5` | 0 px | 0 px |
+
+  The two wedges are open background, not narrow inlets.
+
+**Result:**
+- Of the owner's named gaps, **0 are holes and 0 are narrow inlets** that I could find.
+- "Fill holes" changes nothing on either image.
+- I have no evidence for an inlet width.
+- A closing wide enough to fill the wedges would also fill the feather notches.
+
+**What the owner may have seen.** These are my hypotheses; I have not measured them:
+1. The white areas (`#f5f5f5`, grey 245) are next to the light checker cell (235), so the
+   cuffs, the eye white and the shoe holes can read as empty.
+2. Under drop, neighbors of the same color fuse. The white cuff merges with the white shoe
+   hole and the sole, and the eye white loses its ring. The separation that the line gave is
+   gone.
+3. In the cutout, the black line made the open background wedges at (236, 507) and
+   (526, 627) look closed.
+
+The owner should mark the gaps on an image before a rule is made for them.
+
+### 3. Stroke specks under keep
+
+- **Roadie:** S has 34 8-connected components.
+  - Three are real strokes:
+    - S1: 17940 px.
+    - S2: 444 px, 4.46 mm². This is the ring of the right shoe's hole.
+    - S3: 234 px, 2.35 mm², 8.3 mm long. This is a piece of the left shoe's line.
+  - The other 31 components are 22 px (0.22 mm², 0.8 mm across) or less.
+  - 28 of the 31 touch the exterior (d_ext 1 px). The edge band covers them anyway.
+  - The other 3 are interior, and these become stray dots:
+    - S11: 3 px at (292, 470), in the mouth.
+    - S23: 1 px at (300, 486). This is the dot the controller found.
+    - S22: 1 px at (260, 464), at the eye-beak junction.
+- **Oddie:** 6 components, all real strokes. The smallest is S6: 450 px, 2.51 mm², 10.3 mm
+  long.
+
+### Proposed rules
+
+These are hypotheses from two images. Rules (a) and (b) rest on Roadie alone.
+
+**(a) Keep a core-color wide component only if its inscribed width (2 × the maximum EDT) is
+1.25 mm or more.** The others take the nearest non-family color, as thin pixels do.
+- **The gap on Roadie** is 0.60 mm (the widest core component that is not the pupil) to
+  1.89 mm (the pupil). The midpoint is 1.245 mm, rounded to 1.25 mm. The margins are
+  0.65 mm below and 0.64 mm above, about 6.5 px each way.
+- **An area rule also separates them:** 0.79 mm² to 4.22 mm², midpoint about 2.5 mm².
+- **The evidence is thin:** one positive against 41 negatives, on one image. Oddie has no
+  wide family pixel, so it does not test the rule.
+- **The threshold depends on the print width:**
+  - At 120 mm, Roadie's strokes and remnants would both be about 1.2 mm wide, which is
+    close to the threshold.
+  - A scale-free form is "inscribed ≥ 2 × the family's p90 stroke width". On Roadie that is
+    12 px, which lies between 6.3 px and 18.9 px (1.05 and 3.15 times the p90 of 6.0 px).
+    This is also a hypothesis from one image.
+- **I do not propose an exterior condition** ("does not touch the exterior"). It changes
+  nothing on Roadie, and it would remove a pupil that touches the head's outline.
+- **Simulated** (the last step of the script):
+  - Thin pixels and non-core wide pixels take the nearest non-family color. A core W
+    component is kept only if it does not touch the exterior and its inscribed width is
+    1.25 mm or more. Then `clean_regions` runs.
+  - Roadie still has 4 final colors. The core keeps 422 px in **1 component, the pupil**.
+  - By eye, `roadie-tol30-rules.png` has no dark head tips, no dark tail tips, no dark
+    mouth and no chest dot.
+  - The simulation keeps the exterior condition. Without it, the result is the same: no
+    other component reaches 12.48 px. I did not run that variant separately.
+
+**(b) Non-core wide pixels take the nearest non-family color.** No threshold is needed.
+- It removes W3, W4, W5, W7 and W26, the non-core survivors.
+- This includes the mouth's dark red W5, which goes 72% to red and 28% to yellow.
+- **(b) alone does not remove all of the mouth's darkness.** W8 (50 px, core `#451812`, at
+  the right end of the mouth) survives the current cleanup. Rule (a) is needed for W8, and
+  also for the core tips W2, W9 and W17.
+
+**(c) Fill holes:** there are no holes on these images, so this changes nothing. **I do not
+propose an inlet-closing rule:**
+- No named gap is an inlet.
+- A closing wide enough to reach the wedges also fills the feather notches (P2 to P8, which
+  are already partly enclosed at 0.4 to 2.0 mm).
+- Ask the owner to mark the gaps (see the hypotheses above).
+
+**(d) Under keep, do not draw a stroke component whose area is below the island area.** The
+island area is 0.64 mm², from `flat.island.min_square_side` with the 0.4 mm nozzle. It is an
+existing rule, so no new number is needed.
+- **The gap on both images:**
+  - The specks are 0.221 mm² or less (Roadie S4).
+  - The smallest real strokes are 2.35 mm² (Roadie S3) and 2.51 mm² (Oddie S6).
+- **Margins:** about 2.9 × below the island area and 3.7 × above it. The arithmetic
+  midpoint of the gap would be 1.28 mm², so the island area is inside the gap.
+- **What it removes:** the 3 interior specks (S11, S22 and S23) and the 28 edge specks.
+  The edge band covers the edge specks anyway.
