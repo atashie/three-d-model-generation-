@@ -1,7 +1,8 @@
 """Palette of a masked image: deterministic, count-weighted k-means in CIELAB.
 
 Standalone: it takes an RGB image, a mask and a number of colors, and knows nothing of
-extrusion, thickness or printing. tdmg colors uses it (docs/plans/2026-11-11-color-palette.md,
+extrusion or thickness (the cleanup's printing limits come in as pixel sizes, see below).
+tdmg colors uses it (docs/plans/2026-11-11-color-palette.md,
 Decision 3); the method was measured on the owner's images in
 research/verification/2026-11-11-color-palette/ (kmeans_w in measure_palette.py), and
 this module is a port of that method plus a final nearest reassignment.
@@ -36,6 +37,10 @@ instead of the script's seven-decimal matrix and white; on the owner's images, a
 Round trip: sRGB -> CIELAB -> sRGB returns all 16,777,216 8-bit colors exactly (checked
 2026-11-11 on the Windows PC; the tests check a 52^3 grid).
 
+Region cleanup (CLEANUP_METHOD), `clean_regions(q, limits)` (Decision 4): see its
+docstring. It moves labels only, never palette colors. Its limits are the R1 rules'
+printing sizes, converted to pixels by `printable_limits_px`.
+
 Platform: every result above, and the owner-image fixtures in tests/test_color.py, were
 measured on the Windows PC only. The fixtures have not yet been run on the M5 Mac, so
 cross-platform parity is unverified. To reduce the risk, the color conversions use
@@ -46,9 +51,12 @@ spec's rational numbers, so no LAPACK inverse is computed either.
 
 from __future__ import annotations
 
+import heapq
+import math
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import ndimage
 
 METHOD = "kmeans-lab-countweighted/1"
 
@@ -335,3 +343,362 @@ def quantize(rgb: np.ndarray, mask: np.ndarray, n: int) -> Quantized:
     labels[mask] = _nearest(lab, srgb_to_lab(pal))[inverse]  # lowest index on ties
     return from_labels(labels, pal, iterations=iterations, converged=converged,
                        n_requested=n, n_distinct_colors=len(counts))
+
+
+# --- Cleanup to printable regions (Decision 4) ---------------------------------------------
+
+CLEANUP_METHOD = "opening-edt-then-boundary-merge/1"
+
+# The R1 rules the limits come from (the same ids as tdmg.flat; a test checks they agree).
+OPENING_RULE = "flat.sliver.opening_width"
+ISLAND_RULE = "flat.island.min_square_side"
+
+# Pass cap: a numerical safety bound so that clean_regions cannot loop forever, not a rule.
+# Thin steps alone cannot cycle: a non-thin pixel keeps its label in a thin step, and an
+# opening is monotone (A within B implies open(A) within open(B)), so each color's
+# non-thin set only grows, and once no set grows the thin pixels get the same labels
+# again. A merge can shrink a color, though, so no such argument bounds the alternation of
+# the two steps; the cap guards it, and `cap_hit` says if it was reached. A pass can move
+# labels and move them back: thin pixels given a color whose nearest non-thin pixels they
+# do not touch 4-connectedly (a diagonal contact, or across a gap of another color) form a
+# small piece of that color, which the merge step returns. (Roadie's last pass at 60 mm
+# moves 13 such pixels, a 12-px piece and a 1-px piece, and moves them back.) So the stop
+# test is that a whole pass leaves the labels as they were, not that neither
+# step moved anything. On the owner's images (N = 4, 60 mm wide) cleanup stopped after 4
+# passes each, Roadie and Oddie (2026-11-11, Windows PC; tests/test_color_cleanup.py
+# prints the log).
+MAX_CLEAN_PASSES = 100
+
+_FOUR = ndimage.generate_binary_structure(2, 1)  # 4-connectivity: no diagonal neighbours
+
+
+def _finite_positive(name: str, value) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ColorError(f"{name} must be a number, got {value!r}")
+    value = float(value)
+    if not math.isfinite(value) or value <= 0:
+        raise ColorError(f"{name} must be a finite number above 0, got {value}")
+    return value
+
+
+@dataclass(frozen=True)
+class Limits:
+    """The printable limits in pixels, and where they came from.
+
+    min_width_px: the opening width, flat.sliver.opening_width (mm) / mm_per_px.
+    min_area_px: the island area, (flat.island.min_square_side x nozzle_diameter_mm)^2
+      (mm^2) / mm_per_px^2.
+    The other fields record the inputs: the scale, the two values in mm and mm^2, the
+    printer profile's nozzle diameter and the two rule ids. Raises ColorError unless every
+    number is finite and above 0.
+    """
+
+    min_width_px: float
+    min_area_px: float
+    mm_per_px: float
+    opening_width_mm: float
+    island_area_mm2: float
+    nozzle_diameter_mm: float
+    opening_rule: str
+    island_rule: str
+
+    def __post_init__(self):
+        for name in ("min_width_px", "min_area_px", "mm_per_px", "opening_width_mm",
+                     "island_area_mm2", "nozzle_diameter_mm"):
+            object.__setattr__(self, name, _finite_positive(name, getattr(self, name)))
+
+
+def printable_limits_px(mm_per_px, rules, printer) -> Limits:
+    """The cleanup limits in pixels at mm_per_px (mm per image pixel; tdmg flat's scale is
+    width_mm / mask bbox width in px).
+
+    rules: the dict from tdmg.rules.load_rules(); printer: a tdmg.profiles.PrinterProfile.
+    The island area is (min_square_side x nozzle_diameter_mm)^2, as tdmg.flat computes
+    it. Raises ColorError unless mm_per_px is a finite number above 0.
+    """
+    mm_per_px = _finite_positive("mm_per_px", mm_per_px)
+    opening_mm = float(rules[OPENING_RULE].default)
+    nozzle = float(printer.nozzle_diameter_mm)
+    island_mm2 = (float(rules[ISLAND_RULE].default) * nozzle) ** 2
+    return Limits(min_width_px=opening_mm / mm_per_px, min_area_px=island_mm2 / mm_per_px ** 2,
+                  mm_per_px=mm_per_px, opening_width_mm=opening_mm, island_area_mm2=island_mm2,
+                  nozzle_diameter_mm=nozzle, opening_rule=OPENING_RULE, island_rule=ISLAND_RULE)
+
+
+@dataclass(frozen=True)
+class CleanupLog:
+    """What clean_regions did. Colors are named by hex code, since palette indices change
+    when the palette is re-sorted.
+
+    passes: passes run, counting the last one, which changed nothing unless cap_hit.
+    cap_hit: True if MAX_CLEAN_PASSES passes ran and the last still changed labels (the
+      result is then not a fixed point).
+    thin_pixels_reassigned: thin pixels whose label the thin step changed, summed over the
+      passes that changed the labels (an event count: a pixel moved in two passes counts
+      twice; the last, unchanging pass is not included).
+    thin_pixels_left: thin pixels of the last pass that end it with their own color: those
+      whose nearest non-thin pixel has their own color (spurs, corners with no other color
+      nearer), and the thin_returned ones.
+    thin_returned: pixels the thin step of the last pass moved and its merge step moved
+      back (see MAX_CLEAN_PASSES).
+    no_core: True if some pass found no non-thin labelled pixel at all; its thin step then
+      left the labels unchanged.
+    pieces_merged: merges, summed over the passes that changed the labels (a piece that is
+      itself the result of an earlier merge counts again when it merges).
+    pixels_changed: pixels whose final color differs from their input color (net).
+    moved: ((from_hex, to_hex, pixels), ...), the net changes from input color to final
+      color, ordered by pixels descending, then from_hex, then to_hex. The pixels sum to
+      pixels_changed.
+    dropped_hex: input colors that no pixel has after cleanup, in the input palette order.
+    kept_pieces, kept_area_px: pieces below min_area_px in the last pass with no color
+      neighbour (only OUTSIDE or the image edge around them), kept as they are; removing
+      them is R1 geometry's job.
+    limits: the Limits used.
+    """
+
+    passes: int
+    cap_hit: bool
+    thin_pixels_reassigned: int
+    thin_pixels_left: int
+    thin_returned: int
+    no_core: bool
+    pieces_merged: int
+    pixels_changed: int
+    moved: tuple[tuple[str, str, int], ...]
+    dropped_hex: tuple[str, ...]
+    kept_pieces: int
+    kept_area_px: int
+    limits: Limits
+
+
+def disk_offsets(r: float) -> np.ndarray:
+    """The discrete disk of radius r: every integer offset (dy, dx) with dy^2 + dx^2 <= r^2,
+    as an (m, 2) int array in row-major order. r is not rounded: a non-integer r keeps the
+    offsets inside the real circle, so r = 2.8 gives 21 offsets (r^2 = 7.84 admits (2, 1)
+    but not (2, 2) or (0, 3)). For r < 1 it is the centre pixel only, so an opening by it
+    changes nothing: a width below 2 px cannot be resolved."""
+    n = math.floor(r)
+    dy, dx = np.mgrid[-n:n + 1, -n:n + 1]
+    keep = dy * dy + dx * dx <= r * r
+    return np.stack([dy[keep], dx[keep]], axis=1)
+
+
+def _disk_structure(r: float) -> np.ndarray:
+    off = disk_offsets(r)
+    n = math.floor(r)
+    st = np.zeros((2 * n + 1, 2 * n + 1), bool)
+    st[off[:, 0] + n, off[:, 1] + n] = True
+    return st
+
+
+def _thin_step(labels: np.ndarray, limits: Limits) -> tuple[int, np.ndarray, bool]:
+    """One thin step on labels (int32 (H, W), changed in place).
+
+    For each color c, its non-thin pixels are the binary opening of (labels == c) by the
+    disk of radius min_width_px / 2 (disk_offsets): an erosion, then a dilation by the
+    same disk, with pixels beyond the image edge counted as not c (scipy's default
+    border_value 0). Every other labelled pixel is thin and takes the color of the nearest
+    non-thin labelled pixel of any color, by Euclidean distance. OUTSIDE pixels are never
+    non-thin, so they neither assign nor get assigned. If no non-thin labelled pixel
+    exists, nothing changes.
+
+    Ties are broken here, not by scipy. For each color, scipy.ndimage.distance_transform_edt
+    (return_indices) on the complement of its non-thin set gives a nearest pixel, and the
+    squared distance to it is recomputed as an exact integer. Which of several equally
+    near pixels EDT returns is deterministic for a scipy build but not specified by scipy;
+    the squared distance to the color does not depend on that choice. A thin pixel takes
+    the color at the least squared distance; on a tie, its own color if that is among the
+    nearest, else the lowest palette index. So the result does not depend on EDT's tie
+    choice, and a mirror-symmetric input gives a mirror-symmetric result.
+
+    Returns (labels changed, the thin mask, no_core).
+    """
+    inside = labels != OUTSIDE
+    st = _disk_structure(limits.min_width_px / 2)
+    cores = []
+    for c in np.unique(labels[inside]):          # ascending palette index
+        core_c = ndimage.binary_opening(labels == c, structure=st)
+        if core_c.any():
+            cores.append((int(c), core_c))
+    core = np.zeros(labels.shape, bool)
+    for _, core_c in cores:
+        core |= core_c
+    thin = inside & ~core
+    if not thin.any():
+        return 0, thin, False
+    if not cores:
+        return 0, thin, True
+    ty, tx = np.nonzero(thin)
+    own = labels[ty, tx].astype(np.int64)
+    far = np.iinfo(np.int64).max
+    best = np.full(len(ty), far, np.int64)
+    best_c = own.copy()
+    own_d2 = np.full(len(ty), far, np.int64)
+    for c, core_c in cores:
+        iy, ix = ndimage.distance_transform_edt(~core_c, return_distances=False,
+                                                return_indices=True)
+        d2 = ((iy[ty, tx].astype(np.int64) - ty) ** 2
+              + (ix[ty, tx].astype(np.int64) - tx) ** 2)
+        closer = d2 < best                       # strict: the lowest index wins a tie
+        best = np.where(closer, d2, best)
+        best_c = np.where(closer, c, best_c)
+        own_d2 = np.where(own == c, d2, own_d2)
+    new = np.where(own_d2 == best, own, best_c)
+    n = int((new != own).sum())
+    labels[ty, tx] = new
+    return n, thin, False
+
+
+def _merge_step(labels: np.ndarray, min_area: float, k: int) -> tuple[int, int, int, int]:
+    """Merge small pieces in labels (int32 (H, W), values OUTSIDE or below k, changed in
+    place), one at a time.
+
+    A piece is a 4-connected set of pixels of one color. While a piece of area below
+    min_area that has a color neighbour exists, the first by (area, lowest flat pixel
+    index) is merged into the color it shares the most 4-neighbour pixel edges with
+    (OUTSIDE excluded), ties to the lowest palette index. A piece with no color neighbour
+    is kept: its 4-neighbours are all OUTSIDE or beyond the edge, which no merge changes,
+    so it never gets one.
+
+    The piece list is updated incrementally rather than recomputed after each merge, with
+    the same result: when piece P of color c merges into color d, the new piece of d is P
+    together with every piece of d that touches P (they connect through P; nothing else
+    joins them), and every other piece is unchanged, since P was a whole piece of c and
+    no other pixel changed color. A union-find over the initial pieces records this, with
+    each root's area and lowest flat index; a heap keyed by (area, lowest index) gives the
+    next piece, stale entries skipped. Keys are unique, since pieces never share a pixel.
+    The chosen piece's neighbours are read from the current labels, so they are exact.
+
+    Returns (pieces merged, pixels changed, pieces kept, their total area).
+    """
+    h, w = labels.shape
+    flat = labels.reshape(-1)          # a view: writes go to labels
+    pid = np.full(flat.size, -1, np.int64)
+    area: list[int] = []
+    first: list[int] = []
+    colour: list[int] = []
+    pixels: dict[int, np.ndarray] = {}  # flat indices, for small roots only
+    for c in range(k):
+        pieces, n = ndimage.label(labels == c, structure=_FOUR)
+        if n == 0:
+            continue
+        pf = pieces.reshape(-1)
+        idx = np.flatnonzero(pf)       # ascending
+        ids = pf[idx].astype(np.int64) - 1
+        base = len(area)
+        pid[idx] = ids + base
+        counts = np.bincount(ids, minlength=n)
+        order = np.argsort(ids, kind="stable")  # within a piece, still ascending
+        starts = np.concatenate([[0], np.cumsum(counts)])
+        for j in range(n):
+            area.append(int(counts[j]))
+            first.append(int(idx[order[starts[j]]]))
+            colour.append(c)
+            if counts[j] < min_area:
+                pixels[base + j] = idx[order[starts[j]:starts[j + 1]]]
+    parent = list(range(len(area)))
+
+    def find(x: int) -> int:
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    heap = [(area[r], first[r], r) for r in pixels]
+    heapq.heapify(heap)
+    merged = changed = kept = kept_area = 0
+    while heap:
+        a, f, r = heapq.heappop(heap)
+        if parent[r] != r or r not in pixels or area[r] != a:
+            continue                    # stale
+        px = pixels.pop(r)
+        c = colour[r]
+        y, x = np.divmod(px, w)
+        nb = np.concatenate([px[y > 0] - w, px[y < h - 1] + w,
+                             px[x > 0] - 1, px[x < w - 1] + 1])
+        nl = flat[nb]
+        sel = (nl != OUTSIDE) & (nl != c)
+        if not sel.any():
+            kept += 1
+            kept_area += a
+            continue
+        d = int(np.argmax(np.bincount(nl[sel], minlength=k)))   # lowest index on ties
+        joined = sorted({find(int(p)) for p in pid[nb[nl == d]]})
+        flat[px] = d
+        merged += 1
+        changed += len(px)
+        new_area = a + sum(area[j] for j in joined)
+        new_first = min([f] + [first[j] for j in joined])
+        for j in joined:
+            parent[j] = r
+        area[r], first[r], colour[r] = new_area, new_first, d
+        if new_area < min_area:         # every part was small, so each has its pixels
+            pixels[r] = np.concatenate([px] + [pixels.pop(j) for j in joined])
+            heapq.heappush(heap, (new_area, new_first, r))
+        else:
+            for j in joined:
+                pixels.pop(j, None)
+    return merged, changed, kept, kept_area
+
+
+def clean_regions(q: Quantized, limits: Limits) -> tuple[Quantized, CleanupLog]:
+    """Clean q's label map to printable regions (Decision 4), deterministically.
+
+    Each pass runs two steps. Passes repeat until a pass leaves the labels as they were
+    (a fixed point), or for at most MAX_CLEAN_PASSES:
+    a. Thin parts (_thin_step): per color, the pixels that a binary opening by the disk
+       of diameter min_width_px removes are thin; each takes the color of the nearest
+       non-thin labelled pixel of any color (ties: own color, then lowest index). A thin
+       spur whose nearest non-thin pixel has its own color therefore keeps it.
+    b. Small pieces (_merge_step): 4-connected pieces of one color with area below
+       min_area_px are merged one at a time, smallest first (then lowest flat pixel
+       index), each into the color it shares the longest 4-neighbour boundary with
+       (OUTSIDE excluded), ties to the lowest palette index of q. A piece with no color
+       neighbour is kept and reported.
+    The palette colors are not changed; only labels move. The result is built by
+    from_labels from the new labels and q.rgb, so a color left with no pixel is dropped
+    (and counted in dropped) and the palette is re-sorted by its final areas. q's
+    iterations, converged, n_requested and n_distinct_colors are passed through.
+    """
+    if not isinstance(q, Quantized):
+        raise ColorError(f"q must be a Quantized, got {type(q).__name__}")
+    if not isinstance(limits, Limits):
+        raise ColorError(f"limits must be a Limits, got {type(limits).__name__}")
+    if q.labels.ndim != 2:
+        raise ColorError(f"clean_regions needs a 2-D label map, got shape {q.labels.shape}")
+    k = len(q.hex)
+    labels = np.array(q.labels, np.int32)       # a writable copy
+    thin_total = merged_total = kept = kept_area = thin_left = returned = passes = 0
+    no_core = False
+    cap_hit = True
+    for passes in range(1, MAX_CLEAN_PASSES + 1):
+        start = labels.copy()
+        n_thin, thin, nc = _thin_step(labels, limits)
+        n_merged, _, kept, kept_area = _merge_step(labels, limits.min_area_px, k)
+        no_core |= nc
+        thin_left = int((thin & (labels == start)).sum())
+        if np.array_equal(labels, start):       # a fixed point of the whole pass
+            returned, cap_hit = n_thin, False
+            break
+        thin_total += n_thin
+        merged_total += n_merged
+    out = from_labels(labels, q.rgb, iterations=q.iterations, converged=q.converged,
+                      n_requested=q.n_requested, n_distinct_colors=q.n_distinct_colors,
+                      dropped=q.dropped)
+    inside = q.labels != OUTSIDE
+    before = q.labels[inside].astype(np.int64)
+    after = labels[inside].astype(np.int64)
+    diff = before != after
+    pair = np.bincount(before[diff] * k + after[diff], minlength=k * k)
+    moved = sorted(((q.hex[i // k], q.hex[i % k], int(pair[i])) for i in np.flatnonzero(pair)),
+                   key=lambda t: (-t[2], t[0], t[1]))
+    final = np.bincount(after, minlength=k)
+    log = CleanupLog(
+        passes=passes, cap_hit=cap_hit, thin_pixels_reassigned=thin_total,
+        thin_pixels_left=thin_left, thin_returned=returned, no_core=no_core, pieces_merged=merged_total,
+        pixels_changed=int(diff.sum()), moved=tuple(moved),
+        dropped_hex=tuple(q.hex[i] for i in range(k) if final[i] == 0),
+        kept_pieces=kept, kept_area_px=kept_area, limits=limits)
+    return out, log
