@@ -453,3 +453,16 @@ equal the N = 6 rows of `outline-shade.txt`:
 - **Roadie, keep:** the band looks uniform along the borders and the outer edge.
 - **Oddie:** the lines and leaf veins are gone. A dotted dark fringe remains along parts of
   the outer edge; this is the fringe noted in Surprises above.
+
+### Correction, 2026-11-11 (spec review of the Task 7c addendum)
+
+- **Band share:** the addendum above says "the 0.6 mm (5.99 px) band is 38.4% of the
+  subject". That is wrong. 38.4% is the core's final share: the band, the pupil, the dark
+  tips and the cleanup's changes together. The band alone is 27781 px, about 37.2% of
+  Roadie's 74768 masked pixels.
+- **A by-eye effect left out:** dropping the black lines removes the only separation
+  between neighbours of the same color.
+  - In Oddie's default run, the overlapping dark-green leaves fuse into one region.
+  - With the blue merge, the arms and feet fuse into the body's silhouette.
+  
+  This bears on the owner's Task 7d choice between keep and drop for Oddie.

@@ -391,3 +391,11 @@ The larger values are at junctions. On a synthetic straight border the band is e
 - **A side effect of `auto`:** a speck or a 1 px line in a color of its own is "thin", so
   it joins the outline family. Its pixels then go to the nearest color, which cleanup
   would also have done. Its fate in the record is then "outline", not "cleanup".
+- **Correction, 2026-11-11 (spec review):** in Roadie's keep run, 38.4% is the core's
+  final share (band, pupil, tips and cleanup together). The band alone is 27781 px, about
+  37.2% of the subject.
+- **Keep or drop for Oddie?** Dropping the black lines removes the only separation
+  between neighbours of the same color. In Oddie's default run the overlapping dark-green
+  leaves fuse into one region. With the blue merge, the arms and feet fuse into the body's
+  silhouette. `keep` would draw a band between them only where two different colors meet,
+  so same-color neighbours would stay fused either way.
