@@ -105,7 +105,7 @@ spec review and a quality review, then the Codex critical review in Task 8.
      - `furry`: σ = 1.0 px. The 1.0 is a starting guess; the owner judges it on the
        previews in Task 7.
    - **Supersampling:** the factor 4 is a numerical choice for the staircase size (at
-     Roadie's scale, 0.072 mm/px / 4 = 0.018 mm, far below a bead). It is stated with
+     Roadie's scale, 0.100 mm/px / 4 = 0.025 mm, far below a bead; corrected 2026-11-11 from a wrong 0.072, measured in Task 1). It is stated with
      that reason in the code, like other numerical bounds, and is not a rule.
    - **R1 is unchanged:** `smooth_outline` stays as is. A test checks the two-label case
      agrees with it.
