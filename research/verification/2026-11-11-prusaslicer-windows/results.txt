@@ -1,0 +1,14 @@
+cube info: returncode 0 | size_x = 20.000000; size_y = 20.000000; size_z = 20.000000; number_of_facets = 12; manifold = yes; number_of_parts =  1; volume = 8000.000488
+cube gcode: returncode 0 | gcode 195404 bytes, 100 layers, last ;Z:20
+open info: returncode 0 | size_x = 20.000000; size_y = 20.000000; size_z = 20.000000; number_of_facets = 11; manifold = no; open_edges = 3; number_of_parts =  1; volume = 6666.666992
+open gcode: returncode 0 | gcode 50872 bytes, 10 layers, last ;Z:2
+toobig info: returncode 0 | size_x = 300.000000; size_y = 20.000000; size_z = 5.000000; number_of_facets = 12; manifold = yes; number_of_parts =  1; volume = 30000.000000
+toobig gcode: returncode 0 | no gcode | All objects are outside of the print volume.
+garbage info: returncode 1 | garbage.stl: Loading of a model file failed.
+garbage gcode: returncode 1 | no gcode | garbage.stl: Loading of a model file failed.
+missing info: returncode 1 | No such file: missing.stl
+missing gcode: returncode 1 | no gcode | No such file: missing.stl
+roadie-tol30-60x3-s3 info: returncode 0 | size_x = 59.970630; size_y = 49.404216; size_z = 3.000000; number_of_facets = 31200; manifold = yes; number_of_parts =  1; volume = 2277.742188
+roadie-tol30-60x3-s3 gcode: returncode 0 | gcode 990200 bytes, 15 layers, last ;Z:3
+oddie-60x3-s3 info: returncode 0 | size_x = 59.986743; size_y = 65.870964; size_z = 3.000000; number_of_facets = 29212; manifold = yes; number_of_parts =  1; volume = 5033.670898
+oddie-60x3-s3 gcode: returncode 0 | gcode 541404 bytes, 15 layers, last ;Z:3
