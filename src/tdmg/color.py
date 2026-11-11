@@ -41,6 +41,11 @@ Region cleanup (CLEANUP_METHOD), `clean_regions(q, limits)` (Decision 4): see it
 docstring. It moves labels only, never palette colors. Its limits are the R1 rules'
 printing sizes, converted to pixels by `printable_limits_px`.
 
+Extraction steps (plan Task 7b): `handle_outlines` is the seam for the outline family
+(Task 7b does no outline handling; Task 7c fills it in), `apply_merges` applies the owner's
+explicit (from, into) merges, and `index_map` matches palette indices before and after a
+step by color. Like the cleanup, they move labels only, never palette colors.
+
 Platform: every result above, and the owner-image fixtures in tests/test_color.py, were
 measured on the Windows PC only. The fixtures have not yet been run on the M5 Mac, so
 cross-platform parity is unverified. To reduce the risk, the color conversions use
@@ -866,3 +871,135 @@ def changed_mask(before: Quantized, after: Quantized) -> np.ndarray:
     a = hb[np.where(outside, len(before.hex), before.labels)]
     b = ha[np.where(outside, len(after.hex), after.labels)]
     return a != b
+
+
+# --- Extraction: outline handling and the owner's merges (plan Task 7b) --------------------
+
+# Task 7b only: the outline handling is a seam that Task 7c fills in. This method name says
+# that no outline handling is done, so a plan made before 7c can never share an id with
+# one made after it.
+OUTLINE_METHOD = "outline-not-implemented/0"
+OUTLINE_PLACEHOLDER_NOTE = ("outline detection is not implemented yet (plan Task 7c): auto "
+                            "finds no outline family, so the outline colors stay as "
+                            "ordinary colors")
+
+
+def index_map(before: Quantized, after: Quantized) -> tuple[int | None, ...]:
+    """For each palette index of before, its index in after, or None if after lacks it.
+
+    Matched by the palette color (rgb), which steps such as merges and clean_regions keep
+    unchanged while they move labels and re-sort the palette. Raises ColorError if before's
+    palette has a color twice (quantize never gives that: a repeated rounded color gets no
+    pixel in the nearest reassignment, so it is dropped).
+    """
+    if not isinstance(before, Quantized) or not isinstance(after, Quantized):
+        raise ColorError("index_map needs two Quantized results")
+    if len(set(before.hex)) != len(before.hex):
+        raise ColorError("the palette has a color twice, so indices cannot be matched by color")
+    where = {h: i for i, h in enumerate(after.hex)}
+    return tuple(where.get(h) for h in before.hex)
+
+
+def merge_problem(merges) -> str | None:
+    """What is wrong with a list of (from, into) index pairs, or None.
+
+    Only the pairs' structure: from != into, each from at most once, and no into that is
+    also a from (no chains). Whether the indices exist is the caller's check.
+    """
+    froms = [a for a, _ in merges]
+    for a, b in merges:
+        if a == b:
+            return f"[{a}, {b}] merges a color into itself"
+    for a in froms:
+        if froms.count(a) > 1:
+            return f"color {a} is merged more than once"
+    for a, b in merges:
+        if b in froms:
+            return (f"[{a}, {b}] merges into color {b}, which is itself merged away (no "
+                    "chains: merge each color straight into its final color)")
+    return None
+
+
+def apply_merges(q: Quantized, merges) -> Quantized:
+    """The owner's explicit merges: every pixel of each `from` color takes the `into` color.
+
+    merges: a sequence of (from, into) pairs of q's palette indices (ints, not bool). The
+    pairs must pass merge_problem (no self-merge, each from once, no chains), so the
+    result does not depend on their order. The palette colors are not changed: the `into`
+    color keeps its rgb, and each `from` color is left with no pixel, so from_labels
+    removes it (and counts it in `dropped`) and re-sorts the palette by the new areas.
+    index_map(q, result) gives each color's new index (None for the merged-away ones). q's
+    iterations, converged, n_requested and n_distinct_colors are passed through. With no
+    pairs the labels are unchanged (the result is still a new Quantized).
+    Raises ColorError on a bad pair.
+    """
+    if not isinstance(q, Quantized):
+        raise ColorError(f"q must be a Quantized, got {type(q).__name__}")
+    k = len(q.hex)
+    pairs = []
+    for pair in merges:
+        if (not isinstance(pair, (list, tuple)) or len(pair) != 2
+                or not all(isinstance(i, (int, np.integer)) and not isinstance(i, bool)
+                           for i in pair)):
+            raise ColorError(f"a merge is a pair of color indices (from, into), got {pair!r}")
+        a, b = (int(i) for i in pair)
+        if not (0 <= a < k and 0 <= b < k):
+            raise ColorError(f"merge {[a, b]}: indices must be 0 to {k - 1}")
+        pairs.append((a, b))
+    problem = merge_problem(pairs)
+    if problem:
+        raise ColorError(f"merge: {problem}")
+    remap = np.arange(k, dtype=np.int64)
+    for a, b in pairs:
+        remap[a] = b
+    inside = q.labels != OUTSIDE
+    labels = np.full(q.labels.shape, OUTSIDE, np.int64)
+    labels[inside] = remap[q.labels[inside]]
+    return from_labels(labels, q.rgb, iterations=q.iterations, converged=q.converged,
+                       n_requested=q.n_requested, n_distinct_colors=q.n_distinct_colors,
+                       dropped=q.dropped)
+
+
+@dataclass(frozen=True)
+class OutlineResult:
+    """What handle_outlines did.
+
+    family: the outline family, as extraction indices (q's indices), ascending.
+    found_by: "none" (outline_color none), "auto" (detection) or "config" (a list).
+    method: OUTLINE_METHOD. note: a sentence for the record and the CLI, or None.
+    """
+
+    family: tuple[int, ...]
+    found_by: str
+    method: str
+    note: str | None
+
+
+def _detect_outline_family_placeholder(q: Quantized) -> tuple[int, ...]:
+    """PLACEHOLDER for plan Task 7c, which replaces it with the thinness rule
+    (color.outline.thin_share). Until then `auto` finds no outline family."""
+    return ()
+
+
+def handle_outlines(q: Quantized, *, outline_color, outlines: str
+                    ) -> tuple[Quantized, OutlineResult]:
+    """The outline step between quantize and the merges: the seam Task 7c fills in.
+
+    q: the extracted colors (quantize's result). outline_color: "auto", "none" or a list of
+    extraction indices; outlines: "drop" or "keep". Returns the colors after outline
+    handling and an OutlineResult.
+
+    Task 7b: no outline handling is implemented. "none" and "auto" (through
+    _detect_outline_family_placeholder, which finds nothing) return q itself with an empty
+    family; an explicit list is refused with ColorError, because acting on it is Task 7c.
+    """
+    if outlines not in ("drop", "keep"):
+        raise ColorError(f"outlines must be drop or keep, got {outlines!r}")
+    if outline_color == "none":
+        return q, OutlineResult(family=(), found_by="none", method=OUTLINE_METHOD, note=None)
+    if outline_color == "auto":
+        family = _detect_outline_family_placeholder(q)
+        return q, OutlineResult(family=family, found_by="auto", method=OUTLINE_METHOD,
+                                note=OUTLINE_PLACEHOLDER_NOTE)
+    raise ColorError("outline_color as a list of indices is not implemented yet (plan Task "
+                     "7c); use auto or none")

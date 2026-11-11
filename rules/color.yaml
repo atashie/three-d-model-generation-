@@ -19,3 +19,94 @@
       validation: untested
       claim: The design's statement of what furry can and cannot mean on an FDM print (the reason in the notes); an engineering inference, not a measurement.
   notes: Set in pixels, like flat.smooth.sigma_px, because the jaggedness comes from the image. Detail finer than about one bead width (0.42 mm) does not print; it merges or vanishes in the slicer. So furry means less smoothing and sharper corners, not hair-fine strands.
+
+# Extraction, outline and shade settings (plan Task 7b; the outline and shade rules are used
+# from Task 7c). Each threshold is read off a gap between a few values measured in software
+# on the owner's two images (research/verification/2026-11-11-color-palette/, addendum
+# "outline and shade indicators"), so each is a hypothesis and untested.
+- id: color.extract.default_count
+  kind: hypothesis
+  summary: How many colors quantize extracts before outline handling and merges, when the config does not say (the `extract` setting). The final palette is then reduced to at most `colors` by the owner's merges and the outline handling.
+  unit: count
+  default: 6
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "the outline and both shade pairs need N ≥ 6"
+      provenance: primary
+      validation: untested
+      claim: "Our own software measurement (no print) on the owner's two images: Oddie's black lines get their own cluster from N = 5, and its blue shade pair separates only from N = 6. One image sets the value; Roadie needs only N = 4 and gains outline fringe clusters at larger N."
+    - ref: docs/plans/2026-11-11-color-palette.md
+      locator: "\"Extract 6 by default (Recommended)\""
+      provenance: unverified
+      validation: untested
+      claim: The owner's choice between the offered options, recorded in the plan. A decision, not evidence that 6 suits other images.
+  notes: A count of palette colors, not a print threshold. At most `colors` survive into the final palette; if more remain, the plan is written with ready false. Larger values split Roadie's outline into more fringe clusters (the record's Surprises).
+
+- id: color.outline.thin_share
+  kind: hypothesis
+  summary: "An extracted color is in the outline family when more than this share of its pixels is removed by the printable opening (width flat.sliver.opening_width), i.e. when it is mostly thin lines. Used by `outline_color: auto`."
+  unit: fraction
+  default: 0.38
+  range: [0.0, 1.0]
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "The gap is 9.9% (highest other) to 66.3% (lowest outline)."
+      provenance: primary
+      validation: untested
+      claim: "Our own software measurement (no print), before cleanup, at N = 4 to 7 and 60 mm, on the owner's two images: every outline-family color has thinness 66.3-100%, every other color 1.2-9.9%."
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "**T ≈ 38%**, a margin of about 28 percentage points each way."
+      provenance: primary
+      validation: untested
+      claim: The midpoint of that gap. Any value inside the gap separates these two images equally well; the midpoint is a choice, not a measurement.
+  notes: A share of pixels (0 to 1), not a length. It depends on the opening width and the scale (mm per pixel), so the same image at another print width can give other shares. Two images only.
+
+- id: color.shade.max_hue_diff_deg
+  kind: hypothesis
+  summary: "After the outline family is removed, two extracted colors are flagged as a likely shade pair when their CIELAB hue angles differ by less than this. Flags are reported for the owner, never applied."
+  unit: deg
+  default: 5.5
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "Gap 1.5° to 9.5°: **H ≈ 5.5°**, a margin of 4°."
+      provenance: primary
+      validation: untested
+      claim: "Our own software measurement (no print) on the owner's two images: the true shade pairs (Oddie's greens and blues) differ by 0.2-1.5°, the closest non-pair (Oddie's mouth and eyes, by eye different objects) by 9.5°. 5.5 is the gap's midpoint."
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "The hue gap rests on a single counterexample (mouth/eyes)."
+      provenance: primary
+      validation: untested
+      claim: The record's own statement of how weak the upper side of the gap is.
+  notes: Applies only to pairs where both colors pass color.shade.min_chroma (a near-grey color's hue angle means nothing). Two images and one counterexample.
+
+- id: color.shade.min_chroma
+  kind: hypothesis
+  summary: A color takes part in shade-pair flags only if its CIELAB chroma C* is above this, so white, grey and black, whose hue angle is meaningless, are never flagged by hue.
+  unit: cielab_chroma
+  default: 8.5
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-11-color-palette/README.md
+      locator: "exclude white and black: C* 0.0–1.9, against the lowest shade color's 15.0; midpoint"
+      provenance: primary
+      validation: untested
+      claim: "Our own software measurement (no print) on the owner's two images: white and black have C* 0.0-1.9; the least chromatic shade color (Oddie's blue shadow) has C* 15.0. 8.5 is about the midpoint."
+  notes: CIELAB chroma, sqrt(a*^2 + b*^2), D65 white (tdmg.color.srgb_to_lab). Not a separator of outlines from shade pairs; the record shows no chroma floor does that, which is why the outline family is removed first.
+
+- id: color.outline.keep_width
+  kind: hypothesis
+  summary: "Width of the uniform outline band that `outlines: keep` draws along every border between colors and inside the outer edge, in the darkest outline-family color."
+  unit: mm
+  default: 0.6
+  scales_with_model: false
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: docs/plans/2026-11-11-color-palette.md
+      locator: "a round starting value above it, and the owner judges it in the preview."
+      provenance: unverified
+      validation: untested
+      claim: Our own starting value, stated in the plan. It must exceed flat.sliver.opening_width (0.4 mm), because the region cleanup removes strips at or below that width; 0.6 mm is a round number above it. No measurement or print supports it yet.
+  notes: In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width or cleanup removes the band it draws; tests/test_rules.py checks that it does.

@@ -64,3 +64,35 @@ def test_furry_edge_rule_exists_with_its_unit_and_default():
     assert (rule.unit, rule.default, rule.kind) == ("px", 1.0, "hypothesis")
     assert rule.best_validation == "untested"
     assert rule.best_provenance == "unverified"
+
+
+# The extraction, outline and shade rules (color-palette plan Task 7b), from the Task 7a
+# measurements on two owner images: each a hypothesis, untested.
+@pytest.mark.parametrize("rule_id, unit, default, provenance", [
+    ("color.extract.default_count", "count", 6, "primary"),
+    ("color.outline.thin_share", "fraction", 0.38, "primary"),
+    ("color.shade.max_hue_diff_deg", "deg", 5.5, "primary"),
+    ("color.shade.min_chroma", "cielab_chroma", 8.5, "primary"),
+    ("color.outline.keep_width", "mm", 0.6, "unverified"),
+])
+def test_extraction_outline_and_shade_rules(rule_id, unit, default, provenance):
+    rule = RULES[rule_id]
+    assert (rule.unit, rule.default, rule.kind) == (unit, default, "hypothesis")
+    assert rule.best_validation == "untested"
+    assert rule.best_provenance == provenance
+    assert all(e.ref.startswith(("research/verification/2026-11-11-color-palette/",
+                                 "docs/plans/2026-11-11-color-palette.md"))
+               for e in rule.evidence)
+
+
+def test_extract_default_is_an_integer_count():
+    assert type(RULES["color.extract.default_count"].default) is int
+
+
+def test_kept_outline_is_wider_than_the_cleanup_opening():
+    # Cleanup removes strips at or below the opening width (plan Task 4), so a kept outline
+    # band at or below it would be removed again.
+    keep, opening = RULES["color.outline.keep_width"], RULES["flat.sliver.opening_width"]
+    assert keep.unit == opening.unit == "mm"
+    assert keep.default > opening.default
+    assert keep.scales_with_model is False

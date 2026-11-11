@@ -14,7 +14,9 @@ from tdmg.color_config import (
     ColorConfigError,
     ResolvedColorConfig,
     check_base,
+    check_extraction_indices,
     edge_sigma_px,
+    merge_problem,
     palette_cap,
     resolve_color_config,
 )
@@ -25,6 +27,11 @@ from tdmg.rules import load_rules
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
 NO_FLAGS = {"colors": None, "edges": None, "base": None}
+# The Task 7b keys at their defaults (settings as resolved, as recorded, and their sources).
+NEW = {"extract": 6, "outlines": "drop", "outline_color": "auto", "merge": ()}
+NEW_PLAIN = {**NEW, "merge": []}
+NEW_SOURCES = {"extract": "rule", "outlines": "default", "outline_color": "default",
+               "merge": "default"}
 
 
 def _resolve(flags=None, path=None, printer=A1):
@@ -50,8 +57,8 @@ def _printer_with_slots(slots: int) -> PrinterProfile:
 
 def test_defaults_without_flags_or_file():
     r = _resolve()
-    assert r.settings == {"colors": 4, "edges": "smooth", "base": "auto"}
-    assert r.sources == {"colors": "profile", "edges": "default", "base": "default"}
+    assert r.settings == {**NEW, "colors": 4, "edges": "smooth", "base": "auto"}
+    assert r.sources == {**NEW_SOURCES, "colors": "profile", "edges": "default", "base": "default"}
     assert r.config_sha256 is None
 
 
@@ -84,30 +91,30 @@ def test_file_overrides_defaults_and_its_hash_is_recorded(tmp_path):
     text = "colors: 3\nedges: furry\n"
     path = _config(tmp_path, text)
     r = _resolve(path=path)
-    assert r.settings == {"colors": 3, "edges": "furry", "base": "auto"}
-    assert r.sources == {"colors": "config", "edges": "config", "base": "default"}
+    assert r.settings == {**NEW, "colors": 3, "edges": "furry", "base": "auto"}
+    assert r.sources == {**NEW_SOURCES, "colors": "config", "edges": "config", "base": "default"}
     assert r.config_sha256 == hashlib.sha256(text.encode()).hexdigest()
 
 
 def test_flags_override_the_file(tmp_path):
     path = _config(tmp_path, "colors: 3\nedges: furry\nbase: 1\n")
     r = _resolve({"colors": 2, "base": "auto"}, path)
-    assert r.settings == {"colors": 2, "edges": "furry", "base": "auto"}
-    assert r.sources == {"colors": "flag", "edges": "config", "base": "flag"}
+    assert r.settings == {**NEW, "colors": 2, "edges": "furry", "base": "auto"}
+    assert r.sources == {**NEW_SOURCES, "colors": "flag", "edges": "config", "base": "flag"}
     assert r.config_sha256 is not None
 
 
 def test_flags_override_defaults():
     r = _resolve({"edges": "exact", "base": 0})
-    assert r.settings == {"colors": 4, "edges": "exact", "base": 0}
-    assert r.sources == {"colors": "profile", "edges": "flag", "base": "flag"}
+    assert r.settings == {**NEW, "colors": 4, "edges": "exact", "base": 0}
+    assert r.sources == {**NEW_SOURCES, "colors": "profile", "edges": "flag", "base": "flag"}
 
 
 def test_empty_file_means_no_settings_but_is_still_hashed(tmp_path):
     path = _config(tmp_path, "# nothing set\n")
     r = _resolve(path=path)
-    assert r.settings == {"colors": 4, "edges": "smooth", "base": "auto"}
-    assert r.sources == {"colors": "profile", "edges": "default", "base": "default"}
+    assert r.settings == {**NEW, "colors": 4, "edges": "smooth", "base": "auto"}
+    assert r.sources == {**NEW_SOURCES, "colors": "profile", "edges": "default", "base": "default"}
     assert r.config_sha256 == hashlib.sha256(b"# nothing set\n").hexdigest()
 
 
@@ -304,8 +311,8 @@ def test_resolved_config_is_immutable_and_gives_plain_dicts_for_the_record(tmp_p
     with pytest.raises(TypeError):
         r.sources["colors"] = "flag"
     rec = r.as_record()
-    assert rec == {"settings": {"colors": 4, "edges": "furry", "base": "auto"},
-                   "sources": {"colors": "profile", "edges": "config", "base": "default"},
+    assert rec == {"settings": {**NEW_PLAIN, "colors": 4, "edges": "furry", "base": "auto"},
+                   "sources": {**NEW_SOURCES, "colors": "profile", "edges": "config", "base": "default"},
                    "config_sha256": r.config_sha256}
     assert type(rec["settings"]) is dict and type(rec["sources"]) is dict
     rec["settings"]["colors"] = 2           # a copy: the resolved config is unchanged
@@ -321,10 +328,164 @@ def test_resolved_config_copies_its_inputs():
 
 
 def test_keys_come_from_the_model():
-    assert KEYS == tuple(ColorConfig.model_fields) == ("colors", "edges", "base")
+    assert KEYS == tuple(ColorConfig.model_fields) == (
+        "colors", "extract", "edges", "base", "outlines", "outline_color", "merge")
 
 
 def test_a_missing_rule_is_a_clear_error():
     rules = {k: v for k, v in RULES.items() if k != "color.edges.furry_sigma_px"}
     with pytest.raises(ColorConfigError, match="color.edges.furry_sigma_px"):
         edge_sigma_px("furry", rules)
+
+
+# ---- Task 7b: extract, outlines, outline_color, merge --------------------------------------
+
+def test_extract_defaults_to_its_rule():
+    r = _resolve()
+    assert r.settings["extract"] == RULES["color.extract.default_count"].default == 6
+    assert r.sources["extract"] == "rule"
+
+
+def test_extract_default_follows_the_rule_value():
+    rules = copy.deepcopy(RULES)
+    rid = "color.extract.default_count"
+    rules[rid] = rules[rid].model_copy(update={"default": 5})
+    assert resolve_color_config(NO_FLAGS, None, rules, A1).settings["extract"] == 5
+
+
+def test_a_missing_extract_rule_is_a_clear_error():
+    rules = {k: v for k, v in RULES.items() if k != "color.extract.default_count"}
+    with pytest.raises(ColorConfigError, match="color.extract.default_count"):
+        resolve_color_config(NO_FLAGS, None, rules, A1)
+    # Given explicitly, the rule is not needed.
+    assert resolve_color_config({"extract": 4}, None, rules, A1).settings["extract"] == 4
+
+
+def test_a_bad_extract_rule_value_is_refused():
+    rules = copy.deepcopy(RULES)
+    rid = "color.extract.default_count"
+    rules[rid] = rules[rid].model_copy(update={"default": 6.0})
+    with pytest.raises(ColorConfigError, match="rule color.extract.default_count: extract"):
+        resolve_color_config(NO_FLAGS, None, rules, A1)
+
+
+def test_new_keys_precedence_flag_over_file_over_default(tmp_path):
+    path = _config(tmp_path, "extract: 7\noutlines: keep\noutline_color: none\n"
+                             "merge: [[5, 1], [6, 1]]\n")
+    r = _resolve(path=path)
+    assert (r.settings["extract"], r.settings["outlines"], r.settings["outline_color"],
+            r.settings["merge"]) == (7, "keep", "none", ((5, 1), (6, 1)))
+    assert {k: r.sources[k] for k in NEW} == {k: "config" for k in NEW}
+    r = _resolve({"extract": 8, "outlines": "drop"}, path)
+    assert (r.settings["extract"], r.settings["outlines"]) == (8, "drop")
+    assert (r.sources["extract"], r.sources["outlines"], r.sources["merge"]) == (
+        "flag", "flag", "config")
+
+
+def test_new_keys_are_recorded_as_plain_lists(tmp_path):
+    r = _resolve(path=_config(tmp_path, "outline_color: [4, 2]\nmerge: [[3, 0]]\n"))
+    assert r.settings["outline_color"] == (4, 2)            # order kept, frozen
+    rec = r.as_record()["settings"]
+    assert rec["outline_color"] == [4, 2] and rec["merge"] == [[3, 0]]
+    assert type(rec["merge"][0]) is list
+    rec["merge"][0][0] = 9                                  # a copy
+    assert r.settings["merge"] == ((3, 0),)
+
+
+PAIRS = r"merge must be a list of \[from, into\] pairs"
+NON_EMPTY = "outline_color must be auto, none or a non-empty list"
+
+
+@pytest.mark.parametrize("text, message", [
+    ("extract: 1\n", "extract: must be between 2 and 254"),
+    ("extract: 255\n", "extract: must be between 2 and 254"),
+    ("extract: true\n", "extract"),
+    ("extract: 6.0\n", "extract"),
+    ("extract: '6'\n", "extract"),
+    ("outlines: none\n", "outlines"),
+    ("outlines: true\n", "outlines"),
+    ("outline_color: 3\n", NON_EMPTY),
+    ("outline_color: []\n", NON_EMPTY),
+    ("outline_color: [-1]\n", NON_EMPTY),
+    ("outline_color: [true]\n", NON_EMPTY),
+    ("outline_color: [1.0]\n", NON_EMPTY),
+    ("outline_color: [2, 2]\n", "outline_color: lists an index more than once"),
+    ("outline_color: black\n", NON_EMPTY),
+    ("merge: 3\n", PAIRS),
+    ("merge: [3, 1]\n", PAIRS),
+    ("merge: [[3]]\n", PAIRS),
+    ("merge: [[3, 1, 0]]\n", PAIRS),
+    ("merge: [[3, -1]]\n", PAIRS),
+    ("merge: [[3, true]]\n", PAIRS),
+    ("merge: [[3, 3]]\n", "merges a color into itself"),
+    ("merge: [[3, 1], [3, 2]]\n", "color 3 is merged more than once"),
+    ("merge: [[3, 1], [1, 0]]\n", "no chains"),
+    ("merge: {3: 1}\n", PAIRS),
+])
+def test_bad_new_key_values_are_refused(tmp_path, text, message):
+    with pytest.raises(ColorConfigError, match=message):
+        _resolve(path=_config(tmp_path, text))
+
+
+@pytest.mark.parametrize("flags, message", [
+    ({"extract": 1}, "extract"), ({"extract": True}, "extract"),
+    ({"outlines": "maybe"}, "outlines"),
+])
+def test_bad_new_flags_are_refused(flags, message):
+    with pytest.raises(ColorConfigError, match=message):
+        _resolve(flags)
+
+
+@pytest.mark.parametrize("flags, text", [
+    ({"extract": 3}, None),                   # colors defaults to the cap, 4
+    ({"extract": 2, "colors": 3}, None),
+    (None, "extract: 3\n"),
+    ({"extract": 3}, "colors: 4\n"),
+])
+def test_extract_below_colors_is_refused(tmp_path, flags, text):
+    path = _config(tmp_path, text) if text else None
+    with pytest.raises(ColorConfigError, match=r"extract \d is below colors \d"):
+        _resolve(flags, path)
+
+
+def test_extract_equal_to_colors_is_accepted():
+    assert _resolve({"extract": 4}).settings["extract"] == 4
+    assert _resolve({"extract": 3, "colors": 3}).settings["colors"] == 3
+
+
+@pytest.mark.parametrize("text, message", [
+    ("outline_color: [6]\n", "outline_color 6 is not an extraction index"),
+    ("merge: [[6, 0]]\n", r"merge \[6, 0\]: 6 is not an extraction index"),
+    ("merge: [[0, 9]]\n", r"merge \[0, 9\]: 9 is not an extraction index"),
+    ("outline_color: [4]\nmerge: [[4, 0]]\n", "color 4 is in the outline family"),
+    ("outline_color: [4]\nmerge: [[1, 4]]\n", "color 4 is in the outline family"),
+])
+def test_indices_are_checked_against_extract_when_resolving(tmp_path, text, message):
+    with pytest.raises(ColorConfigError, match=message):
+        _resolve(path=_config(tmp_path, text))          # extract 6: indices 0..5
+
+
+def test_check_extraction_indices_after_quantize():
+    # The image gave 4 colors although extract was 6.
+    check_extraction_indices("auto", [[3, 0]], 4)
+    with pytest.raises(ColorConfigError, match="the extraction has 4 colors"):
+        check_extraction_indices("auto", [[4, 0]], 4)
+    with pytest.raises(ColorConfigError, match="outline_color 5"):
+        check_extraction_indices([5], [], 4)
+    # A family found by detection (auto) is protected the same way.
+    with pytest.raises(ColorConfigError, match="color 2 is in the outline family"):
+        check_extraction_indices("auto", [[2, 0]], 4, family=(2,))
+    check_extraction_indices("none", [[1, 0]], 4)
+    with pytest.raises(ColorConfigError, match="no chains"):
+        check_extraction_indices("auto", [(1, 0), (2, 1)], 4)
+
+
+def test_merge_problem_is_none_for_good_pairs():
+    assert merge_problem([]) is None
+    assert merge_problem([(3, 0), (4, 0), (5, 1)]) is None   # two into one is fine
+
+
+def test_outline_color_and_merge_are_accepted_from_any_source():
+    # The CLI has no flags for them (config file only), but the resolver takes any source.
+    r = _resolve({"outline_color": "none", "merge": [[5, 0]]})
+    assert r.sources["outline_color"] == "flag" and r.settings["merge"] == ((5, 0),)

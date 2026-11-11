@@ -11,7 +11,7 @@ import typer
 from pydantic import ValidationError
 
 from tdmg import __version__
-from tdmg.colors import ColorsError, make_colors
+from tdmg.colors import ColorsError, extracted_fate, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
@@ -365,27 +365,38 @@ def colors(
         "--width-mm", help="Width of the selection in the model, in mm.")],
     out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
     n_colors: Annotated[int | None, typer.Option(
-        "--colors", help="Number of colors; default the printer's palette (4 on the A1).")
+        "--colors", help="Most colors in the final palette; default the printer's palette "
+                         "(4 on the A1).")
     ] = None,
+    extract: Annotated[int | None, typer.Option(
+        "--extract", help="Colors to extract before merges, at least --colors; default "
+                          "the rule color.extract.default_count (6).")] = None,
     edges: Annotated[str | None, typer.Option(
         "--edges", help="smooth (default), furry or exact.")] = None,
     base: Annotated[str | None, typer.Option(
         "--base", help="auto (default: the largest color) or a color index.")] = None,
+    outlines: Annotated[str | None, typer.Option(
+        "--outlines", help="drop (default) or keep the cartoon outline.")] = None,
     config: Annotated[Path | None, typer.Option(
-        "--config", help="YAML file with colors, edges and base; flags override it.")
+        "--config", help="YAML file with colors, extract, edges, base, outlines, "
+                         "outline_color and merge; flags override it. outline_color and "
+                         "merge (by extraction index) are set in this file only.")
     ] = None,
 ) -> None:
     """Suggest a palette for a selection: write labels.png, regions.png and colors.json.
 
     Exit codes:
-      0  files written
+      0  files written; the plan is ready
+      1  files written, but the plan is not ready: more colors
+         remain than --colors allows. Choose merges from
+         regions.png; a plan that is not ready cannot be built
       2  input, config or I/O error: nothing is written, except
          that an I/O failure while writing can leave a folder
          without colors.json, which must not be used
-    No checks run here, so there is no exit 1. Open regions.png to
-    review the colors before building geometry.
+    Open regions.png to review the colors before building geometry.
     """
-    flags = {"colors": n_colors, "edges": edges, "base": _base(base)}
+    flags = {"colors": n_colors, "extract": extract, "edges": edges, "base": _base(base),
+             "outlines": outlines}
     try:
         rec = make_colors(selection, out, width_mm=width_mm, flags=flags, config_path=config,
                           rules=load_rules(), printer=load_printer("bambu-a1"))
@@ -402,13 +413,27 @@ def colors(
                 if name == "regions.png" else "")
         typer.echo(f"wrote {out / name}{note}")
     typer.echo(f"wrote {out / 'colors.json'}")
+    if not rec["ready"]:
+        typer.echo(f"NOT READY: {rec['not_ready_reason']}")
+        typer.echo("The files are written for review only; this plan cannot be built.")
+        raise typer.Exit(1)
 
 
 def _colors_lines(rec: dict) -> list[str]:
-    """The palette, what was dropped or vanished, and colors_id (ASCII only)."""
+    """The extracted colors, merges, the final palette, what was dropped or vanished, and
+    colors_id (ASCII only)."""
     s = rec["settings"]["settings"]
-    lines = [(f"palette: {len(rec['palette'])} colors (asked {s['colors']}), edges "
-              f"{s['edges']}, {rec['mm_per_px']:.4f} mm/px")]
+    ext = rec["extraction"]
+    lines = [(f"extracted: {ext['n_extracted']} colors (asked {ext['extract']}); "
+              "outline_color and merge use these indices")]
+    for e in ext["palette"]:
+        lines.append(f"  {e['index']} {e['hex']} {e['share']:6.1%}  {extracted_fate(e)}")
+    if rec["outline"]["note"]:
+        lines.append(f"outline: {rec['outline']['note']}")
+    for m in rec["merges"]:
+        lines.append(f"merged: {m['from']} {m['from_hex']} into {m['into']} {m['into_hex']}")
+    lines.append(f"palette: {len(rec['palette'])} colors (at most {s['colors']}), edges "
+                 f"{s['edges']}, {rec['mm_per_px']:.4f} mm/px")
     for p in rec["palette"]:
         lines.append(f"  {p['index']} {p['hex']} {p['share']:6.1%}"
                      + ("  base" if p["base"] else ""))

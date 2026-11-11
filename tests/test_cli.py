@@ -378,7 +378,12 @@ def test_colors_writes_outputs_and_prints_the_palette(tmp_path):
     rec = json.loads((out / "colors.json").read_bytes())
     text = _plain(r.stdout)
     n = len(rec["palette"])
-    assert f"palette: {n} colors (asked 4), edges smooth" in text
+    assert f"palette: {n} colors (at most 4), edges smooth" in text
+    assert f"extracted: {n} colors (asked 6)" in text
+    for e in rec["extraction"]["palette"]:
+        assert (f"{e['index']} {e['hex']} {e['share']:6.1%}  final {e['final_index']}"
+                in r.stdout)
+    assert "NOT READY" not in text
     for p in rec["palette"]:
         line = f"{p['index']} {p['hex']} {p['share']:6.1%}"
         assert " ".join(line.split()) + (" base" if p["base"] else "") in text
@@ -393,19 +398,27 @@ def test_colors_writes_outputs_and_prints_the_palette(tmp_path):
 def test_colors_flags_and_config(tmp_path):
     sel = _selection(tmp_path)
     cfg = tmp_path / "c.yaml"
-    cfg.write_bytes(b"colors: 3\nedges: furry\n")
+    cfg.write_bytes(b"colors: 3\nedges: furry\noutlines: keep\noutline_color: none\n"
+                    b"merge: [[2, 0]]\n")
     out = tmp_path / "colors"
-    r = _colors(sel, out, "--config", str(cfg), "--colors", "2", "--base", "auto")
+    r = _colors(sel, out, "--config", str(cfg), "--colors", "2", "--base", "auto",
+                "--extract", "3", "--outlines", "drop")
     assert r.exit_code == 0, r.output
     rec = json.loads((out / "colors.json").read_bytes())
-    assert rec["settings"]["settings"] == {"colors": 2, "edges": "furry", "base": "auto"}
-    assert rec["settings"]["sources"] == {"colors": "flag", "edges": "config", "base": "flag"}
+    assert rec["settings"]["settings"] == {
+        "colors": 2, "extract": 3, "edges": "furry", "base": "auto", "outlines": "drop",
+        "outline_color": "none", "merge": [[2, 0]]}
+    assert rec["settings"]["sources"] == {
+        "colors": "flag", "extract": "flag", "edges": "config", "base": "flag",
+        "outlines": "flag", "outline_color": "config", "merge": "config"}
+    m = rec["merges"][0]
+    assert f"merged: 2 {m['from_hex']} into 0 {m['into_hex']}" in _plain(r.stdout)
     assert "edges furry" in _plain(r.stdout)
 
 
 def test_colors_numeric_base(tmp_path):
     out = tmp_path / "colors"
-    r = _colors(_selection(tmp_path), out, "--colors", "2", "--base", "1")
+    r = _colors(_selection(tmp_path), out, "--colors", "2", "--extract", "2", "--base", "1")
     assert r.exit_code == 0, r.output
     assert json.loads((out / "colors.json").read_bytes())["base_index"] == 1
 
@@ -415,6 +428,9 @@ def test_colors_numeric_base(tmp_path):
     (("--edges", "fuzzy"), "edges"),
     (("--base", "7"), "base 7 is not a color index"),
     (("--config", "missing.yaml"), "cannot read config file"),
+    (("--extract", "3"), "extract 3 is below colors 4"),
+    (("--extract", "1"), "extract: must be between 2 and 254"),
+    (("--outlines", "hide"), "outlines"),
 ])
 def test_colors_bad_settings_exit_2_and_write_nothing(tmp_path, extra, message):
     out = tmp_path / "colors"
@@ -480,10 +496,13 @@ def test_colors_reports_os_errors_without_a_traceback(tmp_path):
 
 def test_colors_help(tmp_path):
     text = _plain(runner.invoke(app, ["colors", "--help"], prog_name="tdmg").output)
-    for option in ("--width-mm", "--out", "--colors", "--edges", "--base", "--config"):
+    for option in ("--width-mm", "--out", "--colors", "--extract", "--edges", "--base",
+                   "--outlines", "--config"):
         assert option in text
+    assert "--outline-color" not in text and "--merge" not in text   # config file only
+    assert "outline_color and merge (by extraction index) are set in this file only" in text
     assert "Usage: tdmg colors [OPTIONS] {SELECTION_DIR}" in text
-    assert "No checks run here, so there is no exit 1." in text
+    assert "1 files written, but the plan is not ready" in text
 
 
 def test_colors_without_width_is_a_usage_error(tmp_path):
@@ -491,3 +510,24 @@ def test_colors_without_width_is_a_usage_error(tmp_path):
                             str(tmp_path / "colors")])
     assert r.exit_code == 2
     assert "Missing option '--width-mm'" in _plain(r.output)
+
+
+def test_colors_not_ready_writes_the_files_and_exits_1(tmp_path):
+    # The test selection has 3 distinct colors; at most 2 are allowed and nothing is merged.
+    out = tmp_path / "colors"
+    sel = _selection(tmp_path)
+    r = _colors(sel, out, "--colors", "2")
+    assert r.exit_code == 1, r.output
+    assert sorted(p.name for p in out.iterdir()) == ["colors.json", "labels.png",
+                                                    "regions.png"]
+    rec = json.loads((out / "colors.json").read_bytes())
+    assert rec["ready"] is False
+    assert f"NOT READY: {rec['not_ready_reason']}" in r.stdout
+    assert "this plan cannot be built" in r.stdout
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+    # With one merge it is ready.
+    cfg = tmp_path / "merge.yaml"
+    cfg.write_bytes(b"merge: [[2, 0]]\n")
+    r = _colors(sel, tmp_path / "merged", "--colors", "2", "--config", str(cfg))
+    assert r.exit_code == 0, r.output
+    assert "NOT READY" not in r.stdout
