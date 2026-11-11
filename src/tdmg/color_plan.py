@@ -13,7 +13,8 @@ plan_colors runs, in order:
    none; or a list) is dropped; under `keep` it also returns the band that redraws the
    drawing's lines.
 4. check_extraction_indices again, now with the family and its core (a merge may go into
-   the core, never from a family member); then apply_merges.
+   the core, never from a family member; under drop not into a core the drop left with
+   no pixel, under keep yes, since the band gives it pixels); then apply_merges.
 5. shade_pairs among the colors left after steps 3 and 4, without the core: flagged for the
    owner, never applied (no labels change).
 6. Under `keep` (decided 2026-11-11): paint_band paints the band in the core's color, after
@@ -28,8 +29,11 @@ the final index of at least one extracted color with the same hex.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass
+
+import numpy as np
 
 from tdmg.color import (
     CleanupLog,
@@ -38,6 +42,7 @@ from tdmg.color import (
     Quantized,
     apply_merges,
     clean_regions,
+    from_labels,
     quantize,
 )
 from tdmg.color_config import ColorConfigError, check_extraction_indices
@@ -114,12 +119,19 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
                                         rules=rules)
     check_extraction_indices(outline_color, merge, n, outline.family, outline.core)
     merges = tuple((int(a), int(b)) for a, b in merge)
-    for a, b in merges:
-        if b == outline.core and outline.remap[b] is None:
-            raise ColorConfigError(
-                f"merge [{a}, {b}]: color {b}, the outline core, has no pixel left after the "
-                "outline handling (it has no wide area); merge into another color")
-    merged = apply_merges(outlined, _translate(merges, outline.remap))
+    core_gone = outline.core is not None and outline.remap[outline.core] is None
+    into_gone_core = [(a, b) for a, b in merges if core_gone and b == outline.core]
+    if into_gone_core and outline.band is None:
+        a, b = into_gone_core[0]
+        raise ColorConfigError(
+            f"merge [{a}, {b}]: color {b}, the outline core, has no pixel left after the "
+            "outline handling (it has no wide area); merge into another color")
+    if into_gone_core:
+        # Under keep (decided 2026-11-11) the band gives the core pixels, so a merge into
+        # it is allowed although the drop left it none: those colors take its color here.
+        merged = _merge_into_absent_core(outlined, outline, merges)
+    else:
+        merged = apply_merges(outlined, _translate(merges, outline.remap))
     hue, chroma = rule_value(rules, SHADE_HUE_RULE), rule_value(rules, SHADE_CHROMA_RULE)
     pairs = shade_pairs(extracted.lab.tolist(), extracted.hex,
                         shade_candidates(n, outline.remap, outline.core, merges), hue, chroma)
@@ -165,6 +177,32 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
                      merged=merged, banded=banded, shade_pairs=pairs,
                      shade_rules=((SHADE_HUE_RULE, hue), (SHADE_CHROMA_RULE, chroma)),
                      cleaned=cleaned, log=log, fate=tuple(fate), final_index=tuple(final))
+
+
+def _merge_into_absent_core(outlined: Quantized, outline: OutlineResult, merges
+                            ) -> Quantized:
+    """apply_merges when some merges go into the core, which the drop left with no pixel
+    (only under keep). Those `from` colors' pixels take a palette row appended with the
+    core's color; the other merges are then applied with apply_merges. The result's remap
+    is composed so that it maps outlined's indices to the result's, as apply_merges' does
+    (None for every merged-away color)."""
+    core = outline.core
+    labels = np.array(outlined.labels, np.int64)
+    k = len(outlined.hex)
+    for a, b in merges:
+        if b == core:
+            labels[outlined.labels == outline.remap[a]] = k
+    rgb = np.vstack([outlined.rgb, np.asarray(outline.core_rgb, np.uint8)[None]])
+    first = from_labels(labels, rgb, iterations=outlined.iterations,
+                        converged=outlined.converged, n_requested=outlined.n_requested,
+                        n_distinct_colors=outlined.n_distinct_colors,
+                        dropped=outlined.dropped - 1)
+    rest = [(first.remap[outline.remap[a]], first.remap[outline.remap[b]])
+            for a, b in merges if b != core]
+    second = apply_merges(first, rest)
+    remap = tuple(None if first.remap[j] is None else second.remap[first.remap[j]]
+                  for j in range(k))
+    return dataclasses.replace(second, remap=remap)
 
 
 def _translate(merges, remap) -> list[tuple[int, int]]:

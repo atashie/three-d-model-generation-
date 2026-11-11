@@ -144,7 +144,7 @@ LABELS_METHOD = ("nearest-label fill of OUTSIDE (exact squared distance, lowest 
                  "ties. sigma 0: nearest upsample of the filled map")
 
 
-def _sigma_or_zero(value) -> float:
+def sigma_or_zero(value) -> float:
     """value as a float: a real number (not a bool or a string), finite and at least 0."""
     if isinstance(value, bool) or not isinstance(value, numbers.Real):
         raise SmoothingError(f"sigma_px must be a number, got {value!r}")
@@ -154,7 +154,8 @@ def _sigma_or_zero(value) -> float:
     return sigma
 
 
-def _supersample(value) -> int:
+def check_supersample(value) -> int:
+    """value as an int of at least 1 (not a bool), the fine map's supersample factor."""
     return _positive_int("supersample", value)
 
 
@@ -328,8 +329,8 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     indices, the k coarse fields and a few float64 bands (_band_rows x W s x 8 bytes
     each).
     """
-    sigma = _sigma_or_zero(sigma_px)
-    s = _supersample(supersample)
+    sigma = sigma_or_zero(sigma_px)
+    s = check_supersample(supersample)
     band_rows = _positive_int("_band_rows", _band_rows)
     filled = _fill_outside(_label_map(labels))
     h, w = filled.shape

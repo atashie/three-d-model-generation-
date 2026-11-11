@@ -1407,3 +1407,19 @@ def test_verify_colors_allows_last_digit_lab_differences_only(cartoon_done, tmp_
         0, r["extraction"]["palette"][2]["lab"][0] + 1e-6))
     with pytest.raises(ColorsError, match="lab is not the CIELAB of its rgb"):
         verify_colors(d, cartoon_done[2])
+
+
+def test_keep_merge_into_a_core_with_no_wide_area_is_recorded_and_verified(tmp_path):
+    from test_color_outline import PUPIL
+    rgba = green_cartoon()
+    rgba[PUPIL] = (37, 86, 27, 255)
+    sel = write_sel(tmp_path / "sel", rgba, SelectionSpec(keep_at=((30, 70),)))
+    core = run(sel, tmp_path / "probe", width_mm=11.0)["outline"]["core"]
+    out = tmp_path / "out"
+    with pytest.raises(ColorsError, match="the outline core, has no pixel left"):
+        run(sel, tmp_path / "drop", width_mm=11.0, flags={"merge": [[1, core]]})
+    rec = run(sel, out, width_mm=11.0, flags={"outlines": "keep", "merge": [[1, core]]})
+    ext = rec["extraction"]["palette"]
+    assert ext[1]["fate"] == "merged" and ext[core]["fate"] == "final"
+    assert rec["ready"] is True
+    verify_colors(out, sel)

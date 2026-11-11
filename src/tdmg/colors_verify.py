@@ -49,7 +49,7 @@ from tdmg.colors import (
     shade_pair_records,
 )
 from tdmg.selection import SelectionError, pixels_sha256, read_selection
-from tdmg.smoothing import SmoothingError, _sigma_or_zero, _supersample
+from tdmg.smoothing import SmoothingError, check_supersample, sigma_or_zero
 
 # --- verify_colors: reading a colors folder back (design step 2, geometry) ---------------
 
@@ -111,10 +111,10 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        counts do not increase; base_index and the base flags agree with settings.base;
        k is at most settings.colors (as ready says). The extraction palette: indices
        0..n-1; its hex codes are quantize.palette_hex and each is the "#rrggbb" of its rgb;
-       each lab is srgb_to_lab of its rgb, to LAB_ABS_TOL per component. The outline: found_by matches
-       outline_color (auto, none, or config for a list); the family is the list (config),
-       empty (none), or exactly the indices whose recorded thinness is above the thin
-       share (auto); thinness has one number from 0 to 1 per extracted color; family_hex
+       each lab is srgb_to_lab of its rgb, to LAB_ABS_TOL per component. The outline:
+       found_by matches outline_color (auto, none, or config for a list); the family is
+       the list (config), empty (none), or exactly the indices whose recorded thinness is
+       above the thin share (auto); thinness has one number from 0 to 1 per extracted color; family_hex
        is the family's colors; the core is outline_core of the family on the recorded Lab
        (the darkest member), with its hex; keep_width is set exactly when the keep width
        rule is used. The merges' from_hex and into_hex are the extraction's colors. Each
@@ -184,7 +184,7 @@ def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str 
                           f"(got {err['input']!r})") from None
     width = check_width_mm(ident["width_mm"])
     try:
-        supersample = _supersample(ident["supersample"])
+        supersample = check_supersample(ident["supersample"])
     except SmoothingError as e:
         raise ColorsError(f"identity.{e}") from None
     edge_rule = EDGE_RULES[settings["edges"]]
@@ -201,7 +201,7 @@ def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str 
             raise ColorsError(f"identity.rules[{rule_id!r}] must be a finite number, "
                               f"got {value!r}")
     try:
-        sigma = _sigma_or_zero(0.0 if edge_rule is None else rules[edge_rule])
+        sigma = sigma_or_zero(0.0 if edge_rule is None else rules[edge_rule])
     except SmoothingError as e:
         raise ColorsError(f"identity.rules: {e}") from None
     return settings, width, supersample, sigma, edge_rule

@@ -155,7 +155,10 @@ def stroke_band(strokes: np.ndarray, inside: np.ndarray, width_px: float) -> np.
       the pixels whose centre is within W of the outer edge, inside it (floor(W + 1/2) px
       on a straight edge). Holes (OUTSIDE pixels inside the subject) count as outside.
     Where lines meet or curve, the same rule is applied; the width there is not claimed to
-    be exactly W.
+    be exactly W. Strokes are taken as drawn, so a 1 px fringe tone of the family on one
+    side of a line widens it on that side and moves the centre line about 0.5 px toward
+    it (inside the "within one pixel" above). An isolated thin speck of a family color is
+    also a stroke: it becomes a disc about W across.
     """
     inside = np.asarray(inside, bool)
     band = np.zeros(inside.shape, bool)

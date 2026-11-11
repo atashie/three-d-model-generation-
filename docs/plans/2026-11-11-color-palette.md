@@ -424,3 +424,24 @@ The code moved to `tdmg.color_outline`, and `verify_colors` to `tdmg.colors_veri
   ready. The green pair is still flagged. This is a new choice for the owner in Task 7d:
   keep the lines and merge the greens, or drop the lines.
 - Drop runs are unchanged.
+
+**Decision, 2026-11-11 (controller, after the c266ce7 reviews): a merge into the core
+under `keep`.** Under `keep`, a merge into the core is allowed even when the drop leaves
+the core no wide pixel, because the band gives it pixels. The merged colors take the core's
+color before the band is painted. Under `drop` the refusal stays. Both cases are tested.
+
+**Correction, 2026-11-11 (review of the re-run):** "Roadie, keep … by eye it looks like
+the first version" overstated it. The controller's review found three differences:
+- **The mouth:** its lower part is shaded in the thin dark-red family tone (`#960a0a`), so
+  `keep` redraws that shading as a stroke. The red mouth interior shrinks to a small spot
+  inside a thick band.
+- **The eye white** is also smaller.
+- **A dot:** one isolated thin speck, about 15.7 px from the edge at (300, 486), shows as a
+  small dot.
+
+**Added to "Open for the owner (Task 7d)":**
+- Under `keep`, Roadie's mouth becomes a thick band with a small red spot, and the eye
+  white shrinks. Is that acceptable, or should the mouth's shading tone be left out of
+  the family (an explicit `outline_color` list)?
+- Isolated thin specks of a family color become small dots about W across. Keep them, or
+  drop them?

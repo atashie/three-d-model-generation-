@@ -466,3 +466,16 @@ equal the N = 6 rows of `outline-shade.txt`:
   - With the blue merge, the arms and feet fuse into the body's silhouette.
   
   This bears on the owner's Task 7d choice between keep and drop for Oddie.
+
+### Correction, 2026-11-11 (Roadie with the redefined keep)
+
+The plan's Task 7c re-run note said that Roadie under the new `keep` (the drawn lines, at
+git `c266ce7`) "looks like the first version". That overstated it. The controller's
+review of `artifacts/colors-runs/roadie-tol30-60-keep-v2/regions.png` found three
+differences; I have not measured them myself:
+- **The mouth:** its lower part is shaded in the thin dark-red family tone `#960a0a`, so
+  keep redraws that shading as a stroke. The red mouth interior shrinks to a small spot
+  inside a thick band.
+- **The eye white** is smaller.
+- **A dot:** one isolated thin speck, about 15.7 px from the edge at (300, 486), becomes a
+  small dot.

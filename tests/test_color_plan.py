@@ -230,3 +230,25 @@ def test_shade_pairs_are_flagged_never_applied():
 
 def test_shade_candidates_leave_out_removed_merged_and_core_colors():
     assert shade_candidates(5, (0, None, 1, 2, 3), 3, ((4, 0),)) == [0, 2]
+
+
+def test_under_keep_a_merge_into_a_core_with_no_wide_area_is_allowed():
+    # Decided 2026-11-11: under keep the band gives the core pixels, so a merge into it is
+    # allowed even when the drop left it none (under drop it is refused, test above).
+    from test_color_outline import PUPIL, RED, cartoon
+    rgb, mask = cartoon()
+    rgb[PUPIL] = RED
+    p0 = cartoon_plan((rgb, mask), outlines="keep")
+    b, w, r = _ix(p0, "black"), _ix(p0, "white"), _ix(p0, "red")
+    assert p0.outline.remap[b] is None and p0.fate[b] == "final"   # the band's color
+    p = cartoon_plan((rgb, mask), outlines="keep", merge=((w, b),))
+    assert p.fate[w] == "merged" and p.fate[b] == "final"
+    core = p.cleaned.hex.index("#0a0a0a")
+    assert p.cleaned.hex[p.final_index[b]] == "#0a0a0a"
+    assert set(p.cleaned.hex) == {"#0a0a0a", "#c81e1e"}
+    # The white area is now the core's color; the red stays red.
+    assert (p.cleaned.labels[20:80, 70:105] == core).all()
+    assert p.fate[r] == "final"
+    # The other merges still apply alongside it.
+    p = cartoon_plan((rgb, mask), outlines="keep", merge=((w, b), (r, b)))
+    assert set(p.cleaned.hex) == {"#0a0a0a"}
