@@ -492,3 +492,10 @@ Answered by the project owner on 2026-11-09.
   Explicit selection is implemented as `tdmg select` (2026-11-10, plan
   `docs/plans/2026-11-10-subject-selection.md`); the owner confirmed the Roadie and
   Oddie selections. Automatic language-to-selection behavior is not built.
+- **Q7. Color for flat prints (R2), 2026-11-11:** the owner asked for an AMS multicolor
+  print with few color changes, and a glue-together route. Agreed design, with the owner's
+  decisions: `docs/plans/2026-11-11-color-design.md`. In short: colors only in a top
+  skin on a one-color base; the palette suggested from the image (this replaces, for
+  now, section 11's "palette snapped to the job's filament colors"); glue pieces as
+  inlays in pockets; tiny regions merged for glue only; face up or down chosen by
+  measurement; a reusable color module steered by a strict config file of named keys.

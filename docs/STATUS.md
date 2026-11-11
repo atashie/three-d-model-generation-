@@ -50,14 +50,17 @@ passed. These commits are pushed; for CI see above.
 
 ## Next steps, in order
 
-1. **Caliper measurements,** if the owner gets calipers: three named dimensions within
+1. **R2 color (owner's next request, 2026-11-11):** design agreed in
+   `docs/plans/2026-11-11-color-design.md`. Next: the implementation plan for its step 1
+   (`tdmg.color` and `tdmg colors`, with previews for the owner to review).
+2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
-2. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
+3. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
    identity scheme.
-3. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
+4. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
    still a bit rough", acceptable for now. Options: a per-image `--smooth-px`, or a
    better source image.
-4. **R4 backend (open):** help the owner choose under their decision rule: a cheap
+5. **R4 backend (open):** help the owner choose under their decision rule: a cheap
    standard service, around $1 per model, beats a homemade pipeline if it does
    everything we need.
 
