@@ -69,3 +69,15 @@ install PrusaSlicer 2.9.7).
 - **Not done:** PrusaSlicer's G-code was not printed. It is generic (it is not Bambu
   firmware G-code), and it is used only as evidence that a second reader accepts and
   slices the file.
+
+## Addendum: full install hashes, 2026-11-11
+
+`install_hashes_full.py` → `install-hashes-full.txt` hashes the extracted install with
+`tdmg.slicer.app_tree_sha256` (sorted `relpath<TAB>sha256` lines):
+- `PrusaSlicer.dll`: `6070610345f2c4c56fdfc462c64218b68a9d2dac9973674cc2a7642e3bc73c7c`;
+- the app tree: 1,119 files,
+  `5515fb4aecfadd7f97bb9dee5639ec14e6f19ae0d3330bddd3594f486d0b921a`.
+
+These equal the values pinned in `profiles/slicers/prusaslicer-2.9.7.yaml`. The
+implementer, working separately, also re-extracted the hash-checked zip and got the same
+tree hash.

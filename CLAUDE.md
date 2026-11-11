@@ -22,7 +22,8 @@ uv run pytest                         # all tests
 uv run python scripts/gen_docs.py     # regenerate docs/reference/rules.md and docs/print-types/recipes.md
 uv run ruff check .                   # lint
 uv run python scripts/setup_orcaslicer.py --verify-only artifacts/tools/orcaslicer-2.5.0   # check the pinned slicer (Windows x64)
-TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 uv run pytest -m slicer               # real-slicer test
+uv run python scripts/setup_prusaslicer.py --verify-only artifacts/tools/prusaslicer-2.9.7  # check the pinned PrusaSlicer
+TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 TDMG_PRUSASLICER_DIR=artifacts/tools/prusaslicer-2.9.7 uv run pytest -m slicer   # real-slicer tests
 ```
 
 ## Environment facts (each says where and when it was verified; re-verify on any other machine)
