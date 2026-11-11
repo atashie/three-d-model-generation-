@@ -15,7 +15,7 @@ import time
 import numpy as np
 import pytest
 from scipy import ndimage
-from test_color import _owner_selection, research_rows  # noqa: F401  (a fixture)
+from scipy.spatial import cKDTree
 
 from tdmg import color
 from tdmg.color import (
@@ -23,6 +23,7 @@ from tdmg.color import (
     CleanupLog,
     ColorError,
     Limits,
+    changed_mask,
     clean_regions,
     from_labels,
     printable_limits_px,
@@ -95,6 +96,15 @@ def test_printable_limits_refuses_bad_scale(bad):
         printable_limits_px(bad, RULES, PRINTER)
 
 
+@pytest.mark.parametrize("rule_id,unit", [("flat.sliver.opening_width", "px"),
+                                          ("flat.island.min_square_side", "mm")])
+def test_printable_limits_refuses_other_units(rule_id, unit):
+    rules = dict(RULES)
+    rules[rule_id] = RULES[rule_id].model_copy(update={"unit": unit})
+    with pytest.raises(ColorError, match=rule_id):
+        printable_limits_px(0.1, rules, PRINTER)
+
+
 def test_limits_refuse_bad_values():
     with pytest.raises(ColorError):
         Limits(min_width_px=0.0, min_area_px=1.0, mm_per_px=1.0, opening_width_mm=0.4,
@@ -138,15 +148,25 @@ def test_axis_aligned_strip_is_removed_iff_not_wider_than_w(w, vertical):
             assert got[12:12 + n, 4 + math.ceil(w):76 - math.ceil(w)].all(), (w, n)
 
 
-def _f_exact(mask, pts):
-    """Distance from each point (x, y) to the complement of the union of the mask's pixel
-    squares (pixel (i, j) is [j, j+1] x [i, i+1]; beyond the image is outside)."""
+def _f_grid(mask, step):
+    """f(c) at every point c = (x, y) = (b * step, a * step) of the image, for 1/step an
+    integer: the exact distance from c to the complement of the union of the mask's
+    pixel squares (pixel (i, j) is [j, j+1] x [i, i+1]; beyond the image is outside).
+
+    The nearest point of a closed square to a grid point is the clamped point, which is a
+    grid point too (the squares' corners are on the grid), so f(c) is the distance to the
+    nearest grid point lying in a complement square: an exact Euclidean distance
+    transform on the grid (scipy's EDT is exact), divided by 1/step. One ring of outside
+    squares stands for everything beyond the image."""
+    s = round(1 / step)
     pad = np.pad(mask, 1, constant_values=False)
-    oi, oj = np.nonzero(~pad)
-    x0, y0 = oj - 1.0, oi - 1.0
-    dx = np.maximum(np.maximum(x0[None] - pts[:, :1], 0), pts[:, :1] - (x0[None] + 1))
-    dy = np.maximum(np.maximum(y0[None] - pts[:, 1:], 0), pts[:, 1:] - (y0[None] + 1))
-    return np.sqrt(dx ** 2 + dy ** 2).min(axis=1)
+    hp, wp = pad.shape
+    comp = np.zeros((s * hp + 1, s * wp + 1), bool)
+    for i, j in zip(*np.nonzero(~pad)):
+        comp[s * i:s * i + s + 1, s * j:s * j + s + 1] = True
+    f = ndimage.distance_transform_edt(~comp) / s
+    h, w = mask.shape
+    return f[s:s * (h + 1) + 1, s:s * (w + 1) + 1]       # the image's own grid points
 
 
 DELTA = math.sqrt(2) / 4   # the covering radius of the half-pixel lattice
@@ -156,22 +176,23 @@ def reference_sets(mask, w, step=1 / 8):
     """Brute force. O(m): pixels whose centre is within r - m of some point c, on a grid
     of spacing `step`, with distance to the complement > r + m (r = w / 2). Returns
     (O(0), O(DELTA)). The half-pixel lattice is on the grid, so O(0) bounds the method
-    from above exactly; O(DELTA) on the grid is a subset of the continuous O(DELTA)."""
+    from above exactly; O(DELTA) on the grid is a subset of the continuous O(DELTA).
+    The centre-to-point query uses a KD-tree (scipy.spatial.cKDTree)."""
     h, wd = mask.shape
     r = w / 2
-    gx = np.arange(0, wd / step + 1) * step
-    gy = np.arange(0, h / step + 1) * step
+    gx = np.arange(0, round(wd / step) + 1) * step
+    gy = np.arange(0, round(h / step) + 1) * step
     pts = np.stack(np.meshgrid(gx, gy, indexing="xy"), -1).reshape(-1, 2)
-    f = _f_exact(mask, pts)
+    f = _f_grid(mask, step).reshape(-1)
     cy, cx = np.nonzero(mask)
+    centres = np.stack([cx + 0.5, cy + 0.5], 1)
     out = []
     for m in (0.0, DELTA + 1e-9):
         good = pts[f > r + m]
         o = np.zeros(mask.shape, bool)
-        if len(good):
-            for y, x in zip(cy, cx):
-                d2 = (good[:, 0] - (x + 0.5)) ** 2 + (good[:, 1] - (y + 0.5)) ** 2
-                o[y, x] = (d2 <= (r - m) ** 2).any() if r - m >= 0 else False
+        if len(good) and r - m >= 0:
+            dist, _ = cKDTree(good).query(centres)
+            o[cy, cx] = dist <= r - m
         out.append(o)
     return out
 
@@ -200,6 +221,52 @@ def test_opening_errs_only_toward_removal_within_the_stated_bound(seed):
     o0, od = reference_sets(mask, w)
     assert not (got & ~o0).any()
     assert not (od & ~got).any()
+
+
+def open_mask_footprint(mask, width_px):
+    """A test-only reference for open_mask: the same offsets (color._opening_offsets) as
+    scipy footprints. binary_erosion keeps x iff input[x + o] holds for every footprint
+    offset o (not reflected), so the erosion footprint is the offsets; binary_dilation
+    sets x iff input[x - o] holds for some o, so the dilation footprint is the offsets
+    reflected. Beyond the image is outside (border_value 0)."""
+    mask = np.asarray(mask, bool)
+    offsets, m = color._opening_offsets(width_px / 2)
+    out = np.zeros_like(mask)
+    for ero, dil in offsets:
+        fe = np.zeros((2 * m + 1, 2 * m + 1), bool)
+        fd = np.zeros_like(fe)
+        for di, dj in ero:
+            fe[di + m, dj + m] = True
+        for di, dj in dil:
+            fd[m - di, m - dj] = True
+        centres = ndimage.binary_erosion(mask, structure=fe, border_value=0)
+        out |= ndimage.binary_dilation(centres, structure=fd, border_value=0)
+    return out & mask
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_open_mask_equals_the_footprint_reference(seed):
+    rng = np.random.default_rng(1000 + seed)
+    w = float(rng.uniform(0.5, 9.0))
+    shape = tuple(int(v) for v in rng.integers(8, 40, size=2))
+    blob = ndimage.gaussian_filter(rng.random(shape), float(rng.uniform(0.5, 3)))
+    mask = blob > np.quantile(blob, float(rng.uniform(0.2, 0.8)))
+    if seed % 5 == 0:
+        mask[0, :] = True                      # touching the image edge
+    np.testing.assert_array_equal(color.open_mask(mask, w), open_mask_footprint(mask, w))
+
+
+@pytest.mark.parametrize("bad", [0, -1.0, math.nan, math.inf, True, "4", None])
+def test_open_mask_refuses_bad_width(bad):
+    with pytest.raises(ColorError):
+        color.open_mask(np.ones((5, 5), bool), bad)
+
+
+def test_open_mask_refuses_non_2d():
+    with pytest.raises(ColorError):
+        color.open_mask(np.ones((5, 5, 2), bool), 2.0)
+    with pytest.raises(ColorError):
+        color.open_mask(np.ones(5, bool), 2.0)
 
 
 # --- thin parts -----------------------------------------------------------------------------
@@ -445,6 +512,101 @@ def test_log_counts_equal_label_changes():
     assert isinstance(log, CleanupLog)
 
 
+def reference_merge(labels, min_area, k):
+    """The merge step by its definition: recompute every piece and boundary after each
+    merge. The next piece is the first by (area, lowest flat index) among pieces below
+    min_area with a color neighbour; it goes to the color with the most shared 4-neighbour
+    edges (OUTSIDE excluded), ties to the lowest index."""
+    lab = labels.copy()
+    h, w = lab.shape
+    merged = 0
+    while True:
+        cands = []
+        for c in range(k):
+            pieces, n = ndimage.label(lab == c, structure=FOUR)
+            for p in range(1, n + 1):
+                region = pieces == p
+                area = int(region.sum())
+                if area < min_area:
+                    cands.append((area, int(np.flatnonzero(region)[0]), c, region))
+        cands.sort(key=lambda t: (t[0], t[1]))
+        for _, _, c, region in cands:
+            counts = np.zeros(k, int)
+            ys, xs = np.nonzero(region)
+            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                ny, nx = ys + dy, xs + dx
+                ok = (ny >= 0) & (ny < h) & (nx >= 0) & (nx < w)
+                nl = lab[ny[ok], nx[ok]]
+                nl = nl[(nl != OUTSIDE) & (nl != c)]
+                counts += np.bincount(nl, minlength=k)
+            if counts.sum():
+                lab[region] = int(np.argmax(counts))
+                merged += 1
+                break
+        else:
+            break
+    kept = [(a, c) for a, _, c, region in cands]
+    return lab, merged, len(kept), sum(a for a, _ in kept)
+
+
+def random_small_map(seed):
+    rng = np.random.default_rng(seed)
+    k = int(rng.integers(3, 5))
+    shape = (20, 20)
+    cell = int(rng.integers(2, 6))
+    coarse = rng.integers(0, k, size=(shape[0] // cell + 1, shape[1] // cell + 1))
+    lab = np.kron(coarse, np.ones((cell, cell), int))[:shape[0], :shape[1]]
+    lab = np.where(rng.random(shape) < 0.15, rng.integers(0, k, size=shape), lab)
+    outside = ndimage.gaussian_filter(rng.random(shape), 2) > 0.55
+    return np.where(outside, OUTSIDE, lab).astype(np.int32), k
+
+
+@pytest.mark.parametrize("seed", range(30))
+def test_merge_step_equals_the_brute_force_reference(seed):
+    lab, k = random_small_map(seed)
+    min_area = float(np.random.default_rng(seed).uniform(2.5, 14))
+    want, merged, kept, kept_area = reference_merge(lab, min_area, k)
+    got = lab.copy()
+    n_merged, n_px, n_kept, n_kept_area = color._merge_step(got, min_area, k)
+    np.testing.assert_array_equal(got, want)
+    assert (n_merged, n_kept, n_kept_area) == (merged, kept, kept_area)
+    assert n_px >= int((got != lab).sum()) and (n_px == 0) == (n_merged == 0)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_random_maps_are_deterministic(seed):
+    lab, k = random_small_map(500 + seed)
+    q = make_q(lab, PAL4[:k])
+    a, la = clean_regions(q, limits_for(3.2))
+    b, lb = clean_regions(q, limits_for(3.2))
+    np.testing.assert_array_equal(a.labels, b.labels)
+    assert a.hex == b.hex and la == lb
+
+
+def test_changed_mask():
+    q = make_q(noisy_labels(seed=2), PAL4)
+    out, log = clean_regions(q, limits_for(4.0))
+    ch = changed_mask(q, out)
+    assert ch.dtype == np.bool_ and ch.shape == q.labels.shape
+    np.testing.assert_array_equal(ch, hex_map(q) != hex_map(out))
+    assert int(ch.sum()) == log.pixels_changed > 0
+    assert not ch[q.labels == OUTSIDE].any()
+    assert not changed_mask(q, q).any()
+
+
+def test_changed_mask_refuses_mismatched_maps():
+    q = make_q(noisy_labels(seed=2), PAL4)
+    other = make_q(noisy_labels(seed=2)[:-1], PAL4)
+    with pytest.raises(ColorError):
+        changed_mask(q, other)
+    lab = np.array(q.labels)
+    lab[lab == OUTSIDE] = 0
+    with pytest.raises(ColorError):
+        changed_mask(q, make_q(lab, PAL4))
+    with pytest.raises(ColorError):
+        changed_mask(q, "out")
+
+
 def test_cleanup_is_deterministic():
     q = make_q(noisy_labels(seed=3), PAL4)
     a, la = clean_regions(q, limits_for(4.0))
@@ -489,13 +651,23 @@ def test_bad_input_is_refused():
         clean_regions(q, 0.1)
     with pytest.raises(ColorError):
         clean_regions("q", limits_for(4.0))
+    flat_q = make_q(np.array([0, 0, 1, OUTSIDE]), [B, A])     # a 1-D label map
+    with pytest.raises(ColorError, match="2-D"):
+        clean_regions(flat_q, limits_for(4.0))
 
 
 # --- the owner's images ---------------------------------------------------------------------
 
+# Measured on the Windows PC on 2026-11-11 (git f641506, scipy 1.18.1), like the Task 3
+# fixtures in tests/test_color.py; not yet run on the M5 Mac, so cross-platform parity is
+# unverified: (passes, pixels changed, SHA-256[:16] of the int32 label map).
+OWNER_CLEANUP = {"roadie-tol30": (5, 9625, "3cb39537e2a922f3"),
+                 "oddie": (4, 10464, "e82e00d992a5c643")}
+
+
 @pytest.mark.parametrize("name", ["roadie-tol30", "oddie"])
-def test_owner_images_fixed_point_without_small_pieces(name, research_rows):  # noqa: F811 (the fixture)
-    rgb, mask = _owner_selection(name, research_rows)
+def test_owner_images_fixed_point_without_small_pieces(name, owner_selection):
+    rgb, mask = owner_selection(name)
     cols = np.flatnonzero(mask.any(0))
     mm_per_px = 60.0 / (cols.max() - cols.min() + 1)
     lim = printable_limits_px(mm_per_px, RULES, PRINTER)
@@ -507,12 +679,15 @@ def test_owner_images_fixed_point_without_small_pieces(name, research_rows):  # 
     assert not log.cap_hit
     assert ((out.labels == OUTSIDE) == ~mask).all()
     assert_fixed_point_without_small_pieces(out, lim)
+    digest = hashlib.sha256(out.labels.tobytes()).hexdigest()[:16]
+    assert (log.passes, log.pixels_changed, digest) == OWNER_CLEANUP[name]
     print(f"\n{name}: mm_per_px {mm_per_px:.6f}, min_width_px {lim.min_width_px:.3f}, "
           f"min_area_px {lim.min_area_px:.2f}; passes {log.passes}, cap_hit {log.cap_hit}, "
-          f"thin reassigned {log.thin_pixels_reassigned}, thin left {log.thin_pixels_left}, returned {log.thin_returned}, "
+          f"thin reassigned {log.thin_pixels_reassigned}, "
+          f"thin left {log.thin_pixels_left}, returned {log.thin_returned}, "
           f"pieces merged {log.pieces_merged}, pixels changed {log.pixels_changed} of "
           f"{int(mask.sum())}, dropped {log.dropped_hex}, kept pieces {log.kept_pieces} "
           f"({log.kept_area_px} px), no_core {log.no_core}; moved {log.moved}; "
-          f"palette {q.hex} shares {[f'{s:.1%}' for s in q.shares]} -> {out.hex} shares {[f'{s:.1%}' for s in out.shares]}; "
-          f"time {dt:.2f} s; labels sha256 "
-          f"{hashlib.sha256(out.labels.tobytes()).hexdigest()[:16]}")
+          f"palette {q.hex} shares {[f'{s:.1%}' for s in q.shares]} -> {out.hex} "
+          f"shares {[f'{s:.1%}' for s in out.shares]}; time {dt:.2f} s; "
+          f"labels sha256 {digest}")

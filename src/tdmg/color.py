@@ -352,6 +352,8 @@ CLEANUP_METHOD = "lattice-opening-nearest-then-boundary-merge/1"
 # The R1 rules the limits come from (the same ids as tdmg.flat; a test checks they agree).
 OPENING_RULE = "flat.sliver.opening_width"
 ISLAND_RULE = "flat.island.min_square_side"
+# The units the conversion below assumes; printable_limits_px refuses rules in others.
+RULE_UNITS = {OPENING_RULE: "mm", ISLAND_RULE: "x_nozzle"}
 
 # Pass cap. This is a numerical safety bound on a loop, kept here and not in rules/: it is
 # not a print threshold and has no physical meaning; it only stops clean_regions from
@@ -416,9 +418,14 @@ def printable_limits_px(mm_per_px, rules, printer) -> Limits:
 
     rules: the dict from tdmg.rules.load_rules(); printer: a tdmg.profiles.PrinterProfile.
     The island area is (min_square_side x nozzle_diameter_mm)^2, as tdmg.flat computes
-    it. Raises ColorError unless mm_per_px is a finite number above 0.
+    it. Raises ColorError unless mm_per_px is a finite number above 0, and if either
+    rule is not in the unit the conversion assumes (RULE_UNITS: mm, and nozzle widths).
     """
     mm_per_px = _finite_positive("mm_per_px", mm_per_px)
+    for rule_id, unit in RULE_UNITS.items():
+        if rules[rule_id].unit != unit:
+            raise ColorError(f"{rule_id} must be in {unit!r} for this conversion, "
+                             f"got {rules[rule_id].unit!r}")
     opening_mm = float(rules[OPENING_RULE].default)
     nozzle = float(printer.nozzle_diameter_mm)
     island_mm2 = (float(rules[ISLAND_RULE].default) * nozzle) ** 2
@@ -534,11 +541,29 @@ def open_mask(mask: np.ndarray, width_px: float) -> np.ndarray:
     curves, corners) only the bound above is claimed; the tests check it by brute force on
     45 degree bands and random blobs.
 
+    Raises ColorError unless mask is 2-D and width_px is a finite number above 0.
+
+    Implementation: in-place AND (erosion) and OR (dilation) of shifted array windows over
+    the offsets of _opening_offsets, on the mask's bounding box padded by m + 1 False
+    pixels. Cost O(box pixels x offsets); there are about pi r^2 erosion offsets and
+    pi r^2 dilation offsets per lattice type, 4 types. Measured on the Windows PC
+    (2026-11-11, best of 3, all four of Roadie's color masks at N = 4, 792 x 836 px):
+    0.009 s at w = 4, 0.082 s at w = 13.2, 0.18 s at w = 20. Alternatives measured on the
+    same masks, identical results, not used: the same offsets as scipy footprints
+    (binary_erosion and binary_dilation on the padded box) took 0.037 s at w = 4 and
+    0.25 s at w = 13.2; an exact two-EDT form on the half-pixel grid (O(pixels) at any w)
+    took about 0.23 s at every w from 2 to 20, so it would only pay above w of about 20.
+    The tests compare this function with the footprint form on random masks.
+
     Not idempotent: the union of the kept pixels' squares is not itself open (a kept pixel
     near the boundary has parts outside every disk), so opening the result again can
     remove more pixels. See MAX_CLEAN_PASSES for how clean_regions contains this.
     """
-    mask = np.asarray(mask, bool)
+    mask = np.asarray(mask)
+    if mask.ndim != 2:
+        raise ColorError(f"mask must be 2-D, got shape {mask.shape}")
+    width_px = _finite_positive("width_px", width_px)
+    mask = mask.astype(bool, copy=False)
     keep = np.zeros(mask.shape, bool)
     rows, cols = np.flatnonzero(mask.any(1)), np.flatnonzero(mask.any(0))
     if rows.size == 0:
@@ -549,34 +574,40 @@ def open_mask(mask: np.ndarray, width_px: float) -> np.ndarray:
     sub = np.pad(mask[i0:i1, j0:j1], pad, constant_values=False)
     hh, ww = sub.shape
 
-    def shifted(a, di, dj):
-        """b[i, j] = a[i + di, j + dj], False beyond the array."""
-        b = np.zeros_like(a)
+    def window(di, dj):
+        """Slices (target, source) with target[i, j] paired with source[i + di, j + dj]."""
         ys, ye = max(0, -di), min(hh, hh - di)
         xs, xe = max(0, -dj), min(ww, ww - dj)
-        b[ys:ye, xs:xe] = a[ys + di:ye + di, xs + dj:xe + dj]
-        return b
+        return ((slice(ys, ye), slice(xs, xe)),
+                (slice(ys + di, ye + di), slice(xs + dj, xe + dj)))
 
+    # In place, with no array allocated per offset. The pixels left out of a window lie in
+    # the pad (|di|, |dj| <= m < pad), where sub, and so centres, are False: for the AND
+    # they are already False, and for the OR their shifted value is False (beyond the
+    # array). So this equals combining with fully shifted arrays.
     out = np.zeros_like(sub)
     for ero, dil in offsets:
         centres = sub.copy()
         for di, dj in ero:
-            centres &= shifted(sub, di, dj)
+            t, src = window(di, dj)
+            centres[t] &= sub[src]
         if not centres.any():
             continue
         for di, dj in dil:
-            out |= shifted(centres, di, dj)
+            t, src = window(di, dj)
+            out[t] |= centres[src]
     keep[i0:i1, j0:j1] = (out & sub)[pad:-pad, pad:-pad]
     return keep
 
 
-def _thin_step(labels: np.ndarray, limits: Limits) -> tuple[int, np.ndarray, bool]:
+def _thin_step(labels: np.ndarray, limits: Limits,
+               cache: dict | None = None) -> tuple[int, np.ndarray, bool]:
     """One thin step on labels (int32 (H, W), changed in place).
 
-    For each color c, its non-thin pixels are open_mask(labels == c, min_width_px): the
-    pixels that R1's opening of width min_width_px keeps, sampled as open_mask states
-    (pixels beyond the image edge count as not c). Every other labelled pixel is thin and takes the color of the nearest
-    non-thin labelled pixel of any color, by Euclidean distance. OUTSIDE pixels are never
+    For each color c, its non-thin pixels are open_mask(labels == c, min_width_px), the
+    pixel sample of R1's opening of width min_width_px (pixels beyond the image edge
+    count as not c). Every other labelled pixel is thin. It takes the color of the
+    nearest non-thin labelled pixel of any color, by Euclidean distance. OUTSIDE pixels are never
     non-thin, so they neither assign nor get assigned. If no non-thin labelled pixel
     exists, nothing changes.
 
@@ -589,12 +620,23 @@ def _thin_step(labels: np.ndarray, limits: Limits) -> tuple[int, np.ndarray, boo
     nearest, else the lowest palette index. So the result does not depend on EDT's tie
     choice, and a mirror-symmetric input gives a mirror-symmetric result.
 
+    cache: optional dict, color -> (its mask, its core) from an earlier call with the same
+    limits; a color whose mask is unchanged reuses its core (open_mask is a function of
+    the mask alone), so the result is the same with or without it.
+
     Returns (labels changed, the thin mask, no_core).
     """
     inside = labels != OUTSIDE
     cores = []
     for c in np.unique(labels[inside]):          # ascending palette index
-        core_c = open_mask(labels == c, limits.min_width_px)
+        mask_c = labels == c
+        hit = cache.get(int(c)) if cache is not None else None
+        if hit is not None and np.array_equal(hit[0], mask_c):
+            core_c = hit[1]
+        else:
+            core_c = open_mask(mask_c, limits.min_width_px)
+            if cache is not None:
+                cache[int(c)] = (mask_c, core_c)
         if core_c.any():
             cores.append((int(c), core_c))
     core = np.zeros(labels.shape, bool)
@@ -665,13 +707,15 @@ def _merge_step(labels: np.ndarray, min_area: float, k: int) -> tuple[int, int, 
         base = len(area)
         pid[idx] = ids + base
         counts = np.bincount(ids, minlength=n)
-        order = np.argsort(ids, kind="stable")  # within a piece, still ascending
-        starts = np.concatenate([[0], np.cumsum(counts)])
-        for j in range(n):
-            area.append(int(counts[j]))
-            first.append(int(idx[order[starts[j]]]))
-            colour.append(c)
-            if counts[j] < min_area:
+        _, first_at = np.unique(ids, return_index=True)   # idx ascending: the lowest index
+        area.extend(counts.tolist())
+        first.extend(idx[first_at].tolist())
+        colour.extend([c] * n)
+        small = np.flatnonzero(counts < min_area)
+        if small.size:
+            order = np.argsort(ids, kind="stable")      # within a piece, still ascending
+            starts = np.concatenate([[0], np.cumsum(counts)])
+            for j in small.tolist():                    # Python loops over small pieces only
                 pixels[base + j] = idx[order[starts[j]:starts[j + 1]]]
     parent = list(range(len(area)))
 
@@ -746,6 +790,18 @@ def clean_regions(q: Quantized, limits: Limits) -> tuple[Quantized, CleanupLog]:
     outline, spurs into the outside) or where the merge step returns them; they are
     counted in thin_pixels_left and thin_returned. Step 2 geometry applies R1's polygon
     opening to each region anyway.
+
+    Cost per pass, for an H x W map with k colors and opening width w px: the thin step
+    runs open_mask on each color whose mask changed since the last pass (O(HW w^2)
+    each; an unchanged color reuses its earlier result) and one exact EDT per color
+    (O(HW) each); the merge step labels each color (O(HW)) and then works only on the
+    small pieces (a heap and a union-find; each merge reads the piece's own pixels). The
+    number of passes is not bounded except by MAX_CLEAN_PASSES. Measured on the Windows
+    PC (2026-11-11, best of 3; N = 4, 60 mm): Roadie (792 x 836, w = 3.99 px, 5 passes)
+    0.36 s; Oddie (1013 x 1024, w = 5.35 px, 4 passes) 0.69 s; a 2000 x 2000 synthetic map
+    (a smoothed random image quantized to 4 colors inside a disk of radius 990 px; 60 mm
+    wide, so w = 13.2 px; 10 passes) 27.9 s, of which most is open_mask and the EDTs.
+    The previous version (git f641506) gave the same labels in 0.36 s, 0.69 s and 87.1 s.
     """
     if not isinstance(q, Quantized):
         raise ColorError(f"q must be a Quantized, got {type(q).__name__}")
@@ -758,9 +814,10 @@ def clean_regions(q: Quantized, limits: Limits) -> tuple[Quantized, CleanupLog]:
     thin_total = merged_total = kept = kept_area = thin_left = returned = passes = 0
     no_core = False
     cap_hit = True
+    cache: dict = {}
     for passes in range(1, MAX_CLEAN_PASSES + 1):
         start = labels.copy()
-        n_thin, thin, nc = _thin_step(labels, limits)
+        n_thin, thin, nc = _thin_step(labels, limits, cache)
         n_merged, _, kept, kept_area = _merge_step(labels, limits.min_area_px, k)
         no_core |= nc
         thin_left = int((thin & (labels == start)).sum())
@@ -782,8 +839,30 @@ def clean_regions(q: Quantized, limits: Limits) -> tuple[Quantized, CleanupLog]:
     final = np.bincount(after, minlength=k)
     log = CleanupLog(
         passes=passes, cap_hit=cap_hit, thin_pixels_reassigned=thin_total,
-        thin_pixels_left=thin_left, thin_returned=returned, no_core=no_core, pieces_merged=merged_total,
+        thin_pixels_left=thin_left, thin_returned=returned, no_core=no_core,
+        pieces_merged=merged_total,
         pixels_changed=int(diff.sum()), moved=tuple(moved),
         dropped_hex=tuple(q.hex[i] for i in range(k) if final[i] == 0),
         kept_pieces=kept, kept_area_px=kept_area, limits=limits)
     return out, log
+
+
+def changed_mask(before: Quantized, after: Quantized) -> np.ndarray:
+    """Bool (H, W): the pixels whose color differs between before and after (such as the
+    input and output of clean_regions). Colors are compared by hex code, since after's
+    palette may be re-sorted; OUTSIDE pixels are never changed. Raises ColorError unless
+    both are Quantized with the same label shape and the same OUTSIDE pixels.
+    """
+    if not isinstance(before, Quantized) or not isinstance(after, Quantized):
+        raise ColorError("changed_mask needs two Quantized results")
+    if before.labels.shape != after.labels.shape:
+        raise ColorError(f"label shapes differ: {before.labels.shape} and "
+                         f"{after.labels.shape}")
+    outside = before.labels == OUTSIDE
+    if not np.array_equal(outside, after.labels == OUTSIDE):
+        raise ColorError("the two label maps have different OUTSIDE pixels")
+    hb = np.array(list(before.hex) + [""], dtype=object)
+    ha = np.array(list(after.hex) + [""], dtype=object)
+    a = hb[np.where(outside, len(before.hex), before.labels)]
+    b = ha[np.where(outside, len(after.hex), after.labels)]
+    return a != b
