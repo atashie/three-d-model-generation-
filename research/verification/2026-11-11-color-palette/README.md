@@ -206,3 +206,56 @@ label-map hashes of the first two methods, and the CIELAB check, are unchanged.
   cleanup), and at low N a small, salient color such as Oddie's red face can be lost.
 - Median cut is still not as good. The plan is not edited here. Whether a lost face at
   N = 3 matters is a question for the owner's review (plan Task 7).
+
+## Addendum, 2026-11-11: review fixes and nearest-color ΔE
+
+**Why:** a quality review of this record asked for the fixes below. The text above is
+unchanged.
+
+**Note on Setup:** the commit named in Setup (`89b5ec6`) is the commit of the original run.
+The weighted-seeding addendum ran at `9882f72`, and this run at `39999f0` plus the edited
+script.
+
+**What was added to `measure_palette.py`:**
+- The `results.txt` header gives the SHA-256 of the script itself and
+  `git describe --always --dirty`. This run: script sha256
+  `152c3dc25852520c2f23b2b96deb416bd66473f1a1f89845d20a27df22f3e7f3`, git `39999f0-dirty`
+  (the dirty part is this script, committed with this addendum).
+- New columns for every method: the actual palette size (`colors`; a row with fewer than
+  N colors is flagged; none was), and the ΔE*76 with each pixel moved to its nearest
+  rounded palette color (`nearest_mean`, `nearest_p95`), and the share of pixels whose
+  assigned color is not their nearest (`not_nearest%`; ties count as nearest).
+- "Lowest unique-color index" in both k-means seedings means the lowest packed 0xRRGGBB
+  value, because `np.unique` sorts the colors.
+- Usage: with fewer than two arguments the script prints its usage and exits 2. It
+  refuses an OUT_DIR that exists and is not a directory.
+- The k-means docstring now says it returns labels, iterations and a converged flag.
+- Previews round the alpha blend instead of truncating it (previews only).
+
+**Run:** into `artifacts/color-palette-runs-3/` (git-ignored); `results.txt` was
+regenerated. A diff of the old and new `results.txt`, without the header, the run times
+and the new columns, showed no difference: every previously recorded number and label-map
+hash is unchanged.
+
+**Nearest-color ΔE*76** (assigned-color values from the tables above in brackets):
+
+| Image | N | k-means mean / p95 | not nearest | median cut mean / p95 | not nearest | k-means weighted mean / p95 | not nearest |
+|---|---:|---|---:|---|---:|---|---:|
+| Roadie | 2 | 31.72 / 74.14 (same) | 0.01% | 33.14 / 71.28 (33.35 / 71.28) | 2.70% | 31.72 / 74.14 (same) | 0.01% |
+| Roadie | 3 | 22.77 / 59.63 (same) | 0.02% | 23.07 / 69.21 (23.49 / 69.48) | 3.48% | 22.77 / 59.63 (same) | 0.01% |
+| Roadie | 4 | 11.72 / 34.37 (same) | 0.01% | 19.59 / 69.21 (20.21 / 69.43) | 6.03% | 11.72 / 34.37 (same) | 0.01% |
+| Oddie | 2 | 33.60 / 46.40 (same) | 0.00% | 32.09 / 44.15 (32.12 / 44.15) | 0.95% | 19.54 / 41.97 (same) | 0.02% |
+| Oddie | 3 | 17.81 / 35.27 (same) | 0.00% | 30.45 / 42.64 (30.49 / 42.64) | 0.77% | 9.52 / 44.46 (same) | 0.05% |
+| Oddie | 4 | 17.78 / 34.83 (same) | 0.00% | 27.48 / 42.64 (28.10 / 42.64) | 10.10% | 7.75 / 33.42 (same) | 0.03% |
+
+- **Median cut:** Pillow's labels leave 0.77–10.10% of pixels on a palette color that is
+  not their nearest. Moving them to the nearest lowers its ΔE mean by at most 0.62 and its
+  p95 by at most 0.27.
+- **k-means:** up to 0.05% of pixels are not on their nearest color. These are pixels
+  near a cluster boundary; rounding each centroid to a hex code moves the boundary
+  slightly. Their ΔE is unchanged at two decimals.
+
+**Does any conclusion change?** No. With nearest assignment, median cut is still worse
+than k-means at N = 3 and 4. At N = 2 it is still slightly better than the current seeding (mean on Oddie, p95
+on both), but not than the weighted seeding on Oddie. The weighted seeding is still the method the numbers support, with the costs
+stated in the previous addendum.

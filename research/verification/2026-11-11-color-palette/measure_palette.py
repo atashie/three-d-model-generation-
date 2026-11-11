@@ -1,21 +1,25 @@
-"""Measure two palette methods on subject selections: CIELAB k-means and Pillow median cut.
+"""Measure palette methods on subject selections: CIELAB k-means (two seedings), median cut.
 
 Usage: uv run python research/verification/2026-11-11-color-palette/measure_palette.py \
     OUT_DIR SELECTION_DIR [SELECTION_DIR ...]
-OUT_DIR must not exist or be empty. It receives results.txt (also printed) and one preview
+OUT_DIR must not exist or be an empty directory. It receives results.txt (also printed) and one preview
 PNG per selection, N and method: the cutout, the palette-painted subject, and the painted
 subject with the pieces below the island area shown in magenta.
 
-Only pixels where mask.png is 255 count. Both methods see the same masked pixels:
+Only pixels where mask.png is 255 count. All methods see the same masked pixels:
 - kmeans: sRGB -> CIELAB (D65), farthest-point seeding from the most frequent color,
   Lloyd iterations in float64 weighted by pixel count, until no color changes cluster or
   MAX_ITER is reached.
 - kmeans_w: the same, except each seed after the first maximises count * dmin^2 (dmin =
   CIELAB distance to the nearest chosen seed), ties to the lowest unique-color index.
+  The unique colors come from np.unique, which sorts them, so the lowest index is the
+  lowest packed 0xRRGGBB value (in both k-means seedings).
 - mediancut: Pillow Image.quantize(colors=N, method=MEDIANCUT, dither=NONE) on a 1-row image
   of the masked pixels (median cut depends only on the color histogram).
 Palettes are ordered by area descending, then L*, a*, b*. Each palette color is the rounded
-sRGB hex code; Delta E*76 is measured to the CIELAB value of that hex code.
+sRGB hex code; Delta E*76 is measured to the CIELAB value of that hex code, both for each
+pixel's assigned color and (nearest_*) for its nearest palette color; not_nearest% is the
+share of pixels whose assigned color is not their nearest (ties count as nearest).
 The island area is (flat.island.min_square_side x nozzle)^2 from rules/geometry-flat.yaml and
 profiles/printers/bambu-a1.yaml, converted to pixels with mm_per_px = WIDTH_MM / (mask
 bounding-box width in px), as tdmg flat scales the exact outline.
@@ -69,7 +73,11 @@ def lab_to_srgb8(lab):
 
 
 def kmeans_lab(px, n, weighted=False):
-    """Labels (0..n-1, unordered) for px (k, 3) uint8, and the iteration count."""
+    """Return (labels, iterations, converged) for px (k, 3) uint8.
+
+    labels are 0..n-1 per pixel, not yet ordered; iterations is the number of centroid
+    updates; converged is False if MAX_ITER was reached.
+    """
     packed = (px[:, 0].astype(np.uint32) << 16) | (px[:, 1].astype(np.uint32) << 8) | px[:, 2]
     uniq, inverse, counts = np.unique(packed, return_inverse=True, return_counts=True)
     ucol = np.stack([(uniq >> 16) & 255, (uniq >> 8) & 255, uniq & 255], axis=1)
@@ -134,10 +142,13 @@ def sha(path):
 
 
 def main():
+    if len(sys.argv) < 3:
+        print(__doc__, file=sys.stderr)
+        sys.exit(2)
     out = pathlib.Path(sys.argv[1]).resolve()
     sels = [pathlib.Path(a).resolve() for a in sys.argv[2:]]
-    if not sels:
-        sys.exit(__doc__)
+    if out.exists() and not out.is_dir():
+        sys.exit(f"refusing: {out} exists and is not a directory")
     if out.exists() and any(out.iterdir()):
         sys.exit(f"refusing: {out} is not empty")
     out.mkdir(parents=True, exist_ok=True)
@@ -146,11 +157,12 @@ def main():
     nozzle = load_printer("bambu-a1").nozzle_diameter_mm
     island_mm2 = (side * nozzle) ** 2
     try:
-        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True,
+        commit = subprocess.run(["git", "describe", "--always", "--dirty"], capture_output=True,
                                 text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         commit = "unknown"
-    lines = [(f"measure_palette.py at commit {commit}; python {platform.python_version()}, "
+    script_sha = sha(__file__)
+    lines = [(f"measure_palette.py sha256 {script_sha} at git {commit}; python {platform.python_version()}, "
              f"numpy {np.__version__}, pillow {PIL.__version__}, opencv {cv2.__version__}"),
              (f"flat.island.min_square_side = {side}, nozzle = {nozzle} mm -> island area "
              f"{island_mm2:.4f} mm^2; width {WIDTH_MM} mm; MAX_ITER {MAX_ITER}; "
@@ -188,11 +200,12 @@ def main():
                   f"mm_per_px {mm_per_px:.6f}, island area {island_px:.2f} px, "
                   f"edge-band px {edge.mean():.1%}"),
                   ("   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)"
-                  "  iters  identical  label_sha256[:16]")]
+                  "  iters  identical  label_sha256[:16]  colors  nearest_mean  nearest_p95"
+                  "  not_nearest%")]
         detail = []
         bg = np.full(cut.shape[:2] + (3,), 255, np.uint8)
         a = cut[..., 3:4].astype(np.float64) / 255
-        orig = (cut[..., :3] * a + bg * (1 - a)).astype(np.uint8)
+        orig = np.rint(cut[..., :3] * a + bg * (1 - a)).astype(np.uint8)
         for n in NS:
             for method in ("kmeans", "mediancut", "kmeans_w"):
                 labels, rgb, t1, iters, conv = run(method, px, n)
@@ -204,7 +217,11 @@ def main():
                 h1 = hashlib.sha256(lab_map.tobytes()).hexdigest()
                 h2 = hashlib.sha256(lab_map2.tobytes()).hexdigest()
                 same = h1 == h2 and np.array_equal(rgb, rgb2)
-                de = np.linalg.norm(lab_px - srgb_to_lab(rgb)[labels], axis=1)
+                plab = srgb_to_lab(rgb)
+                de = np.linalg.norm(lab_px - plab[labels], axis=1)
+                de_all = np.linalg.norm(lab_px[:, None, :] - plab[None, :, :], axis=2)
+                de_near = de_all.min(axis=1)
+                not_nearest = (de > de_near).mean()
                 pieces = small = small_px = 0
                 small_map = np.zeros(mask.shape, bool)
                 for k in range(len(rgb)):
@@ -219,7 +236,11 @@ def main():
                 it_s = "-" if iters is None else f"{iters}{'' if conv else '(cap)'}"
                 lines.append(f"   {method:9s} {n}  {de.mean():7.2f}  {np.percentile(de, 95):6.2f}"
                              f"  {pieces:6d}  {small:5d}  {small_px / inside.sum():8.2%}"
-                             f"  {t1:.3f}/{t2:.3f}  {it_s:>5s}  {same!s:9s}  {h1[:16]}")
+                             f"  {t1:.3f}/{t2:.3f}  {it_s:>5s}  {same!s:9s}  {h1[:16]}"
+                             f"  {len(rgb):6d}{'' if len(rgb) == n else '!'}"
+                             f"  {de_near.mean():12.2f}  {np.percentile(de_near, 95):11.2f}"
+                             f"  {not_nearest:11.2%}"
+                             f"{'  FEWER THAN N COLORS' if len(rgb) < n else ''}")
                 parts = []
                 for k, c in enumerate(rgb):
                     sel_k = labels == k

@@ -1,20 +1,20 @@
-measure_palette.py at commit 9882f72; python 3.13.1, numpy 2.5.4, pillow 13.0.0, opencv 5.0.0
+measure_palette.py sha256 152c3dc25852520c2f23b2b96deb416bd66473f1a1f89845d20a27df22f3e7f3 at git 39999f0-dirty; python 3.13.1, numpy 2.5.4, pillow 13.0.0, opencv 5.0.0
 flat.island.min_square_side = 2.0, nozzle = 0.4 mm -> island area 0.6400 mm^2; width 60.0 mm; MAX_ITER 1000; edge band 2.0 px
 CIELAB of white, black, red, green, blue: (255, 255, 255) -> (100.0000, -0.0000, 0.0000); (0, 0, 0) -> (0.0000, 0.0000, 0.0000); (255, 0, 0) -> (53.2408, 80.0925, 67.2032); (0, 255, 0) -> (87.7347, -86.1827, 83.1793); (0, 0, 255) -> (32.2970, 79.1875, -107.8602)
 all 16,777,216 sRGB colors: round trip sRGB->Lab->sRGB max error 0 levels; max |difference| from OpenCV float32 RGB2Lab: [0.1894, 0.4667, 0.3326] (L*, a*, b*)
 
 == roadie-tol30: mask sha256 0bf6bdc6d26f2a42, cutout sha256 7729c18cb7dd69d5
    74768 masked px, 20789 unique colors, mm_per_px 0.100167, island area 63.79 px, edge-band px 9.0%
-   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)  iters  identical  label_sha256[:16]
-   kmeans    2    31.72   74.14     288    273     1.34%  0.049/0.050     14  True       422f4e3af0d20899
-   mediancut 2    33.35   71.28      69     52     0.48%  0.029/0.030      -  True       c05b10a9cabb3e04
-   kmeans_w  2    31.72   74.14     288    273     1.34%  0.039/0.039     10  True       422f4e3af0d20899
-   kmeans    3    22.77   59.63     535    518     3.42%  0.049/0.049     12  True       c51a970965eff808
-   mediancut 3    23.49   69.48      30     11     0.06%  0.028/0.031      -  True       bde29fac101a42b5
-   kmeans_w  3    22.77   59.63     536    519     3.45%  0.055/0.055     14  True       d6cb572063b05211
-   kmeans    4    11.72   34.37      81     56     0.89%  0.049/0.048      9  True       a0c9528921f5f742
-   mediancut 4    20.21   69.43     588    553     3.25%  0.027/0.027      -  True       90da25123af032e2
-   kmeans_w  4    11.72   34.37      81     56     0.89%  0.048/0.048      9  True       a0c9528921f5f742
+   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)  iters  identical  label_sha256[:16]  colors  nearest_mean  nearest_p95  not_nearest%
+   kmeans    2    31.72   74.14     288    273     1.34%  0.052/0.050     14  True       422f4e3af0d20899       2         31.72        74.14        0.01%
+   mediancut 2    33.35   71.28      69     52     0.48%  0.028/0.028      -  True       c05b10a9cabb3e04       2         33.14        71.28        2.70%
+   kmeans_w  2    31.72   74.14     288    273     1.34%  0.040/0.042     10  True       422f4e3af0d20899       2         31.72        74.14        0.01%
+   kmeans    3    22.77   59.63     535    518     3.42%  0.051/0.051     12  True       c51a970965eff808       3         22.77        59.63        0.02%
+   mediancut 3    23.49   69.48      30     11     0.06%  0.031/0.031      -  True       bde29fac101a42b5       3         23.07        69.21        3.48%
+   kmeans_w  3    22.77   59.63     536    519     3.45%  0.056/0.056     14  True       d6cb572063b05211       3         22.77        59.63        0.01%
+   kmeans    4    11.72   34.37      81     56     0.89%  0.049/0.048      9  True       a0c9528921f5f742       4         11.72        34.37        0.01%
+   mediancut 4    20.21   69.43     588    553     3.25%  0.029/0.032      -  True       90da25123af032e2       4         19.59        69.21        6.03%
+   kmeans_w  4    11.72   34.37      81     56     0.89%  0.051/0.051      9  True       a0c9528921f5f742       4         11.72        34.37        0.01%
    palettes (hex, area share, share of that color's px in the edge band):
    kmeans    2: #d10d0a 58.4% (edge 8%), #d0c89a 41.6% (edge 10%)
    mediancut 2: #c4180c 63.4% (edge 11%), #e6e0ae 36.6% (edge 5%)
@@ -28,16 +28,16 @@ all 16,777,216 sRGB colors: round trip sRGB->Lab->sRGB max error 0 levels; max |
 
 == oddie: mask sha256 421bddd781ddadb7, cutout sha256 5a7bfc486f864011
    298172 masked px, 5579 unique colors, mm_per_px 0.074720, island area 114.63 px, edge-band px 2.3%
-   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)  iters  identical  label_sha256[:16]
-   kmeans    2    33.60   46.40       4      0     0.00%  0.068/0.067      3  True       d505f23d0f49b0d0
-   mediancut 2    32.12   44.15     591    580     0.34%  0.066/0.063      -  True       6c3d7e07ac7c4a9d
-   kmeans_w  2    19.54   41.97      13      2     0.00%  0.070/0.067      4  True       efe0a3816124d0f6
-   kmeans    3    17.81   35.27      16      2     0.00%  0.068/0.068      5  True       2b212e3aa1bb520d
-   mediancut 3    30.49   42.64     607    595     0.34%  0.063/0.062      -  True       25a50f997d132992
-   kmeans_w  3     9.52   44.46    1381   1370     0.86%  0.068/0.071      3  True       676d6ee4277f1b04
-   kmeans    4    17.78   34.83      20      6     0.06%  0.071/0.070      4  True       c79dc11a690a2e5f
-   mediancut 4    28.10   42.64    2606   2581     1.28%  0.063/0.067      -  True       bece7bfdd229c2fb
-   kmeans_w  4     7.75   33.42    1436   1424     0.86%  0.065/0.072      3  True       9ac892364ded815f
+   method    N  dE_mean  dE_p95  pieces  small  small_px%  time_s(run1/run2)  iters  identical  label_sha256[:16]  colors  nearest_mean  nearest_p95  not_nearest%
+   kmeans    2    33.60   46.40       4      0     0.00%  0.064/0.064      3  True       d505f23d0f49b0d0       2         33.60        46.40        0.00%
+   mediancut 2    32.12   44.15     591    580     0.34%  0.062/0.071      -  True       6c3d7e07ac7c4a9d       2         32.09        44.15        0.95%
+   kmeans_w  2    19.54   41.97      13      2     0.00%  0.066/0.066      4  True       efe0a3816124d0f6       2         19.54        41.97        0.02%
+   kmeans    3    17.81   35.27      16      2     0.00%  0.068/0.069      5  True       2b212e3aa1bb520d       3         17.81        35.27        0.00%
+   mediancut 3    30.49   42.64     607    595     0.34%  0.064/0.062      -  True       25a50f997d132992       3         30.45        42.64        0.77%
+   kmeans_w  3     9.52   44.46    1381   1370     0.86%  0.065/0.076      3  True       676d6ee4277f1b04       3          9.52        44.46        0.05%
+   kmeans    4    17.78   34.83      20      6     0.06%  0.067/0.070      4  True       c79dc11a690a2e5f       4         17.78        34.83        0.00%
+   mediancut 4    28.10   42.64    2606   2581     1.28%  0.062/0.061      -  True       bece7bfdd229c2fb       4         27.48        42.64       10.10%
+   kmeans_w  4     7.75   33.42    1436   1424     0.86%  0.065/0.064      3  True       9ac892364ded815f       4          7.75        33.42        0.03%
    palettes (hex, area share, share of that color's px in the edge band):
    kmeans    2: #406e4a 97.9% (edge 2%), #dc4f47 2.1% (edge 0%)
    mediancut 2: #60916e 50.1% (edge 0%), #2b4c28 49.9% (edge 4%)
