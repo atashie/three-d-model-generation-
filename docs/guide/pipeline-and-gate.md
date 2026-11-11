@@ -72,8 +72,11 @@ with measured F6 checks:
   2.9.7, must read `model.stl` as modelled and slice its full height. `--info` must report
   a manifold mesh with no open edges, the record's part and facet counts, its sizes and
   its volume within derived float bounds. `--export-gcode`, with the bed, nozzle, layer
-  and filament settings taken from the pinned A1 profile, must write G-code with the
-  expected layer count and Z heights. Its exit code 0 alone is not trusted: an
+  and filament settings taken from the pinned A1 profile (every other setting is
+  PrusaSlicer's default, so this is not the A1 print process), must write a complete
+  G-code with the expected layer count and Z heights, and with extrusion on every layer
+  at that layer's height. That shows plastic is laid on every layer to the top, not that
+  each layer is fully printed. Its exit code 0 alone is not trusted: an
   outside-bed part exits 0 with no G-code, and an open mesh exits 0 with a truncated one.
   Both slicers read STL with the same library (admesh), so for STL this shows that a
   second slicer accepts the file; it does not show that an independent reader agrees.

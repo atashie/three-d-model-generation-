@@ -40,8 +40,8 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. `origin/main` is at `0cf75c9`. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI.
 
-Latest local validation (2026-11-11, Windows PC, `slice-4` with `F6.portability`):
-`uv run pytest -q` gave **935 passed and 3 skipped**, both plain and with
+Latest local validation (2026-11-11, Windows PC, `slice-4` after the portability Codex review fixes):
+`uv run pytest -q` gave **961 passed and 3 skipped**, both plain and with
 `CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
 passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
 uv run pytest -m slicer` command in `CLAUDE.md`. `uv run ruff check .`,
@@ -67,10 +67,14 @@ passed. These commits are not yet pushed or CI-checked.
   (`profiles/slicers/prusaslicer-2.9.7.yaml`, `scripts/setup_prusaslicer.py`); its CLI
   measured on Windows (`research/verification/2026-11-11-prusaslicer-windows/`). In
   `tdmg slice` (`slice-4`), `F6.portability` checks PrusaSlicer's `--info` read of
-  `model.stl` (manifold, parts, facets, sizes, volume) and its full-height slice with the
-  A1 settings. Both slicers read STL with admesh, so for STL this shows a second slicer
-  accepts the file, not an independent reader; 3MF output must re-check. Controls: an
-  open cube and an outside-bed part FAIL it. Roadie and Oddie are PRINTABLE. Plan:
+  `model.stl` (manifold, parts, facets, sizes, volume) and its slice: a complete G-code
+  with extrusion on every layer at its height, given the A1 bed, nozzle, layer and
+  filament settings (the rest are PrusaSlicer's defaults). Both slicers read STL with
+  admesh, so for STL this shows a second slicer accepts the file, not an independent
+  reader; 3MF output must re-check. Controls: an open cube and an outside-bed part FAIL
+  it, as do cut or comment-only versions of the real G-code. Roadie and Oddie are
+  PRINTABLE. Codex critical review: three findings, all fixed
+  (`research/reviews/2026-11-11-portability/`). Plan:
   `docs/plans/2026-11-11-portability-check.md`.
 
 - **PC setup (2026-11-09):** completed locally, with optional failures documented in

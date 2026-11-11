@@ -139,3 +139,27 @@ slice_ids are `7a9836d9…` (Roadie) and `33c470ac…` (Oddie).
 calibration print has been measured, and strength is not judged. Both slicers read STL
 with admesh, so this shows that a second slicer accepts and slices the file, not that an
 independent reader agrees.
+
+## Addendum: corrections after the Codex review, 2026-11-11
+
+See `research/reviews/2026-11-11-portability/README.md`.
+
+- **Settings (corrects "So every setting is given explicitly" above):** only the bed
+  shape and height, nozzle diameter, layer and first-layer heights and filament diameter
+  are given. Every other setting is PrusaSlicer 2.9.7's default. The Roadie's PrusaSlicer
+  G-code records `fill_density = 20%`, `elefant_foot_compensation = 0` and
+  `perimeter_generator = arachne`; the OrcaSlicer A1 run used 15%, 0.075 and classic.
+- **What the G-code shows:** layer markers alone do not show a complete slice. The check
+  now also reads the motion. Facts it relies on, measured on all 14 PrusaSlicer G-code
+  files written here (owner models, cube, open cube): each ends with
+  `; prusaslicer_config = end`; each uses G90 and M82 with `G92 E0` resets and only
+  G0/G1 moves; no X, Y or Z word has more than 3 decimals. On the owner models every
+  layer has 925 or more extruding moves, all at their layer's height (largest difference
+  4e-16 mm). The parser's total filament equals the file's own
+  `; filament used [mm]` line (Roadie 814.64, Oddie 1367.12).
+- **Mutations** (`mutations_portability.py` → `mutations.txt`): the real Roadie and Oddie
+  G-code PASS; cut after the last `;Z:`, cut within the last layer, comments only (with
+  and without the closing line), the last layer's extrusion removed, M83, and one
+  layer's Z raised all FAIL.
+- **Re-run:** the owner models stay PRINTABLE with the same slice_ids; the controls give
+  the same verdicts (`controls.txt`, re-run with the fixed code).

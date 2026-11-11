@@ -1,18 +1,18 @@
-== cube_20: 6.6 s; OrcaSlicer exit 0, layers 100, F6.layer_count PASS
-   F6.portability PASS: a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full height with the A1 bed, nozzle, layer and filament settings. OrcaSlicer and PrusaSlicer share the admesh STL reader, so a 3MF output must re-run portability with truly different readers. prusaslicer.portability-only.gcode.txt is generic G-code for a generic printer, not Bambu firmware G-code and not for the A1: it is evidence of portability only; never print it
+== cube_20: 6.8 s; OrcaSlicer exit 0, layers 100, F6.layer_count PASS
+   F6.portability PASS: a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full height, with extrusion on every layer, given the A1 bed, nozzle, layer and filament settings (its other settings are PrusaSlicer's defaults). OrcaSlicer and PrusaSlicer share the admesh STL reader, so a 3MF output must re-run portability with truly different readers. prusaslicer.portability-only.gcode.txt is generic G-code for a generic printer, not Bambu firmware G-code and not for the A1: it is evidence of portability only; never print it
    --info rc 0: manifold True, open_edges None, facets 12, parts 1, volume 8000.000488
    --export-gcode rc 0, file prusaslicer.portability-only.gcode.txt, layers 100, last Z 20.0, quarantined False
    stdout tail: ['Slicing result exported to <work>\\gcode\\prusaslicer.portability-only.gcode.txt']
    certification: NOT CERTIFIED: F1.consistent_orientation missing, F1.edge_manifold missing, F1.finite missing, F1.no_degenerate_faces missing, F1.no_duplicate_faces missing, F1.positive_volume missing, F1.vertex_manifold missing, F2.export_matches_geometry missing, F2.fits_build_volume missing, F2.target_width missing, F4.body_count missing, F5.triangles missing
    outputs: ['plate_1.gcode', 'plate_1.statistics.json', 'prusaslicer.portability-only.gcode.txt']
-== open_cube_20: 3.8 s; OrcaSlicer exit 0, layers 10, F6.layer_count FAIL
+== open_cube_20: 4.2 s; OrcaSlicer exit 0, layers 10, F6.layer_count FAIL
    F6.portability FAIL: PrusaSlicer 2.9.7: PrusaSlicer reads model.stl as not manifold (open_edges 3)
    --info rc 0: manifold False, open_edges 3, facets 11, parts 1, volume 6666.666992
    --export-gcode rc 0, file prusaslicer.portability-only.gcode.txt.failed, layers 10, last Z 2.0, quarantined True
    stdout tail: ['Slicing result exported to <work>\\gcode\\prusaslicer.portability-only.gcode.txt']
    certification: NOT CERTIFIED: F3.printed_connectivity UNKNOWN, F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN, F6.layer_count FAIL, F6.portability FAIL, F1.consistent_orientation missing, F1.edge_manifold missing, F1.finite missing, F1.no_degenerate_faces missing, F1.no_duplicate_faces missing, F1.positive_volume missing, F1.vertex_manifold missing, F2.export_matches_geometry missing, F2.fits_build_volume missing, F2.target_width missing, F4.body_count missing, F5.triangles missing
    outputs: ['plate_1.gcode.failed', 'plate_1.statistics.json', 'prusaslicer.portability-only.gcode.txt.failed']
-== outside_bed_300x20x5: 3.7 s; OrcaSlicer exit -50, layers None, F6.layer_count UNKNOWN
+== outside_bed_300x20x5: 4.3 s; OrcaSlicer exit -50, layers None, F6.layer_count UNKNOWN
    F6.portability FAIL: PrusaSlicer 2.9.7: --export-gcode exited 0 but wrote no G-code: All objects are outside of the print volume.
    --info rc 0: manifold True, open_edges None, facets 12, parts 1, volume 30000.0
    --export-gcode rc 0, file None, layers None, last Z None, quarantined None

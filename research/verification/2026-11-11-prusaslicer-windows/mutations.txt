@@ -1,0 +1,20 @@
+== roadie-tol30-60x3-printable (first layer and layer height 0.2 mm, the pinned A1 profile)
+   original: PASS 
+   cut just after the last ;Z:: FAIL PrusaSlicer 2.9.7: the G-code does not end with '; prusaslicer_config = end': it is incomplete
+   cut halfway through the last layer: FAIL PrusaSlicer 2.9.7: the G-code does not end with '; prusaslicer_config = end': it is incomplete
+   only ;LAYER_CHANGE and ;Z: lines: FAIL PrusaSlicer 2.9.7: the G-code does not end with '; prusaslicer_config = end': it is incomplete
+   cut just after the last ;Z:, closing line added: FAIL PrusaSlicer 2.9.7: layer 15 of 15 has no extruding move
+   only markers, closing line added: FAIL PrusaSlicer 2.9.7: layer 1 of 15 has no extruding move
+   last layer without extruding moves: FAIL PrusaSlicer 2.9.7: layer 15 of 15 has no extruding move
+   relative extrusion (M82 -> M83): FAIL PrusaSlicer 2.9.7: cannot read the G-code: the G-code uses relative extrusion (M83), which this check does not read
+   one layer's Z move raised by 0.2 mm: FAIL PrusaSlicer 2.9.7: layer 9 of 15 extrudes at Z 2 mm, not at its 1.8 mm
+== oddie-60x3-printable (first layer and layer height 0.2 mm, the pinned A1 profile)
+   original: PASS 
+   cut just after the last ;Z:: FAIL PrusaSlicer 2.9.7: the G-code does not end with '; prusaslicer_config = end': it is incomplete
+   cut halfway through the last layer: FAIL PrusaSlicer 2.9.7: the G-code does not end with '; prusaslicer_config = end': it is incomplete
+   only ;LAYER_CHANGE and ;Z: lines: FAIL PrusaSlicer 2.9.7: the G-code does not end with '; prusaslicer_config = end': it is incomplete
+   cut just after the last ;Z:, closing line added: FAIL PrusaSlicer 2.9.7: layer 15 of 15 has no extruding move
+   only markers, closing line added: FAIL PrusaSlicer 2.9.7: layer 1 of 15 has no extruding move
+   last layer without extruding moves: FAIL PrusaSlicer 2.9.7: layer 15 of 15 has no extruding move
+   relative extrusion (M82 -> M83): FAIL PrusaSlicer 2.9.7: cannot read the G-code: the G-code uses relative extrusion (M83), which this check does not read
+   one layer's Z move raised by 0.2 mm: FAIL PrusaSlicer 2.9.7: layer 9 of 15 extrudes at Z 2 mm, not at its 1.8 mm

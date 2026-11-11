@@ -1,0 +1,62 @@
+Codex CLI 0.167.0, codex exec --sandbox read-only --ephemeral, commits 8233345..c40340d, 2026-11-11. Final response verbatim (tool transcript not kept).
+
+I found a reproducible false-PRINTABLE path and a confirmed flaw in the volume-bound derivation. **I would fix the first before relying on the full-height guarantee.** I did not establish that either saved owner output is defective.
+
+**Confirmed findings**
+
+1. **High — Layer comments can certify an incomplete—or nonexistent—toolpath.**  
+   Location: [src/tdmg/portability.py:391](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/portability.py:391), acceptance at line 665.
+
+   **Scenario:** retain successful `--info` and exit codes, but truncate Prusa’s G-code immediately after its final `;Z:` comment. All expected markers remain, although the final layer has no toolpath. F6.portability still PASSes; combining it with the other recorded checks still yields PRINTABLE and avoids quarantine.
+
+   **Confirmed by reproduction:** using the actual owner artifacts, entirely in memory:
+
+   | Input to validator | Roadie | Oddie |
+   |---|---|---|
+   | Original output | PASS | PASS |
+   | Cut immediately after final `;Z:` | PASS | PASS |
+   | Only layer/Z comments, 309 bytes | PASS | PASS |
+
+   This tests the validator boundary; I did **not** observe the pinned executable producing these damaged files.
+
+   **Fix:** validate layer-marker pairing, actual commanded Z and positive extrusion within every layer, and evidence that export finished. Merely requiring one extrusion per layer still permits partial layers; use footprint/completeness checks if “slice completely” is the promised guarantee. Add mutations of real output: truncation within the last layer, comments only, missing extrusion, and contradictory motion Z.
+
+   The current fake reinforces this blind spot: [tests/fake_prusa.py:90](C:/Users/arikt/documents/github/three-d-model-generation-/tests/fake_prusa.py:90) repeatedly writes the same `G1 X10 Y10 E1`, without establishing relative extrusion. Its PASS fixtures do not demonstrate meaningful extrusion through the model.
+
+2. **Medium — The volume bound omits admesh’s small-normal cutoff.**  
+   Location: [src/tdmg/portability.py:495](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/portability.py:495), implemented at lines 537–548.
+
+   **Scenario:** a nonzero cross product below admesh’s normalization cutoff becomes a **zero normal**, rather than the approximately unit normal assumed by `delta`. That is a discontinuity, not a rounding error covered by doubling the bound. The cutoff is present in upstream [`stl_normalize_vector`](https://raw.githubusercontent.com/prusa3d/PrusaSlicer/version_2.9.7/bundled_deps/admesh/admesh/stl.h).
+
+   **Confirmed by source reading and reproduction:** for a binary STL cube with side `1e-6` mm, the repository’s own emulation returns zero volume, while:
+
+   - Stored-STL volume: approximately `9.999999924e-19 mm³`.
+   - `volume_error_bound`: approximately `4.021679385e-24 mm³`.
+   - Actual emulated error exceeds the claimed bound by roughly **248,652 times**.
+
+   **Limit:** the additional `5e-7 mm³` print-rounding allowance masks this particular example. This disproves the advertised general bound; it does **not** demonstrate a false owner-model verdict. Both owner meshes’ minimum computed cross-product norms are above the cutoff.
+
+   **Fix:** account explicitly for zeroed normals, or enforce and document the domain where the derivation applies. Add cutoff-boundary cases to the tests. The existing twelve random cases all passed when I called them directly, but they miss this branch.
+
+3. **Low — “Every setting is explicit/from Orca” overstates the measurement.**  
+   Location: [scripts/setup_prusaslicer.py:12](C:/Users/arikt/documents/github/three-d-model-generation-/scripts/setup_prusaslicer.py:12), also [src/tdmg/slicing.py:25](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/slicing.py:25) and the research README’s Settings section.
+
+   **Scenario:** readers interpret the check as using the A1 process settings throughout. Only six options are transferred. Other geometry-affecting settings use Prusa defaults.
+
+   **Confirmed by reading actual output and verified profiles:** Roadie’s Prusa output records infill `20%`, elephant-foot compensation `0`, and perimeter generator `arachne`; the pinned Orca process uses `15%`, `0.075`, and `classic`.
+
+   **Fix:** say “these six settings are explicit; remaining settings use pinned Prusa defaults.” Preserve the research record and append a correction. This does not invalidate the narrower bed/nozzle/layer/filament claim, but it is not full process equivalence.
+
+**What held up**
+
+- I re-hashed both installed app trees successfully, including Prusa’s executable, DLL and 1,119-file tree. Normal execution checks them; skipping trees caps certification.
+- All recorded output hashes matched for both owner runs. Their saved Prusa files contain positive XY extrusion on all fifteen layers through commanded Z=3.
+- The six explicit settings match the hash-checked Orca profiles; missing values are refused.
+- Nonzero exits, timeouts, missing/empty files, repairs, duplicate/unknown info keys and nonfinite numbers fail closed. Required FAILs quarantine both outputs.
+- The size-bound arithmetic is consistent with the stated centering operations; my 100,000-case centering experiment found no violation. The `18 → √3×18 → half → 16` arithmetic in the volume comment is also correct.
+- The timeout rule keeps hypothesis, primary provenance and untested margin separate, with an existing evidence locator. I found no additional unexplained acceptance number worth flagging.
+- Current owner-facing documentation states the shared-reader limitation and “never print” warning.
+
+**Remaining limits:** `slice_id` identifies the request, not a unique verdict: timeouts are deliberately excluded, so FAIL and PASS runs can share it. The numerical “double it for omitted terms” argument remains less rigorous than a complete bound; I found no further counterexample beyond the cutoff above.
+
+I ran read-only Python checks using the existing interpreter after `uv` failed on cache permissions. I did not run pytest, re-slice, or modify files.

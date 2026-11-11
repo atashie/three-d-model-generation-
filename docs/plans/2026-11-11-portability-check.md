@@ -119,6 +119,13 @@ approved installing PrusaSlicer on 2026-11-11. The evidence is
   - **Timeout:** each PrusaSlicer run is limited by a new rule, `slicer.prusa.timeout_s`
     (300 s; the slowest measured run took 1.16 s).
   - **`--skip-tree-check`** covers both slicers and caps the verdict at NOT CERTIFIED.
+- **Codex critical review** (`research/reviews/2026-11-11-portability/`). Three findings,
+  all confirmed and fixed within `slice-4` (unpushed):
+  - layer comments alone could PASS: the G-code's motion is now read, and it must be
+    complete and extrude on every layer at its height;
+  - the volume bound missed admesh's zeroed normals;
+  - "every setting explicit" overstated: only the six listed settings are; the rest are
+    PrusaSlicer's defaults.
 - **Task 3:** see the addendum "`F6.portability` through `tdmg slice`" in
   `research/verification/2026-11-11-prusaslicer-windows/README.md`. Roadie and Oddie are
   PRINTABLE. The open cube and the outside-bed part FAIL `F6.portability`.
