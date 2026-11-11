@@ -285,3 +285,141 @@ are in the git-ignored `artifacts/colors-review/`). The owner's answers, verbati
 
 **Why the outline was inconsistent:** the outline was treated as an ordinary color, so
 cleanup removed its thin parts and kept its wide ones.
+
+## Addendum, 2026-11-11: outline and shade indicators (plan Task 7a)
+
+**Why:** before any outline or shade rule is set (plan Task 7b), measure whether simple
+per-color and per-pair numbers separate the cartoon outline and the shade pairs from the
+other colors. The text above is unchanged.
+
+**Run:** `measure_outline_shade.py` (in this folder; its docstring defines every column)
+on the owner's selections `roadie-tol30` and `oddie`, Windows PC, at `d2fbe97` (script
+sha256 `c6bb2bca…`, recorded in the output header with the library versions: Python
+3.13.1, numpy 2.5.4, scipy 1.18.1). The colors are `tdmg.color.quantize` at N = 4, 5, 6
+and 7, unchanged, **before any cleanup**, at 60 mm wide. The opening is
+`tdmg.color.open_mask` at `printable_limits_px(...).min_width_px` (0.4 mm = 3.993 px for
+Roadie, 5.353 px for Oddie). Full tables: `outline-shade.txt`. The previews (one panel per
+extracted color: its pixels in its color, the rest of the subject light grey) are in the
+git-ignored `artifacts/outline-shade-runs/` (`roadie-tol30-n{4,5,6,7}.png`,
+`oddie-n{4,5,6,7}.png`). "thin" is the share of a color's pixels that the opening does not
+keep; "border" is the share with a 4-neighbour of another color or of the outside; "band"
+is 2 × the Euclidean distance transform.
+
+### Identification by eye (my visual judgement from the panels; not measured)
+
+I looked at the panels for Roadie N = 4, 5, 6 and Oddie N = 4, 5, 7. Oddie at N = 6 has
+the same colors as N = 7 except the red (per the table), and Roadie at N = 7 the same as
+N = 6 plus one split; for those two I read the tables, not the panels. "Outline family"
+means every cluster that traces the drawn lines: the line's core and the anti-aliasing
+fringe between the line and a filled color.
+
+| Image | N | Outline core | Fringe clusters that trace the lines | Shade pairs (same object, two lightnesses) |
+|---|---:|---|---|---|
+| Roadie | 4 | 2 `#5c271b` (also fills the eye pupil) | none separate | none |
+| Roadie | 5 | 2 `#4e3227` | 3 `#870b0b` (red side of the lines) | none |
+| Roadie | 6 | 3 `#451812` | 2 `#960a0a` (red side), 5 `#746c5b` (white side) | none |
+| Roadie | 7 | 3 `#451812` | 2 `#960a0a`, 5 `#797473` (white side), 6 `#797409` (yellow side) | none |
+| Oddie | 4 | none: the black lines are absorbed (mostly into dark green 0) | – | greens 0–2. The blues are **one** cluster (the shadow is merged into the body) |
+| Oddie | 5 | 3 `#101311` | none separate | greens 0–2; blues still merged |
+| Oddie | 6, 7 | 4 `#0d100d` | none separate; 3 `#395266` (the blue shadow) also collects dotted fringe along lines | greens 0–2; blues 1–3 (body `#547e9d`, shadow `#395266`) |
+
+At N = 7, Oddie's red splits into the mouth (5 `#ee605b`) and the eyes (6 `#a10804`). By
+eye these are different objects, not a shade pair. The small white eye highlights get no
+cluster at any N from 4 to 7.
+
+### Key numbers (from `outline-shade.txt`)
+
+Per color, over all N:
+
+| | outline family | every other color |
+|---|---|---|
+| Roadie | thin 66.3–98.5%, border 56.1–83.6%, band median 2.0 px (0.20 mm) | thin 2.7–4.7%, border 7.3–9.0%, band median ≥ 12.0 px |
+| Oddie | thin 100.0%, border 63.9–68.0%, band median 2.0 px (0.15 mm) | thin 1.2–9.9%, border 2.9–15.1%, band median ≥ 7.2 px (0.54 mm) |
+
+The highest thinness of a non-outline color is the blue shadow at N = 6 and 7 (9.9%,
+which holds fringe), then Oddie's dark green at N = 4 (8.0%, which holds the absorbed
+lines). The lowest outline thinness is Roadie's outline at N = 4 (66.3%: the filled
+pupil is not thin).
+
+Adjacent pairs with a small hue difference (dh):
+
+| Image, N | Pair | By eye | dh (°) | C* i / j | dL* | Shared px |
+|---|---|---|---:|---|---:|---:|
+| Oddie 4–7 | dark/light green | shade pair | 0.2–0.6 | 35.6–40.9 / 69.9 | 29.2–33.0 | 2938–3881 |
+| Oddie 6, 7 | blue body/shadow | shade pair | 1.5 | 21.9 / 15.0 | −17.3 | 2140–2141 |
+| Oddie 7 | mouth/eyes red | not a pair | 9.5 | 62.8 / 72.2 | −25.8 | 101 |
+| Roadie 4 | red/outline | outline | 0.5 | 97.4 / 30.3 | −26.7 | 4176 |
+| Roadie 5–7 | red/red fringe | outline fringe | 1.8–2.5 | 100.2–100.5 / 60.3–66.5 | −20.4 to −23.4 | 3998–4056 |
+| Roadie 5–7 | red fringe/outline core | outline family | 2.6–10.5 | 60.3–66.5 / 16.5–25.9 | −15.9 to 4.1 | 4219–4275 |
+| Roadie 7 | yellow/yellow fringe | outline fringe | 2.7 | 94.0 / 52.3 | −46.6 | 758 |
+| Roadie 6 | white/grey fringe | outline fringe | 0.4 | 0.0 / 10.7 | −50.6 | 2014 |
+| Oddie 5–7 | dark green/black | outline | 8.7–18.9 | 40.5–40.9 / 1.7–1.9 | −26.5 to −27.7 | 7147–7241 |
+
+### Does a simple rule separate them?
+
+**Outline: yes on these two images, but as a family of colors, not one color.**
+- `thin > T` puts every outline-family cluster on one side and every other color on the
+  other, at every N. The gap is 9.9% (highest other) to 66.3% (lowest outline). Midpoint
+  **T ≈ 38%**, a margin of about 28 percentage points each way. Border share (gap 15.1%
+  to 56.1%, midpoint ≈ 36%) and band median (gap 0.20 mm to 0.54 mm, midpoint ≈ 0.37 mm)
+  also separate them; the three agree on every color here.
+- The single-color form ("the color with the largest thinness and the lowest L*") fails
+  above N = 4. On Roadie the thinnest color is a fringe (N = 5: `#870b0b`, 93.1%, against
+  the core's 86.2%; N = 6: `#746c5b`, 96.3%), while the core has the lowest L*. Lowest L*
+  alone also fails: on Oddie at N = 4 it picks the dark green (L* 28.4), which is not an
+  outline. Where the core is the darkest, its lead can be small: 23.8 against 27.9 (Roadie
+  N = 5).
+- At N = 4 the thinness rule gives the right answer for both images: Roadie has one
+  outline cluster (thin 66.3%, also the lowest L*); Oddie has no color above T (highest
+  8.0%), which is correct, because its lines have no cluster of their own.
+
+**Shade pairs: not by hue and chroma alone.** Roadie's red and its outline at N = 4
+(dh 0.5°, C* 97.4 / 30.3, adjacent over 4176 px) look like a shade pair by these numbers,
+and so do Roadie's red/fringe pairs. No chroma floor separates them: the true blue pair
+has C* 15.0, lower than the outline's 30.3. A two-step rule does separate them here:
+1. Remove the outline family first (`thin > T`).
+2. Among the remaining colors, flag pairs with `dh < H` and C* above a floor for both.
+   The remaining pairs: the greens (dh ≤ 0.6°) and the blues (1.5°), against the red
+   mouth/eyes (9.5°) and every other pair (≥ 13.2°; that one is white/yellow, where
+   white has C* 0.0, so its hue means nothing; with both C* above the floor, the next is
+   63.7°). Gap 1.5° to 9.5°: **H ≈ 5.5°**, a margin of 4°. The chroma floor only has to
+   exclude white and black: C* 0.0–1.9, against the lowest shade color's 15.0; midpoint
+   **≈ 8.5**.
+   Adjacency adds nothing on these images. The true pairs share 2140–3881 px and the
+   mouth/eyes 101 px, but those 101 px are fringe pixels, and the count is in image
+   pixels, so it depends on resolution. dL* separates nothing (shade pairs 17–33,
+   other pairs 20–51).
+
+All these thresholds are **hypotheses from two images**, read off gaps between a few
+values. The hue gap rests on a single counterexample (mouth/eyes). If they become rules,
+they are `kind: hypothesis`, `validation: untested`, with this record as their only
+evidence. Detection should stay a suggestion that the owner confirms, never an automatic
+merge, as the owner decided.
+
+### Which N extracts what
+
+- Oddie's lines get their own cluster from **N = 5** (`#101311`, 6.0%) and keep it at 6
+  and 7 (`#0d100d`, 5.7%).
+- The green shade pair is separate at every N from 4 to 7. The blue shade pair is
+  separate only from **N = 6**; at N = 4 and 5 the shadow is merged into the body.
+- So, on Oddie, the outline and both shade pairs need N ≥ 6, two colors more than the
+  four the owner reviewed.
+
+### Surprises
+
+- **Roadie's outline splits into fringes as N grows.** From N = 5, the extra clusters
+  are anti-aliasing colors between the line and each fill (dark red, grey, dark yellow),
+  not new regions. At N = 7, four of Roadie's seven colors trace the lines. A larger N
+  helps Oddie and costs Roadie, and "drop outline" must remove the whole family.
+- **Roadie's eye pupil has the outline's color** at every N (at N = 4 it is why the
+  outline's band p90 is 4.5 px and its thinness only 66.3%). Dropping the outline would
+  also remove the pupil.
+- **Roadie's red and white never touch** (0 shared px at every N): the outline always
+  separates them, so dropping it fills a gap between them.
+- **Fringe also hides inside real regions.** Oddie's blue shadow cluster at N = 6 and 7
+  has 1618 pieces (dotted fringe along lines), its dark green at N = 5 to 7 has 741–761
+  (dotted along the veins of the light leaves), and its blue at N = 4 has 1418. These
+  pixels are not clusters of their own, so neither rule sees them; the region cleanup
+  must still handle them.
+- Oddie's mouth has a darker upper-right part in the cutout. It gets no cluster of its
+  own at any N from 4 to 7 (by eye).
