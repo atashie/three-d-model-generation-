@@ -1910,7 +1910,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "onnxruntime", marker = "extra == 'perception'" },
     { name = "opencv-python-headless" },
-    { name = "pillow" },
+    { name = "pillow", specifier = ">=10.1" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pymeshlab", marker = "extra == 'analysis'" },
     { name = "pyobjc-framework-vision", marker = "sys_platform == 'darwin' and extra == 'perception'" },

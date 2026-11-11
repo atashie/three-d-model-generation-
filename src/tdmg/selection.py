@@ -344,7 +344,7 @@ def select_from_mask(intake: Intake, mask: np.ndarray, spec: SelectionSpec) -> S
                      input_pixels_sha256=intake.pixels_sha256)
 
 
-def _checker(h: int, w: int) -> np.ndarray:
+def checker(h: int, w: int) -> np.ndarray:
     """H x W uint8 checkerboard; the top-left cell uses CHECKER_SHADES[1]."""
     rows = (np.arange(h) // CHECKER_CELL_PX % 2).astype(bool)
     cols = (np.arange(w) // CHECKER_CELL_PX % 2).astype(bool)
@@ -363,7 +363,7 @@ def _preview(rgba: np.ndarray, mask: np.ndarray) -> np.ndarray:
     h, w = mask.shape
     out = np.empty((h, 2 * w, 3), np.uint8)
     left, right = out[:, :w], out[:, w:]
-    bg = _checker(h, w)[..., None]
+    bg = checker(h, w)[..., None]
     a = rgba[..., 3:4].astype(np.uint16)
     # At most 255 * 255 + 127 = 65152, so uint16 does not overflow.
     np.floor_divide(rgba[..., :3] * a + bg * (255 - a) + 127, 255, out=left, casting="unsafe")

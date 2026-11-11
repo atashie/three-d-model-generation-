@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import io
 import json
 import math
 import numbers
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -46,7 +48,14 @@ from tdmg.color import (
     printable_limits_px,
     quantize,
 )
-from tdmg.color_config import ColorConfigError, check_base, edge_sigma_px, resolve_color_config
+from tdmg.color_config import (
+    FURRY_RULE,
+    SMOOTH_RULE,
+    ColorConfigError,
+    check_base,
+    edge_sigma_px,
+    resolve_color_config,
+)
 from tdmg.profiles import PrinterProfile
 from tdmg.records import (
     RecordError,
@@ -57,7 +66,7 @@ from tdmg.records import (
     record_text,
     write_outputs,
 )
-from tdmg.selection import SelectionError, _checker, read_selection
+from tdmg.selection import SelectionError, checker, pixels_sha256, read_selection
 from tdmg.smoothing import LABELS_METHOD, SUPERSAMPLE, SmoothingError, smooth_labels
 
 COLORS_ALGORITHM_VERSION = "colors-1"
@@ -113,22 +122,33 @@ def mask_mm_per_px(mask: np.ndarray, width_mm: float) -> float:
 
 
 def colors_identity(*, methods: dict, selection_id: str, cutout_pixels_sha256: str,
-                    mask_pixels_sha256: str, settings: dict, width_mm: float, rules: dict,
-                    sigma_px: float, nozzle_diameter_mm: float, supersample: int) -> str:
-    """colors_id: SHA-256 of the canonical JSON of these fields.
+                    mask_pixels_sha256: str, settings: dict, width_mm: float, printer: str,
+                    nozzle_diameter_mm: float, rules: dict, supersample: int) -> dict:
+    """The identity of a color plan: the dict that colors_id hashes, stored in colors.json.
 
     methods: the algorithm versions (colors, quantize, cleanup, labels). settings: the
     resolved values (colors, edges, base), not their sources: the same values from a flag
-    or from a file give the same plan. rules: {rule id: value} for every rule used (the two
-    cleanup rules and the edges rule, if any). The environment is never part of it.
-    Raises ValueError for NaN or infinity.
+    or from a file give the same plan. printer: the profile id (as flat_identity's params
+    hold it). rules: {rule id: registry value} for every rule used: the two cleanup rules
+    (the island rule's own min_square_side, not the derived area) and the edges preset's
+    rule, if any. The edges sigma is hashed only there; `exact` has no rule and sigma 0
+    by definition. supersample: the fine map's factor. The environment is never part of it.
     """
-    identity = {"methods": methods, "selection_id": selection_id,
-                "cutout_pixels_sha256": cutout_pixels_sha256,
-                "mask_pixels_sha256": mask_pixels_sha256, "settings": settings,
-                "width_mm": width_mm, "rules": rules, "sigma_px": sigma_px,
-                "nozzle_diameter_mm": nozzle_diameter_mm, "supersample": supersample}
-    return hashlib.sha256(canonical_json(identity)).hexdigest()
+    return {"methods": dict(methods), "selection_id": selection_id,
+            "cutout_pixels_sha256": cutout_pixels_sha256,
+            "mask_pixels_sha256": mask_pixels_sha256, "settings": dict(settings),
+            "width_mm": width_mm, "printer": printer,
+            "nozzle_diameter_mm": nozzle_diameter_mm, "rules": dict(rules),
+            "supersample": supersample}
+
+
+def colors_id(identity: dict) -> str:
+    """SHA-256 of the canonical JSON of identity (colors_identity's dict). Raises
+    ColorsError if it cannot be encoded (NaN or infinity, or text UTF-8 cannot encode)."""
+    try:
+        return hashlib.sha256(canonical_json(identity)).hexdigest()
+    except ValueError as e:              # includes UnicodeEncodeError
+        raise ColorsError(f"the colors identity cannot be hashed: {e}") from None
 
 
 def _width(width_mm) -> float:
@@ -140,7 +160,7 @@ def _width(width_mm) -> float:
     return value
 
 
-def _plain(obj):
+def _json_plain(obj):
     """A JSON round trip: tuples become lists and dataclasses must already be dicts."""
     return json.loads(canonical_json(obj))
 
@@ -186,9 +206,12 @@ def _inner_edge(region: np.ndarray) -> np.ndarray:
 def _strip(rows: list[tuple[tuple[int, int, int] | None, str]], width: int) -> np.ndarray:
     """The swatch strip at 1x: one ROW_PX row per entry, a swatch (or none) and its text.
 
-    Text uses Pillow's built-in bitmap font (ImageFont.load_default_imagefont), which has
-    no anti-aliasing and no FreeType dependency, so the pixels are the same on every
-    platform with this Pillow version. Text wider than the strip is cut off.
+    Text uses Pillow's built-in bitmap font (ImageFont.load_default_imagefont, Pillow
+    10.1 or later), which has no anti-aliasing and no FreeType dependency, so the pixels
+    are expected to be the same on every platform with the same Pillow version; that is
+    not yet compared across machines. The record's regions_pixels_sha256 (decoded pixels)
+    and outputs["regions.png"] (file bytes) let a pixel difference be told apart from an
+    encoding difference. Text wider than the strip is cut off.
     """
     im = Image.new("RGB", (width, ROW_PX * len(rows)), STRIP_BACKGROUND)
     draw = ImageDraw.Draw(im)
@@ -210,25 +233,28 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
                    edges: str, vanished: set[int]) -> np.ndarray:
     """The review preview: two panels side by side, then the swatch strip.
 
+    fine is smooth_labels' fine map at supersample s (its shape is (H s, W s)); vanished
+    holds the palette indices that smoothing removed.
+
     Left: the cutout, PREVIEW_SCALE x nearest, on tdmg select's preview checkerboard
     outside the mask. Right: the final palette colors from the smoothed fine map
     (_fine_to_preview), inside the mask only (the image mask, enlarged by nearest; the R1
     outline is smoothed in step 2, not here), on the same checkerboard. Pixels whose color
     cleanup changed (changed_mask) are outlined on the right: the inner edge of the
     changed region, enlarged, drawn in black and white dashes of CHANGED_DASH_PX along the
-    diagonals, so it shows on any color. Below: the legend rows (legend_rows, which say
-    that the outer outline is the image's pixel outline, smoothed in step 2), and one row per palette entry
-    with its swatch, index, hex code, area share, and whether it is the base or vanished in
-    smoothing.
+    diagonals, so it shows on any color. Below: the legend rows (legend_rows; they say
+    that the outer outline is the image's pixel outline, smoothed in step 2), then one row
+    per palette entry with its swatch, index, hex code, area share, and whether it is the
+    base or vanished in smoothing.
     """
     h, w = mask.shape
     p = PREVIEW_SCALE
     big_mask = _enlarge(mask, p)
-    checker = _checker(h * p, w * p)[..., None].repeat(3, axis=2)
-    left = np.where(big_mask[..., None], _enlarge(cutout_rgb, p), checker)
+    board = checker(h * p, w * p)[..., None].repeat(3, axis=2)
+    left = np.where(big_mask[..., None], _enlarge(cutout_rgb, p), board)
     pal = np.array([e["rgb"] for e in palette], np.uint8)
     right = np.where(big_mask[..., None], pal[_fine_to_preview(fine, h, w, supersample)],
-                     checker)
+                     board)
     edge = _inner_edge(_enlarge(changed, p))
     yy, xx = np.nonzero(edge)
     dash = ((yy + xx) // CHANGED_DASH_PX) % 2
@@ -253,8 +279,9 @@ def make_colors(selection_dir, out_dir, *, width_mm, flags: dict, config_path,
 
     flags: {"colors", "edges", "base"}, None for "not given". config_path: a YAML file or
     None. rules: the registry (tdmg.rules.load_rules()); printer: the printer profile (its
-    palette cap and nozzle). supersample: the fine map's factor (tdmg.smoothing.SUPERSAMPLE
-    by default; it enters colors_id). width_mm must be a finite number above 0.
+    palette cap and nozzle). supersample: the factor of smooth_labels' fine map, an int
+    >= 1 (tdmg.smoothing.SUPERSAMPLE by default; it is part of the identity). width_mm
+    must be a finite number above 0.
 
     Raises ColorsError for any refused input, setting, selection or output folder, with
     nothing written. An OSError while writing can leave a folder without colors.json,
@@ -281,14 +308,14 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     q = quantize(sel.cutout_rgb, sel.mask, settings["colors"])
     cleaned, log = clean_regions(q, limits)
     k = len(cleaned.hex)
+    if k >= LABELS_OUTSIDE:     # the config caps colors at the profile's slots (4 for the A1)
+        raise ColorsError(f"{k} colors do not fit an 8-bit labels.png with "
+                          f"{LABELS_OUTSIDE} outside")
     check_base(settings["base"], k)
     base_index = 0 if settings["base"] == "auto" else settings["base"]
     smoothed = smooth_labels(cleaned.labels, sigma, supersample)
     vanished = set(smoothed.vanished)
 
-    if k >= LABELS_OUTSIDE:     # the config caps colors at the profile's slots (4 for the A1)
-        raise ColorsError(f"{k} colors do not fit an 8-bit labels.png with "
-                          f"{LABELS_OUTSIDE} outside")
     labels8 = np.where(cleaned.labels == OUTSIDE, LABELS_OUTSIDE,
                        cleaned.labels).astype(np.uint8)
     palette = [{"index": i, "hex": cleaned.hex[i], "rgb": cleaned.rgb[i].tolist(),
@@ -306,17 +333,18 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     if edge_rule is not None:
         used_rules[edge_rule] = sigma
     record_settings = resolved.as_record()
-    limits_record = _plain(dataclasses.asdict(limits))
+    limits_record = _json_plain(dataclasses.asdict(limits))
+    identity = colors_identity(
+        methods=methods, selection_id=sel.record["selection_id"],
+        cutout_pixels_sha256=sel.cutout_pixels_sha256,
+        mask_pixels_sha256=sel.record["mask_pixels_sha256"],
+        settings=record_settings["settings"], width_mm=width_mm, printer=printer.id,
+        nozzle_diameter_mm=limits.nozzle_diameter_mm, rules=used_rules,
+        supersample=smoothed.supersample)
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": COLORS_ALGORITHM_VERSION,
-        "colors_id": colors_identity(
-            methods=methods, selection_id=sel.record["selection_id"],
-            cutout_pixels_sha256=sel.cutout_pixels_sha256,
-            mask_pixels_sha256=sel.record["mask_pixels_sha256"],
-            settings=record_settings["settings"], width_mm=width_mm, rules=used_rules,
-            sigma_px=sigma, nozzle_diameter_mm=limits.nozzle_diameter_mm,
-            supersample=smoothed.supersample),
+        "colors_id": colors_id(identity), "identity": identity,
         "input": {"selection_id": sel.record["selection_id"],
                   "selection_json_sha256": sel.record_sha256,
                   "cutout_pixels_sha256": sel.cutout_pixels_sha256,
@@ -331,7 +359,7 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
                      "n_requested": q.n_requested, "n_distinct_colors": q.n_distinct_colors,
                      "dropped": q.dropped, "palette_hex": list(q.hex)},
         # The log's limits are the top-level "limits"; they are not repeated here.
-        "cleanup": {k: v for k, v in _plain(dataclasses.asdict(log)).items()
+        "cleanup": {k: v for k, v in _json_plain(dataclasses.asdict(log)).items()
                     if k != "limits"},
         "smoothing": {"sigma_px": sigma, "edge_rule": edge_rule,
                       "supersample": smoothed.supersample,  # method: methods.labels
@@ -345,6 +373,8 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
                     "changed_outline": "inner edge of the pixels cleanup changed, black and "
                                        "white dashes"},
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+        # Decoded pixels, so a pixel difference can be told from a PNG encoding difference.
+        "regions_pixels_sha256": pixels_sha256(regions),
         "environment": {**environment(), "scipy": scipy.__version__},
         "review": REVIEW,
     }
@@ -354,3 +384,183 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         raise ColorsError(f"the record cannot be stored as strict JSON: {e}") from None
     write_outputs(out_dir, files, RECORD_NAME, data, create_folder=create_folder)
     return json.loads(data)
+
+
+# --- verify_colors: reading a colors folder back (step 2) ---------------------------------
+
+EDGE_RULES = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE, "exact": None}
+
+
+@dataclass(frozen=True, eq=False)
+class VerifiedColors:
+    """A tdmg colors folder, read and checked by verify_colors. labels is read-only.
+
+    record: colors.json as parsed. labels: (H, W) int32, the palette index per pixel and
+    OUTSIDE (-1) outside the mask, as smooth_labels takes it. palette: the record's palette
+    entries. settings: the resolved colors, edges and base. base_index: the base color's
+    index. sigma_px and supersample: what smooth_labels needs to recompute the fine map.
+    width_mm and mm_per_px: the scale the cleanup used.
+    """
+
+    record: dict
+    labels: np.ndarray
+    palette: list
+    settings: dict
+    base_index: int
+    sigma_px: float
+    supersample: int
+    width_mm: float
+    mm_per_px: float
+
+
+def verify_colors(colors_dir, selection_dir=None) -> VerifiedColors:
+    """Read a tdmg colors folder and check it, or raise ColorsError. Nothing is written.
+
+    Checks, in order:
+    - colors.json is UTF-8 JSON with schema RECORD_SCHEMA and an identity block, and
+      colors_id is colors_id(identity);
+    - the record fields that repeat the identity equal it: input.selection_id,
+      input.cutout_pixels_sha256, input.mask_pixels_sha256, settings.settings, width_mm,
+      printer, methods (and algorithm = methods.colors), limits.nozzle_diameter_mm,
+      limits.opening_width_mm and island_area_mm2 (from the identity's rules), and
+      smoothing.supersample, edge_rule and sigma_px (the edges preset's rule and its value
+      in the identity's rules; exact: no rule and 0);
+    - base_index and the palette's base flags agree with settings.base;
+    - the outputs are exactly labels.png and regions.png, and each file's SHA-256 is the
+      record's; regions.png's decoded pixels hash to regions_pixels_sha256;
+    - labels.png is 8-bit grey of the recorded size, every value is 255 or a palette
+      index, and the pixel count of each index is the palette entry's count.
+    With selection_dir: the selection is read with tdmg.selection.read_selection (with the
+    cutout), its selection_id, mask and cutout pixel hashes are the identity's, and
+    labels.png is 255 exactly outside its mask.
+
+    What it cannot check: fields outside the identity that are not listed above (such as
+    the palette's hex codes and the cleanup log) are as the record says; only a rerun of
+    make_colors with the same identity reproduces them.
+    """
+    colors_dir = Path(colors_dir)
+    path = colors_dir / RECORD_NAME
+    if not path.is_file():
+        raise ColorsError(f"{path} not found; give a tdmg colors output folder")
+    try:
+        record = json.loads(path.read_bytes().decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as e:
+        raise ColorsError(f"{path} is not valid JSON: {e}") from None
+    if not isinstance(record, dict) or record.get("schema") != RECORD_SCHEMA:
+        raise ColorsError(f"{path} is not a {RECORD_SCHEMA} record")
+    if not isinstance(record.get("identity"), dict):
+        raise ColorsError(f"{path} has no identity block")
+    try:
+        return _verify(colors_dir, record, selection_dir)
+    except (KeyError, TypeError, AttributeError, IndexError) as e:
+        raise ColorsError(f"{path} is missing or has an invalid field: {e!r}") from None
+
+
+def _inconsistent(field: str) -> ColorsError:
+    return ColorsError(f"colors.json is inconsistent: {field} does not match the identity")
+
+
+def _verify(colors_dir: Path, record: dict, selection_dir) -> VerifiedColors:
+    ident = record["identity"]
+    if colors_id(ident) != record["colors_id"]:
+        raise ColorsError("colors.json is inconsistent: colors_id does not match its identity")
+    inp, sm, lim = record["input"], record["smoothing"], record["limits"]
+    rules = ident["rules"]
+    settings = record["settings"]["settings"]
+    edge_rule = EDGE_RULES.get(ident["settings"]["edges"], "?")
+    sigma = 0.0 if edge_rule is None else rules.get(edge_rule)
+    nozzle = ident["nozzle_diameter_mm"]
+    duplicates = {
+        "input.selection_id": (inp["selection_id"], ident["selection_id"]),
+        "input.cutout_pixels_sha256": (inp["cutout_pixels_sha256"],
+                                       ident["cutout_pixels_sha256"]),
+        "input.mask_pixels_sha256": (inp["mask_pixels_sha256"], ident["mask_pixels_sha256"]),
+        "settings.settings": (settings, ident["settings"]),
+        "width_mm": (record["width_mm"], ident["width_mm"]),
+        "printer": (record["printer"], ident["printer"]),
+        "methods": (record["methods"], ident["methods"]),
+        "algorithm": (record["algorithm"], ident["methods"]["colors"]),
+        "limits.nozzle_diameter_mm": (lim["nozzle_diameter_mm"], nozzle),
+        "limits.opening_width_mm": (lim["opening_width_mm"], rules.get(lim["opening_rule"])),
+        "limits.island_area_mm2": (lim["island_area_mm2"],
+                                   (rules.get(lim["island_rule"], math.nan) * nozzle) ** 2),
+        "smoothing.supersample": (sm["supersample"], ident["supersample"]),
+        "smoothing.edge_rule": (sm["edge_rule"], edge_rule),
+        "smoothing.sigma_px": (sm["sigma_px"], sigma),
+    }
+    for field, (got, want) in duplicates.items():
+        if got != want:
+            raise _inconsistent(field)
+    palette = record["palette"]
+    k = len(palette)
+    base_index = record["base_index"]
+    want_base = 0 if settings["base"] == "auto" else settings["base"]
+    if base_index != want_base or [p["base"] for p in palette] != [
+            i == base_index for i in range(k)]:
+        raise ColorsError("colors.json is inconsistent: base_index and the palette's base "
+                          "flags do not match settings.base")
+    if [p["index"] for p in palette] != list(range(k)):
+        raise ColorsError("colors.json is inconsistent: palette indices are not 0..k-1")
+    data = _verified_outputs(colors_dir, record)
+    labels8 = _decode(data["labels.png"], "labels.png", "L")
+    if labels8.shape != (inp["height_px"], inp["width_px"]):
+        raise ColorsError(f"labels.png is {labels8.shape[1]}x{labels8.shape[0]}, not the "
+                          f"recorded {inp['width_px']}x{inp['height_px']}")
+    inside = labels8 != LABELS_OUTSIDE
+    if (labels8[inside] >= k).any():
+        raise ColorsError(f"labels.png has values other than {LABELS_OUTSIDE} and the "
+                          f"palette indices 0..{k - 1}")
+    counts = np.bincount(labels8[inside], minlength=k)
+    if counts.tolist() != [p["count"] for p in palette]:
+        raise ColorsError("labels.png's pixel counts do not match the palette's counts")
+    if selection_dir is not None:
+        _check_selection(selection_dir, ident, inside)
+    labels = np.where(inside, labels8.astype(np.int32), OUTSIDE).astype(np.int32)
+    labels.flags.writeable = False
+    return VerifiedColors(record=record, labels=labels, palette=palette,
+                          settings=dict(settings), base_index=base_index,
+                          sigma_px=float(sigma), supersample=ident["supersample"],
+                          width_mm=ident["width_mm"], mm_per_px=record["mm_per_px"])
+
+
+def _verified_outputs(colors_dir: Path, record: dict) -> dict[str, bytes]:
+    outputs = record["outputs"]
+    if set(outputs) != set(OUTPUT_FILES):
+        raise ColorsError(f"colors.json outputs must be {', '.join(OUTPUT_FILES)}")
+    data = {}
+    for name in OUTPUT_FILES:
+        path = colors_dir / name
+        if not path.is_file():
+            raise ColorsError(f"{path} not found")
+        data[name] = path.read_bytes()
+        if hashlib.sha256(data[name]).hexdigest() != outputs[name]:
+            raise ColorsError(f"{name} does not match colors.json")
+    if pixels_sha256(_decode(data["regions.png"], "regions.png", "RGB")) != (
+            record["regions_pixels_sha256"]):
+        raise ColorsError("regions.png's pixels do not match regions_pixels_sha256")
+    return data
+
+
+def _decode(data: bytes, name: str, mode: str) -> np.ndarray:
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            if im.mode != mode:
+                raise ColorsError(f"{name} has mode {im.mode}, not {mode}")
+            return np.asarray(im).copy()
+    except (OSError, Image.DecompressionBombError) as e:
+        raise ColorsError(f"{name} is not a readable image: {e}") from None
+
+
+def _check_selection(selection_dir, ident: dict, inside: np.ndarray) -> None:
+    try:
+        sel = read_selection(selection_dir, cutout=True)
+    except SelectionError as e:
+        raise ColorsError(str(e)) from None
+    if (sel.record["selection_id"], sel.record["mask_pixels_sha256"],
+            sel.cutout_pixels_sha256) != (ident["selection_id"], ident["mask_pixels_sha256"],
+                                          ident["cutout_pixels_sha256"]):
+        raise ColorsError("this color plan was made from another selection (selection_id, "
+                          "mask or cutout differ)")
+    if inside.shape != sel.mask.shape or not np.array_equal(inside, sel.mask):
+        raise ColorsError("labels.png labels pixels outside the selection's mask, or leaves "
+                          "pixels inside it unlabelled")

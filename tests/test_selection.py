@@ -30,6 +30,7 @@ from tdmg.selection import (
     SelectionSpec,
     _preview,
     _result,
+    checker,
     load_image,
     load_mask,
     pixels_sha256,
@@ -597,6 +598,8 @@ def test_preview_of_semi_transparent_pixels_uses_integer_compositing():
 
 
 def test_checker_alternates_cells():
+    cells = checker(1, 2 * CHECKER_CELL_PX)[0, [0, CHECKER_CELL_PX]]
+    assert cells.tolist() == [CHECKER_SHADES[1], CHECKER_SHADES[0]]
     prev = _preview(np.zeros((1, CHECKER_CELL_PX * 2, 4), np.uint8),
                     np.zeros((1, CHECKER_CELL_PX * 2), bool))
     assert (prev[0, 0] == CHECKER_SHADES[1]).all()

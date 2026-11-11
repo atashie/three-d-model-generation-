@@ -352,7 +352,8 @@ def _base(value: str | None) -> str | int | None:
     try:
         return int(value)
     except ValueError:
-        raise typer.BadParameter(f"expects auto or a color index, got {value!r}") from None
+        raise typer.BadParameter(f"--base expects auto or a color index, got {value!r}"
+                                 ) from None
 
 
 @app.command()

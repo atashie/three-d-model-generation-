@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import math
+import shutil
 import time
 
 import numpy as np
@@ -22,10 +23,13 @@ from tdmg.colors import (
     PREVIEW_SCALE,
     RECORD_SCHEMA,
     ColorsError,
+    VerifiedColors,
+    colors_id,
     colors_identity,
     make_colors,
     mask_mm_per_px,
     swatch_box,
+    verify_colors,
 )
 from tdmg.flat import mask_outline, to_model
 from tdmg.profiles import load_printer
@@ -44,7 +48,8 @@ from tdmg.smoothing import LABELS_METHOD, SUPERSAMPLE
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
 NO_FLAGS = {"colors": None, "edges": None, "base": None}
-TOP_KEYS = {"schema", "tdmg_version", "algorithm", "colors_id", "input", "settings",
+TOP_KEYS = {"schema", "tdmg_version", "algorithm", "colors_id", "identity", "input",
+            "settings", "regions_pixels_sha256",
             "width_mm", "mm_per_px", "printer", "limits", "palette", "base_index",
             "quantize", "cleanup", "smoothing", "methods", "preview", "outputs",
             "environment", "review"}
@@ -88,8 +93,7 @@ def test_read_selection_returns_the_verified_record_mask_and_cutout(sel):
 
 
 def test_read_selection_without_cutout_does_not_read_it(sel, tmp_path):
-    import shutil
-    d = shutil.copytree(sel, tmp_path / "sel")
+    d = _copy(sel, tmp_path)
     (d / "cutout.png").unlink()
     v = read_selection(d)
     assert v.cutout_rgb is None and v.cutout_pixels_sha256 is None
@@ -97,9 +101,8 @@ def test_read_selection_without_cutout_does_not_read_it(sel, tmp_path):
         read_selection(d, cutout=True)
 
 
-def _copy(sel, tmp_path):
-    import shutil
-    return shutil.copytree(sel, tmp_path / "sel")
+def _copy(src, tmp_path, name="sel"):
+    return shutil.copytree(src, tmp_path / name)
 
 
 def test_tampered_cutout_is_refused(sel, tmp_path):
@@ -175,6 +178,8 @@ def test_outputs_and_record_schema(done, sel):
     for name in OUTPUT_FILES:
         assert rec["outputs"][name] == hashlib.sha256((out / name).read_bytes()).hexdigest()
     assert set(rec["outputs"]) == set(OUTPUT_FILES)
+    regions = np.array(Image.open(out / "regions.png"))
+    assert rec["regions_pixels_sha256"] == pixels_sha256(regions)
     v = read_selection(sel, cutout=True)
     assert rec["input"] == {
         "selection_id": v.record["selection_id"], "selection_json_sha256": v.record_sha256,
@@ -319,19 +324,136 @@ def test_colors_id_ignores_the_environment_and_setting_sources(done, sel, tmp_pa
     assert env["colors_id"] == rec["colors_id"]
 
 
-def test_colors_identity_is_the_documented_hash(done):
+def test_colors_id_is_the_hash_of_the_stored_identity(done):
     rec = done[0]
-    lim = rec["limits"]
-    rid = colors_identity(
+    ident = rec["identity"]
+    assert colors_id(ident) == rec["colors_id"]
+    assert rec["colors_id"] == hashlib.sha256(json.dumps(
+        ident, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    # Built from explicit inputs; the duplicated record fields agree with it.
+    assert ident == colors_identity(
         methods=rec["methods"], selection_id=rec["input"]["selection_id"],
         cutout_pixels_sha256=rec["input"]["cutout_pixels_sha256"],
         mask_pixels_sha256=rec["input"]["mask_pixels_sha256"],
         settings=rec["settings"]["settings"], width_mm=rec["width_mm"],
-        rules={lim["opening_rule"]: 0.4, lim["island_rule"]: 2.0,
-               "flat.smooth.sigma_px": 2.5},
-        sigma_px=2.5, nozzle_diameter_mm=lim["nozzle_diameter_mm"],
-        supersample=rec["smoothing"]["supersample"])
-    assert rid == rec["colors_id"]
+        printer=rec["printer"], nozzle_diameter_mm=rec["limits"]["nozzle_diameter_mm"],
+        rules=ident["rules"], supersample=rec["smoothing"]["supersample"])
+    assert set(ident) == {"methods", "selection_id", "cutout_pixels_sha256",
+                          "mask_pixels_sha256", "settings", "width_mm", "printer",
+                          "nozzle_diameter_mm", "rules", "supersample"}
+    # One value per rule used, from the registry: both cleanup rules (the island rule's
+    # own value, not the derived area) and the edges rule. Sigma is hashed only here.
+    lim, sm = rec["limits"], rec["smoothing"]
+    assert ident["rules"] == {
+        lim["opening_rule"]: RULES[lim["opening_rule"]].default,
+        lim["island_rule"]: RULES[lim["island_rule"]].default,
+        sm["edge_rule"]: RULES[sm["edge_rule"]].default}
+    assert ident["rules"][sm["edge_rule"]] == sm["sigma_px"]
+
+
+def test_colors_id_refuses_nan():
+    with pytest.raises(ColorsError, match="identity"):
+        colors_id({"width_mm": math.nan})
+
+
+# --- verify_colors --------------------------------------------------------------------
+
+def test_verify_colors_accepts_a_good_folder(done, sel):
+    rec, out = done
+    labels8 = np.array(Image.open(out / "labels.png"))
+    for selection_dir in (None, sel):
+        v = verify_colors(out, selection_dir)
+        assert isinstance(v, VerifiedColors)
+        assert v.record == rec
+        assert v.palette == rec["palette"] and v.settings == rec["settings"]["settings"]
+        assert v.sigma_px == rec["smoothing"]["sigma_px"]
+        assert v.supersample == rec["smoothing"]["supersample"]
+        assert v.width_mm == rec["width_mm"] and v.base_index == rec["base_index"]
+        assert v.labels.dtype == np.int32 and not v.labels.flags.writeable
+        want = np.where(labels8 == LABELS_OUTSIDE, OUTSIDE, labels8.astype(np.int32))
+        assert (v.labels == want).all()
+
+
+def _edit_record(d, change):
+    rec = json.loads((d / "colors.json").read_bytes())
+    change(rec)
+    (d / "colors.json").write_bytes(json.dumps(rec).encode())
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda r: r.update(width_mm=50.0), "width_mm does not match the identity"),
+    (lambda r: r["settings"]["settings"].update(colors=3), "settings.settings"),
+    (lambda r: r["input"].update(selection_id="0" * 64), "input.selection_id"),
+    (lambda r: r.update(printer="other"), "printer"),
+    (lambda r: r["smoothing"].update(sigma_px=1.0), "sigma_px"),
+    (lambda r: r["smoothing"].update(supersample=2), "supersample"),
+    (lambda r: r["methods"].update(quantize="x"), "methods"),
+    (lambda r: r["identity"].update(width_mm=50.0), "colors_id does not match"),
+    (lambda r: r["identity"]["rules"].update({"flat.sliver.opening_width": 0.5}),
+     "colors_id does not match"),
+    (lambda r: r.pop("identity"), "identity"),
+    (lambda r: r.update(schema="tdmg.colors/0"), "tdmg.colors/1"),
+    (lambda r: r["palette"].pop(), "labels.png has values"),
+    (lambda r: r["palette"][0].update(count=1), "pixel counts"),
+])
+def test_verify_colors_refuses_an_edited_record(done, tmp_path, change, message):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d)
+
+
+def test_verify_colors_refuses_tampered_images(done, tmp_path):
+    d = _copy(done[1], tmp_path, "labels")
+    labels = np.array(Image.open(d / "labels.png"))
+    labels[tuple(np.argwhere(labels == LABELS_OUTSIDE)[0])] = 0
+    Image.fromarray(labels).save(d / "labels.png")
+    with pytest.raises(ColorsError, match="labels.png does not match colors.json"):
+        verify_colors(d)
+    d = _copy(done[1], tmp_path, "regions")
+    data = bytearray((d / "regions.png").read_bytes())
+    data[-20] ^= 1
+    (d / "regions.png").write_bytes(bytes(data))
+    with pytest.raises(ColorsError, match="regions.png does not match colors.json"):
+        verify_colors(d)
+    d = _copy(done[1], tmp_path, "gone")
+    (d / "labels.png").unlink()
+    with pytest.raises(ColorsError, match="labels.png not found"):
+        verify_colors(d)
+
+
+def _rewrite_labels(d, change):
+    """Edit labels.png and update its hash in colors.json, so only deeper checks catch it."""
+    labels = np.array(Image.open(d / "labels.png"))
+    change(labels)
+    Image.fromarray(labels).save(d / "labels.png")
+    digest = hashlib.sha256((d / "labels.png").read_bytes()).hexdigest()
+    _edit_record(d, lambda r: r["outputs"].update({"labels.png": digest}))
+
+
+def test_verify_colors_refuses_labels_out_of_range_even_with_a_matching_hash(done, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _rewrite_labels(d, lambda a: a.__setitem__(tuple(np.argwhere(a == 0)[0]), 7))
+    with pytest.raises(ColorsError, match="labels.png has values other than"):
+        verify_colors(d)
+
+
+def test_verify_colors_refuses_another_selection(done, tmp_path):
+    other = write_sel(tmp_path / "other",
+                      spec=SelectionSpec(instructions="", keep_at=((100, 100),)))
+    with pytest.raises(ColorsError, match="was made from another selection"):
+        verify_colors(done[1], other)
+
+
+def test_verify_colors_refuses_labels_outside_the_selection_mask(done, sel, tmp_path):
+    # Hashes and counts made consistent, but labels.png labels a pixel outside the mask.
+    d = _copy(done[1], tmp_path, "colors")
+    _rewrite_labels(d, lambda a: a.__setitem__(
+        tuple(np.argwhere(a == LABELS_OUTSIDE)[0]), 0))
+    _edit_record(d, lambda r: r["palette"][0].update(count=r["palette"][0]["count"] + 1))
+    verify_colors(d)                      # consistent on its own
+    with pytest.raises(ColorsError, match="outside the selection's mask"):
+        verify_colors(d, sel)
 
 
 # --- settings -------------------------------------------------------------------------
@@ -399,7 +521,9 @@ def test_fewer_distinct_colors_than_requested(tmp_path):
 
 # --- the preview ----------------------------------------------------------------------
 
-def test_regions_png_size_swatches_and_determinism(done, sel, tmp_path):
+def test_regions_png_size_swatches_and_same_process_repeat(done, sel, tmp_path):
+    # "Repeat" means two runs in one process and environment give the same bytes; it is
+    # not a comparison across machines.
     rec, out = done
     img = np.array(Image.open(out / "regions.png"))
     h, w = rec["input"]["height_px"], rec["input"]["width_px"]
@@ -461,7 +585,7 @@ OWNER_PALETTE = {"roadie-tol30": ["#ed0707", "#ededed", "#eeef0a", "#5c271b"],
 def test_owner_images(name, owner_selection, tmp_path):
     from conftest import SELECTIONS
     from test_color_cleanup import OWNER_CLEANUP
-    from test_smooth_labels import OWNER_FINE_SHA
+    from test_smooth_labels import OWNER_FINE_SHA, PARITY
 
     from tdmg.smoothing import smooth_labels
 
@@ -480,7 +604,7 @@ def test_owner_images(name, owner_selection, tmp_path):
     fine = smooth_labels(labels, rec["smoothing"]["sigma_px"],
                          rec["smoothing"]["supersample"]).fine
     assert hashlib.sha256(np.ascontiguousarray(fine).tobytes()).hexdigest()[:16] == (
-        OWNER_FINE_SHA[name])
+        OWNER_FINE_SHA[name]), PARITY
     assert [p["hex"] for p in rec["palette"]] == OWNER_PALETTE[name]
     shares = [f"{p['share']:.1%}" for p in rec["palette"]]
     print(f"\n{name}: make_colors {dt:.2f} s; palette {OWNER_PALETTE[name]} shares "

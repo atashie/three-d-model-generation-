@@ -20,7 +20,7 @@ dependencies = [
     "opencv-python-headless",
     "build123d",         # pulls cadquery-ocp (OpenCASCADE: LGPL-2.1 with exception)
     "vtracer",
-    "pillow",
+    "pillow>=10.1",
     "pydantic>=2",
     "typer",
     "pyyaml",

@@ -428,24 +428,36 @@ def test_colors_bad_settings_exit_2_and_write_nothing(tmp_path, extra, message):
 def test_colors_bad_base_text_is_a_usage_error(tmp_path):
     r = _colors(_selection(tmp_path), tmp_path / "colors", "--base", "red")
     assert r.exit_code == 2
-    assert "expects auto or a color index, got 'red'" in _plain(r.output)
+    assert "--base expects auto or a color index, got 'red'" in _plain(r.output)
     assert not (tmp_path / "colors").exists()
 
 
-def test_colors_bad_width_and_input_exit_2(tmp_path):
-    sel = _selection(tmp_path)
-    r = runner.invoke(app, ["colors", str(sel), "--width-mm", "0", "--out",
-                            str(tmp_path / "a")])
-    assert r.exit_code == 2 and r.stderr.startswith("error: width_mm")
+def _not_a_selection(sel, tmp_path):
     other = tmp_path / "other"
     other.mkdir()
-    r = _colors(other, tmp_path / "b")
-    assert r.exit_code == 2 and "selection.json" in r.stderr
+    return other
+
+
+def _bad_mask(sel, tmp_path):
     (sel / "mask.png").write_bytes((sel / "preview.png").read_bytes())
-    r = _colors(sel, tmp_path / "c")
-    assert r.exit_code == 2 and "mask.png" in r.stderr
-    for name in "abc":
-        assert not (tmp_path / name).exists()
+    return sel
+
+
+@pytest.mark.parametrize("make_input, width, message", [
+    (lambda sel, tmp_path: sel, "0", "error: width_mm"),
+    (lambda sel, tmp_path: sel, "nan", "error: width_mm"),
+    (_not_a_selection, "60", "selection.json"),
+    (_bad_mask, "60", "mask.png"),
+])
+def test_colors_bad_width_or_input_exits_2_and_writes_nothing(tmp_path, make_input, width,
+                                                              message):
+    source = make_input(_selection(tmp_path), tmp_path)
+    out = tmp_path / "colors"
+    r = runner.invoke(app, ["colors", str(source), "--width-mm", width, "--out", str(out)])
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and message in r.stderr
+    assert "Traceback" not in r.output and isinstance(r.exception, SystemExit)
+    assert not out.exists()
 
 
 def test_colors_refuses_a_non_empty_out_folder(tmp_path):
