@@ -158,8 +158,15 @@ def outline_preview_mask(mask: np.ndarray, sigma_px: float) -> np.ndarray:
     (a + 0.5) / P) in image pixels; shapely's contains_xy (exact; a centre on the outline
     counts as outside) decides. A straight axis-aligned edge stays on its cell edge under
     the blur, and no centre lies on a cell edge, so along such an edge this is exactly the
-    enlarged mask. Not shown: tdmg flat's later clean (its opening and island removal in
-    mm), which removes only features narrower than the opening width."""
+    enlarged mask.
+
+    It matches tdmg flat only at flat's default smooth_px (the same rule) and only before
+    flat's clean (tests/test_colors.py ties it to flat.rasterise of the uncleaned to_model
+    output). Not shown: that clean (tdmg.flat.clean), which removes features narrower
+    than the opening width, also rounds every convex corner to radius opening/2 and drops
+    islands below the island area. Measured on the owner's images at 60 mm (Windows PC,
+    2026-11-11, an inline check, not committed), it changes 20 image pixels on Roadie (16
+    removed, 4 added) and 10 on Oddie, out of about 75,000 and 298,000."""
     h, w = mask.shape
     p = PREVIEW_SCALE
     region = smooth_outline(mask, sigma_px)
@@ -208,15 +215,19 @@ def colors_identity(*, methods: dict, selection_id: str, cutout_pixels_sha256: s
     methods: the algorithm versions (colors, quantize, outline, cleanup, labels). settings:
     the resolved values of every key (colors, extract, edges, base, outlines,
     outline_color, merge, outline_width_mm), not their sources: the same values from a
-    flag, a file or a default give the same plan. The rules that only give a setting's
-    default (color.extract.default_count, color.outline.keep_width) are therefore not
-    hashed separately; their values are settings.extract and settings.outline_width_mm. printer: the profile id (as flat_identity's params
-    hold it). rules: {rule id: registry value} for every rule used: the two cleanup rules
-    (the island rule's own min_square_side, not the derived area), the edges preset's
-    rule, if any, the outline rules that decided the plan (the thin share under auto, the
+    flag, a file or a default give the same plan. outline_width_mm is in it under drop
+    too, where it is unused: a documented choice, so the identity is always every
+    resolved setting. The rules that only give a setting's default
+    (color.extract.default_count, color.outline.keep_width) are therefore not hashed
+    separately; their values are settings.extract and settings.outline_width_mm.
+    printer: the profile id (as flat_identity's params hold it). rules: {rule id: registry
+    value} for every rule used: the two cleanup rules (the island rule's own
+    min_square_side, not the derived area), the edges preset's rule, if any, the outline
+    rules that decided the plan (the thin share under auto, the
     wide-area ratio with a family) and the two shade rules. The preview's outer outline
-    (flat.smooth.sigma_px) is display only and not part of it. The edges sigma is hashed only there; `exact` has no rule and sigma 0
-    by definition. supersample: the fine map's factor. The environment is never part of it.
+    (flat.smooth.sigma_px) is display only and not part of it. The edges sigma is hashed
+    only there; `exact` has no rule and sigma 0 by definition. supersample: the fine map's
+    factor. The environment is never part of it.
     """
     return {"methods": dict(methods), "selection_id": selection_id,
             "cutout_pixels_sha256": cutout_pixels_sha256,

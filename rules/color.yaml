@@ -123,7 +123,7 @@
       provenance: unverified
       validation: untested
       claim: "The controller's decision to use 0.5 mm, from the measurement and the owner's wish for a finer band than 0.6 mm. A decision, not a print result."
-  notes: "In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width (0.4 mm) or cleanup removes the band; tests/test_rules.py checks that it does, and tdmg.color_config refuses an outline_width_mm at or below it. Close above the opening is not enough: at 0.45 mm (less than one pixel above it on the owner's images) cleanup removed up to 28.6% of the band. History: 0.6 mm (Task 7c, a round starting value), 0.45 mm (Task 7e-b, the owner's request), 0.5 mm (after the measurement). Two images at 60 mm only; at other scales the margin over the opening in pixels changes. Whether a 0.5 mm band (about one 0.42 mm bead) prints cleanly is untested."
+  notes: "In mm, not pixels, because it is a printed width. It must stay above flat.sliver.opening_width (0.4 mm) or cleanup removes the band; tests/test_rules.py checks that it does, and tdmg.color_config refuses an outline_width_mm at or below it. Close above the opening is not enough: at 0.45 mm (less than one pixel above it on the owner's images) cleanup removed up to 28.6% of the band. History: 0.6 mm (Task 7c, a round starting value); 0.45 mm (Task 7e-b, our reading of the owner's \"0.4 mm?\", since 0.4 mm equals the opening and cannot be used); 0.5 mm (after the measurement). Two images at 60 mm only; at other scales the margin over the opening in pixels changes. Whether a 0.5 mm band (about one 0.42 mm bead) prints cleanly is untested."
 
 - id: color.outline.keep_area_width_ratio
   kind: hypothesis

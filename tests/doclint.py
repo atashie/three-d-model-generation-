@@ -83,6 +83,7 @@ def broken_links(page: Path) -> list[str]:
             continue
         path_part, _, frag = target.partition("#")
         dest = page if not path_part else (page.parent / path_part.replace("%20", " "))
-        if not dest.exists() or frag and dest.suffix == ".md" and frag not in anchors(dest.read_text(encoding="utf-8")):
+        if not dest.exists() or (frag and dest.suffix == ".md"
+                                 and frag not in anchors(dest.read_text(encoding="utf-8"))):
             broken.append(target)
     return broken

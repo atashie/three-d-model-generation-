@@ -84,10 +84,12 @@ class Rule(BaseModel):
                 bad = [v for v in values if prefix is None or not v.startswith(prefix)
                        or v not in ATTRIBUTE_LABELS]
                 if prefix is None or bad:
-                    raise ValueError(f"{self.id}: applies_to {key}: {values} is not a known attribute")
+                    raise ValueError(f"{self.id}: applies_to {key}: {values} is not a known "
+                                     "attribute")
         for ev in self.evidence:
             if not ev.locator.strip() or ev.ref.startswith(("/", "..")) or "/../" in ev.ref:
-                raise ValueError(f"{self.id}: evidence needs a repo-relative ref and a real locator")
+                raise ValueError(f"{self.id}: evidence needs a repo-relative ref and a real "
+                                 "locator")
         if any(e.validation == "calibrated" for e in self.evidence) and self.calibration is None:
             raise ValueError(f"{self.id}: 'calibrated' evidence needs a calibration block")
         if self.range is not None:

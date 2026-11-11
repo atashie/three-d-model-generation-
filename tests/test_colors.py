@@ -1125,29 +1125,32 @@ OWNER_RUNS = {
         "final": ["#f60606", "#f5f5f5", "#f0f10a", "#451812"],
         "to_final": [0, 1, None, 3, 2, None],
         "cleanup": (3, 57, "4ccd3620d07f982d"), "ready": True, "pairs": [],
-        "kept_wide": [421]}),
+        "kept_wide": [421], "stroke_width_px": 6.0, "n_wide": 22, "specks": None}),
     "roadie-keep": ("roadie-tol30", {"outlines": "keep"}, {
         "family": [2, 3, 5], "core": 3,
         "final": ["#f60606", "#451812", "#f5f5f5", "#f0f10a"],
         "to_final": [0, 2, None, 1, 3, None],
         "cleanup": (5, 751, "3c8835b97735bc7c"), "ready": True, "pairs": [],
-        "kept_wide": [421]}),
+        "kept_wide": [421], "stroke_width_px": 6.0, "n_wide": 22,
+        "specks": {"count": 31, "px": 102}}),
     "oddie-default": ("oddie", {}, {
         "family": [4], "core": 4,
         "final": ["#25561b", "#48a835", "#547e9d", "#395266", "#dd4f47"],
         "to_final": [0, 2, 1, 3, None, 4],
         "cleanup": (5, 10259, "a8b7de8a6d3cc898"), "ready": False,
-        "pairs": [[0, 2], [1, 3]]}),
+        "pairs": [[0, 2], [1, 3]], "stroke_width_px": 4.0, "n_wide": 0, "specks": None}),
     "oddie-merge-blues": ("oddie", {"merge": [[3, 1]]}, {
         "family": [4], "core": 4,
         "final": ["#25561b", "#547e9d", "#48a835", "#dd4f47"],
         "to_final": [0, 1, 2, None, None, 3],
-        "cleanup": (3, 7660, "1b10c29696824627"), "ready": True, "pairs": [[0, 2]]}),
+        "cleanup": (3, 7660, "1b10c29696824627"), "ready": True, "pairs": [[0, 2]],
+        "stroke_width_px": 4.0, "n_wide": 0, "specks": None}),
     "oddie-keep-merge-blues": ("oddie", {"merge": [[3, 1]], "outlines": "keep"}, {
         "family": [4], "core": 4,
         "final": ["#25561b", "#547e9d", "#48a835", "#0d100d", "#dd4f47"],
         "to_final": [0, 1, 2, None, 3, 4],
-        "cleanup": (4, 512, "6c7b3e398a91d877"), "ready": False, "pairs": [[0, 2]]}),
+        "cleanup": (4, 512, "6c7b3e398a91d877"), "ready": False, "pairs": [[0, 2]],
+        "stroke_width_px": 4.0, "n_wide": 0, "specks": {"count": 0, "px": 0}}),
 }
 OWNER_EXTRACTED = {
     "roadie-tol30": ["#f60606", "#f5f5f5", "#960a0a", "#451812", "#f0f10a", "#746c5b"],
@@ -1181,6 +1184,8 @@ def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_p
     # Task 7e-b: on Roadie only the pupil keeps the core's color; Oddie has no wide area.
     assert [c["area_px"] for c in o["wide_components"] if c["kept"]] == (
         want.get("kept_wide", [])), PARITY
+    assert (o["stroke_width_px"], len(o["wide_components"]), o["specks_not_drawn"]) == (
+        want["stroke_width_px"], want["n_wide"], want["specks"]), PARITY
     assert rec["ready"] is want["ready"]
     if want["ready"]:
         verify_colors(out, SELECTIONS / name)
@@ -1463,7 +1468,7 @@ def test_cartoon_record_has_the_stroke_width_and_the_wide_components(cartoon_don
     assert [c["kept"] for c in comps] == [True]                  # the pupil only
     c = comps[0]
     assert set(c) == {"area_px", "inscribed_px", "centroid", "kept"}
-    assert c["inscribed_px"] >= 2.0 * o["stroke_width_px"]
+    assert c["inscribed_px"] >= RULES[KEEP_RATIO_RULE].default * o["stroke_width_px"]
     assert abs(c["centroid"][0] - 45.5) < 1 and abs(c["centroid"][1] - 30.5) < 1
     assert o["specks_not_drawn"] is None and o["keep_width"] is None
     assert "1 at least 2 x the stroke width" in o["notes"][0]
@@ -1483,6 +1488,10 @@ def _wide(r):
     (lambda r: _wide(r)[0].pop("centroid"), r"wide_components\[0\] must hold"),
     (lambda r: _wide(r)[0].update(area_px=0), r"wide_components\[0\] must hold"),
     (lambda r: _wide(r)[0].update(kept=1), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r)[0].update(centroid=[1.0]), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r)[0].update(centroid=["x", 1.0]), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r)[0].update(centroid=[True, 1.0]), r"wide_components\[0\] must hold"),
+    (lambda r: _wide(r)[0].update(centroid=None), r"wide_components\[0\] must hold"),
     (lambda r: _wide(r).append({**_wide(r)[0], "area_px": 10 ** 6}), "largest first"),
     (lambda r: r["outline"].update(wide_components={}), "must be a list"),
     (lambda r: r["outline"].update(specks_not_drawn={"count": 0, "px": 0}),
@@ -1540,7 +1549,9 @@ def test_the_preview_background_is_a_mid_grey_checker():
     from tdmg.colors import BACKGROUND_SHADES, background
     from tdmg.selection import CHECKER_CELL_PX, CHECKER_SHADES
     assert BACKGROUND_SHADES == (112, 144)
-    # Far from white (the owner's white is 245) and from tdmg select's light checker.
+    # Far from white (the owner's white is 245) and from tdmg select's light checker
+    # (200/235). The 50 grey levels are a display margin chosen for this test, not a rule:
+    # the lighter background shade (144) is 56 below select's darker one (200).
     assert max(BACKGROUND_SHADES) < min(CHECKER_SHADES) - 50
     b = background(20, 20)
     assert b.shape == (20, 20, 3) and (b[..., 0] == b[..., 2]).all()
@@ -1575,6 +1586,30 @@ def test_the_smoothed_outer_outline_keeps_a_straight_edge_and_rounds_a_corner():
     # The corner is rounded: the corner pixel of the mask is outside the smoothed outline.
     assert big[10 * p, 10 * p] and not m[10 * p, 10 * p]
     assert (m & ~big).sum() == 0               # a convex shape only loses its corners
+
+
+def test_the_preview_outline_is_flats_uncleaned_smoothed_outline():
+    # The preview samples smooth_outline at the preview pixel centres. tdmg flat (at its
+    # default smooth_px) builds from the same outline through to_model and checks it with
+    # rasterise. Scaled by PREVIEW_SCALE about the origin, rasterise's pixel centres are
+    # the preview's, so the two agree before flat's clean (which also rounds convex
+    # corners and drops islands, not shown in the preview).
+    from shapely import affinity
+
+    from tdmg.colors import outline_preview_mask
+    from tdmg.flat import rasterise, to_model
+    from tdmg.smoothing import smooth_outline
+    yy, xx = np.mgrid[0:70, 0:90]
+    mask = ((yy - 35) ** 2 / 25 ** 2 + (xx - 40) ** 2 / 30 ** 2 <= 1) | (
+        (yy >= 30) & (yy < 40) & (xx >= 60) & (xx < 88))
+    mask[35, 50] = False                        # a one-pixel hole the blur closes
+    p = PREVIEW_SCALE
+    geom = affinity.scale(smooth_outline(mask, 2.5), p, p, origin=(0, 0))
+    model, transform = to_model(geom, 60.0)
+    parts = list(getattr(model, "geoms", [model]))
+    want = rasterise(parts, transform, (70 * p, 90 * p))
+    got = outline_preview_mask(mask, 2.5)
+    assert want.sum() > 0 and np.array_equal(got, want)
 
 
 def test_the_right_panel_fills_a_notch_the_smoothing_closes(tmp_path):

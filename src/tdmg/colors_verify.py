@@ -119,20 +119,22 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        each lab is srgb_to_lab of its rgb, to LAB_ABS_TOL per component. The outline:
        found_by matches outline_color (auto, none, or config for a list); the family is
        the list (config), empty (none), or exactly the indices whose recorded thinness is
-       above the thin share (auto); thinness has one number from 0 to 1 per extracted color; family_hex
-       is the family's colors; the core is outline_core of the family on the recorded Lab
-       (the darkest member), with its hex; keep_width and specks_not_drawn are set exactly
-       under keep with a family, keep_width.mm being settings.outline_width_mm. Without a
-       family, stroke_width_px is null and wide_components empty; each wide component is
-       kept exactly when the ratio rule (keeps_wide_area) says so on its recorded
-       inscribed width and the recorded stroke width, and they are ordered largest
-       first. The merges' from_hex and into_hex are the extraction's colors. Each
-       merged_into is the merge setting's; each fate is one of FATES, with final exactly
-       when final_index is set, merged exactly when merged_into is set, outline only for
-       an index in outline.family (and always for a family member other than the core),
-       and cleanup only for a hex in cleanup.dropped_hex; each final_index is a final
-       palette index with the same hex; and every final palette entry is the final_index
-       of at least one extraction entry with the same hex. The shade pairs are what
+       above the thin share (auto); thinness has one number from 0 to 1 per extracted
+       color; family_hex is the family's colors; the core is outline_core of the family on
+       the recorded Lab (the darkest member), with its hex; keep_width and
+       specks_not_drawn are set exactly under keep with a family, keep_width.mm being
+       settings.outline_width_mm. Without a family, stroke_width_px is null and
+       wide_components empty; each wide component has an int area of at least 1, a finite
+       inscribed width, a centroid of two finite numbers and a bool kept, which is true
+       exactly when the ratio rule (keeps_wide_area) says so on its recorded inscribed
+       width and the recorded stroke width; they are ordered largest first. The merges'
+       from_hex and into_hex are the extraction's colors. Each merged_into is the merge
+       setting's; each fate is one of FATES, with final exactly when final_index is set,
+       merged exactly when merged_into is set, outline only for an index in
+       outline.family (and always for a family member other than the core), and cleanup
+       only for a hex in cleanup.dropped_hex; each final_index is a final palette index
+       with the same hex; and every final palette entry is the final_index of at least
+       one extraction entry with the same hex. The shade pairs are what
        tdmg.color_outline.shade_pairs gives again on the recorded Lab (its numbers to
        LAB_ABS_TOL), for the colors whose fate is final or cleanup other than the core,
        with the identity's two shade rules.
@@ -471,14 +473,18 @@ def _check_wide_components(outline: dict, rules: dict) -> None:
             raise ColorsError("colors.json is inconsistent: with no outline family there is "
                               "no stroke width and no wide component")
         return
+    def finite(v) -> bool:
+        return not isinstance(v, bool) and isinstance(v, numbers.Real) and math.isfinite(v)
+
     ratio = rules[KEEP_RATIO_RULE]
     areas = []
     for n, c in enumerate(comps):
-        ins = c["inscribed_px"]
+        ins, cen = c.get("inscribed_px"), c.get("centroid")
         if (set(c) != {"area_px", "inscribed_px", "centroid", "kept"}
                 or type(c["area_px"]) is not int or c["area_px"] < 1
-                or isinstance(ins, bool) or not isinstance(ins, numbers.Real)
-                or not math.isfinite(ins) or type(c["kept"]) is not bool):
+                or not finite(ins) or type(c["kept"]) is not bool
+                or not isinstance(cen, list) or len(cen) != 2
+                or not all(finite(v) for v in cen)):
             raise ColorsError(f"colors.json is inconsistent: outline.wide_components[{n}] "
                               "must hold area_px, inscribed_px, centroid and kept")
         if c["kept"] != keeps_wide_area(ins, sw, ratio):

@@ -26,10 +26,11 @@ $TDMG_PRUSASLICER_DIR gives its folder. The bed shape and height, nozzle diamete
 and first-layer heights and filament diameter are passed explicitly from the hash-checked
 OrcaSlicer A1 profiles; every other setting is PrusaSlicer 2.9.7's default (Codex review
 2026-11-11, finding 3: for example 20% infill, no elephant-foot compensation and the
-Arachne perimeter generator, where the A1 profile has 15%, 0.075 mm and classic). Without it, F6.portability is UNKNOWN. For STL it
-shows that a second slicer accepts the model as modelled and slices its full height
-(tdmg.portability.PORTABILITY_MEANING); both slicers share the admesh STL reader, so a 3MF
-output must re-run portability with truly different readers. Its G-code is kept as
+Arachne perimeter generator, where the A1 profile has 15%, 0.075 mm and classic). Without
+it, F6.portability is UNKNOWN. For STL it shows that a second slicer accepts the model as
+modelled and slices its full height (tdmg.portability.PORTABILITY_MEANING); both slicers
+share the admesh STL reader, so a 3MF output must re-run portability with truly different
+readers. Its G-code is kept as
 prusaslicer.portability-only.gcode.txt, generic G-code that is evidence of portability
 only and never for the A1 (not a .gcode name, so no printer software offers it); a FAIL
 quarantines it as prusaslicer.portability-only.gcode.txt.failed, as for plate_1.gcode.

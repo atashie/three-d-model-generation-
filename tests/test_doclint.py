@@ -24,12 +24,14 @@ def test_reversed_order_is_caught():
 
 
 def test_rule_ref_typos_are_caught_in_any_registry_namespace():
-    refs = rule_refs("see `fdm.typo` and `gate.topology.nope` and `trimesh.creation`", {"fdm", "gate"})
+    refs = rule_refs("see `fdm.typo` and `gate.topology.nope` and `trimesh.creation`",
+                     {"fdm", "gate"})
     assert refs == {"fdm.typo", "gate.topology.nope"}
 
 
 def test_github_slugs():
-    assert slug("4. Pipeline stages and the gate contract") == "4-pipeline-stages-and-the-gate-contract"
+    assert slug("4. Pipeline stages and the gate contract") == (
+        "4-pipeline-stages-and-the-gate-contract")
     assert slug("11. Roadmap") == "11-roadmap"
     assert anchors("# A\n## A\n") == {"a", "a-1"}
 

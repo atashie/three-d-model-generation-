@@ -51,7 +51,7 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
 
-from tdmg.color import ColorError, merge_problem
+from tdmg.color import OPENING_RULE, ColorError, merge_problem
 from tdmg.color_outline import KEEP_WIDTH_RULE, check_outline_width
 from tdmg.profiles import PrinterProfile
 from tdmg.rules import Rule
@@ -68,7 +68,6 @@ EXTRACT_RULE = "color.extract.default_count"
 # Keys that default to a rule's value, and the unit each rule must be in.
 RULE_DEFAULTS = {"extract": EXTRACT_RULE, "outline_width_mm": KEEP_WIDTH_RULE}
 RULE_DEFAULT_UNITS = {"extract": "count", "outline_width_mm": "mm"}
-OPENING_RULE = "flat.sliver.opening_width"
 SMOOTH_RULE = "flat.smooth.sigma_px"
 FURRY_RULE = "color.edges.furry_sigma_px"
 

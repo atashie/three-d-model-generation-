@@ -777,3 +777,18 @@ images, so the opening removes diagonal and curved runs.
   whose lines survive cleanup.
 - **Previews:** 2 and 3 in `artifacts/colors-review-3/` are remade at 0.5 mm. The two
   `extra-*-0.5mm.png` previews are deleted.
+
+### Correction, 2026-11-11 (reviews of Task 7e-b)
+
+The Task 7e-b addendum says that in the 0.5 mm previews "the lines are continuous by eye".
+More exactly, they are continuous apart from small breaks where lines meet. Cleanup takes
+1.7% of the band on Roadie and 0.3% on Oddie (`band-survival.txt`).
+
+### Note, 2026-11-11: the preview outline and tdmg flat's clean
+
+The review-3 previews draw the smoothed outer outline (`smooth_outline` at
+`flat.smooth.sigma_px`) without tdmg flat's later clean step. The clean rounds convex corners
+to radius opening/2 and drops islands. I checked the difference with an inline check (not
+committed): `tdmg.flat.clean` with opening 0.4 mm and island 0.64 mm², then `rasterise`, at
+60 mm. It changes 20 image pixels on Roadie (16 removed, 4 added, of 74,730) and 10 on Oddie
+(10 removed, of 298,202).

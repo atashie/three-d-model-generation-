@@ -540,15 +540,28 @@ def test_wide_core_components_are_four_connected_and_ordered_by_size():
     assert wide_core_components(np.zeros((4, 4), bool), 2.0, 2.0)[0] == ()
 
 
+def test_wide_core_components_measure_each_on_its_own_box_with_the_frame_outside():
+    # A component at the image corner: the frame beyond the image counts as outside, so a
+    # 5 x 5 block there reads 6 (centre 3 px from outside), as it would in the open.
+    m = np.zeros((30, 30), bool)
+    m[0:5, 0:5] = True
+    m[20:25, 20:25] = True
+    comps, _ = wide_core_components(m, 1.0, 1.0)
+    assert [(c.area_px, c.inscribed_px) for c in comps] == [(25, 6.0), (25, 6.0)]
+    assert [c.centroid for c in comps] == [(2.0, 2.0), (22.0, 22.0)]
+
+
 def test_stroke_specks_are_small_eight_connected_components():
     s = np.zeros((40, 40), bool)
     s[5, 5] = True
     s[6, 6] = True                               # diagonal: one speck of 2 px
     s[20, 0:39] = True                           # a 39 px line
-    specks = stroke_specks(s, 39)
-    assert specks[5, 5] and specks[6, 6] and not specks[20].any()
-    assert stroke_specks(s, 40)[20, 0:39].all()   # strict: 39 < 40
-    assert not stroke_specks(np.zeros((4, 4), bool), 10).any()
+    specks, n = stroke_specks(s, 39)
+    assert specks[5, 5] and specks[6, 6] and not specks[20].any() and n == 1
+    specks, n = stroke_specks(s, 40)                # strict: 39 < 40
+    assert specks[20, 0:39].all() and n == 2
+    specks, n = stroke_specks(np.zeros((4, 4), bool), 10)
+    assert not specks.any() and n == 0
 
 
 def test_keep_does_not_draw_stroke_specks():

@@ -213,7 +213,12 @@ def wide_core_components(core_wide: np.ndarray, stroke_px: float | None, ratio: 
     """The 4-connected components of core_wide (bool (H, W): the core's pixels that its
     own opening keeps), largest first (ties: the one whose first pixel in row-major order
     comes first), each judged by keeps_wide_area(its inscribed width, stroke_px, ratio).
-    Returns them and the bool mask of the kept components' pixels."""
+    Returns them and the bool mask of the kept components' pixels.
+
+    Each component is measured on its own bounding box (inscribed_width_px pads that box
+    with one outside pixel, which gives the same distances as the whole image, the frame
+    beyond the image still counting as outside), so the work grows with the components'
+    sizes, not with their number times the image."""
     core_wide = np.asarray(core_wide, bool)
     keep = np.zeros(core_wide.shape, bool)
     lab, n = ndimage.label(core_wide, structure=ndimage.generate_binary_structure(2, 1))
@@ -224,39 +229,42 @@ def wide_core_components(core_wide: np.ndarray, stroke_px: float | None, ratio: 
     comps = []
     for li in sorted(range(1, n + 1), key=lambda i: (-int(areas[i]), i)):
         box = objects[li - 1]
-        comp = np.zeros(core_wide.shape, bool)
-        comp[box] = lab[box] == li
-        ys, xs = np.nonzero(comp)
-        ins = inscribed_width_px(comp)
+        crop = lab[box] == li
+        ys, xs = np.nonzero(crop)
+        ins = inscribed_width_px(crop)
         kept = keeps_wide_area(ins, stroke_px, ratio)
         if kept:
-            keep |= comp
-        comps.append(WideComponent(area_px=int(areas[li]), inscribed_px=ins,
-                                   centroid=(float(ys.mean()), float(xs.mean())),
-                                   kept=kept))
+            keep[box] |= crop
+        comps.append(WideComponent(
+            area_px=int(areas[li]), inscribed_px=ins,
+            centroid=(float((ys + box[0].start).mean()), float((xs + box[1].start).mean())),
+            kept=kept))
     return tuple(comps), keep
 
 
-def stroke_specks(strokes: np.ndarray, min_area_px: float) -> np.ndarray:
-    """The pixels of the 8-connected components of strokes (bool (H, W)) with fewer than
-    min_area_px pixels (strict): isolated specks, not drawn lines. tdmg.color_outline passes
-    the cleanup's island area (Limits.min_area_px, from flat.island.min_square_side), so
-    no new number is needed (7e-a: specks 0.221 mm2 or less, real strokes 2.35 mm2 or
-    more, against an island area of 0.64 mm2)."""
+def stroke_specks(strokes: np.ndarray, min_area_px: float) -> tuple[np.ndarray, int]:
+    """The stroke specks: the 8-connected components of strokes (bool (H, W)) with fewer
+    than min_area_px pixels (strict), which are isolated specks, not drawn lines. Returns
+    the bool mask of their pixels and their count. handle_outlines passes the cleanup's
+    island area (Limits.min_area_px, from flat.island.min_square_side), so no new number
+    is needed (7e-a: specks 0.221 mm2 or less, real strokes 2.35 mm2 or more, against an
+    island area of 0.64 mm2)."""
     strokes = np.asarray(strokes, bool)
     lab, n = ndimage.label(strokes, structure=ndimage.generate_binary_structure(2, 2))
     if not n:
-        return np.zeros(strokes.shape, bool)
+        return np.zeros(strokes.shape, bool), 0
     small = np.bincount(lab.ravel(), minlength=n + 1) < min_area_px
     small[0] = False
-    return small[lab]
+    return small[lab], int(small.sum())
 
 
 def stroke_band(strokes: np.ndarray, inside: np.ndarray, width_px: float) -> np.ndarray:
     """The kept outline band (bool, the shape of inside): `outlines: keep`.
 
     strokes: bool (H, W), the outline family's thin pixels (the lines as drawn, before the
-    drop). inside: bool (H, W), the labelled pixels. width_px: the band width W in pixels.
+    drop); handle_outlines removes the stroke specks (stroke_specks) first, so they are
+    not redrawn. inside: bool (H, W), the labelled pixels. width_px: the band width W in
+    pixels.
 
     The drawn lines' centre line is found at half-pixel resolution: each stroke pixel is
     split into 2 x 2 half pixels and stroke_ridge is taken on that grid. A straight stroke
@@ -276,8 +284,8 @@ def stroke_band(strokes: np.ndarray, inside: np.ndarray, width_px: float) -> np.
     Where lines meet or curve, the same rule is applied; the width there is not claimed to
     be exactly W. Strokes are taken as drawn, so a 1 px fringe tone of the family on one
     side of a line widens it on that side and moves the centre line about 0.5 px toward
-    it (inside the "within one pixel" above). An isolated thin speck of a family color is
-    also a stroke: it becomes a disc about W across.
+    it (inside the "within one pixel" above). A speck left in strokes would also be
+    redrawn, as a disc about W across; handle_outlines leaves specks out.
     """
     inside = np.asarray(inside, bool)
     band = np.zeros(inside.shape, bool)
@@ -401,6 +409,74 @@ def _nearest_non_family(q: Quantized, family, ty: np.ndarray, tx: np.ndarray) ->
     return best_c
 
 
+def _select_family(q: Quantized, outline_color, thin, rules
+                   ) -> tuple[tuple[int, ...], str, list[tuple[str, float]]]:
+    """Step 1 of handle_outlines: the family, how it was found, and the thin share used
+    (as a threshold) under auto."""
+    if outline_color == "none":
+        return (), "none", []
+    if outline_color == "auto":
+        t = _check_thin_share(rule_value(rules, THIN_SHARE_RULE))
+        return _family_by_thinness(thin, t), "auto", [(THIN_SHARE_RULE, t)]
+    return _family_from_list(outline_color, len(q.hex)), "config", []
+
+
+@dataclass(frozen=True, eq=False)
+class _Dropped:
+    """Step 4 of handle_outlines: the labels after the drop and what it measured."""
+
+    labels: np.ndarray
+    strokes: np.ndarray
+    stroke_px: float | None
+    comps: tuple[WideComponent, ...]
+    note: str
+
+
+def _drop(q: Quantized, family, core: int, kept, ratio: float) -> _Dropped:
+    """Step 4 of handle_outlines (see its docstring): strokes, shading tones and the core's
+    narrow wide areas take the nearest non-family color; the core keeps the wide areas
+    that pass keeps_wide_area."""
+    labels = np.array(q.labels, np.int64)
+    strokes = np.zeros(labels.shape, bool)
+    shading = np.zeros(labels.shape, bool)               # non-core members' wide pixels
+    for f in family:
+        m = q.labels == f
+        strokes |= m & ~kept[f]
+        if f != core:
+            shading |= m & kept[f]
+    core_wide = (q.labels == core) & kept[core]
+    stroke_px = stroke_width_px(strokes)
+    comps, keep_core = wide_core_components(core_wide, stroke_px, ratio)
+    replaced = strokes | shading | (core_wide & ~keep_core)
+    ty, tx = np.nonzero(replaced)
+    labels[ty, tx] = _nearest_non_family(q, family, ty, tx)
+    n_kept = sum(c.kept for c in comps)
+    width_text = "none" if stroke_px is None else f"{stroke_px:.2f} px"
+    note = (f"outlines: drop: {int(strokes.sum())} thin pixel(s) and "
+            f"{int(shading.sum())} wide pixel(s) of the other members took the nearest "
+            f"non-family color; of the core's {len(comps)} wide area(s), {n_kept} at "
+            f"least {ratio:g} x the stroke width ({width_text}) kept the core "
+            f"{q.hex[core]} ({int(keep_core.sum())} px), the rest took the nearest "
+            "non-family color")
+    return _Dropped(labels=labels, strokes=strokes, stroke_px=stroke_px, comps=comps,
+                    note=note)
+
+
+def _keep_band(q: Quantized, strokes: np.ndarray, core: int, limits: Limits,
+               width_mm: float, width_px: float) -> tuple[np.ndarray, tuple[int, int], str]:
+    """Step 5 of handle_outlines: the read-only band (stroke_band of the strokes without
+    their specks), the specks' (count, pixels) and the note."""
+    speck_px, n_specks = stroke_specks(strokes, limits.min_area_px)
+    specks = (n_specks, int(speck_px.sum()))
+    band = stroke_band(strokes & ~speck_px, q.labels != OUTSIDE, width_px)
+    band.flags.writeable = False
+    note = (f"outlines: keep: a {width_mm:g} mm ({width_px:.2f} px) band in the "
+            f"core {q.hex[core]} redraws the drawn lines and the outer edge, painted after "
+            f"the merges ({int(band.sum())} px); {n_specks} stroke speck(s) below "
+            f"the island area ({specks[1]} px) are not drawn")
+    return band, specks, note
+
+
 def handle_outlines(q: Quantized, *, outline_color, outlines: str, limits: Limits,
                     rules, width_mm=None) -> tuple[Quantized, OutlineResult]:
     """The outline step between quantize and the merges (plan Tasks 7c and 7e-b).
@@ -456,27 +532,18 @@ def handle_outlines(q: Quantized, *, outline_color, outlines: str, limits: Limit
         raise ColorError(f"outline_color must be auto, none or a non-empty list of "
                          f"extraction indices, got {outline_color!r}")
     thin, kept = _opened(q, limits)
-    thresholds: list[tuple[str, float]] = []
-    if outline_color == "none":
-        family, found_by = (), "none"
-    elif outline_color == "auto":
-        t = _check_thin_share(rule_value(rules, THIN_SHARE_RULE))
-        family, found_by = _family_by_thinness(thin, t), "auto"
-        thresholds.append((THIN_SHARE_RULE, t))
-    else:
-        family, found_by = _family_from_list(outline_color, k), "config"
-    identity = tuple(range(k))
-    if not family:
+    family, found_by, thresholds = _select_family(q, outline_color, thin, rules)   # 1
+    if not family:                                                                  # 2
         notes = (KEEP_NO_EFFECT_NOTE,) if outlines == "keep" else ()
         return q, OutlineResult(family=(), core=None, thinness=thin, found_by=found_by,
-                                method=OUTLINE_METHOD, remap=identity,
+                                method=OUTLINE_METHOD, remap=tuple(range(k)),
                                 thresholds=tuple(thresholds), stroke_width_px=None,
                                 wide_components=(), keep_width_mm=None, keep_width_px=None,
                                 specks=None, band=None, core_rgb=None, notes=notes)
     if len(family) == k:
         raise ColorError("every extracted color is in the outline family, so no color is "
                          "left for its pixels; set outline_color to none or a shorter list")
-    core = outline_core(family, q.lab)
+    core = outline_core(family, q.lab)                                              # 3
     ratio = rule_value(rules, KEEP_RATIO_RULE)
     if ratio < 0:
         raise ColorError(f"{KEEP_RATIO_RULE} must be 0 or more, got {ratio}")
@@ -489,49 +556,21 @@ def handle_outlines(q: Quantized, *, outline_color, outlines: str, limits: Limit
         width_px = width_mm / limits.mm_per_px
     else:
         width_mm = None
-
-    labels = np.array(q.labels, np.int64)
-    strokes = np.zeros(labels.shape, bool)
-    shading = np.zeros(labels.shape, bool)               # non-core members' wide pixels
-    for f in family:
-        m = q.labels == f
-        strokes |= m & ~kept[f]
-        if f != core:
-            shading |= m & kept[f]
-    core_wide = (q.labels == core) & kept[core]
-    stroke_px = stroke_width_px(strokes)
-    comps, keep_core = wide_core_components(core_wide, stroke_px, ratio)
-    replaced = strokes | shading | (core_wide & ~keep_core)
-    ty, tx = np.nonzero(replaced)
-    labels[ty, tx] = _nearest_non_family(q, family, ty, tx)
-    hx = q.hex[core]
-    n_kept = sum(c.kept for c in comps)
-    width_text = "none" if stroke_px is None else f"{stroke_px:.2f} px"
-    notes = [(f"outlines: drop: {int(strokes.sum())} thin pixel(s) and "
-              f"{int(shading.sum())} wide pixel(s) of the other members took the nearest "
-              f"non-family color; of the core's {len(comps)} wide area(s), {n_kept} at "
-              f"least {ratio:g} x the stroke width ({width_text}) kept the core {hx} "
-              f"({int(keep_core.sum())} px), the rest took the nearest non-family color")]
+    dropped = _drop(q, family, core, kept, ratio)                                   # 4
+    notes = [dropped.note]
     band = specks = None
-    if outlines == "keep":
-        speck_px = stroke_specks(strokes, limits.min_area_px)
-        n_specks = int(ndimage.label(speck_px, structure=np.ones((3, 3), bool))[1])
-        specks = (n_specks, int(speck_px.sum()))
-        band = stroke_band(strokes & ~speck_px, q.labels != OUTSIDE, width_px)
-        band.flags.writeable = False
-        notes.append(f"outlines: keep: a {width_mm:g} mm ({width_px:.2f} px) band in the "
-                     f"core {hx} redraws the drawn lines and the outer edge, painted after "
-                     f"the merges ({int(band.sum())} px); {n_specks} stroke speck(s) below "
-                     f"the island area ({specks[1]} px) are not drawn")
-    out = from_labels(labels, q.rgb, iterations=q.iterations, converged=q.converged,
-                      n_requested=q.n_requested, n_distinct_colors=q.n_distinct_colors,
-                      dropped=q.dropped)
+    if outlines == "keep":                                                          # 5
+        band, specks, note = _keep_band(q, dropped.strokes, core, limits, width_mm, width_px)
+        notes.append(note)
+    out = from_labels(dropped.labels, q.rgb, iterations=q.iterations,
+                      converged=q.converged, n_requested=q.n_requested,
+                      n_distinct_colors=q.n_distinct_colors, dropped=q.dropped)
     core_rgb = np.array(q.rgb[core])
     core_rgb.flags.writeable = False
     return out, OutlineResult(family=family, core=core, thinness=thin, found_by=found_by,
                               method=OUTLINE_METHOD, remap=out.remap,
-                              thresholds=tuple(thresholds), stroke_width_px=stroke_px,
-                              wide_components=comps, keep_width_mm=width_mm,
+                              thresholds=tuple(thresholds), stroke_width_px=dropped.stroke_px,
+                              wide_components=dropped.comps, keep_width_mm=width_mm,
                               keep_width_px=width_px, specks=specks, band=band,
                               core_rgb=core_rgb, notes=tuple(notes))
 

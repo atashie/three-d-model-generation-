@@ -74,3 +74,7 @@ line-length = 100
 target-version = "py313"
 # research/ holds frozen experiment records; they are kept as run, not maintained.
 extend-exclude = ["research"]
+
+[tool.ruff.lint]
+# E501 (line length) on top of the default rules.
+extend-select = ["E501"]

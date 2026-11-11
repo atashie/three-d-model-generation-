@@ -53,12 +53,14 @@ def _rule_row(r: Rule) -> str:
 
 def render_rules() -> str:
     out = [HEADER.format(src="rules/*.yaml"), "# Design rules\n\n",
-           "Every number the pipeline uses. *Provenance / validation* shows the strongest evidence for ",
-           "each rule (see docs/PLAN.md section 7). Sources and exact quotes are in the YAML files.\n"]
+           ("Every number the pipeline uses. *Provenance / validation* shows the strongest "
+            "evidence for "),
+           ("each rule (see docs/PLAN.md section 7). Sources and exact quotes are in the YAML "
+            "files.\n")]
     for stem, rules in rule_files().items():
         out.append(f"\n## `rules/{stem}.yaml`\n\n")
-        out.append("| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to "
-                   "| Conditions and notes |\n")
+        out.append("| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation "
+                   "| Applies to | Conditions and notes |\n")
         out.append("|---|---|---|---|---|---|---|---|---|\n")
         out.extend(_rule_row(r) + "\n" for r in rules)
     return "".join(out)

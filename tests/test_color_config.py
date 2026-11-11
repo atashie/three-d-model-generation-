@@ -314,7 +314,8 @@ def test_resolved_config_is_immutable_and_gives_plain_dicts_for_the_record(tmp_p
         r.sources["colors"] = "flag"
     rec = r.as_record()
     assert rec == {"settings": {**NEW_PLAIN, "colors": 4, "edges": "furry", "base": "auto"},
-                   "sources": {**NEW_SOURCES, "colors": "profile", "edges": "config", "base": "default"},
+                   "sources": {**NEW_SOURCES, "colors": "profile", "edges": "config",
+                               "base": "default"},
                    "config_sha256": r.config_sha256}
     assert type(rec["settings"]) is dict and type(rec["sources"]) is dict
     rec["settings"]["colors"] = 2           # a copy: the resolved config is unchanged

@@ -493,8 +493,8 @@ of the outline and shading previews". The controller's response, Task 7e:
 - **Keep:**
   - Stroke specks below the island area are not drawn.
   - The band width is the config key `outline_width_mm`. Its default is
-    `color.outline.keep_width`, now 0.45 mm, and a value at or below the opening width is
-    refused.
+    `color.outline.keep_width`, now 0.45 mm (superseded: 0.5 mm, see the decision and the
+    correction below), and a value at or below the opening width is refused.
   - Both the drop and keep changes apply to the drop step that `keep` also runs.
 - **Preview:**
   - The outer outline is smoothed as R1 builds it.
@@ -510,7 +510,8 @@ of the outline and shading previews". The controller's response, Task 7e:
 
 **Open: the 0.45 mm band does not survive cleanup well.** Cleanup removes 13.6% of
 Roadie's band and 28.6% of Oddie's. By eye, most inner lines are lost or broken. At 0.5 mm
-the loss is 1.7% and 0.3%, and the lines look whole. See the research README's Task 7e-b
+the loss is 1.7% and 0.3%, and the lines are continuous apart from small breaks where
+lines meet (1.7% of the band on Roadie, 0.3% on Oddie; corrected 2026-11-11, see below). See the research README's Task 7e-b
 addendum. The controller and the owner should choose between:
 - raising the default to 0.5 mm;
 - keeping 0.45 mm.
@@ -531,3 +532,14 @@ and the extra 0.5 mm previews are removed.
 - **Oddie, kept, blues and greens merged:** 4 colors, ready.
 
 The owner reviews them next (Task 7e-c).
+
+**Correction, 2026-11-11 (reviews of Task 7e-b):**
+- **The width:** "now 0.45 mm" in the Task 7e-b result is superseded. The default is
+  0.5 mm (the decision above).
+- **The lines at 0.5 mm:** the result first said the lines "look whole". They are
+  continuous apart from small breaks where lines meet: 1.7% of the band on Roadie and 0.3%
+  on Oddie.
+- **0.45 mm** was our reading of the owner's "0.4 mm?". 0.4 mm equals the opening width,
+  so it could not be used.
+- **`outline_width_mm` under drop:** it stays part of the identity, although it is not
+  used there. This is a documented choice: the identity holds every resolved setting.

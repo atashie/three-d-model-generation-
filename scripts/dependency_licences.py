@@ -28,7 +28,8 @@ def declared_licence(md: metadata.PackageMetadata) -> str:
     expr = md.get("License-Expression")
     if expr:
         return expr
-    classifiers = [c.split(" :: ")[-1] for c in md.get_all("Classifier") or [] if c.startswith("License ::")]
+    classifiers = [c.split(" :: ")[-1] for c in md.get_all("Classifier") or []
+                   if c.startswith("License ::")]
     if classifiers:
         return "; ".join(classifiers)
     lic = (md.get("License") or "").strip().splitlines()

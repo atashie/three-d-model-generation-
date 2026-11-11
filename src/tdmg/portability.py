@@ -16,9 +16,9 @@ parts, facets, sizes, volume) and slices its full height, with extrusion on ever
 given the A1 bed, nozzle, layer and filament settings. Its other settings are PrusaSlicer's
 defaults, so this is not the A1 print process (for example 20% infill and Arachne
 perimeters against the profile's 15% and classic). It does not show that every layer is
-fully printed; F3 judges that for the OrcaSlicer G-code. OrcaSlicer and PrusaSlicer share the admesh STL reader, so for STL this
-is not a check by an independent reader; a 3MF output must re-run portability with truly
-different readers.
+fully printed; F3 judges that for the OrcaSlicer G-code. OrcaSlicer and PrusaSlicer share
+the admesh STL reader, so for STL this is not a check by an independent reader; a 3MF
+output must re-run portability with truly different readers.
 
 PrusaSlicer is located only from --prusaslicer-dir or $TDMG_PRUSASLICER_DIR, never by
 searching the system, so an unpinned PrusaSlicer is never used by accident. When neither
@@ -486,7 +486,8 @@ def gcode_layers(data: bytes) -> dict:
             for word in words:
                 axis, text = word[:1], word[1:]
                 if axis not in (b"X", b"Y", b"Z", b"E", b"F") or axis in new or not text:
-                    raise SlicerError(f"the G-code has a move word {word.decode('ascii', 'replace')!r} "
+                    shown = word.decode("ascii", "replace")
+                    raise SlicerError(f"the G-code has a move word {shown!r} "
                                       "this check does not read")
                 if axis in (b"X", b"Y", b"Z") and b"." in text and len(text.split(b".")[1]) > 3:
                     raise SlicerError(f"the G-code has {word.decode('ascii', 'replace')!r}, with "
