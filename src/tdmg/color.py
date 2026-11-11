@@ -347,26 +347,28 @@ def quantize(rgb: np.ndarray, mask: np.ndarray, n: int) -> Quantized:
 
 # --- Cleanup to printable regions (Decision 4) ---------------------------------------------
 
-CLEANUP_METHOD = "opening-edt-then-boundary-merge/1"
+CLEANUP_METHOD = "lattice-opening-nearest-then-boundary-merge/1"
 
 # The R1 rules the limits come from (the same ids as tdmg.flat; a test checks they agree).
 OPENING_RULE = "flat.sliver.opening_width"
 ISLAND_RULE = "flat.island.min_square_side"
 
-# Pass cap: a numerical safety bound so that clean_regions cannot loop forever, not a rule.
-# Thin steps alone cannot cycle: a non-thin pixel keeps its label in a thin step, and an
-# opening is monotone (A within B implies open(A) within open(B)), so each color's
-# non-thin set only grows, and once no set grows the thin pixels get the same labels
-# again. A merge can shrink a color, though, so no such argument bounds the alternation of
-# the two steps; the cap guards it, and `cap_hit` says if it was reached. A pass can move
-# labels and move them back: thin pixels given a color whose nearest non-thin pixels they
-# do not touch 4-connectedly (a diagonal contact, or across a gap of another color) form a
-# small piece of that color, which the merge step returns. (Roadie's last pass at 60 mm
-# moves 13 such pixels, a 12-px piece and a 1-px piece, and moves them back.) So the stop
-# test is that a whole pass leaves the labels as they were, not that neither
-# step moved anything. On the owner's images (N = 4, 60 mm wide) cleanup stopped after 4
-# passes each, Roadie and Oddie (2026-11-11, Windows PC; tests/test_color_cleanup.py
-# prints the log).
+# Pass cap. This is a numerical safety bound on a loop, kept here and not in rules/: it is
+# not a print threshold and has no physical meaning; it only stops clean_regions from
+# running forever, and `cap_hit` records if it was reached. No proof bounds the number of
+# passes: a merge can shrink a color, and the sampled opening (open_mask) is not
+# idempotent (opening its own result can remove more pixels: a 30 x 30 square at w = 4 px
+# loses 12, 12, 16, 20 ... pixels on repeated openings), so neither step alone gives a
+# monotone quantity. In clean_regions that repeated erosion is contained, because a thin
+# pixel whose own color's non-thin pixels are as near as any keeps its color (a 30 x 30
+# block inside another color stops after 2 passes, 4 corner pixels moved). A pass can
+# also move labels and move them back: thin pixels given a color whose nearest non-thin
+# pixels they do not touch 4-connectedly (a diagonal contact, or across a gap of another
+# color) form a small piece of that color, which the merge step returns. So the stop test
+# is that a whole pass leaves the labels as they were (a fixed point of the pass), not
+# that neither step moved anything. Observed on the owner's images (N = 4, 60 mm wide,
+# 2026-11-11, Windows PC; tests/test_color_cleanup.py prints the log): 5 passes for
+# Roadie and 4 for Oddie, far below the cap.
 MAX_CLEAN_PASSES = 100
 
 _FOUR = ndimage.generate_binary_structure(2, 1)  # 4-connectivity: no diagonal neighbours
@@ -471,33 +473,109 @@ class CleanupLog:
     limits: Limits
 
 
-def disk_offsets(r: float) -> np.ndarray:
-    """The discrete disk of radius r: every integer offset (dy, dx) with dy^2 + dx^2 <= r^2,
-    as an (m, 2) int array in row-major order. r is not rounded: a non-integer r keeps the
-    offsets inside the real circle, so r = 2.8 gives 21 offsets (r^2 = 7.84 admits (2, 1)
-    but not (2, 2) or (0, 3)). For r < 1 it is the centre pixel only, so an opening by it
-    changes nothing: a width below 2 px cannot be resolved."""
-    n = math.floor(r)
-    dy, dx = np.mgrid[-n:n + 1, -n:n + 1]
-    keep = dy * dy + dx * dx <= r * r
-    return np.stack([dy[keep], dx[keep]], axis=1)
+# The half-pixel lattice of candidate disk centres, as (dy, dx) positions within a pixel
+# (pixel (i, j) is the square [j, j+1] x [i, i+1], x right, y down): its centre, the
+# midpoints of its top and left edges, and its top-left corner. Together, over all pixels,
+# they are every point whose coordinates are multiples of 1/2.
+_LATTICE = ((0.5, 0.5), (0.0, 0.5), (0.5, 0.0), (0.0, 0.0))
 
 
-def _disk_structure(r: float) -> np.ndarray:
-    off = disk_offsets(r)
-    n = math.floor(r)
-    st = np.zeros((2 * n + 1, 2 * n + 1), bool)
-    st[off[:, 0] + n, off[:, 1] + n] = True
-    return st
+def _opening_offsets(r: float):
+    """For each lattice type (dy, dx) in _LATTICE: (erosion offsets, dilation offsets).
+
+    Erosion offsets: the pixel offsets (di, dj) whose closed square comes within r of the
+    candidate point (its distance is <= r); the candidate is a centre only if all of them
+    are inside the region. Dilation offsets: the anchor offsets (di, dj) whose candidate
+    point lies within r of a pixel's centre. Every coordinate is a multiple of 1/2, so the
+    squared distances are exact in float64 and compared with r * r exactly.
+    """
+    rr = r * r
+    m = math.ceil(r) + 1
+    rng = range(-m, m + 1)
+    out = []
+    for v, u in _LATTICE:
+        ero, dil = [], []
+        for di in rng:
+            for dj in rng:
+                ddx = max(dj - u, 0.0, u - (dj + 1))
+                ddy = max(di - v, 0.0, v - (di + 1))
+                if ddx * ddx + ddy * ddy <= rr:
+                    ero.append((di, dj))
+                if (dj + u - 0.5) ** 2 + (di + v - 0.5) ** 2 <= rr:
+                    dil.append((di, dj))
+        out.append((ero, dil))
+    return out, m
+
+
+def open_mask(mask: np.ndarray, width_px: float) -> np.ndarray:
+    """The pixels of mask (bool (H, W)) that survive an opening of width width_px.
+
+    Reference: R1's opening, shapely buffer(-w/2).buffer(+w/2) of the union of the mask's
+    pixel squares (beyond the image is outside), which removes every straight strip of
+    width <= w and keeps one wider than w. Here r = w / 2, f(c) is the exact Euclidean
+    distance from a point c to the complement of that union, and a pixel is kept iff its
+    centre lies within r (<=) of a candidate centre c with f(c) > r (strict), where the
+    candidates are the half-pixel lattice (_LATTICE: every point whose x and y are
+    multiples of 1/2). That is: an erosion of the pixel squares by r sampled at the
+    lattice, then a dilation by r sampled at the pixel centres.
+
+    Exactness and error bound. Let O(m) be the set of pixels whose centre is within r - m
+    of some point c (anywhere) with f(c) > r + m; O(0) is the exact pixel-centre sample of
+    the reference opening. The result K satisfies O(sqrt(2)/4) within K within O(0): it
+    only errs toward removal, and only for pixels kept by centres whose margin is below
+    sqrt(2)/4 = 0.354 px, the lattice's covering radius (f is 1-Lipschitz, and every
+    point is within sqrt(2)/4 of a lattice point). For an axis-aligned straight strip of n
+    px it is exact: the strip's midline (n/2) is on the lattice, so the strip is removed
+    iff n/2 <= r, i.e. n <= w; and if n > w, each pixel across it has a lattice point in
+    (r, r + 1/2] from the near edge, or the midline, within r of its centre, so the whole
+    width is kept (away from the strip's ends, which round). A non-integer w is used as
+    is, not rounded: w = 3.993 removes a 3 px strip and keeps a 4 px one; w = 4 removes
+    4 px and keeps 5 px. For every other shape (45 degree and other staircase edges,
+    curves, corners) only the bound above is claimed; the tests check it by brute force on
+    45 degree bands and random blobs.
+
+    Not idempotent: the union of the kept pixels' squares is not itself open (a kept pixel
+    near the boundary has parts outside every disk), so opening the result again can
+    remove more pixels. See MAX_CLEAN_PASSES for how clean_regions contains this.
+    """
+    mask = np.asarray(mask, bool)
+    keep = np.zeros(mask.shape, bool)
+    rows, cols = np.flatnonzero(mask.any(1)), np.flatnonzero(mask.any(0))
+    if rows.size == 0:
+        return keep
+    offsets, m = _opening_offsets(width_px / 2)
+    pad = m + 1
+    i0, i1, j0, j1 = rows[0], rows[-1] + 1, cols[0], cols[-1] + 1
+    sub = np.pad(mask[i0:i1, j0:j1], pad, constant_values=False)
+    hh, ww = sub.shape
+
+    def shifted(a, di, dj):
+        """b[i, j] = a[i + di, j + dj], False beyond the array."""
+        b = np.zeros_like(a)
+        ys, ye = max(0, -di), min(hh, hh - di)
+        xs, xe = max(0, -dj), min(ww, ww - dj)
+        b[ys:ye, xs:xe] = a[ys + di:ye + di, xs + dj:xe + dj]
+        return b
+
+    out = np.zeros_like(sub)
+    for ero, dil in offsets:
+        centres = sub.copy()
+        for di, dj in ero:
+            centres &= shifted(sub, di, dj)
+        if not centres.any():
+            continue
+        for di, dj in dil:
+            out |= shifted(centres, di, dj)
+    keep[i0:i1, j0:j1] = (out & sub)[pad:-pad, pad:-pad]
+    return keep
 
 
 def _thin_step(labels: np.ndarray, limits: Limits) -> tuple[int, np.ndarray, bool]:
     """One thin step on labels (int32 (H, W), changed in place).
 
-    For each color c, its non-thin pixels are the binary opening of (labels == c) by the
-    disk of radius min_width_px / 2 (disk_offsets): an erosion, then a dilation by the
-    same disk, with pixels beyond the image edge counted as not c (scipy's default
-    border_value 0). Every other labelled pixel is thin and takes the color of the nearest
+    For each color c, its non-thin pixels are open_mask(labels == c, min_width_px): the
+    pixels that R1's opening of width min_width_px keeps, sampled as open_mask states
+    (pixels beyond the image edge count as not c). Every other labelled pixel is thin and takes the color of the nearest
     non-thin labelled pixel of any color, by Euclidean distance. OUTSIDE pixels are never
     non-thin, so they neither assign nor get assigned. If no non-thin labelled pixel
     exists, nothing changes.
@@ -514,10 +592,9 @@ def _thin_step(labels: np.ndarray, limits: Limits) -> tuple[int, np.ndarray, boo
     Returns (labels changed, the thin mask, no_core).
     """
     inside = labels != OUTSIDE
-    st = _disk_structure(limits.min_width_px / 2)
     cores = []
     for c in np.unique(labels[inside]):          # ascending palette index
-        core_c = ndimage.binary_opening(labels == c, structure=st)
+        core_c = open_mask(labels == c, limits.min_width_px)
         if core_c.any():
             cores.append((int(c), core_c))
     core = np.zeros(labels.shape, bool)
@@ -648,8 +725,8 @@ def clean_regions(q: Quantized, limits: Limits) -> tuple[Quantized, CleanupLog]:
 
     Each pass runs two steps. Passes repeat until a pass leaves the labels as they were
     (a fixed point), or for at most MAX_CLEAN_PASSES:
-    a. Thin parts (_thin_step): per color, the pixels that a binary opening by the disk
-       of diameter min_width_px removes are thin; each takes the color of the nearest
+    a. Thin parts (_thin_step): per color, the pixels that an opening of width
+       min_width_px removes (open_mask) are thin; each takes the color of the nearest
        non-thin labelled pixel of any color (ties: own color, then lowest index). A thin
        spur whose nearest non-thin pixel has its own color therefore keeps it.
     b. Small pieces (_merge_step): 4-connected pieces of one color with area below
@@ -661,6 +738,14 @@ def clean_regions(q: Quantized, limits: Limits) -> tuple[Quantized, CleanupLog]:
     from_labels from the new labels and q.rgb, so a color left with no pixel is dropped
     (and counted in dropped) and the palette is re-sorted by its final areas. q's
     iterations, converged, n_requested and n_distinct_colors are passed through.
+
+    What is guaranteed (unless cap_hit): the result is a fixed point of a whole pass, so
+    no piece below min_area_px has a color neighbour, and one more thin step followed by a
+    merge step changes no label. It does not guarantee that no pixel is thin: thin pixels
+    can remain where their own color is nearest (convex corners and staircase edges at the
+    outline, spurs into the outside) or where the merge step returns them; they are
+    counted in thin_pixels_left and thin_returned. Step 2 geometry applies R1's polygon
+    opening to each region anyway.
     """
     if not isinstance(q, Quantized):
         raise ColorError(f"q must be a Quantized, got {type(q).__name__}")

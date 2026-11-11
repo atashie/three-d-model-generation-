@@ -4,7 +4,7 @@
 The label maps are built here. The limits always come from the rules and the printer
 profile through printable_limits_px; `limits_for(w)` picks the mm_per_px that makes the
 opening width w pixels, and every geometry asserts the precondition it relies on (a piece
-below or above the island area, a disk smaller than 2 px so that nothing is thin), so a
+below or above the island area, a shape the opening leaves unchanged), so a
 change of rule values fails loudly instead of silently testing something else.
 """
 
@@ -24,7 +24,6 @@ from tdmg.color import (
     ColorError,
     Limits,
     clean_regions,
-    disk_offsets,
     from_labels,
     printable_limits_px,
     quantize,
@@ -107,15 +106,100 @@ def test_limits_refuse_bad_values():
                opening_rule="flat.sliver.opening_width", island_rule="flat.island.min_square_side")
 
 
-def test_disk_offsets():
-    assert disk_offsets(0.5).tolist() == [[0, 0]]          # r < 1: the single centre pixel
-    d2 = disk_offsets(2.0)
-    assert len(d2) == 13                                      # dx^2 + dy^2 <= 4
-    assert {tuple(o) for o in d2} >= {(0, 2), (2, 0), (1, 1), (-1, -1)}
-    assert (1, 2) not in {tuple(o) for o in d2}
-    d = disk_offsets(2.8)                                     # not rounded: 2.8^2 = 7.84
-    s = {tuple(o) for o in d}
-    assert (2, 1) in s and (2, 2) not in s and (0, 3) not in s and len(d) == 21
+# --- the opening (R1's buffer(-w/2).buffer(+w/2) on the union of pixel squares) ----------
+
+WIDTHS = [0.9, 1.9, 2.5, 3.2, 3.993, 4.0, 5.353, 6.0]
+
+
+def strip_widths(w):
+    """(n removed, n kept): a straight strip of n px is removed iff n <= w."""
+    lo, hi = math.floor(w), math.ceil(w)
+    removed = [n for n in {lo, hi} if 1 <= n <= w]
+    kept = [n for n in {lo, hi, lo + 1} if n > w]
+    return removed, kept
+
+
+@pytest.mark.parametrize("w", WIDTHS)
+@pytest.mark.parametrize("vertical", [False, True])
+def test_axis_aligned_strip_is_removed_iff_not_wider_than_w(w, vertical):
+    removed, kept = strip_widths(w)
+    assert removed or w < 1
+    assert kept
+    for n in removed + kept:
+        mask = np.zeros((40, 80), bool)
+        mask[12:12 + n, 4:76] = True           # a 72 px long strip, n px wide
+        got = color.open_mask(mask.T if vertical else mask, w)
+        got = got.T if vertical else got
+        assert not (got & ~mask).any()
+        if n in removed:
+            assert not got.any(), (w, n)
+        else:
+            # away from the strip's two ends, every pixel across the width is kept
+            assert got[12:12 + n, 4 + math.ceil(w):76 - math.ceil(w)].all(), (w, n)
+
+
+def _f_exact(mask, pts):
+    """Distance from each point (x, y) to the complement of the union of the mask's pixel
+    squares (pixel (i, j) is [j, j+1] x [i, i+1]; beyond the image is outside)."""
+    pad = np.pad(mask, 1, constant_values=False)
+    oi, oj = np.nonzero(~pad)
+    x0, y0 = oj - 1.0, oi - 1.0
+    dx = np.maximum(np.maximum(x0[None] - pts[:, :1], 0), pts[:, :1] - (x0[None] + 1))
+    dy = np.maximum(np.maximum(y0[None] - pts[:, 1:], 0), pts[:, 1:] - (y0[None] + 1))
+    return np.sqrt(dx ** 2 + dy ** 2).min(axis=1)
+
+
+DELTA = math.sqrt(2) / 4   # the covering radius of the half-pixel lattice
+
+
+def reference_sets(mask, w, step=1 / 8):
+    """Brute force. O(m): pixels whose centre is within r - m of some point c, on a grid
+    of spacing `step`, with distance to the complement > r + m (r = w / 2). Returns
+    (O(0), O(DELTA)). The half-pixel lattice is on the grid, so O(0) bounds the method
+    from above exactly; O(DELTA) on the grid is a subset of the continuous O(DELTA)."""
+    h, wd = mask.shape
+    r = w / 2
+    gx = np.arange(0, wd / step + 1) * step
+    gy = np.arange(0, h / step + 1) * step
+    pts = np.stack(np.meshgrid(gx, gy, indexing="xy"), -1).reshape(-1, 2)
+    f = _f_exact(mask, pts)
+    cy, cx = np.nonzero(mask)
+    out = []
+    for m in (0.0, DELTA + 1e-9):
+        good = pts[f > r + m]
+        o = np.zeros(mask.shape, bool)
+        if len(good):
+            for y, x in zip(cy, cx):
+                d2 = (good[:, 0] - (x + 0.5)) ** 2 + (good[:, 1] - (y + 0.5)) ** 2
+                o[y, x] = (d2 <= (r - m) ** 2).any() if r - m >= 0 else False
+        out.append(o)
+    return out
+
+
+@pytest.mark.parametrize("w", [1.9, 2.5, 3.993, 4.0, 5.353])
+def test_45_degree_band_within_the_stated_bound(w):
+    """The band |col - row| <= k of pixels, a staircase at 45 degrees: the result lies
+    between O(sqrt(2)/4) and O(0) (see open_mask), so it errs only toward removal, by
+    at most the stated margin."""
+    ii, jj = np.mgrid[0:24, 0:24]
+    for k in range(5):
+        mask = np.abs(jj - ii) <= k
+        got = color.open_mask(mask, w)
+        o0, od = reference_sets(mask, w)
+        assert not (got & ~o0).any(), (w, k)
+        assert not (od & ~got).any(), (w, k)
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_opening_errs_only_toward_removal_within_the_stated_bound(seed):
+    """The same sandwich on random blobs."""
+    rng = np.random.default_rng(seed)
+    mask = ndimage.binary_opening(rng.random((14, 14)) < 0.65, structure=FOUR)
+    w = float(rng.choice([1.7, 2.5, 3.2, 4.0]))
+    got = color.open_mask(mask, w)
+    o0, od = reference_sets(mask, w)
+    assert not (got & ~o0).any()
+    assert not (od & ~got).any()
 
 
 # --- thin parts -----------------------------------------------------------------------------
@@ -172,22 +256,18 @@ def test_speck_below_island_area_is_merged_into_the_color_around_it():
     lab = np.zeros((40, 40), np.int32)
     lab[18:21, 18:21] = 1                       # 3 x 3
     lim = limits_for(1.9)
-    assert lim.min_width_px < 2 and 9 < lim.min_area_px      # nothing is thin; 9 is small
+    assert 9 < lim.min_area_px                                # 9 is small ...
+    np.testing.assert_array_equal(color.open_mask(lab == 1, lim.min_width_px), lab == 1)
     out, log = clean_regions(make_q(lab, [B, A]), lim)
     assert (out.labels == 0).all() and len(out.hex) == 1
     assert log.pieces_merged == 1 and log.thin_pixels_reassigned == 0
     assert log.moved == ((hexes(A), hexes(B), 9),)
 
 
-def test_disk_speck_is_not_thin_but_is_merged():
-    lab = np.zeros((40, 40), np.int32)
-    for dy, dx in disk_offsets(2.0):
-        lab[20 + dy, 20 + dx] = 1               # the 13-px disk: unchanged by the opening
-    lim = limits_for(4.0)
-    assert 13 < lim.min_area_px
-    out, log = clean_regions(make_q(lab, [B, A]), lim)
-    assert (out.labels == 0).all()
-    assert log.pieces_merged == 1 and log.thin_pixels_reassigned == 0
+def assert_nothing_thin(lab, lim):
+    """Precondition: every color is unchanged by the opening, so only merges act."""
+    for c in np.unique(lab[lab != OUTSIDE]):
+        np.testing.assert_array_equal(color.open_mask(lab == c, lim.min_width_px), lab == c)
 
 
 @pytest.mark.parametrize("c0,c1,want", [(18, 20, B), (19, 21, C)])
@@ -221,34 +301,39 @@ def test_speck_on_equal_boundaries_goes_to_the_lowest_palette_index(split):
 
 
 def test_two_adjacent_small_pieces_do_not_swap():
-    """A (row 10) touches only C; C (row 11) touches A on 6 edges and B on 3. Merged at once
-    they would swap; one at a time (A first: same area, lower flat index), A joins C, and
-    the joined piece, still small, joins B."""
+    """A (rows 10-11) touches only C; C (rows 12-13) touches A on 6 edges and B on 3.
+    Merged at once they would swap colors. One at a time (A first: same area, lower flat
+    index), A joins C, and the joined piece is no longer small."""
     mask = np.zeros((20, 20), bool)
-    mask[10:12, 10:16] = True
-    mask[12:20, 10:13] = True
+    mask[10:14, 10:16] = True
+    mask[14:20, 10:13] = True
     lab = np.where(mask, 0, OUTSIDE).astype(np.int32)
-    lab[10, 10:16] = 2
-    lab[11, 10:16] = 1
+    lab[10:12, 10:16] = 2
+    lab[12:14, 10:16] = 1
     lim = limits_for(1.9)
-    assert 12 < lim.min_area_px < 24
+    assert 12 < lim.min_area_px < 18
+    assert_nothing_thin(lab, lim)
     q = make_q(lab, [B, C, A])
     out, log = clean_regions(q, lim)
-    assert out.hex == (hexes(B),)
-    assert (out.labels[mask] == 0).all()
-    assert log.pieces_merged == 2
-    assert {(f, t): n for f, t, n in log.moved} == {(hexes(A), hexes(B)): 6,
-                                                          (hexes(C), hexes(B)): 6}
+    assert (hex_map(out)[10:14, 10:16] == hexes(C)).all()
+    assert (hex_map(out)[14:20, 10:13] == hexes(B)).all()
+    assert log.pieces_merged == 1
+    assert log.moved == ((hexes(A), hexes(C), 12),)
 
 
 def test_cascading_merges_reach_a_fixed_point_and_count_passes():
-    lab = np.zeros((30, 30), np.int32)
-    lab[10:13, 10:13] = 1                        # C ring of 8 ...
-    lab[11, 11] = 2                              # ... around a 1-px A speck
-    lim = limits_for(1.9)
-    assert lim.min_area_px > 9
+    """A 1-px line inside the outside: A (1 px) touches only C (2 px); joined they are 3 px,
+    still small, and join B (8 px)."""
+    mask = np.zeros((20, 30), bool)
+    mask[10, 10:21] = True
+    lab = np.where(mask, 0, OUTSIDE).astype(np.int32)
+    lab[10, 10] = 2
+    lab[10, 11:13] = 1
+    lim = limits_for(0.9)
+    assert 3 < lim.min_area_px < 8
+    assert_nothing_thin(lab, lim)
     out, log = clean_regions(make_q(lab, [B, C, A]), lim)
-    assert (out.labels == 0).all()
+    assert (out.labels[mask] == 0).all()
     assert log.pieces_merged == 2                # A into C (its only neighbour), then C into B
     assert log.passes == 2 and not log.cap_hit   # one pass that changed, one that did not
     assert sorted(log.dropped_hex) == sorted([hexes(A), hexes(C)])
@@ -288,7 +373,7 @@ def test_convex_corners_at_another_color_are_rounded_symmetrically():
     q = make_q(lab, [B, A])
     out, log = clean_regions(q, limits_for(4.0))
     got = out.labels
-    assert log.pixels_changed > 0
+    assert log.pixels_changed > 0 and not log.cap_hit and log.passes <= 3
     changed = got != q.labels
     np.testing.assert_array_equal(changed, changed[::-1, :])
     np.testing.assert_array_equal(changed, changed[:, ::-1])
@@ -368,10 +453,12 @@ def test_cleanup_is_deterministic():
     assert a.hex == b.hex and la == lb
 
 
-def assert_clean(out, lim):
-    """No piece with a color neighbour below the island area, and a further pass (thin step,
-    then merge step) leaves the labels as they are. A lone thin step may still move a few
-    pixels that the merge step returns (CleanupLog.thin_returned)."""
+def assert_fixed_point_without_small_pieces(out, lim):
+    """What clean_regions guarantees: no piece with a color neighbour below the island
+    area, and a further pass (thin step, then merge step) leaves the labels as they are.
+    It does not claim that no pixel is thin: residual opening losses (corners, staircase
+    edges, pixels the merge step returns) are reported in thin_pixels_left and
+    thin_returned."""
     lab = out.labels
     for c in range(len(out.hex)):
         pieces, n = ndimage.label(lab == c, structure=FOUR)
@@ -389,11 +476,11 @@ def assert_clean(out, lim):
     np.testing.assert_array_equal(again, lab)
 
 
-def test_synthetic_result_is_clean():
+def test_synthetic_result_is_a_fixed_point_without_small_pieces():
     q = make_q(noisy_labels(seed=7), PAL4)
     lim = limits_for(4.0)
     out, _ = clean_regions(q, lim)
-    assert_clean(out, lim)
+    assert_fixed_point_without_small_pieces(out, lim)
 
 
 def test_bad_input_is_refused():
@@ -407,7 +494,7 @@ def test_bad_input_is_refused():
 # --- the owner's images ---------------------------------------------------------------------
 
 @pytest.mark.parametrize("name", ["roadie-tol30", "oddie"])
-def test_owner_images_cleanup_sanity(name, research_rows):  # noqa: F811 (the fixture)
+def test_owner_images_fixed_point_without_small_pieces(name, research_rows):  # noqa: F811 (the fixture)
     rgb, mask = _owner_selection(name, research_rows)
     cols = np.flatnonzero(mask.any(0))
     mm_per_px = 60.0 / (cols.max() - cols.min() + 1)
@@ -419,7 +506,7 @@ def test_owner_images_cleanup_sanity(name, research_rows):  # noqa: F811 (the fi
     assert set(out.hex) <= set(q.hex)
     assert not log.cap_hit
     assert ((out.labels == OUTSIDE) == ~mask).all()
-    assert_clean(out, lim)
+    assert_fixed_point_without_small_pieces(out, lim)
     print(f"\n{name}: mm_per_px {mm_per_px:.6f}, min_width_px {lim.min_width_px:.3f}, "
           f"min_area_px {lim.min_area_px:.2f}; passes {log.passes}, cap_hit {log.cap_hit}, "
           f"thin reassigned {log.thin_pixels_reassigned}, thin left {log.thin_pixels_left}, returned {log.thin_returned}, "
