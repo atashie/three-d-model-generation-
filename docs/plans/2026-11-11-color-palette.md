@@ -29,7 +29,12 @@ spec review and a quality review, then the Codex critical review in Task 8.
    `cutout.png`, and check them against the record's hashes and `selection_id`, the way
    `tdmg.flat._read_selection` does. Factor that reader into a shared function rather than
    copying it. Colors come from the RGB of `cutout.png`, inside the mask only.
-2. **The physical width is required: `--width-mm`.** The cleanup thresholds are in mm, so
+2. **The physical width is required: `--width-mm`.** *Decided in Task 6
+   (2026-11-11):* `mm_per_px` uses the exact mask width. `tdmg flat`'s default
+   (smoothed) outline is 0.4–0.6% wider in pixels for the owner images (Roadie 0.100167
+   against 0.100802 mm/px; Oddie 0.074720 against 0.075017). That shifts the cleanup
+   limits by under 1%, which is accepted. Step 2 compares the requested `width_mm`, not
+   the scale. The cleanup thresholds are in mm, so
    pixels per mm must be known before the preview can show what will print. The record
    holds `width_mm`, and step 2 (`tdmg flat --colors`) refuses a different width.
    `mm_per_px` = width_mm / mask bbox width in px, the same scale as `tdmg flat`.
@@ -121,7 +126,11 @@ spec review and a quality review, then the Codex critical review in Task 8.
    - **Precedence:** CLI flags, then the file, then the defaults. The record stores the
      resolved settings, which source each came from, and the config file's SHA-256.
    - Keys for later steps (`min_glue_piece`, `face`) are added in those steps, not now.
-7. **Outputs** (`--out DIR`, exclusive, the record written last):
+7. **Outputs** (`--out DIR`, exclusive, the record written last). *Decided in Task 6
+   (2026-11-11):* `colors_id` hashes the resolved setting values, not where each came
+   from or the config file's hash, so the same values give the same plan. This differs
+   from `selection_id`, where a control's source is part of the id. The sources and the
+   config hash are still in the record.
    - `labels.png`: the cleaned region map, 8-bit, the palette index per pixel, 255
      outside the mask. It is at image resolution; the supersampled map is recomputed in
      step 2 from it and the recorded σ, so it is not stored.
