@@ -21,7 +21,8 @@ That script wrote its files with Path.write_text on Windows, so they have CRLF l
 this one writes the same bytes explicitly.
 
 OrcaSlicer is AGPL-3.0. Its files are only downloaded to DIR (git-ignored under artifacts/);
-none enters the repo. tdmg itself never downloads anything.
+none enters the repo. tdmg itself never downloads anything. The download, extraction and
+app checks are shared with scripts/setup_prusaslicer.py (scripts/_slicer_setup.py).
 Exit codes: 0 installed (or verified), 2 refused; the message says why.
 """
 
@@ -36,101 +37,37 @@ import shutil
 import sys
 import tempfile
 import urllib.parse
-import urllib.request
-import zipfile
 from pathlib import Path
 
-from tdmg.slicer import (
-    SlicerError,
-    SlicerPin,
-    app_tree_sha256,
-    load_pin,
-    sha256_file,
-    verify_install,
-)
+import _slicer_setup
+from _slicer_setup import SetupError
+from _slicer_setup import check_hash as _check
+from _slicer_setup import require_empty as _require_empty
+
+from tdmg.slicer import SlicerError, SlicerPin, load_pin, verify_install
 
 USER_AGENT = "tdmg-setup-orcaslicer"
-HTTP_TIMEOUT_S = 60   # per network read; a stalled connection fails instead of hanging
 MAX_CHAIN = 20        # inherits links followed before refusing (guards against a cycle)
-_CHUNK = 1 << 20
-
-
-class SetupError(Exception):
-    """The install was refused; nothing that failed a check is left in place."""
-
-
-def fetch(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_S) as resp:
-        return resp.read()
-
-
-def download(url: str, path: Path) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_S) as resp, open(path, "xb") as f:
-        shutil.copyfileobj(resp, f, _CHUNK)
-
-
-def _check(what: str, actual: str, expected: str) -> None:
-    if actual != expected:
-        raise SetupError(f"{what} has sha256 {actual}, which does not match the pin ({expected})")
 
 
 def check_platform(system: str | None = None, machine: str | None = None) -> None:
-    system = platform.system() if system is None else system
-    machine = platform.machine() if machine is None else machine
-    if system != "Windows" or machine.upper() not in ("AMD64", "X86_64"):
-        raise SetupError(f"this script supports Windows x64 only (found {system} {machine}); "
-                         "the pinned asset is the Windows x64 portable zip")
+    """Refuse anything but Windows x64; reads this machine's platform when not given."""
+    _slicer_setup.check_platform(platform.system() if system is None else system,
+                                 platform.machine() if machine is None else machine)
 
 
-def _require_empty(folder: Path) -> None:
-    if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
-        raise SetupError(f"{folder} is not empty; choose a new --dest or remove it")
+def fetch(url: str) -> bytes:
+    return _slicer_setup.fetch(url, USER_AGENT)
+
+
+def download(url: str, path: Path) -> None:
+    _slicer_setup.download(url, path, USER_AGENT)
 
 
 def install_app(dest: Path, pin: SlicerPin, zip_path: Path | None = None) -> None:
     """Get the release zip, check it, extract it into dest/app and check the exe."""
-    app = dest / "app"
-    _require_empty(app)
-    if zip_path is None:
-        (dest / "download").mkdir(parents=True, exist_ok=True)
-        zip_path = dest / "download" / pin.release.asset
-        if not zip_path.exists():
-            partial = zip_path.with_name(zip_path.name + ".partial")
-            partial.unlink(missing_ok=True)
-            download(pin.release.url, partial)
-            try:
-                _check(str(zip_path), sha256_file(partial), pin.release.sha256)
-            except SetupError:
-                partial.unlink()
-                raise
-            os.replace(partial, zip_path)
-        elif sha256_file(zip_path) != pin.release.sha256:
-            raise SetupError(f"the cached download {zip_path} does not match the pin "
-                             f"({pin.release.sha256}); delete {zip_path} and run again")
-    _check(str(zip_path), sha256_file(zip_path), pin.release.sha256)
-
-    tmp = Path(tempfile.mkdtemp(dir=dest, prefix=".app-"))
-    try:
-        with zipfile.ZipFile(zip_path) as z:
-            z.extractall(tmp)   # extractall drops absolute paths and ".." components
-        for pinned in (pin.exe, *pin.libraries):
-            rel = Path(pinned.path).relative_to(pin.app_tree.folder)
-            if not (tmp / rel).is_file():
-                raise SetupError(f"the zip has no {rel}")
-            _check(str(rel), sha256_file(tmp / rel), pinned.sha256)
-        files, tree = app_tree_sha256(tmp)
-        if (files, tree) != (pin.app_tree.files, pin.app_tree.sha256):
-            raise SetupError(f"the extracted app tree ({files} files, sha256 {tree}) does not "
-                             f"match the pin ({pin.app_tree.files} files, "
-                             f"{pin.app_tree.sha256})")
-        if app.exists():
-            app.rmdir()         # empty, checked above
-        os.replace(tmp, app)
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
+    # download is looked up here, at call time, so tests can replace it.
+    _slicer_setup.install_app(dest, pin, zip_path, download)
 
 
 def _json_bytes(obj) -> bytes:

@@ -63,8 +63,10 @@ packages = ["src/tdmg"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# scripts/ holds _slicer_setup.py, which the setup scripts import as a sibling module.
+pythonpath = ["scripts"]
 markers = [
-    "slicer: runs the real OrcaSlicer; skipped unless TDMG_ORCASLICER_DIR is set",
+    "slicer: runs a real slicer; needs TDMG_ORCASLICER_DIR (and TDMG_PRUSASLICER_DIR for Prusa)",
 ]
 
 [tool.ruff]

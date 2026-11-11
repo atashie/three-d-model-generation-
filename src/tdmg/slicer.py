@@ -184,14 +184,41 @@ def app_tree_sha256(folder: str | Path) -> tuple[int, str]:
     return len(lines), tree.hexdigest()
 
 
-def _verified(path: Path, expected: str) -> str:
+SETUP_SCRIPT = "scripts/setup_orcaslicer.py"
+
+
+def _verified(path: Path, expected: str, setup_script: str = SETUP_SCRIPT) -> str:
     if not path.is_file():
-        raise SlicerError(f"{path} is missing; run scripts/setup_orcaslicer.py")
+        raise SlicerError(f"{path} is missing; run {setup_script}")
     actual = sha256_file(path)
     if actual != expected:
         raise SlicerError(f"{path} has sha256 {actual}, which does not match the pin "
-                          f"({expected}); reinstall with scripts/setup_orcaslicer.py")
+                          f"({expected}); reinstall with {setup_script}")
     return actual
+
+
+def verify_tree(slicer_dir: str | Path, pin, setup_script: str = SETUP_SCRIPT) -> dict:
+    """{files, sha256} of the pin's app folder, checked against the pin. SlicerError if not."""
+    folder = Path(slicer_dir) / pin.app_tree.folder
+    files, tree = app_tree_sha256(folder)
+    if (files, tree) != (pin.app_tree.files, pin.app_tree.sha256):
+        raise SlicerError(
+            f"app tree {folder} ({files} files, sha256 {tree}) does not match the pin "
+            f"({pin.app_tree.files} files, {pin.app_tree.sha256}); reinstall with "
+            f"{setup_script}")
+    return {"files": files, "sha256": tree}
+
+
+def verify_app(slicer_dir: str | Path, pin, setup_script: str = SETUP_SCRIPT) -> dict:
+    """{exe_sha256, libraries: {path: sha256}}: the pin's exe and libraries, checked.
+
+    pin is any pin with exe, libraries and app_tree (SlicerPin, or PrusaPin in
+    tdmg.portability). Raises SlicerError naming setup_script.
+    """
+    root = Path(slicer_dir)
+    return {"exe_sha256": _verified(root / pin.exe.path, pin.exe.sha256, setup_script),
+            "libraries": {lib.path: _verified(root / lib.path, lib.sha256, setup_script)
+                          for lib in pin.libraries}}
 
 
 def verify_install(slicer_dir: str | Path, pin: SlicerPin, full_tree: bool = False) -> dict:
@@ -203,22 +230,15 @@ def verify_install(slicer_dir: str | Path, pin: SlicerPin, full_tree: bool = Fal
     plus app_tree: {files, sha256} when full_tree.
     """
     root = Path(slicer_dir)
-    exe = _verified(root / pin.exe.path, pin.exe.sha256)
-    libraries = {lib.path: _verified(root / lib.path, lib.sha256) for lib in pin.libraries}
+    found = verify_app(root, pin)
     profiles = {}
     for kind in PROFILE_KINDS:
         p = pin.profiles.flat[kind]
         profiles[kind] = {"name": p.preset, "file": p.file,
                           "sha256": _verified(root / pin.profiles.folder / p.file, p.sha256)}
-    found = {"exe_sha256": exe, "libraries": libraries, "profiles": profiles}
+    found["profiles"] = profiles
     if full_tree:
-        files, tree = app_tree_sha256(root / pin.app_tree.folder)
-        if (files, tree) != (pin.app_tree.files, pin.app_tree.sha256):
-            raise SlicerError(
-                f"app tree {root / pin.app_tree.folder} ({files} files, sha256 {tree}) does "
-                f"not match the pin ({pin.app_tree.files} files, {pin.app_tree.sha256}); "
-                "reinstall with scripts/setup_orcaslicer.py")
-        found["app_tree"] = {"files": files, "sha256": tree}
+        found["app_tree"] = verify_tree(root, pin)
     return found
 
 
