@@ -328,8 +328,9 @@ shade indicators"):
   - the outline thinness threshold T (0.38, the gap midpoint);
   - the shade hue threshold H (5.5°);
   - the chroma floor (8.5);
-  - the kept-outline width W. It starts at the printable minimum, `flat.sliver.opening_width`,
-    so that it prints; the owner judges it in the preview.
+  - the kept-outline width W: 0.6 mm. It must exceed `flat.sliver.opening_width`
+    (0.4 mm), because cleanup removes strips at or below that width (Task 4). 0.6 mm is
+    a round starting value above it, and the owner judges it in the preview.
 - **7b:** the config keys (`extract`, `outlines`, `outline_color`, `merge`), the rules,
   the merge and ready plumbing, the identity, the record and `verify_colors`.
 - **7c:** outline detection, drop and keep, shade-pair flags, and the preview's
