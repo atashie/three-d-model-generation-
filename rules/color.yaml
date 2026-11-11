@@ -1,0 +1,21 @@
+# Flat multicolor (R2) settings. The edge presets map a name to a Gaussian sigma in image
+# pixels (docs/plans/2026-11-11-color-palette.md Decision 5): smooth reuses
+# flat.smooth.sigma_px, exact is no blur (a definition, not a rule), and furry is below.
+- id: color.edges.furry_sigma_px
+  kind: hypothesis
+  summary: Gaussian blur (in image pixels) applied to each color's indicator before every pixel takes the color with the largest blurred value, for the `furry` edge preset. Less blur than `smooth`, so more of the image's jagged edge detail is kept.
+  unit: px
+  default: 1.0
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: docs/plans/2026-11-11-color-palette.md
+      locator: "`furry`: σ = 1.0 px. The 1.0 is a starting guess"
+      provenance: unverified
+      validation: untested
+      claim: Our own starting guess, stated in the plan; no measurement or print supports it yet. The owner judges it on the previews in plan Task 7.
+    - ref: docs/plans/2026-11-11-color-design.md
+      locator: "jagged detail survives only down to about one bead width"
+      provenance: unverified
+      validation: untested
+      claim: The design's statement of what furry can and cannot mean on an FDM print (the reason in the notes); an engineering inference, not a measurement.
+  notes: Set in pixels, like flat.smooth.sigma_px, because the jaggedness comes from the image. Detail finer than about one bead width (0.42 mm) does not print; it merges or vanishes in the slicer. So furry means less smoothing and sharper corners, not hair-fine strands.

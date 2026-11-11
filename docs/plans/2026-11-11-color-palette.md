@@ -94,7 +94,8 @@ spec review and a quality review, then the Codex critical review in Task 8.
      the two fields sum to 1.
    - **Outside the mask:** labels come from the nearest masked color, so that step 2 can
      clip to the R1 outline without gaps.
-   - **The presets (new rule `color.edges.presets`, a hypothesis):**
+   - **The presets (new rule `color.edges.furry_sigma_px`, a hypothesis; a rule holds one
+     number, so `smooth` reuses its rule and `exact` needs none):**
      - `smooth`: σ = `flat.smooth.sigma_px` (2.5 px);
      - `exact`: no blur;
      - `furry`: σ = 1.0 px. The 1.0 is a starting guess; the owner judges it on the
@@ -150,15 +151,15 @@ spec review and a quality review, then the Codex critical review in Task 8.
    - Choose the method from the numbers. Record the choice; Decision 3 is updated if
      median cut wins.
 2. **`color_config.py` and the rule.**
-   - Add `color.edges.presets` to a new `rules/color.yaml`, with evidence: `smooth` cites
-     the existing smoothing record; `furry` and `exact` are hypotheses with stated
-     reasons.
+   - Add `color.edges.furry_sigma_px` to a new `rules/color.yaml`, a hypothesis with its
+     stated reason. `smooth` reuses `flat.smooth.sigma_px`, which cites the smoothing
+     record; `exact` is no blur by definition and needs no rule.
    - Run `scripts/gen_docs.py`.
    - **Tests:** defaults; precedence (flag over file over default); refusals (an unknown
      key, `colors` 1 or 5, a bool for `colors`, an unknown `edges` value, a non-mapping
      YAML, a bad path); `base` out of range found after the palette is known; the cap
      read from the profile.
-3. **`quantize`** in `color.py`.
+3. **`quantize`** in `tdmg.color`.
    - **Synthetic tests:**
      - exact flat-color shapes give exactly their colors;
      - anti-aliased edges give the core colors, with edge pixels assigned to the nearest;

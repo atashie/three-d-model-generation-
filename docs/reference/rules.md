@@ -17,6 +17,12 @@ Every number the pipeline uses. *Provenance / validation* shows the strongest ev
 | `joint.pin_in_loop.clearance_radial` | Radial gap between axle and hole in a flat print-in-place hinge. | 0.55 |  | mm | empirical | primary / source-tested | A1 | measured as radial; absolute: does not scale with the model |
 | `joint.pin_in_loop.clearance_vertical` | Vertical gap between the top of the axle and the shackle in a flat print-in-place hinge. | 0.5 |  | mm | empirical | primary / source-tested | A1 | measured as vertical; absolute: does not scale with the model |
 
+## `rules/color.yaml`
+
+| Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |
+|---|---|---|---|---|---|---|---|---|
+| `color.edges.furry_sigma_px` | Gaussian blur (in image pixels) applied to each color's indicator before every pixel takes the color with the largest blurred value, for the `furry` edge preset. Less blur than `smooth`, so more of the image's jagged edge detail is kept. | 1 |  | px | hypothesis | unverified / untested | C2 | Set in pixels, like flat.smooth.sigma_px, because the jaggedness comes from the image. Detail finer than about one bead width (0.42 mm) does not print; it merges or vanishes in the slicer. So furry means less smoothing and sharper corners, not hair-fine strands. |
+
 ## `rules/fdm.yaml`
 
 | Rule | Summary | Default | Range | Unit | Kind | Provenance / validation | Applies to | Conditions and notes |

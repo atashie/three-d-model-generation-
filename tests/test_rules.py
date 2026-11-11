@@ -57,3 +57,10 @@ def test_prusaslicer_timeout_rule_exists_with_its_unit_and_default():
     assert rule.best_validation == "untested"
     assert [e.ref for e in rule.evidence] == [
         "research/verification/2026-11-11-prusaslicer-windows/README.md"]
+
+
+def test_furry_edge_rule_exists_with_its_unit_and_default():
+    rule = RULES["color.edges.furry_sigma_px"]
+    assert (rule.unit, rule.default, rule.kind) == ("px", 1.0, "hypothesis")
+    assert rule.best_validation == "untested"
+    assert rule.best_provenance == "unverified"
