@@ -543,3 +543,15 @@ The owner reviews them next (Task 7e-c).
   so it could not be used.
 - **`outline_width_mm` under drop:** it stays part of the identity, although it is not
   used there. This is a documented choice: the identity holds every resolved setting.
+
+### Task 7e-c: owner review (2026-11-11)
+
+**Approved:** the owner approved all four previews in `artifacts/colors-review-3/`:
+"amazing work. 1-4 are great, well done." (verbatim, in the research README addendum).
+Task 7 is complete.
+
+**Remaining for step 1:** Task 8:
+- the docs: the attribute page for multicolor, the pipeline guide for `tdmg colors`, and
+  STATUS;
+- the Codex critical review, recorded in `research/reviews/`;
+- then the push and CI.

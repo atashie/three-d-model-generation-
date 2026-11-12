@@ -1,7 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-11 (color Task 7e-b; earlier: F6.portability, first PRINTABLE). Phase 1
-(R1, flat single-color) is under way, with three commands:
+**Last updated:** 2026-11-11 (R2 color step 1, Task 7 done and approved by the owner;
+earlier: F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+with three commands, and R2 (flat multicolor) has its first command:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
 - **`tdmg flat`** (S2–S4, S8): makes a flat STL, smoothed by default (`--smooth-px 0`
@@ -10,6 +11,15 @@
   Bambu A1 profiles. It measures F6 and judges F3 from the printed G-code footprint
   (`F3.printed_connectivity`, `F3.edge_coverage`, `F3.edge_overprint`). With a pinned
   PrusaSlicer 2.9.7 (`--prusaslicer-dir`), it also measures `F6.portability`.
+- **`tdmg colors`** (R2 step 1): turns a selection into a reviewed color plan.
+  - **Steps:** it extracts 6 colors (CIELAB k-means), handles cartoon outlines (drop
+    by default, or keep as a 0.5 mm line), applies the owner's merges, cleans regions
+    to printable size and smooths the region borders.
+  - **Outputs:** it writes `labels.png`, a `regions.png` preview and a verifiable
+    `colors.json`.
+  - **Not ready:** when more colors remain than the AMS allows, it marks the plan not
+    ready and suggests merges.
+  - **Not built yet:** no geometry is made from the plan (design step 2).
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -40,8 +50,12 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI. For `5632ca4` (`F6.portability`, `slice-4`, and the portability Codex review fixes; run 43033039270, checked 2026-11-11), `ubuntu-latest` and `windows-latest` passed; `macos-15` did not run: GitHub cancelled it after no macOS runner picked it up ("The job was not acquired by Runner of type hosted even after multiple attempts"). CI then passed on all three OSes for `c93dfa1`, which adds only this STATUS note to `5632ca4` (run 43035563763, verified 2026-11-11); the real slicers are not installed in CI.
 
-Latest local validation (2026-11-11, Windows PC, `slice-4` after the portability Codex review fixes):
-`uv run pytest -q` gave **961 passed and 3 skipped**, both plain and with
+Latest local validation (2026-11-11, Windows PC, R2 step 1 after Task 7e-b, commit `5d5b5a9`):
+`uv run pytest -q` gave **1733 passed and 3 skipped**; the CLI and docs tests also pass with
+`CI=true GITHUB_ACTIONS=true`. `uv run ruff check .` (now with E501, line length 100) and
+`uv run python scripts/gen_docs.py --check` passed. **About 45 commits since `8a5856e` are
+local only: not pushed, not CI-checked.** Earlier (portability, `slice-4`): 961 passed and 3 skipped,
+both plain and with
 `CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
 passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
 uv run pytest -m slicer` command in `CLAUDE.md`. `uv run ruff check .`,
@@ -50,35 +64,56 @@ passed. These commits are pushed; for CI see above.
 
 ## Next steps, in order
 
-1. **R2 color (owner's next request, 2026-11-11):** design agreed in
-   `docs/plans/2026-11-11-color-design.md`. Executing `docs/plans/2026-11-11-color-palette.md`
-   (step 1: `tdmg.color` and `tdmg colors`).
-   - **Done:**
-     - Task 7c added outline detection, drop and keep, and the shade-pair flags
-       (`tdmg.color_outline`).
-     - Task 7d recorded the owner's review.
-     - Task 7e-a measured what survives drop.
-     - Task 7e-b (2026-11-11, Windows PC):
-       - Drop keeps only core areas at least `color.outline.keep_area_width_ratio`
-         strokes wide. On Roadie, that is only the pupil.
-       - Shading tones take the nearest color.
-       - Keep skips stroke specks, and its width is the config key `outline_width_mm`.
-         The default is 0.5 mm: at 0.45 mm, cleanup removed 13.6–28.6% of the band
-         (`band-survival.txt` in the research folder).
-       - The preview shows the smoothed outer outline on a mid-grey checker.
-   - **Next:** the owner reviews the four previews in `artifacts/colors-review-3/`
-     (Task 7e-c).
-
-   This is functionally tested and run on the owner's images; the rules are untested
-   hypotheses.
-2. **Caliper measurements,** if the owner gets calipers: three named dimensions within
+1. **R2 color, step 1 (`tdmg colors`): finish Task 8.** The design is
+   `docs/plans/2026-11-11-color-design.md`, and the plan is
+   `docs/plans/2026-11-11-color-palette.md`. Tasks 1–7 are done; Task 7 was approved by
+   the owner on 2026-11-11 ("amazing work. 1-4 are great").
+   - **Task 8 to do:**
+     - **Docs:** a new attribute page `docs/print-types/attributes/color-multi.md` with
+       the template headings; the pipeline guide's `tdmg colors` stage; the dependencies
+       page if needed.
+     - **Codex critical review** of `8a5856e..HEAD`, recorded in
+       `research/reviews/2026-11-11-color-palette/`, with each finding handled.
+     - **Push,** then record CI here.
+   - **Modules:**
+     - `tdmg.color` (quantize, from_labels, clean_regions, open_mask);
+     - `tdmg.color_outline` (outline family, drop and keep, shade pairs);
+     - `tdmg.color_plan` (`plan_colors`, pure);
+     - `tdmg.color_config` (strict config keys: colors, extract, edges, base, outlines,
+       outline_color, merge, outline_width_mm);
+     - `tdmg.smoothing.smooth_labels`;
+     - `tdmg.colors` (`make_colors`, record schema `tdmg.colors/3`, preview);
+     - `tdmg.colors_verify.verify_colors` (step 2 must call it with the selection folder).
+   - **Owner decisions:**
+     - colors suggested from the image;
+     - a top skin of 0.6 mm;
+     - inlay glue pieces;
+     - smooth edges by default;
+     - outlines dropped by default, with `keep` redrawing the drawing's own lines at 0.5 mm;
+     - only pupil-like dark areas survive a drop;
+     - shade pairs flagged, never merged automatically;
+     - extract 6 colors;
+     - the owner prefers Oddie with the outline kept and both shade pairs merged.
+   - **Configs used:** `artifacts/colors-runs/configs/`. The previews the owner approved
+     are in `artifacts/colors-review-3/` (git-ignored).
+   - **All new rules are hypotheses,** untested. They rest on two images, and on one
+     example (the pupil) for `color.outline.keep_area_width_ratio`.
+   - **Open:** the owner fixtures have not been run on the Mac, so cross-platform parity is
+     unverified.
+2. **R2 design step 2: colored flat geometry** (`tdmg flat --colors`).
+   - **What it builds:** the base and top-skin inlays, plus the glue pieces with pockets.
+   - **What it inherits:** the requirements in the color design's section "Requirements
+     step 2 inherits from step 1".
+   - **What follows:** steps 3–5 (3MF writer, AMS slicing with the face-up/face-down
+     measurement, then prints).
+3. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
-3. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
+4. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
    identity scheme.
-4. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
+5. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
    still a bit rough", acceptable for now. Options: a per-image `--smooth-px`, or a
    better source image.
-5. **R4 backend (open):** help the owner choose under their decision rule: a cheap
+6. **R4 backend (open):** help the owner choose under their decision rule: a cheap
    standard service, around $1 per model, beats a homemade pipeline if it does
    everything we need.
 

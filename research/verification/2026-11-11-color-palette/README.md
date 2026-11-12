@@ -792,3 +792,26 @@ to radius opening/2 and drops islands. I checked the difference with an inline c
 committed): `tdmg.flat.clean` with opening 0.4 mm and island 0.64 mm², then `rasterise`, at
 60 mm. It changes 20 image pixels on Roadie (16 removed, 4 added, of 74,730) and 10 on Oddie
 (10 removed, of 298,202).
+
+## Addendum: owner review of the Task 7e-b previews (plan Task 7e-c), 2026-11-11
+
+**What was reviewed:** the four previews in the git-ignored `artifacts/colors-review-3/`:
+1. Roadie, outline dropped;
+2. Roadie, outline kept at 0.5 mm;
+3. Oddie, outline kept, blues and greens merged;
+4. Oddie, outline dropped, blues merged.
+
+**The questions asked:**
+1. Is Roadie with the outline dropped right, with only the pupil dark?
+2. Are any empty spots still visible?
+3. Is 0.5 mm the right outline width?
+4. Are the small breaks where lines meet acceptable?
+
+**The owner's answer, verbatim:** "amazing work. 1-4 are great, well done."
+
+**So:**
+- The outline and shading behaviour of the `tdmg colors` step is accepted on these two
+  images.
+- The "empty spots" were not holes (Task 7e-a). With the mid-grey preview background,
+  none remain.
+- The rules stay hypotheses (validation untested): nothing has been printed.
