@@ -302,10 +302,13 @@ The full list is in `docs/PLAN.md` section 13.
       precondition relied on a rounding sliver that does not arise on arm64. That test
       now builds the sliver exactly.
     - CI now writes failing tests as public annotations, because the logs need a sign-in.
-    - CI for the final commit: PENDING (fill in).
+    - CI for `f64897d` (the Codex fixes and STATUS): passed on macOS 15, Windows and Ubuntu
+      (run 43327420060, verified 2026-11-12).
   - **Owner decisions:**
     - Task 5: "Fold small pieces too".
     - Task 7: no glue version for a plan that keeps a drawn outline.
+  - **Step 3 plan written:** `docs/plans/2026-11-12-color-3mf.md`, awaiting the owner's
+    approval (Task 1 is an import experiment in the pinned slicers).
   - **Next, when the owner says to proceed:** R2 step 3, the deterministic multicolor 3MF
     writer (separate objects or one assembly, decided by import tests in OrcaSlicer and
     PrusaSlicer; the owner confirms in Bambu Studio). Then step 4 (AMS slicing, face up
