@@ -1,7 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-11 (R2 color step 1 complete: Task 8 docs, two Codex reviews,
-the float64 blur; earlier: F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+**Last updated:** 2026-11-12 (R2 step 2 under way: Tasks 1–4 of
+`docs/plans/2026-11-12-color-geometry.md` committed locally, not pushed; earlier: R2 step 1,
+F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
 with three commands, and R2 (flat multicolor) has its first command:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -133,6 +134,20 @@ passed. These commits are pushed; for CI see above.
      unverified. Because `verify_colors` rebuilds, a plan made on the PC and checked on
      the Mac is refused if their results differ.
 2. **R2 design step 2: colored flat geometry** (`tdmg flat --colors`).
+   - **Progress (2026-11-12):** the plan `docs/plans/2026-11-12-color-geometry.md` was
+     approved by the owner with its three starting values (rules `color.skin.depth_mm`
+     0.6, `color.glue.clearance_mm` 0.2, `color.glue.min_piece_side_mm` 2.0; all
+     hypotheses, untested). Tasks 1–4 are done and committed locally (`a4a2a4f..7565dd8`),
+     not pushed, so CI has not run on them:
+     - Task 1, measured: the raw fine-map boundaries are within F5. No simplification.
+     - Task 3: `tdmg.color_geometry.color_regions`. **Owner decision "Match preview"**:
+       inlays are not cleaned (per-inlay trimming drew base-colored hairlines).
+     - Task 4: AMS bodies meshed directly on a float32-exact grid. manifold3d unions
+       failed F1 after STL storage on 3 of 4 plans. Pinch vertices are joined. New checks
+       `F4.color_partition` and `F4.filaments`. All 16 bodies on the four owner plans pass
+       (`research/verification/2026-11-12-color-geometry/bodies.txt`).
+     - Next: Task 5 (glue pieces), Task 6 (`make_colored_flat`, record, previews, CLI),
+       Task 7 (owner review), Task 8 (docs, Codex review, push, CI).
    - **What it builds:** the base and top-skin inlays, plus the glue pieces with pockets.
    - **What it inherits:** the requirements in the color design's section "Requirements
      step 2 inherits from step 1".
@@ -248,6 +263,21 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
+- **Latest session (2026-11-12): R2 step 2, Tasks 1–4 of the color-geometry plan done.**
+  - **Commits:** `a4a2a4f..7565dd8`, local only; push and CI come at Task 8.
+  - **Owner decisions:** the plan was approved with its three values. "Match preview":
+    no cleaning of inlays (plan Decision 5 replacement).
+  - **Controller decisions, recorded in the plan:**
+    - no simplification;
+    - bodies meshed directly on the storage grid G = 2^(e−24);
+    - pinch vertices joined by a 2G diamond, with S pinches left to F1;
+    - checks named F4.*.
+  - **Next:** plan Task 5 (glue: fold, shrink, pockets, `F4.glue_fit`), then Tasks 6–8.
+  - **Watch:** on Roadie with the outline kept, 14.3 mm² of the kept outline band is
+    narrower than 0.4 mm. It is reported as information; the step 4 slicer checks judge
+    it.
+  - **Housekeeping:** a stray `C:\c\...` folder (6 scratch files from a subagent) needs
+    deleting by the owner.
 - **Latest session (2026-11-11): R2 step 1 (`tdmg colors`) finished.**
   - **Done:** Task 8 (docs and the first Codex review, 9 findings handled), the float64
     blur (flat-3, owner: "fix it now"; R1 re-run still PRINTABLE) and Codex review 2 (3
