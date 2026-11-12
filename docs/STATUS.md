@@ -52,8 +52,9 @@ CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel
 
 Latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 review fixes):
 `uv run pytest -q` gave **1760 passed and 3 skipped**. `uv run ruff check .` and
-`uv run python scripts/gen_docs.py --check` passed. CI for the push of R2 step 1: see
-below once recorded. Earlier (portability, `slice-4`): 961 passed and 3 skipped,
+`uv run python scripts/gen_docs.py --check` passed. R2 step 1 is pushed (`8a5856e..ef4b2cf`),
+and CI passed on macOS 15, Windows and Ubuntu for `ef4b2cf` ([run 43130647502](https://github.com/atashie/three-d-model-generation-/actions/runs/43130647502),
+verified 2026-11-11); the real slicers are not installed in CI. Earlier (portability, `slice-4`): 961 passed and 3 skipped,
 both plain and with
 `CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
 passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
@@ -63,7 +64,8 @@ passed. These commits are pushed; for CI see above.
 
 ## Next steps, in order
 
-1. **R2 color, step 1 (`tdmg colors`): done, pending CI.** The design is
+1. **R2 color, step 1 (`tdmg colors`): done; CI passed for `ef4b2cf`.** Next is step 2
+   (item 2), after the owner answers the float64 question below. The design is
    `docs/plans/2026-11-11-color-design.md`, and the plan is
    `docs/plans/2026-11-11-color-palette.md`. Tasks 1–8 are done; Task 7 was approved by
    the owner on 2026-11-11 ("amazing work. 1-4 are great").

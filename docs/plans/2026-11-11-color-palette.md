@@ -570,4 +570,4 @@ Task 7 is complete.
   - A null config document is refused.
   - The OpenCV float32 path dependence is documented; the float64 change is left to the
     owner.
-- **Step 1 is complete** once CI passes.
+- **Step 1 is complete:** CI passed on all three OSes for `ef4b2cf` (run 43130647502).
