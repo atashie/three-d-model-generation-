@@ -55,7 +55,12 @@ Latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 revi
 `uv run pytest -q` gave **1760 passed and 3 skipped**. `uv run ruff check .` and
 `uv run python scripts/gen_docs.py --check` passed. R2 step 1 is pushed (`8a5856e..ef4b2cf`),
 and CI passed on macOS 15, Windows and Ubuntu for `ef4b2cf` ([run 43130647502](https://github.com/atashie/three-d-model-generation-/actions/runs/43130647502),
-verified 2026-11-11); the real slicers are not installed in CI. Earlier (portability, `slice-4`): 961 passed and 3 skipped,
+verified 2026-11-11); the real slicers are not installed in CI. The float64 blur (flat-3) and
+its review fixes, `f3aa5a0`, passed on all three OSes too ([run 43137532846](https://github.com/atashie/three-d-model-generation-/actions/runs/43137532846),
+verified 2026-11-11). That includes the new test showing the blur does not depend on
+OpenCV's optimised code path, now run on macOS arm64 and Linux as well as Windows. That
+test compares two code paths on one machine. It does not show that two machines give
+identical bits. Earlier (portability, `slice-4`): 961 passed and 3 skipped,
 both plain and with
 `CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
 passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
