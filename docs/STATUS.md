@@ -1,7 +1,7 @@
 # Project status
 
-**Last updated:** 2026-11-11 (R2 color step 1 complete: Task 8 docs and Codex review
-done; earlier: F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+**Last updated:** 2026-11-11 (R2 color step 1 complete: Task 8 docs, two Codex reviews,
+the float64 blur; earlier: F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
 with three commands, and R2 (flat multicolor) has its first command:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -52,7 +52,8 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI. For `5632ca4` (`F6.portability`, `slice-4`, and the portability Codex review fixes; run 43033039270, checked 2026-11-11), `ubuntu-latest` and `windows-latest` passed; `macos-15` did not run: GitHub cancelled it after no macOS runner picked it up ("The job was not acquired by Runner of type hosted even after multiple attempts"). CI then passed on all three OSes for `c93dfa1`, which adds only this STATUS note to `5632ca4` (run 43035563763, verified 2026-11-11); the real slicers are not installed in CI.
 
 Latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 review fixes):
-`uv run pytest -q` gave **1760 passed and 3 skipped**. `uv run ruff check .` and
+`uv run pytest -q` gave **1777 passed and 3 skipped** (after Codex review 2, `058f474`;
+it was 1760 at `ef4b2cf`). `uv run ruff check .` and
 `uv run python scripts/gen_docs.py --check` passed. R2 step 1 is pushed (`8a5856e..ef4b2cf`),
 and CI passed on macOS 15, Windows and Ubuntu for `ef4b2cf` ([run 43130647502](https://github.com/atashie/three-d-model-generation-/actions/runs/43130647502),
 verified 2026-11-11); the real slicers are not installed in CI. The float64 blur (flat-3) and
@@ -60,7 +61,9 @@ its review fixes, `f3aa5a0`, passed on all three OSes too ([run 43137532846](htt
 verified 2026-11-11). That includes the new test showing the blur does not depend on
 OpenCV's optimised code path, now run on macOS arm64 and Linux as well as Windows. That
 test compares two code paths on one machine. It does not show that two machines give
-identical bits. Earlier (portability, `slice-4`): 961 passed and 3 skipped,
+identical bits. The Codex review 2 fixes, `058f474`, passed on all three OSes
+([run 43146458172](https://github.com/atashie/three-d-model-generation-/actions/runs/43146458172),
+verified 2026-11-11). Earlier (portability, `slice-4`): 961 passed and 3 skipped,
 both plain and with
 `CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
 passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
@@ -95,6 +98,12 @@ passed. These commits are pushed; for CI see above.
      - **Colors:** the four approved previews have identical labels and change by at most
        88 pixels.
      - **Record:** `research/reviews/2026-11-11-color-palette/README.md`.
+   - **Codex review 2** of `e74689b..93e4f84` (the fixes and the float64 change): it
+     judged the nine first-review findings fixed and found three more, all handled in
+     `058f474`. A PNG that makes Pillow raise `ValueError` is now refused with the
+     module's own error (in `verify_colors` and in `tdmg.selection`). `verify_colors` now
+     checks the form of `tdmg_version` and `environment`. A record overstatement was
+     corrected. See "Codex review 2" in the review README.
    - **Modules:**
      - `tdmg.color` (quantize, from_labels, clean_regions, open_mask);
      - `tdmg.color_outline` (outline family, drop and keep, shade pairs);
@@ -239,7 +248,21 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest session (2026-11-10):**
+- **Latest session (2026-11-11): R2 step 1 (`tdmg colors`) finished.**
+  - **Done:** Task 8 (docs and the first Codex review, 9 findings handled), the float64
+    blur (flat-3, owner: "fix it now"; R1 re-run still PRINTABLE) and Codex review 2 (3
+    findings handled, `058f474`). Records: `research/reviews/2026-11-11-color-palette/`.
+  - **CI:** `058f474` passed on macOS 15, Windows and Ubuntu (run 43146458172).
+  - **Next, when the owner says to proceed:** R2 step 2, `tdmg flat --colors`: AMS inlays
+    in a 0.6 mm top skin, plus glue pieces in pockets. It must call
+    `verify_colors(colors_dir, selection_dir)` first, and intersect the smoothed outline
+    with the image box (`docs/plans/2026-11-11-color-design.md`).
+  - **Open, not shown:** that float64 results are bit-identical on the Mac (its parity
+    for the owner fixtures has not been run). The color rules rest on two images, and
+    nothing has been printed from a color plan.
+  - **Local runs:** the owner's approved plans are `artifacts/colors-runs/*-f64` (they
+    verify at `058f474`); the selections are in `artifacts/selection-runs/`.
+- **Earlier session (2026-11-10):**
   - **Built and reviewed, then pushed with green CI (up to `fdb6e67`):** `tdmg select`,
     `tdmg flat`, outline smoothing and `tdmg slice`. Each had subagent spec and quality
     reviews and a Codex review. The A1 profiles are flattened from the pinned v2.5.0
