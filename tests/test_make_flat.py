@@ -369,13 +369,13 @@ def test_a_gate_fail_still_writes_every_file_with_the_verdict(selection_dir, tmp
 
 def scaled_stl(monkeypatch, factor=0.1):
     """Make make_flat export a mesh scaled by factor, as a broken encoder would."""
-    encode = tdmg.flat._encode_stl
+    encode = tdmg.flat.encode_stl
 
     def broken(mesh):
         return encode(trimesh.Trimesh(np.asarray(mesh.vertices) * factor, mesh.faces,
                                       process=False))
 
-    monkeypatch.setattr(tdmg.flat, "_encode_stl", broken)
+    monkeypatch.setattr(tdmg.flat, "encode_stl", broken)
 
 
 def test_an_export_that_differs_from_the_geometry_fails_the_gate(selection_dir, tmp_path,
@@ -532,7 +532,7 @@ def test_off_reproduces_the_exact_outline_path(run_off, selection_dir):
     model, transform = to_model(mask_outline(mask), 60.0)
     parts, cleaning = clean(model, 0.4, (2.0 * 0.4) ** 2,
                             HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
-    stl = tdmg.flat._encode_stl(extrude(parts, 3.0))
+    stl = tdmg.flat.encode_stl(extrude(parts, 3.0))
     assert (out / "model.stl").read_bytes() == stl
     assert hashlib.sha256(stl).hexdigest() == FLAT1_STL_SHA256
     assert record["outputs"]["model.stl"] == FLAT1_STL_SHA256

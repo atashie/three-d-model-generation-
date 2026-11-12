@@ -472,14 +472,24 @@ def export_check(mesh: trimesh.Trimesh, parts: list[Polygon],
     FAILs. The thresholds are derived, not rules, so rule is None.
     """
     region = shapely.union_all(parts)
-    expected_xy = [float(v) for v in region.bounds]
-    expected_z = [0.0, float(thickness_mm)]
     area = float(sum(p.area for p in parts))
-    expected_volume = area * thickness_mm
-    largest = max(max(abs(v) for v in expected_xy), thickness_mm)
+    return export_match(mesh, [float(v) for v in region.bounds], [0.0, float(thickness_mm)],
+                        area * thickness_mm,
+                        2 * area + float(region.length) * thickness_mm)
+
+
+def export_match(mesh: trimesh.Trimesh, expected_xy: list[float], expected_z: list[float],
+                 expected_volume: float, surface_mm2: float) -> CheckResult:
+    """F2.export_matches_geometry against an intended solid given by its numbers.
+
+    expected_xy: [xmin, ymin, xmax, ymax]; expected_z: [zmin, zmax]; expected_volume and
+    surface_mm2 (its surface area) in mm^3 and mm^2. coord_tol = STL_COORD_RTOL x the
+    largest expected |coordinate| (x, y or z); volume_tol = 2 sqrt(3) coord_tol x
+    surface_mm2. export_check gives the derivation; this is its shared core.
+    """
+    largest = max(max(abs(v) for v in expected_xy), max(abs(v) for v in expected_z))
     coord_tol = largest * STL_COORD_RTOL
-    surface = 2 * area + float(region.length) * thickness_mm
-    volume_tol = 2 * math.sqrt(3) * coord_tol * surface
+    volume_tol = 2 * math.sqrt(3) * coord_tol * surface_mm2
     vertices = np.asarray(mesh.vertices, dtype=np.float64)
     low, high = vertices.min(axis=0), vertices.max(axis=0)
     xy = [float(low[0]), float(low[1]), float(high[0]), float(high[1])]
@@ -603,7 +613,7 @@ def flat_identity(algorithm: str, mask_pixels_sha256: str, params: dict) -> str:
     return hashlib.sha256(canonical_json(identity)).hexdigest()
 
 
-def _encode_stl(mesh: trimesh.Trimesh) -> bytes:
+def encode_stl(mesh: trimesh.Trimesh) -> bytes:
     """Binary STL bytes (float32 coordinates). The gate parses exactly these bytes."""
     return mesh.export(file_type="stl")
 
@@ -845,7 +855,7 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     else:
         smoothing, warnings = _smoothing_report(exact, outline, parts, transform, sigma,
                                                 opening["value"], min_island["value"])
-    stl = _encode_stl(extrude(parts, thickness_mm))
+    stl = encode_stl(extrude(parts, thickness_mm))
     kept = rasterise(parts, transform, mask.shape)
     files = {"model.stl": stl, "outline.png": png_bytes(_outline_image(mask, kept))}
 

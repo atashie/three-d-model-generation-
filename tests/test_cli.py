@@ -305,8 +305,8 @@ def test_flat_help_keeps_the_exit_code_list_intact_at_80_columns():
 
 def test_flat_exits_1_when_the_export_differs_from_the_geometry(tmp_path, monkeypatch):
     sel = _selection(tmp_path)
-    encode = tdmg.flat._encode_stl
-    monkeypatch.setattr(tdmg.flat, "_encode_stl", lambda mesh: encode(
+    encode = tdmg.flat.encode_stl
+    monkeypatch.setattr(tdmg.flat, "encode_stl", lambda mesh: encode(
         mesh.copy().apply_scale(0.1)))
     out = tmp_path / "flat"
     r = _flat(sel, out)
