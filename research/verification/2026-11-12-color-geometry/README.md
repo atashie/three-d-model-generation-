@@ -81,3 +81,39 @@ shapely.coverage_is_valid(polys)                      # False
 allb = shapely.union_all([p.boundary for p in polys])
 shapely.coverage_is_valid([shapely.snap(p, allb, 1e-9) for p in polys])   # True
 ```
+
+Note (2026-11-12, Task 3): `tdmg.flat` made `_apply_transform` and `_polygons` public as
+`apply_transform` and `polygon_parts`, so only `measure_vectorize.py`'s imports and call
+sites were renamed. The re-run on the Windows PC (shapely 2.2.0, GEOS 3.14.1, numpy 2.5.4,
+opencv 5.0.0) reproduced `vectorize.txt` line for line, apart from its hand-written header
+and the timings: image sizes, areas, scales, vertex counts, coverage validity, boundary
+deviations, overlaps, gaps, triangle counts and the tracemalloc peaks were all identical.
+`vectorize.txt` was not overwritten.
+
+## Task 3: color regions on the owner's plans (2026-11-12)
+
+**Script:** `measure_regions.py`. **Output:** `regions.txt` (working tree after Task 3, Windows
+PC).
+
+- **The first Task 3 code** (each inlay opened on its own, trimmings to the base; plan
+  Decision 5 as written) left base-colored area where the plan has another color:
+  - 1.2, 21.3, 1.0 and 5.3 mm² on the four plans (Roadie drop, Roadie keep, Oddie merge
+    blues, Oddie keep), in 2,844–9,882 pieces;
+  - on Roadie keep, 19.7 mm² of it from the kept outline band;
+  - at most 0.15 mm² in pieces touching the outline.
+
+  This was measured with a scratch script on that code, which is not kept; the numbers
+  are quoted in the plan's Decision 5 replacement. **The owner chose "Match preview"**: no
+  cleaning.
+- **The current code:** the base-colored area outside the base color's own fine region is
+  0 on three plans and 4.1e-16 mm² on Roadie drop: 14 rounding-sized pieces on the outline.
+  So there are no hairlines.
+- **Thin parts** (narrower than 0.4 mm, `flat.thin_regions`; information only):
+  - The largest is the kept outline band on Roadie keep: 14.33 mm² of 244.65 mm².
+  - The rest are 0.08–4.09 mm².
+  - The piece counts (101–11,655) are high because every convex corner and staircase
+    tooth of the fine map counts. Treat the area as an indicator, not a count of narrow
+    features.
+  - The slicer checks in step 4 judge whether these print.
+- **Time of `color_regions`:** 2.2–7.9 s per plan. A synthetic 4096² map in the quality
+  review took 23.6 s, most of it in the thin report's buffers.

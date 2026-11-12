@@ -33,11 +33,11 @@ from tdmg.flat import (
     ISLAND_RULE,
     OPENING_RULE,
     SMOOTH_RULE,
-    _apply_transform,
-    _polygons,
+    apply_transform,
     clean,
     extrude,
     mask_outline,
+    polygon_parts,
     to_model,
 )
 from tdmg.profiles import load_printer
@@ -126,7 +126,7 @@ def measure(name, plan_dir, sel_dir, rules):
         out.append(f"  SIMPLIFY_PX {tol:.4f} ({frac} / s): {t_simp:.2f} s, vertices "
                    f"{vertices(simp)}, max boundary deviation {dev:.4f} px "
                    f"({dev * transform['scale_mm_per_px']:.5f} mm), coverage valid {valid}")
-        mm = [_apply_transform(p, transform) for p in simp]
+        mm = [apply_transform(p, transform) for p in simp]
         for grid in GRIDS_MM:
             t = time.perf_counter()
             clipped = [shapely.intersection(p, region, grid_size=grid) for p in mm]
@@ -134,10 +134,10 @@ def measure(name, plan_dir, sel_dir, rules):
             overlap, gap = overlap_and_gap(clipped, region)
             triangles = 0
             for p in clipped:
-                polys, _ = _polygons(p)
+                polys, _ = polygon_parts(p)
                 if polys:
                     triangles += len(extrude(polys, SKIN_MM).faces)
-            base_tris = len(extrude(_polygons(region)[0], THICKNESS_MM - SKIN_MM).faces)
+            base_tris = len(extrude(polygon_parts(region)[0], THICKNESS_MM - SKIN_MM).faces)
             out.append(f"    grid {grid}: clip {t_clip:.2f} s, overlap {overlap:.3e} mm^2, "
                        f"gap {gap:.3e} mm^2, skin triangles {triangles}, "
                        f"+ base below skin {base_tris}")

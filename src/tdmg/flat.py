@@ -155,10 +155,10 @@ def to_model(outline, width_mm: float) -> tuple[shapely.Geometry, dict]:
     s = width_mm / (x1 - x0)
     transform = {"scale_mm_per_px": s, "x0_px": x0, "y1_px": y1,
                  "mask_width_px": x1 - x0, "mask_height_px": y1 - y0}
-    return _apply_transform(outline, transform), transform
+    return apply_transform(outline, transform), transform
 
 
-def _apply_transform(outline, transform: dict) -> shapely.Geometry:
+def apply_transform(outline, transform: dict) -> shapely.Geometry:
     """outline (pixel units) in model mm, by a transform from to_model."""
     s, x0, y1 = transform["scale_mm_per_px"], transform["x0_px"], transform["y1_px"]
     return affinity.affine_transform(outline, [s, 0.0, 0.0, -s, -x0 * s, y1 * s])
@@ -171,7 +171,7 @@ def _require_non_negative(name: str, value: float) -> float:
     return value
 
 
-def _polygons(geom) -> tuple[list[Polygon], int]:
+def polygon_parts(geom) -> tuple[list[Polygon], int]:
     """Polygons in geom, read recursively, and the count of non-polygonal parts skipped."""
     if geom.is_empty:
         return [], 0
@@ -180,14 +180,14 @@ def _polygons(geom) -> tuple[list[Polygon], int]:
     if isinstance(geom, (MultiPolygon, GeometryCollection)):
         found, skipped = [], 0
         for sub in geom.geoms:
-            polys, n = _polygons(sub)
+            polys, n = polygon_parts(sub)
             found.extend(polys)
             skipped += n
         return found, skipped
     return [], 1
 
 
-def _order_key(part: Polygon) -> tuple:
+def order_key(part: Polygon) -> tuple:
     return (-part.area, part.bounds)
 
 
@@ -302,17 +302,17 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float,
     if isinstance(geom_mm, (Polygon, MultiPolygon)) and geom_mm.is_valid:
         before, skipped = geom_mm, 0
     else:
-        polys, skipped = _polygons(geom_mm)
+        polys, skipped = polygon_parts(geom_mm)
         before = shapely.union_all(polys)
     radius = opening_mm / 2
     eroded = before.buffer(-radius, quad_segs=QUAD_SEGS)
     opened = eroded.buffer(radius, quad_segs=QUAD_SEGS)
 
-    inputs = np.asarray(_polygons(before)[0], dtype=object)
+    inputs = np.asarray(polygon_parts(before)[0], dtype=object)
     shapely.prepare(eroded)
     vanished = inputs[~shapely.intersects(eroded, inputs)] if len(inputs) else inputs
-    candidates, _ = _polygons(opened)
-    candidates.sort(key=_order_key)
+    candidates, _ = polygon_parts(opened)
+    candidates.sort(key=order_key)
     parts = [p for p in candidates if p.area >= min_island_mm2]
     dropped = sorted((float(p.area) for p in candidates if p.area < min_island_mm2),
                      reverse=True)
@@ -389,8 +389,8 @@ def thin_regions(parts: list[Polygon], min_width_mm: float) -> dict:
     union = shapely.union_all(parts)
     radius = min_width_mm / 2
     opened = union.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
-    pieces, _ = _polygons(union.difference(opened))
-    pieces.sort(key=_order_key)
+    pieces, _ = polygon_parts(union.difference(opened))
+    pieces.sort(key=order_key)
     largest = [{"area_mm2": round(float(p.area), DISPLAY_DECIMALS),
                 "centroid_mm": [round(float(p.centroid.x), DISPLAY_DECIMALS),
                                 round(float(p.centroid.y), DISPLAY_DECIMALS)]}
@@ -659,7 +659,7 @@ def _regions(region, opening_mm: float, min_island_mm2: float) -> dict:
     """
     radius = opening_mm / 2
     opened = region.buffer(-radius, quad_segs=QUAD_SEGS).buffer(radius, quad_segs=QUAD_SEGS)
-    areas = sorted((float(p.area) for p in _polygons(opened)[0] if p.area >= min_island_mm2),
+    areas = sorted((float(p.area) for p in polygon_parts(opened)[0] if p.area >= min_island_mm2),
                    reverse=True)
     return {"count": len(areas), "total_area_mm2": float(sum(areas)),
             "largest_mm2": areas[:DROPPED_LISTED]}
@@ -762,7 +762,7 @@ def _smoothing_report(exact, smooth, parts: list[Polygon], transform: dict, sigm
     s = transform["scale_mm_per_px"]
     step_mm = HAUSDORFF_STEP_PX * s
     try:
-        exact_parts, _ = clean(_apply_transform(exact, transform), opening_mm,
+        exact_parts, _ = clean(apply_transform(exact, transform), opening_mm,
                                min_island_mm2, step_mm)
     except FlatError:                    # cleaning leaves nothing of the exact outline
         exact_parts = []

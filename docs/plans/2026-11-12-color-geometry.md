@@ -102,7 +102,8 @@ Codex critical review.
 4. **Which colors become inlays.**
    - Every final palette color except the base (`base_index`) is an inlay.
    - The base color's top is S minus the union of the inlays, so the base absorbs
-     anything removed from an inlay.
+     anything removed from an inlay. (Since the Decision 5 replacement nothing is
+     removed, so the base top is the base color's own fine region inside S.)
 5. **Each inlay is cleaned like an R1 part.**
    - **Rules:** the opening (`flat.sliver.opening_width`) and the island area
      (`flat.island.min_square_side` × nozzle)², per inlay color.
@@ -113,10 +114,32 @@ Codex critical review.
    - **Report:**
      - per color: the area before and after;
      - colors that vanish entirely, as a warning, with the filament count it leaves.
+   - **Replaced by the owner's decision (2026-11-12, after the Task 3 quality review):**
+     inlays are **not** cleaned.
+     - **Why:** trimming each color on its own and giving the trimmings to the base
+       left base-colored hairlines between touching colors, and gaps in the kept
+       outline band. Measured on the four approved plans with the Task 3 code:
+       - 1.0–21.3 mm² of base color where the plan has another color, in 2,844–9,882
+         pieces;
+       - on Roadie with the outline kept, 19.7 mm² trimmed from the outline band, which
+         is narrower than 0.4 mm in places after smoothing;
+       - at most 0.15 mm² per plan in pieces touching the outline: the slivers this
+         decision was for.
+     - **The owner chose** "Match preview": build exactly the approved preview, that is,
+       the smoothed fine map inside the smoothed outline, with no further trimming.
+     - **What is reported instead:** thin parts of each color are reported as
+       information (narrower than `flat.sliver.opening_width`, measured as
+       `tdmg.flat.thin_regions` does), and the slicer checks in step 4 judge whether
+       they print.
+     - **Effect on Decision 4:** the base top is then S minus the inlays, which is the
+       base color's own fine region inside S, to float64 rounding.
+     - A cleanup side effect must not draw outlines: the owner's standing rule that
+       styles are explicit options.
 6. **The bodies (face up; face down is a flip, decided by measurement in step 4).**
    - **AMS base:** S extruded from 0 to T − d, united with the base top extruded from
      T − d to T. One manifold body.
-   - **AMS inlay for color c:** its cleaned region extruded from T − d to T, in place.
+   - **AMS inlay for color c:** its region (its fine region clipped to S, not cleaned:
+     Decision 5 replacement) extruded from T − d to T, in place.
    - **Glue base:**
      - S extruded to T, with a pocket of depth d for every glue region (Decision 8).
      - It equals the AMS base when no region is folded.
@@ -235,10 +258,14 @@ Codex critical review.
 3. **`color_geometry`: regions** (Decisions 3–5). Synthetic tests:
    - two flat colors in a square give an exact partition of S;
    - a three-color junction leaves no gap or overlap;
-   - a color border running along the outline leaves no sliver: it goes to the base;
-   - an inlay that cleaning erases is reported as vanished;
+   - (replaced 2026-11-12 with the Decision 5 replacement: no cleaning) a color border
+     running along the outline leaves no sliver: it goes to the base; now the strip is
+     kept and reported as thin;
+   - (replaced likewise) an inlay that cleaning erases is reported as vanished; now a
+     thin color stays an inlay with its thin area reported;
    - repeat runs are byte-identical;
-   - overlapping or gapped regions (built by hand) FAIL the partition check.
+   - (moved to Task 4, 2026-11-12 spec review: `C1.partition` is built there)
+     overlapping or gapped regions (built by hand) FAIL the partition check.
 4. **Bodies and AMS checks** (Decisions 6 and 9). Tests:
    - each body passes F1 and `export_check`;
    - the volumes sum to area × T;
@@ -246,6 +273,10 @@ Codex critical review.
    - a region deleted by hand FAILs it (a gap);
    - a five-color body set for a four-slot printer FAILs `C1.filaments`;
    - thickness ≤ skin depth is refused.
+   - (added 2026-11-12, Task 3 quality review) clipping by an oblique S leaves
+     sub-micron inlay and base-top parts (7e-7 to 2e-5 mm² measured on a synthetic map):
+     the bodies, F1 and `export_check` must handle or report them; any cutoff needs a
+     rule in `rules/` (CLAUDE.md rule 2), not a literal.
 5. **Glue** (Decision 8). Tests:
    - a square inlay's measured gap is the clearance (to the grid);
    - a concave corner's gap is at least the clearance;

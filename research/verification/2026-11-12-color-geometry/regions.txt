@@ -1,0 +1,26 @@
+Run 2026-11-12 on the Windows PC (working tree after Task 3): uv run python research/verification/2026-11-12-color-geometry/measure_regions.py
+
+== roadie-tol30-60-drop-v3-f64: color_regions 2.26 s; S 759.2 mm^2
+  base top: 7 parts; not base color in the plan 4.066e-16 mm^2 in 14 positive-area pieces (14 touch the outline); thin 1.19 mm^2
+  color 1: inlay, 7 parts, 211.51 mm^2; thin 0.93 mm^2 in 2146 pieces
+  color 2: inlay, 1 parts, 96.33 mm^2; thin 0.21 mm^2 in 773 pieces
+  color 3: inlay, 1 parts, 4.18 mm^2; thin 0.08 mm^2 in 101 pieces
+  warnings: []
+== roadie-tol30-60-keep-v4-f64: color_regions 5.98 s; S 759.2 mm^2
+  base top: 8 parts; not base color in the plan 0.000e+00 mm^2 in 0 positive-area pieces (0 touch the outline); thin 2.46 mm^2
+  color 1: inlay, 3 parts, 244.65 mm^2; thin 14.33 mm^2 in 8842 pieces
+  color 2: inlay, 8 parts, 150.34 mm^2; thin 1.19 mm^2 in 1771 pieces
+  color 3: inlay, 1 parts, 67.19 mm^2; thin 0.46 mm^2 in 717 pieces
+  warnings: []
+== oddie-60-merge-blues-v3-f64: color_regions 2.22 s; S 1677.9 mm^2
+  base top: 1 parts; not base color in the plan 0.000e+00 mm^2 in 0 positive-area pieces (0 touch the outline); thin 0.64 mm^2
+  color 1: inlay, 1 parts, 585.72 mm^2; thin 0.32 mm^2 in 1865 pieces
+  color 2: inlay, 3 parts, 430.17 mm^2; thin 0.50 mm^2 in 1931 pieces
+  color 3: inlay, 3 parts, 36.12 mm^2; thin 0.20 mm^2 in 484 pieces
+  warnings: []
+== oddie-60-keep-merge-blues-greens-v4-f64: color_regions 7.92 s; S 1677.9 mm^2
+  base top: 4 parts; not base color in the plan 0.000e+00 mm^2 in 0 positive-area pieces (0 touch the outline); thin 2.87 mm^2
+  color 1: inlay, 2 parts, 523.63 mm^2; thin 1.06 mm^2 in 2676 pieces
+  color 2: inlay, 8 parts, 236.31 mm^2; thin 4.09 mm^2 in 11655 pieces
+  color 3: inlay, 3 parts, 32.30 mm^2; thin 0.19 mm^2 in 445 pieces
+  warnings: []
