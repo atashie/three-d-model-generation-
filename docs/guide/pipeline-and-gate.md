@@ -42,9 +42,11 @@ valid solid can still include an unwanted background.
 - **`tdmg slice`** covers S9 (see below). It judges thin features from the G-code and
   replaces the placeholder F6 check with measured ones.
 - **`tdmg colors`** is the first half of S6 for flat multicolor (R2; see below). It
-  writes a color plan for review. It builds no geometry yet.
+  writes a color plan for review.
+- **`tdmg flat --colors`** builds the plan's colored bodies as STL files, for an AMS
+  print and for a glued print (see below). `tdmg slice` cannot slice them yet.
 
-There are no loops, bases, colored geometry or 3MF output yet.
+There are no loops, bases or 3MF output yet.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 
@@ -193,3 +195,64 @@ results differ is refused too; the owner-image results are measured on the Windo
 
 **Not proven:** every color rule is an untested hypothesis set from two images, and
 nothing has been printed from a color plan.
+
+## Colored bodies (`tdmg flat --colors`, 2026-11-12)
+
+`tdmg flat SELECTION_DIR --colors COLORS_DIR --thickness-mm T --out DIR` turns a ready
+color plan into solid bodies (attribute page:
+[C2 one body per filament](../print-types/attributes/color-multi.md)).
+
+**What it reads and refuses:** the selection folder and a `tdmg colors` folder made from
+it. It checks the plan with `verify_colors` first. It refuses, and writes nothing:
+- a plan that `verify_colors` refuses: changed, inconsistent, not ready, made from another
+  selection, or with rule values that differ from today's;
+- a `--width-mm` or `--printer` other than the plan's (both default to the plan's,
+  because the plan's cleanup used that width and that printer's nozzle);
+- any `--smooth-px`: the preview you approved drew the outline with
+  `flat.smooth.sigma_px`, so the model uses it too;
+- a `--thickness-mm` that is not above `color.skin.depth_mm` (0.6 mm), so that there is
+  base material under every inlay;
+- an `--out` folder that is not new or empty.
+
+**What it builds:**
+- **AMS version:** a base body over the whole silhouette, and one inlay body per other
+  color in the top 0.6 mm. The top is exactly the approved preview; nothing more is
+  cleaned.
+- **Glue version:** a base with 0.6 mm pockets, and per color the pieces, each 0.6 mm
+  thick and `color.glue.clearance_mm` (0.2 mm) smaller than its pocket on every side,
+  placed where it sits in the model. A region whose pieces would all be smaller than
+  `color.glue.min_piece_side_mm` squared (4 mm²) is folded into a neighbour; smaller
+  pieces in other regions are dropped, and the pocket area around them becomes base
+  color.
+- A plan made with `outlines: keep` and an outline color gets **no glue version**: a
+  drawn outline is not realistic to glue on, and the plan does not record which pixels
+  are the band. For a glue print, make the plan with `outlines: drop`.
+
+**Outputs:** `ams-base.stl` and `ams-color-<i>-<rrggbb>.stl` (one per inlay color),
+`glue-base.stl` and `glue-color-<i>-<rrggbb>.stl` (one per color with pieces), `top.png`,
+`parts.png` and the record `colored.json`, with `colorflat_id`. The names give the palette
+index and color, never AMS slots. Without a glue version there are no `glue-*.stl` and no
+`parts.png`.
+
+**Checks:** every body gets F1 and `F2.export_matches_geometry` on its written bytes. The
+AMS bodies also get `F4.color_partition`, `F4.filaments`, `F2.fits_build_volume` and
+`F5.triangles` (as one plate); the glue version gets `F4.glue_partition`, `F4.glue_fit`,
+and `F2.fits_build_volume` and `F5.triangles` per plate. `F3.thin_regions` is
+information only (UNKNOWN) and `F6.slicer` is UNKNOWN, so the verdict is always NOT
+CERTIFIED.
+
+**Exit codes:** as for `tdmg flat`, with `DIR/colored.json` for `DIR/flat.json`. 0 means
+the files are written and no check FAILed; 1 means they are written and a check FAILed;
+2 means an input or I/O error. An I/O failure while writing can leave a folder without
+`colored.json`; do not use such a folder.
+
+**What to open:** `top.png`, and compare it with the plan's `regions.png`: the colors
+should match. For the glue version, open `parts.png`: each glue piece has a number, and
+the legend lists the pieces per color, the folds and the leftovers. Check that the pieces
+are a size you can handle.
+
+**Not yet:** the folder has no `DIR/flat.json`, so `tdmg slice` refuses it until step 4
+of the color design. There is no 3MF yet (step 3). Nothing has been printed, and the
+three new rules are untested hypotheses. The runs on the owner's four plans are recorded
+in `research/verification/2026-11-12-color-geometry/colored-runs.txt` (Windows PC only):
+no check FAILed on any of them.

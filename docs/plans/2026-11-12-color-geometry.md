@@ -281,8 +281,10 @@ Codex critical review.
        5. **Cells:** they are rebuilt from the pockets (`color_cells`: one noding on the
           grid, with pinches joined), and the glue base is meshed from them.
      - **Visible effect, which the owner accepted:** a thin outline mostly disappears in
-       the glue version only; the AMS version keeps it. For a glue print with outlines,
-       set the outline color as the base (`base: N`).
+       the glue version only; the AMS version keeps it. (A suggestion first written here,
+       to make the outline color the base for a glue print with outlines, no longer
+       applies: since the Task 7 decision, a plan that keeps a drawn outline gets no
+       glue version at all.)
      - The leftover area per color is reported.
      - **Implementation note (controller, 2026-11-12, Task 5):** steps 3–4 as worded
        left the fine map's staircase teeth and the rounded-corner cusps as leftover

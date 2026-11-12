@@ -58,6 +58,12 @@ This is R2, flat multicolor (docs/PLAN.md section 3; roadmap step 3 in section 1
    - **Glue:** `glue/base.stl` (the silhouette with pockets) and `glue/<color>.stl` (that
      color's pieces, laid flat), with a parts sheet. The sheet lists the pieces per color
      and has a numbered diagram of where each piece goes.
+   - **As built (step 2, 2026-11-12; `docs/plans/2026-11-12-color-geometry.md`
+     Decision 10):** STL bodies only. The 3MF writer is step 3. The files are
+     `ams-base.stl`, `ams-color-<i>-<rrggbb>.stl`, `glue-base.stl` and
+     `glue-color-<i>-<rrggbb>.stl` (prefixes, not folders), with `top.png`, the parts
+     sheet `parts.png` and the record `colored.json`. A plan that keeps a drawn outline
+     gets no glue version (owner, Task 7).
 3. **`tdmg slice`** handles the 3MF with AMS settings in the pinned OrcaSlicer. It reports
    the color changes, the flush and prime-tower waste and the time from the G-code and
    the statistics. The glue STLs are each gated as R1 parts.
