@@ -80,6 +80,7 @@ from tdmg.smoothing import (
     LABELS_METHOD,
     SUPERSAMPLE,
     SmoothingError,
+    check_supersample,
     smooth_labels,
     smooth_outline,
 )
@@ -88,9 +89,10 @@ from tdmg.smoothing import (
 # owner's merges, the shade-pair flags and the ready flag. tdmg.colors/2 adds the
 # extraction, outline, merges, shade_pairs and ready fields; tdmg.colors/3 (Task 7e-b)
 # adds the outline_width_mm setting and the outline block's stroke_width_px,
-# wide_components and specks_not_drawn (the changed outline step is methods.outline).
+# wide_components and specks_not_drawn (the changed outline step is methods.outline);
+# tdmg.colors/4 (Task 8 review) adds the extraction fate "band".
 COLORS_ALGORITHM_VERSION = "colors-2"
-RECORD_SCHEMA = "tdmg.colors/3"
+RECORD_SCHEMA = "tdmg.colors/4"
 RECORD_NAME = "colors.json"
 OUTPUT_FILES = ("labels.png", "regions.png")
 LABELS_OUTSIDE = 255   # labels.png value outside the mask; palette indices are below it
@@ -437,7 +439,8 @@ def extracted_fate(e: dict) -> str:
     """What became of an extracted color (its record entry's fate), for the preview and
     the CLI."""
     return {"final": f"final {e['final_index']}", "merged": f"merged into {e['merged_into']}",
-            "outline": "outline color", "cleanup": "dropped by cleanup"}[e["fate"]]
+            "outline": "outline color", "band": "covered by the kept outline",
+            "cleanup": "dropped by cleanup"}[e["fate"]]
 
 
 def shade_pair_lines(shade: list[dict]) -> list[str]:
@@ -512,11 +515,41 @@ def make_colors(selection_dir, out_dir, *, width_mm, flags: dict, config_path,
 def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, printer,
                  supersample) -> dict:
     resolved = resolve_color_config(flags, config_path, rules, printer)
-    settings = resolved.settings
-    sigma, edge_rule = edge_sigma_px(settings["edges"], rules)
+    edge_sigma_px(resolved.settings["edges"], rules)    # refuse a bad preset before reading
     sel = read_selection(selection_dir, cutout=True)
     create_folder = check_output_dir(out_dir)
+    record, files, _ = build_colors(sel, width_mm, resolved.settings, resolved.as_record(),
+                                    rules, printer, supersample, render=True)
+    try:
+        data = record_text(record)
+    except ValueError as e:
+        raise ColorsError(f"the record cannot be stored as strict JSON: {e}") from None
+    write_outputs(out_dir, files, RECORD_NAME, data, create_folder=create_folder)
+    return json.loads(data)
 
+
+# The record fields that build_colors(render=False) sets to None, because they depend on
+# the fine map (OpenCV's float32 blur, whose last bits depend on its code path), on the PNG
+# encoder or on the software versions. verify_colors compares every other field of a
+# rebuilt record with the stored one. Dotted names are nested fields.
+UNRENDERED_FIELDS = ("tdmg_version", "environment", "outputs", "regions_pixels_sha256",
+                     "smoothing.vanished")
+
+
+def build_colors(sel, width_mm: float, settings, record_settings: dict, rules: dict,
+                 printer: PrinterProfile, supersample: int, *, render: bool
+                 ) -> tuple[dict, dict, np.ndarray]:
+    """A plan's record, output files and labels.png pixels (uint8, LABELS_OUTSIDE outside
+    the mask), in memory; nothing is read or written.
+
+    sel: a read_selection result with the cutout. settings: the resolved settings;
+    record_settings: their record form (settings, sources, config_sha256), stored as given.
+    render: True makes the fine map, labels.png and regions.png (make_colors). False
+    (verify_colors' rebuild) skips them: files is empty and the UNRENDERED_FIELDS are
+    None. Raises what plan_colors and the checks below raise.
+    """
+    sigma, edge_rule = edge_sigma_px(settings["edges"], rules)
+    supersample = check_supersample(supersample)
     mm_per_px = mask_mm_per_px(sel.mask, width_mm)
     limits = printable_limits_px(mm_per_px, rules, printer)
     plan = plan_colors(sel.cutout_rgb, sel.mask, settings, limits, rules)
@@ -534,8 +567,7 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         k, settings["colors"], len(merges), palette_cap(printer),
         outline=bool(outline.family),
         suggestions=[(p.j, p.i, p.hex_j, p.hex_i) for p in plan.shade_pairs])
-    smoothed = smooth_labels(cleaned.labels, sigma, supersample)
-    vanished = set(smoothed.vanished)
+    smoothed = smooth_labels(cleaned.labels, sigma, supersample) if render else None
     into = dict(merges)
     core = outline.core
     outline_record = {
@@ -571,11 +603,14 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     # The preview's outer outline is R1's smoothed one (Task 7e-b); display only, so its
     # sigma is recorded under "preview", not in the identity.
     outer_sigma = float(rules[SMOOTH_RULE].default)
-    regions = _regions_image(sel.cutout_rgb, sel.mask, palette, smoothed.fine,
-                             smoothed.supersample, changed_mask(plan.banded, cleaned),
-                             settings["edges"], vanished, extraction_palette, outline_record,
-                             shade_record, reason, outline_preview_mask(sel.mask, outer_sigma))
-    files = {"labels.png": png_bytes(labels8), "regions.png": png_bytes(regions)}
+    files, regions = {}, None
+    if render:
+        regions = _regions_image(sel.cutout_rgb, sel.mask, palette, smoothed.fine,
+                                 smoothed.supersample, changed_mask(plan.banded, cleaned),
+                                 settings["edges"], set(smoothed.vanished),
+                                 extraction_palette, outline_record, shade_record, reason,
+                                 outline_preview_mask(sel.mask, outer_sigma))
+        files = {"labels.png": png_bytes(labels8), "regions.png": png_bytes(regions)}
 
     methods = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
                "outline": outline.method, "shade": SHADE_METHOD, "cleanup": CLEANUP_METHOD,
@@ -588,7 +623,6 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     # thin share and the wide-area ratio when they were used).
     used_rules.update(dict(outline.thresholds))
     used_rules.update(dict(plan.shade_rules))
-    record_settings = resolved.as_record()
     limits_record = json_plain(dataclasses.asdict(limits))
     identity = colors_identity(
         methods=methods, selection_id=sel.record["selection_id"],
@@ -596,9 +630,9 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         mask_pixels_sha256=sel.record["mask_pixels_sha256"],
         settings=record_settings["settings"], width_mm=width_mm, printer=printer.id,
         nozzle_diameter_mm=limits.nozzle_diameter_mm, rules=used_rules,
-        supersample=smoothed.supersample)
+        supersample=supersample)
     record = {
-        "schema": RECORD_SCHEMA, "tdmg_version": __version__,
+        "schema": RECORD_SCHEMA, "tdmg_version": __version__ if render else None,
         "algorithm": COLORS_ALGORITHM_VERSION,
         "colors_id": colors_id(identity), "identity": identity,
         "input": {"selection_id": sel.record["selection_id"],
@@ -615,8 +649,9 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         # use). fate, followed through the steps' index arrays: final (final_index is its
         # index in the final palette; this includes the outline core when its wide areas
         # remain), merged (merged_into: the extraction index it went to), outline (an
-        # outline-family member that the outline handling removed) or cleanup (cleanup
-        # removed it); final_index is null unless the fate is final.
+        # outline-family member that the outline handling removed), band (the kept
+        # outline band painted over all of it) or cleanup (cleanup removed it);
+        # final_index is null unless the fate is final.
         "extraction": {"extract": settings["extract"], "n_extracted": n_ext,
                        "palette": extraction_palette},
         # The outline step: the family (extraction indices and hexes), its core (the
@@ -641,9 +676,9 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
         "cleanup": {k: v for k, v in json_plain(dataclasses.asdict(log)).items()
                     if k != "limits"},
         "smoothing": {"sigma_px": sigma, "edge_rule": edge_rule,
-                      "supersample": smoothed.supersample,  # method: methods.labels
-                      "vanished": [{"index": i, "hex": cleaned.hex[i]}
-                                   for i in smoothed.vanished]},
+                      "supersample": supersample,  # method: methods.labels
+                      "vanished": None if not render else [
+                          {"index": i, "hex": cleaned.hex[i]} for i in smoothed.vanished]},
         "methods": methods,
         "preview": {"scale": PREVIEW_SCALE,
                     "right_panel": "final colors from the fine map, nearest fine pixel to "
@@ -655,18 +690,14 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
                                    "cell_px": CHECKER_CELL_PX},
                     "changed_outline": "inner edge of the pixels cleanup changed, black and "
                                        "white dashes"},
-        "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
+        "outputs": ({name: hashlib.sha256(data).hexdigest() for name, data in files.items()}
+                    if render else None),
         # Decoded pixels, so a pixel difference can be told from a PNG encoding difference.
-        "regions_pixels_sha256": pixels_sha256(regions),
-        "environment": {**environment(), "scipy": scipy.__version__},
+        "regions_pixels_sha256": pixels_sha256(regions) if render else None,
+        "environment": {**environment(), "scipy": scipy.__version__} if render else None,
         "review": REVIEW,
     }
-    try:
-        data = record_text(record)
-    except ValueError as e:
-        raise ColorsError(f"the record cannot be stored as strict JSON: {e}") from None
-    write_outputs(out_dir, files, RECORD_NAME, data, create_folder=create_folder)
-    return json.loads(data)
+    return record, files, labels8
 
 
 def not_ready_reason(n_final: int, colors: int, n_merges: int, cap: int, *,

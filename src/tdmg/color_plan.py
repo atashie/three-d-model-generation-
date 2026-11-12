@@ -59,10 +59,11 @@ from tdmg.color_outline import (
 from tdmg.rules import Rule
 
 # What became of an extracted color: still in the final palette; merged by the owner into
-# another; removed by the outline handling (an outline-family member); removed by the
-# region cleanup. The outline core, when it keeps wide areas, follows the same remaps as any
-# other color, so its fate is final (or cleanup).
-FATES = ("final", "merged", "outline", "cleanup")
+# another; removed by the outline handling (an outline-family member); covered entirely by
+# the kept outline band (outlines: keep; possible when the band is wide or the color is
+# small); removed by the region cleanup. The outline core, when it keeps wide areas,
+# follows the same remaps as any other color, so its fate is final (or cleanup).
+FATES = ("final", "merged", "outline", "band", "cleanup")
 
 
 @dataclass(frozen=True, eq=False)
@@ -149,6 +150,7 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
     fate, final = [], []
     for i in range(n):
         r = outline.remap[i]
+        covered = False                        # every pixel painted over by the band
         if i in into:
             fate.append("merged")
             final.append(None)
@@ -167,8 +169,9 @@ def plan_colors(cutout_rgb, mask, settings: Mapping, limits: Limits,
             j = merged.remap[r]
             if j is not None and banded is not merged:
                 j = banded.remap[j]
+                covered = j is None
             j = final_of(j)
-        fate.append("final" if j is not None else "cleanup")
+        fate.append("final" if j is not None else "band" if covered else "cleanup")
         final.append(j)
     for k, h in enumerate(cleaned.hex):
         if not any(f == k and extracted.hex[i] == h for i, f in enumerate(final)):

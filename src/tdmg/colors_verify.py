@@ -19,20 +19,32 @@ import numpy as np
 from PIL import Image
 from pydantic import ValidationError
 
-from tdmg.color import ISLAND_RULE, OPENING_RULE, OUTSIDE, srgb_to_lab
+from tdmg.color import (
+    CLEANUP_METHOD,
+    ISLAND_RULE,
+    METHOD,
+    OPENING_RULE,
+    OUTSIDE,
+    ColorError,
+    srgb_to_lab,
+)
 from tdmg.color_config import (
     FURRY_RULE,
     KEYS,
     SMOOTH_RULE,
     ColorConfig,
     ColorConfigError,
+    check_base,
     check_extraction_indices,
     check_outline_width_setting,
+    palette_cap,
 )
 from tdmg.color_outline import (
     KEEP_RATIO_RULE,
+    OUTLINE_METHOD,
     SHADE_CHROMA_RULE,
     SHADE_HUE_RULE,
+    SHADE_METHOD,
     THIN_SHARE_RULE,
     keeps_wide_area,
     outline_core,
@@ -40,24 +52,34 @@ from tdmg.color_outline import (
 )
 from tdmg.color_plan import FATES
 from tdmg.colors import (
+    COLORS_ALGORITHM_VERSION,
     LABELS_OUTSIDE,
     OUTPUT_FILES,
     RECORD_NAME,
     RECORD_SCHEMA,
+    UNRENDERED_FIELDS,
     ColorsError,
+    build_colors,
     check_width_mm,
     colors_id,
     json_plain,
     mask_mm_per_px,
     shade_pair_records,
 )
+from tdmg.profiles import PrinterProfile, load_printer, printer_ids
+from tdmg.rules import load_rules
 from tdmg.selection import SelectionError, pixels_sha256, read_selection
-from tdmg.smoothing import SmoothingError, check_supersample, sigma_or_zero
+from tdmg.smoothing import LABELS_METHOD, SmoothingError, check_supersample, sigma_or_zero
 
 # --- verify_colors: reading a colors folder back (design step 2, geometry) ---------------
 
 EDGE_RULES = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE, "exact": None}
 SETTING_KEYS = KEYS
+# The only methods this code implements. A record naming another version (older or newer)
+# is refused: the rebuild below, and design step 2's fine map, would silently use these.
+SUPPORTED_METHODS = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
+                     "outline": OUTLINE_METHOD, "shade": SHADE_METHOD,
+                     "cleanup": CLEANUP_METHOD, "labels": LABELS_METHOD}
 
 
 @dataclass(frozen=True, eq=False)
@@ -82,7 +104,8 @@ class VerifiedColors:
     mm_per_px: float
 
 
-def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> VerifiedColors:
+def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
+                  rules: dict | None = None) -> VerifiedColors:
     """Read a tdmg colors folder and check it against its selection, or raise ColorsError.
     Nothing is written.
 
@@ -131,12 +154,13 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        from_hex and into_hex are the extraction's colors. Each merged_into is the merge
        setting's; each fate is one of FATES, with final exactly when final_index is set,
        merged exactly when merged_into is set, outline only for an index in
-       outline.family (and always for a family member other than the core), and cleanup
+       outline.family (and always for a family member other than the core), band only
+       for a color outside the family under outlines keep with a family, and cleanup
        only for a hex in cleanup.dropped_hex; each final_index is a final palette index
        with the same hex; and every final palette entry is the final_index of at least
        one extraction entry with the same hex. The shade pairs are what
        tdmg.color_outline.shade_pairs gives again on the recorded Lab (its numbers to
-       LAB_ABS_TOL), for the colors whose fate is final or cleanup other than the core,
+       LAB_ABS_TOL), for the colors whose fate is final, band or cleanup other than the core,
        with the identity's two shade rules.
     5. The outputs are exactly labels.png and regions.png, and each file's SHA-256 is the
        record's. With check_preview (the default), regions.png is decoded and its pixels
@@ -151,10 +175,21 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
        outline.keep_width.px, as the keep width over that scale.
     8. The selection (read_selection, with the cutout): its selection_id, mask and cutout
        pixel hashes are the identity's, and labels.png is 255 exactly outside its mask.
+    9. The rebuild: tdmg.colors.build_colors(render=False) runs the plan again on the
+       selection with the identity's settings, printer and rule values (the registry's
+       rules, given or tdmg.rules.load_rules(), with their values replaced by the
+       identity's). labels.png's pixels must equal the rebuilt labels, and the record must
+       equal the rebuilt one in every field except UNRENDERED_FIELDS and settings (whose
+       sources and config hash cannot be rebuilt; settings.settings is checked in 3).
+       So a labels.png or record changed by hand, with its hashes updated, is refused.
+    The printer (checked first, with 2) is the profile the identity names, a known profile
+    id; its nozzle must be the identity's, and settings.colors at most its palette cap.
+    Settings must not be null, and the identity's methods must be SUPPORTED_METHODS.
 
-    What it cannot check: other record fields (such as the cleanup log, the final
-    palette's Lab values and the thinness values themselves) are as the record says; only a
-    rerun of make_colors reproduces them.
+    What it cannot check: the UNRENDERED_FIELDS are as the record says, and regions.png is
+    only hashed, not redrawn. The rebuild proves that the plan follows from the recorded
+    inputs with this code on this machine; a plan made on a machine whose results differ is
+    refused (the owner-image results are measured on the Windows PC only).
     OSError (an unreadable file) propagates; the CLI maps it to exit 2, as for colors.
     """
     colors_dir = Path(colors_dir)
@@ -170,7 +205,8 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True) -> V
     if not isinstance(record.get("identity"), dict):
         raise ColorsError(f"{path} has no identity block")
     try:
-        return _verify(colors_dir, record, selection_dir, check_preview)
+        return _verify(colors_dir, record, selection_dir, check_preview,
+                       load_rules() if rules is None else rules)
     except (KeyError, TypeError, AttributeError, IndexError) as e:
         raise ColorsError(f"{path} is missing or has an invalid field: {e!r}") from None
     except ArithmeticError as e:          # OverflowError, ZeroDivisionError ...
@@ -181,14 +217,35 @@ def _inconsistent(field: str) -> ColorsError:
     return ColorsError(f"colors.json is inconsistent: {field} does not match the identity")
 
 
-def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str | None]:
+def _identity_printer(ident: dict) -> PrinterProfile:
+    """The profile the identity names, with the identity's nozzle."""
+    pid = ident["printer"]
+    if not isinstance(pid, str) or pid not in printer_ids():
+        raise ColorsError(f"identity.printer {pid!r} is not a known printer profile")
+    printer = load_printer(pid)
+    if float(printer.nozzle_diameter_mm) != ident["nozzle_diameter_mm"]:
+        raise ColorsError(f"identity.nozzle_diameter_mm {ident['nozzle_diameter_mm']!r} is "
+                          f"not the {pid} profile's nozzle ({printer.nozzle_diameter_mm})")
+    return printer
+
+
+def _identity_values(ident: dict, family, printer: PrinterProfile
+                     ) -> tuple[dict, float, int, float, str | None]:
     """Check the identity's types; return its settings, width, supersample, sigma and the
-    edges rule id. family: the record's outline family (whether the keep width is used)."""
+    edges rule id. family: the record's outline family (whether the keep width is used).
+    printer: the identity's profile (settings.colors must be within its palette cap)."""
     settings = ident["settings"]
     if not isinstance(settings, dict) or set(settings) != set(SETTING_KEYS):
         raise ColorsError(f"identity.settings must hold exactly {', '.join(SETTING_KEYS)}")
+    nulls = [key for key, value in settings.items() if value is None]
+    if nulls:
+        raise ColorsError(f"identity.settings.{nulls[0]} is null; a resolved setting always "
+                          "has a value")
+    if ident["methods"] != SUPPORTED_METHODS:
+        raise ColorsError("identity.methods are not the methods this version implements "
+                          f"({SUPPORTED_METHODS}); remake the plan with this version")
     try:
-        ColorConfig.model_validate(settings)
+        ColorConfig.model_validate(settings, context={"cap": palette_cap(printer)})
     except ValidationError as e:
         err = e.errors()[0]
         raise ColorsError(f"identity.settings.{err['loc'][0]} is invalid: {err['msg']} "
@@ -222,8 +279,8 @@ def _identity_values(ident: dict, family) -> tuple[dict, float, int, float, str 
     return settings, width, supersample, sigma, edge_rule
 
 
-def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
-            ) -> VerifiedColors:
+def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
+            registry: dict) -> VerifiedColors:
     ident = record["identity"]
     if colors_id(ident) != record["colors_id"]:
         raise ColorsError("colors.json is inconsistent: colors_id does not match its identity")
@@ -236,8 +293,9 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
         raise ColorsError("colors.json is inconsistent: ready is true but there is a "
                           "not_ready_reason")
     outline = record["outline"]
-    settings, width_mm, supersample, sigma, edge_rule = _identity_values(ident,
-                                                                         outline["family"])
+    printer = _identity_printer(ident)
+    settings, width_mm, supersample, sigma, edge_rule = _identity_values(
+        ident, outline["family"], printer)
     _check_extraction_settings(settings, record["extraction"]["n_extracted"],
                                outline["family"], outline["core"])
     inp, sm, lim = record["input"], record["smoothing"], record["limits"]
@@ -314,7 +372,9 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool
         if got != want:
             raise ColorsError(f"colors.json is inconsistent: {field} is not what width_mm, "
                               "the rules and labels.png give")
-    _check_selection(selection_dir, ident, inside)
+    sel = _check_selection(selection_dir, ident, inside)
+    _check_rebuild(record, labels8, sel, settings, width_mm, supersample, printer,
+                   registry)
     labels = np.where(inside, labels8.astype(np.int32), OUTSIDE).astype(np.int32)
     labels.flags.writeable = False
     return VerifiedColors(record=record, labels=labels, palette=palette,
@@ -337,6 +397,10 @@ def _check_palette(palette: list, base_index, base) -> int:
     counts = [p["count"] for p in palette]
     if counts != sorted(counts, reverse=True):
         raise ColorsError("colors.json is inconsistent: palette counts increase")
+    try:
+        check_base(base, k)
+    except ColorConfigError as e:
+        raise ColorsError(f"colors.json is inconsistent: settings.{e}") from None
     want = 0 if base == "auto" else base
     if base_index != want or [p["base"] for p in palette] != [i == want for i in range(k)]:
         raise ColorsError("colors.json is inconsistent: base_index and the palette's base "
@@ -521,6 +585,10 @@ def _check_fates(record: dict, settings: dict, palette: list) -> None:
             why = "it is an outline-family member other than the core"
         elif fate == "cleanup" and e["hex"] not in dropped:
             why = "its hex is not in cleanup.dropped_hex"
+        elif fate == "band" and (settings["outlines"] != "keep" or not outline["family"]
+                                 or i in outline["family"]):
+            why = ("only a color outside the outline family, under outlines: keep, can be "
+                   "covered by the kept band")
         if why:
             raise ColorsError(f"colors.json is inconsistent: extraction entry {i} has fate "
                               f"{fate!r} but {why}")
@@ -540,7 +608,7 @@ def _check_shade_pairs(record: dict, rules: dict) -> None:
     ext = record["extraction"]["palette"]
     core = record["outline"]["core"]
     candidates = [e["index"] for e in ext
-                  if e["fate"] in ("final", "cleanup") and e["index"] != core]
+                  if e["fate"] in ("final", "band", "cleanup") and e["index"] != core]
     want = shade_pair_records(shade_pairs([e["lab"] for e in ext], [e["hex"] for e in ext],
                                           candidates, rules[SHADE_HUE_RULE],
                                           rules[SHADE_CHROMA_RULE]))
@@ -590,7 +658,8 @@ def _decode(data: bytes, name: str, mode: str) -> np.ndarray:
         raise ColorsError(f"{name} is not a readable image: {e}") from None
 
 
-def _check_selection(selection_dir, ident: dict, inside: np.ndarray) -> None:
+def _check_selection(selection_dir, ident: dict, inside: np.ndarray):
+    """The selection the identity names, read with its cutout; labels exactly in its mask."""
     try:
         sel = read_selection(selection_dir, cutout=True)
     except SelectionError as e:
@@ -603,3 +672,73 @@ def _check_selection(selection_dir, ident: dict, inside: np.ndarray) -> None:
     if inside.shape != sel.mask.shape or not np.array_equal(inside, sel.mask):
         raise ColorsError("labels.png labels pixels outside the selection's mask, or leaves "
                           "pixels inside it unlabelled")
+    return sel
+
+
+def _without(record: dict, fields) -> dict:
+    """A copy of record with the dotted fields removed (a missing one is ignored)."""
+    out = json.loads(json.dumps(record))
+    for field in fields:
+        *parents, last = field.split(".")
+        node = out
+        for key in parents:
+            node = node.get(key) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            node.pop(last, None)
+    return out
+
+
+def _check_rebuild(record: dict, labels8: np.ndarray, sel, settings: dict, width_mm: float,
+                   supersample: int, printer: PrinterProfile, registry: dict) -> None:
+    """Check 9 of verify_colors: the plan rebuilt from the identity equals the record."""
+    ident_rules = record["identity"]["rules"]
+    unknown = sorted(set(ident_rules) - set(registry))
+    if unknown:
+        raise ColorsError(f"identity.rules name rules the registry does not have: {unknown}")
+    rules = {**registry, **{rid: registry[rid].model_copy(update={"default": value})
+                            for rid, value in ident_rules.items()}}
+    try:
+        rebuilt, _, rebuilt_labels = build_colors(sel, width_mm, settings, record["settings"],
+                                                  rules, printer, supersample, render=False)
+    except (ColorConfigError, ColorError, ColorsError, SmoothingError) as e:
+        raise ColorsError(f"the plan cannot be rebuilt from its identity: {e}") from None
+    if not np.array_equal(rebuilt_labels, labels8):
+        n = int((rebuilt_labels != labels8).sum())
+        raise ColorsError(f"labels.png differs from the plan rebuilt from its identity in {n} "
+                          "pixels (changed by hand, or made by a version or machine whose "
+                          "results differ)")
+    skip = (*UNRENDERED_FIELDS, "settings")
+    where = _first_difference(_without(record, skip),
+                              _without(json.loads(json.dumps(rebuilt)), skip), "")
+    if where is not None:
+        raise ColorsError("colors.json differs from the plan rebuilt from its identity at "
+                          f"{where or 'the top level'}")
+
+
+def _first_difference(got, want, path: str) -> str | None:
+    """The path of the first difference between two JSON values, or None. A float may
+    differ from the other number by LAB_ABS_TOL (last-digit differences of float
+    functions between C libraries, as for the Lab check); everything else, ints, bools
+    and strings included, must be equal."""
+    if isinstance(got, dict) and isinstance(want, dict):
+        if set(got) != set(want):
+            return f"{path} (keys)"
+        for key in sorted(got):
+            where = _first_difference(got[key], want[key], f"{path}.{key}" if path else key)
+            if where is not None:
+                return where
+        return None
+    if isinstance(got, list) and isinstance(want, list):
+        if len(got) != len(want):
+            return f"{path} (length)"
+        for i, (a, b) in enumerate(zip(got, want, strict=True)):
+            where = _first_difference(a, b, f"{path}[{i}]")
+            if where is not None:
+                return where
+        return None
+    if (isinstance(got, float) or isinstance(want, float)) and not (
+            isinstance(got, bool) or isinstance(want, bool)):
+        same = (isinstance(got, numbers.Real) and isinstance(want, numbers.Real)
+                and math.isclose(got, want, rel_tol=0.0, abs_tol=LAB_ABS_TOL))
+        return None if same else path
+    return None if type(got) is type(want) and got == want else path

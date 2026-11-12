@@ -163,7 +163,7 @@ before any geometry is built.
 overrides the rules and the printer profile. Unknown keys and values are refused. The
 keys are `colors` (the most colors in the final palette; default 4, the AMS lite's
 slots), `extract`, `edges`, `base` (`auto` is the largest color), `outlines`,
-`outline_color` (`auto`, `none` or an extraction index), `merge` (a list of
+`outline_color` (`auto`, `none`, or a list of extraction indices such as `[3]`), `merge` (a list of
 `[from, into]` extraction indices) and `outline_width_mm`. For example:
 
 ```yaml
@@ -179,6 +179,13 @@ image, the extracted colors with their indices and flags, and the final regions.
 **Exit codes:** 0 means the plan is ready. 1 means the files are written but more colors
 remain than `colors` allows; choose merges from the preview and run again. A plan that is
 not ready cannot be built. 2 means an input, config or I/O error.
+
+**Checking a plan:** `tdmg.colors_verify.verify_colors` reads a plan back with its
+selection folder. It checks the record's own consistency and the printer's color cap, then
+runs the plan again from the selection and the recorded settings and rules. The labels and
+the record must come out the same (floats to the last digits), so a plan edited by hand is
+refused. A plan made on a machine whose results differ is refused too; the owner-image
+results are measured on the Windows PC only.
 
 **Not proven:** every color rule is an untested hypothesis set from two images, and
 nothing has been printed from a color plan.

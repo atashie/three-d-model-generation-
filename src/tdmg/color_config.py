@@ -263,6 +263,11 @@ def read_config(path: str | Path) -> tuple[dict, str]:
     except yaml.YAMLError as e:
         raise ColorConfigError(f"{where} is not valid YAML: {e}") from None
     if raw is None:
+        # An empty or comment-only file has no document node and means "no settings". A
+        # document that is an explicit null (`null`, `~`) is not a mapping: refused below.
+        if yaml.compose(text, Loader=_UniqueKeyLoader) is not None:
+            raise ColorConfigError(f"{where} must be a mapping of settings (key: value), "
+                                   "not null")
         raw = {}
     if not isinstance(raw, dict):
         raise ColorConfigError(f"{where} must be a mapping of settings (key: value), "

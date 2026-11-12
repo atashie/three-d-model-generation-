@@ -152,6 +152,13 @@ face: auto           # auto | up | down
   only for internal consistency, because they are results outside the identity.
 - **Clipping:** the fine region map is clipped to the R1 outline intersected with the
   image box (the outline can overshoot the image by up to about 2e-6 px).
+- **The fine map is not byte-stable across OpenCV code paths** (added 2026-11-11, Task 8
+  review). Both `smooth_labels` and R1's `smooth_outline` blur in float32, and the last
+  bits depend on OpenCV's code path: switching `cv2.setUseOptimized` changed 3 fine
+  pixels in a 17 × 17 test and the outline coordinates of all five owner selections. In
+  float64 the blur was bitwise the same both ways on every case tried. So step 2 must
+  gate its geometry by its own checks, not by reproducing the fine map's bytes. Moving
+  both to float64 is open: it changes R1's outputs, so the owner decides.
 
 ## Testing
 

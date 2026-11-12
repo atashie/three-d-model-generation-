@@ -73,16 +73,20 @@ All of these are untested hypotheses. The color rules rest on two images.
 | Symptom | Cause | Check | Mitigation |
 |---|---|---|---|
 | Too many colors for the AMS | Shading or outlines give extra colors | The record's `ready` flag; exit 1 | Merge flagged shade pairs, or raise `colors` if the setup has more slots |
-| Outline left on some edges only | Cleanup removes only the thinnest parts of a line | The owner's preview review | `outlines` is an explicit choice: drop removes it everywhere, keep redraws it everywhere |
+| Outline left on some edges only | Cleanup removes only the thinnest parts of a line | The owner's preview review | `outlines` is an explicit choice: drop removes it everywhere; keep redraws it as one even band along every line, with small breaks where lines meet (cleanup removed 1.7% of Roadie's band and 0.3% of Oddie's at 0.5 mm) |
 | A wanted dark area disappears | `drop` treats it as outline | The preview; the record lists the kept areas | `outlines: keep`, or report the image so the rule can be checked |
-| A small colored detail is lost | It is below the printable size | The record's cleanup counts | Print larger (a larger `--width-mm`) |
+| A small colored detail is lost | It is below the printable size, or a wide kept outline covers it | The record's cleanup counts; the fate `band` in the extraction list | Print larger (a larger `--width-mm`), or a narrower `outline_width_mm` |
 | Gaps or overlaps between colors | Each color smoothed on its own | One shared smoothing of all borders (by construction) | None needed |
 | The wrong filament in a slot | The file names colors, not slots | The palette in the preview and record | Assign spools in the slicer from the palette |
 
 ## Required checks
 
-- **Step 1 (exists):** `verify_colors` re-reads the plan and refuses a changed or
-  inconsistent folder. The plan must be ready.
+- **Step 1 (exists):** `verify_colors` re-reads the plan with its selection folder. It
+  checks the record's consistency, the printer's color cap and the method versions, then
+  runs the plan again from the selection and the recorded settings and rules: the labels
+  and the record must come out the same. So a folder changed by hand is refused, even with
+  its hashes updated. The plan must be ready. The preview (`regions.png`) is only hashed,
+  not redrawn.
 - **Step 2 (planned):** each color body is closed; the bodies do not overlap; together
   they equal the R1 shape; the filament count is at most `colors`; the color changes
   read from the G-code match the plan.
@@ -109,6 +113,11 @@ Each needs a test print. None is done.
 
 - Nothing is printed. No geometry is built from a color plan yet.
 - The rules rest on two images, and the wide-area rule on one example.
-- The owner-image tests ran on the Windows PC only, not on the Mac.
+- The owner-image tests ran on the Windows PC only, not on the Mac. A plan made on one
+  machine and checked on another is refused if their results differ.
+- The smoothed region borders (the fine map) depend in their last float bits on which
+  internal code path OpenCV uses (measured on the PC: switching OpenCV's optimisations
+  changed 3 fine pixels in a small test). `labels.png` and `colors_id` do not depend on
+  it. R1's outline smoothing has the same property.
 - Empty spots between parts of the subject are not filled. No evidence shows a need yet.
 - The color changes and the purge waste per change are not measured.

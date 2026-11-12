@@ -203,7 +203,7 @@ def test_outputs_and_record_schema(done, sel):
     assert sorted(p.name for p in out.iterdir()) == sorted([*OUTPUT_FILES, "colors.json"])
     assert json.loads((out / "colors.json").read_bytes()) == rec
     assert set(rec) == TOP_KEYS
-    assert rec["schema"] == RECORD_SCHEMA == "tdmg.colors/3"
+    assert rec["schema"] == RECORD_SCHEMA == "tdmg.colors/4"
     assert rec["algorithm"] == COLORS_ALGORITHM_VERSION == "colors-2"
     for name in OUTPUT_FILES:
         assert rec["outputs"][name] == hashlib.sha256((out / name).read_bytes()).hexdigest()
@@ -472,7 +472,7 @@ def _swap_counts(r):
     (lambda r: r["identity"]["rules"].update({"flat.sliver.opening_width": 0.5}),
      "colors_id does not match"),
     (lambda r: r.pop("identity"), "identity"),
-    (lambda r: r.update(schema="tdmg.colors/1"), "not a tdmg.colors/3 record"),
+    (lambda r: r.update(schema="tdmg.colors/1"), "not a tdmg.colors/4 record"),
     (lambda r: r["palette"].pop(), "final_index is not the final palette entry"),
     (lambda r: r["palette"][1].update(index=5), "palette indices are not 0..k-1"),
     (lambda r: r["palette"][0].update(hex="#000000"), "is not its rgb"),
@@ -536,10 +536,18 @@ def test_verify_colors_refuses_an_identity_that_cannot_be_hashed(done, sel, tmp_
 
 
 def test_verify_colors_maps_arithmetic_errors(done, sel, tmp_path):
-    # A huge nozzle overflows the island area (a float ** 2): ColorsError, not a crash.
+    # A huge island rule overflows the island area (a float ** 2): ColorsError, not a crash.
     d = _copy(done[1], tmp_path, "colors")
-    _edit_record(d, _edit_identity(lambda i: i.update(nozzle_diameter_mm=1e300)))
+    _edit_record(d, _edit_identity(
+        lambda i: i["rules"].update({"flat.island.min_square_side": 1e300})))
     with pytest.raises(ColorsError, match="cannot be computed"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_a_nozzle_other_than_the_profiles(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, _edit_identity(lambda i: i.update(nozzle_diameter_mm=0.6)))
+    with pytest.raises(ColorsError, match="not the bambu-a1 profile's nozzle"):
         verify_colors(d, sel)
 
 
@@ -1635,3 +1643,108 @@ def test_the_right_panel_fills_a_notch_the_smoothing_closes(tmp_path):
     assert np.array_equal(left[y, x], board[y, x])
     blue = next(e["rgb"] for e in rec["palette"] if e["hex"] == "#1e1ec8")
     assert right[y, x].tolist() == blue
+
+
+# --- Task 8 Codex review: what verify_colors must refuse ---------------------------------
+
+def _set_setting(key, value):
+    """Change a resolved setting in the identity and its record copy, colors_id recomputed."""
+    def edit(r):
+        r["identity"]["settings"][key] = value
+        r["settings"]["settings"][key] = value
+        r["colors_id"] = colors_id(r["identity"])
+    return edit
+
+
+def test_verify_colors_refuses_colors_above_the_printers_cap(not_ready, sel5, tmp_path):
+    # A not-ready 5-color plan made "ready" by raising colors to 5 (above the A1's 4).
+    d = _copy(not_ready[1], tmp_path, "colors")
+
+    def make_ready(r):
+        _set_setting("colors", 5)(r)
+        r.update(ready=True, not_ready_reason=None)
+    _edit_record(d, make_ready)
+    with pytest.raises(ColorsError, match=r"identity.settings.colors .*palette cap"):
+        verify_colors(d, sel5)
+
+
+@pytest.mark.parametrize("base, message", [
+    (4, "base 4 is not a color index"), (None, "identity.settings.base is null")])
+def test_verify_colors_refuses_a_base_outside_the_palette(done, sel, tmp_path, base, message):
+    d = _copy(done[1], tmp_path, "colors")
+
+    def edit(r):
+        _set_setting("base", base)(r)
+        r["base_index"] = base
+        for p in r["palette"]:
+            p["base"] = False
+    _edit_record(d, edit)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_an_unsupported_method(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+
+    def edit(r):
+        for m in (r["identity"]["methods"], r["methods"]):
+            m["labels"] = "unknown-future-method/999"
+        r["colors_id"] = colors_id(r["identity"])
+    _edit_record(d, edit)
+    with pytest.raises(ColorsError, match="not the methods this version implements"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_labels_moved_by_hand(done, sel, tmp_path):
+    # The foreground labels shifted cyclically (the counts stay), labels.png's hash updated:
+    # every earlier check passes, the rebuild does not.
+    d = _copy(done[1], tmp_path, "colors")
+    labels = np.array(Image.open(d / "labels.png"))
+    inside = labels != LABELS_OUTSIDE
+    labels[inside] = np.roll(labels[inside], 1000)
+    Image.fromarray(labels).save(d / "labels.png")
+    digest = hashlib.sha256((d / "labels.png").read_bytes()).hexdigest()
+    _edit_record(d, lambda r: r["outputs"].update({"labels.png": digest}))
+    with pytest.raises(ColorsError, match="labels.png differs from the plan rebuilt"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_a_record_field_changed_by_hand(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, lambda r: r["quantize"].update(iterations=r["quantize"]["iterations"] + 1))
+    with pytest.raises(ColorsError, match="rebuilt from its identity at quantize.iterations"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_ignores_only_the_unrendered_fields(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+
+    def edit(r):
+        r["tdmg_version"] = "0.0.0-other"
+        r["environment"] = {"python": "other"}
+        r["smoothing"]["vanished"] = [{"index": 0, "hex": "#000000"}]
+        r["settings"]["sources"]["colors"] = "config"
+    _edit_record(d, edit)
+    verify_colors(d, sel)
+
+
+def test_a_color_the_kept_band_covers_has_fate_band(cartoon_done, tmp_path):
+    # A 5 mm band on the 11 mm cartoon paints over two whole colors. Before the fix, their
+    # fate was cleanup with no cleanup entry, and verify_colors refused a ready plan.
+    sel = cartoon_done[2]
+    cfg = tmp_path / "wide.yaml"
+    cfg.write_bytes(b"outlines: keep\noutline_width_mm: 5.0\n")
+    rec = run(sel, tmp_path / "out", width_mm=11.0, config_path=cfg)
+    fates = [e["fate"] for e in rec["extraction"]["palette"]]
+    assert fates.count("band") == 2 and rec["ready"]
+    assert all(e["final_index"] is None for e in rec["extraction"]["palette"]
+               if e["fate"] == "band")
+    verify_colors(tmp_path / "out", sel)
+    d = _copy(tmp_path / "out", tmp_path, "drop")
+
+    def as_drop(r):
+        _set_setting("outlines", "drop")(r)
+        r["outline"]["outlines"] = "drop"
+    _edit_record(d, as_drop)
+    with pytest.raises(ColorsError, match="covered by the kept band"):
+        verify_colors(d, sel)

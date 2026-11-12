@@ -78,7 +78,7 @@ def test_a_color_cleanup_removes_has_fate_cleanup():
 
 
 def test_every_fate_is_known():
-    assert set(FATES) == {"final", "merged", "outline", "cleanup"}
+    assert set(FATES) == {"final", "merged", "outline", "band", "cleanup"}
     assert set(plan(merge=((4, 3),)).fate) <= set(FATES)
 
 

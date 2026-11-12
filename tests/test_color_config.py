@@ -574,3 +574,14 @@ def test_an_outline_width_rule_at_the_opening_or_in_another_unit_is_refused():
     rules = {k: v for k, v in RULES.items() if k != rid}
     r = resolve_color_config({"outline_width_mm": 0.5}, None, rules, A1)
     assert r.settings["outline_width_mm"] == 0.5
+
+
+@pytest.mark.parametrize("text", ["null\n", "~\n", "--- null\n", "# a comment\nnull\n"])
+def test_a_file_that_is_an_explicit_null_is_refused(tmp_path, text):
+    # Only an empty or comment-only file means "no settings" (Codex review, Task 8).
+    with pytest.raises(ColorConfigError, match="must be a mapping.*not null"):
+        _resolve(path=_config(tmp_path, text))
+
+
+def test_a_comment_only_file_still_means_no_settings(tmp_path):
+    assert _resolve(path=_config(tmp_path, "# nothing set\n")).sources["edges"] == "default"
