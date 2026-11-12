@@ -21,10 +21,11 @@ It also writes a parts sheet and the checks that the bodies partition the R1 sha
 - **Checks:** a second new module, `src/tdmg/color_checks.py`, holds the new checks.
 - **The command:** `tdmg.flat` gets `make_colored_flat`. It reuses R1's outline, cleaning,
   extrusion and F-checks, and writes its own record (`colored.json`) in the style of
-  `flat.json`: canonical JSON, the record last, and an id that hashes the identity.
+  `DIR/flat.json`: canonical JSON, the record last, and an id that hashes the identity.
 
 **Tech stack:**
-- shapely 2.2 / GEOS 3.14: the coverage functions and fixed-precision overlay;
+- shapely 2.2 / GEOS 3.14: overlays (after Task 1, plain float64 ones, with no coverage
+  functions and no fixed grid);
 - manifold3d (extrusion);
 - trimesh (STL);
 - Pillow (previews);
@@ -86,6 +87,18 @@ Codex critical review.
      results consistent edges. Task 1 measures the gaps and overlaps with and without
      the grid, and fixes `GRID_MM`, well below the STL's float32 rounding at these
      sizes.
+   - **Amended after Task 1 (2026-11-12,
+     `research/verification/2026-11-12-color-geometry/`):** on the four approved plans:
+     - The raw (unsimplified) boundaries give at most about 244,000 triangles, a quarter
+       of F5.
+     - Plain overlays with no grid gave zero overlap and gaps of at most 7e-12 mm².
+     - A 1e-6 mm grid raised the gaps to about 1e-6 mm².
+     - `coverage_is_valid` was false on every plan only because `mask_outline` drops
+       collinear vertices at three-color junctions (confirmed by adding them).
+
+     So: no simplification (`SIMPLIFY_PX` = 0), no fixed grid, and no coverage
+     functions. The partition is gated by `C1.partition`'s measured overlap and gap.
+     Its tolerance is derived in Task 4 from float64 area rounding, not from a grid.
 4. **Which colors become inlays.**
    - Every final palette color except the base (`base_index`) is an inlay.
    - The base color's top is S minus the union of the inlays, so the base absorbs
@@ -161,11 +174,11 @@ Codex critical review.
      - Their union equals S (symmetric-difference area within the same tolerance).
      - The body volumes sum to area(S) × T within the summed `export_check` volume
        tolerances.
-     - The tolerances are derived from `GRID_MM` (one grid step along the boundaries)
-       and stated in the check, as `export_check` does.
+     - The tolerances are derived (after Task 1: from float64 area rounding, since no
+       grid is used) and stated in the check, as `export_check` does.
    - **`C1.filaments`:** the number of non-empty AMS bodies is at most the plan's
      `colors` and the printer's palette cap.
-   - **`C1.glue_fit`:** each piece, buffered by (clearance − one grid step), lies within
+   - **`C1.glue_fit`:** each piece, buffered by (clearance − a derived rounding margin), lies within
      its pocket. It reports the smallest measured gap.
    - **Triangles:** F5 on the sum over all AMS bodies (one plate), and on each glue
      plate.
@@ -189,12 +202,11 @@ Codex critical review.
       - schema `tdmg.colorflat/1`, algorithm `colorflat-1`;
       - `colorflat_id` = SHA-256 of the canonical identity: the algorithm, `colors_id`,
         the selection's mask hash, and the params (width, thickness, printer, the three
-        new rules and the R1 rules with their values, `SIMPLIFY_PX`, `GRID_MM`,
-        supersample, sigma);
+        new rules and the R1 rules with their values, supersample, sigma);
       - per body: its color, area, volume, triangles and checks;
       - the folding and cleaning reports, the warnings, the output hashes, the
         environment, the verdict and the review line.
-    - **No `flat.json`:** `tdmg slice` refuses a colored folder until step 4 teaches it.
+    - **No `DIR/flat.json`:** `tdmg slice` refuses a colored folder until step 4 teaches it.
     - **How it is written:** as `make_flat` does. Everything is built, encoded and gated
       in memory, so a refused input writes nothing. A FAIL still writes the files for
       review.
@@ -225,9 +237,8 @@ Codex critical review.
    - a three-color junction leaves no gap or overlap;
    - a color border running along the outline leaves no sliver: it goes to the base;
    - an inlay that cleaning erases is reported as vanished;
-   - `coverage_simplify` keeps shared edges identical;
    - repeat runs are byte-identical;
-   - an invalid coverage (built by hand) is refused.
+   - overlapping or gapped regions (built by hand) FAIL the partition check.
 4. **Bodies and AMS checks** (Decisions 6 and 9). Tests:
    - each body passes F1 and `export_check`;
    - the volumes sum to area × T;

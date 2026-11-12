@@ -143,3 +143,66 @@
       validation: untested
       claim: "Oddie, the owner's second image, has no wide outline-family pixel, so it does not test this rule."
   notes: "A ratio of two widths, so it does not depend on the print width or the image's resolution, unlike a width in mm (the 7e-a record notes that at 120 mm a fixed 1.25 mm threshold would sit close to Roadie's strokes). The 7e-a widths were measured on components of the union of all members' wide pixels; the rule measures components of the core's own wide pixels, which are subsets of those, so their widths are no larger. The width is read on the pixel grid (about 1 px above the true width). With no family stroke, no wide area is kept. One positive example, Roadie's pupil; nothing else supports the value."
+
+# Colored flat geometry (R2 step 2, docs/plans/2026-11-12-color-geometry.md Decision 7).
+# The owner approved these three starting values on 2026-11-12. None has been printed:
+# the test strip in design step 5 sets them.
+- id: color.skin.depth_mm
+  kind: hypothesis
+  summary: Depth of the colored top skin. Colors other than the base sit only in the top this-many mm of a flat print, on a full-thickness base of the base color; for the glue route it is also the pocket depth and the piece thickness.
+  unit: mm
+  default: 0.6
+  scales_with_model: false
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: docs/plans/2026-11-11-color-design.md
+      locator: "The colors sit only in the top layers (0.6 mm, three"
+      provenance: unverified
+      validation: untested
+      claim: "The owner's design decision (2026-11-11): three 0.2 mm layers to start, to keep color changes low (at most 3 x (N - 1) for N colors). A choice, not a measurement."
+    - ref: docs/plans/2026-11-12-color-geometry.md
+      locator: "The owner approved it on 2026-11-12 (\"approved\"), with"
+      provenance: unverified
+      validation: untested
+      claim: The owner approved this value as the starting value for step 2.
+  notes: "In mm, not layers, so it does not change with the layer height; three layers at 0.2 mm. Untested: whether 0.6 mm of a light color hides a dark base (the test strip checks it), and whether 0.6 mm glue pieces survive handling."
+
+- id: color.glue.clearance_mm
+  kind: hypothesis
+  summary: Gap per side between a glue piece and its pocket. Each piece is the pocket's shape buffered inwards by this much (round joins), so the gap is at least this everywhere.
+  unit: mm
+  default: 0.2
+  scales_with_model: false
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: "research_notes/Image to printable 3D model landscape/fdm_design_rules_and_ai_ecosystem.md"
+      locator: "An Original Prusa will be accurate to at least 0.2 mm"
+      provenance: primary
+      validation: untested
+      claim: "Prusa's stated printer accuracy: a gap below it may not open. It is about accuracy in general, not about glued inlays."
+    - ref: "research_notes/Image to printable 3D model landscape/articulated_flexi_print_design.md"
+      locator: "\"standard\" 0.20–0.30, \"loose\" 0.30–0.40"
+      provenance: secondary
+      validation: untested
+      claim: "A vendor blog's PLA radial clearances for print-in-place joints; 0.2 mm is the low end of its standard fit. Moving joints, not glued parts."
+    - ref: "research_notes/Image to printable 3D model landscape/fdm_design_rules_and_ai_ecosystem.md"
+      locator: "sliding 0.1–0.3 mm"
+      provenance: secondary
+      validation: untested
+      claim: A secondary source's clearance range for sliding fits; 0.2 mm is its middle. Its press-fit and sliding conventions conflict with other sources (same note).
+  notes: "Per side, in mm. None of the sources is about glued inlays: a piece only has to drop in, and the glue fills the gap, so a slip fit is the target. The test strip (design step 5) sets the value. The slicer's X-Y compensation can change printed gaps; it is not set by tdmg."
+
+- id: color.glue.min_piece_side_mm
+  kind: hypothesis
+  summary: Smallest glue piece, as the side of a square. A piece whose area after shrinking by the clearance is below this squared (4 mm^2 at 2 mm) is folded into its neighbour with the longest shared boundary, and gets no pocket of its own.
+  unit: mm
+  default: 2.0
+  scales_with_model: false
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: docs/plans/2026-11-12-color-geometry.md
+      locator: "Our reason is a piece small enough to lose or to"
+      provenance: unverified
+      validation: untested
+      claim: "Our own guess, stated in the plan: no source for a smallest handleable glue piece was found. The owner approved it as the starting value (2026-11-12)."
+  notes: "Area = side^2. Handling, not printability: the AMS output keeps every region the slicer can print; this applies to the glue output only (design decision 4)."

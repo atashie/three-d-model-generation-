@@ -1,0 +1,76 @@
+Run 2026-11-12 on the Windows PC at a4a2a4f: uv run python research/verification/2026-11-12-color-geometry/measure_vectorize.py
+shapely 2.2.0 GEOS (3, 14, 1) numpy 2.5.4 opencv 5.0.0
+
+== roadie-drop: artifacts/colors-runs/roadie-tol30-60-drop-v3-f64
+verify_colors 0.44 s; image 836 x 792 px, width 60.0 mm, sigma 2.5 px, supersample 4, palette 4, base 0
+silhouette 0.08 s; area 759.2469 mm^2, scale 0.100802 mm/px
+smooth_labels 0.75 s; fine 3344 x 3168
+vectorize 0.76 s; colors [0, 1, 2, 3]; raw vertices 22554; coverage_is_valid False
+  SIMPLIFY_PX 0.0000 (0.0 / s): 0.00 s, vertices 22554, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.02 s, overlap 0.000e+00 mm^2, gap -1.251e-12 mm^2, skin triangles 61916, + base below skin 31196
+    grid 1e-06: clip 0.07 s, overlap 0.000e+00 mm^2, gap -3.133e-06 mm^2, skin triangles 61916, + base below skin 31196
+    grid 1e-05: clip 0.07 s, overlap 0.000e+00 mm^2, gap 5.295e-06 mm^2, skin triangles 61916, + base below skin 31196
+  SIMPLIFY_PX 0.1250 (0.5 / s): 0.01 s, vertices 22554, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.03 s, overlap 0.000e+00 mm^2, gap -1.251e-12 mm^2, skin triangles 61916, + base below skin 31196
+    grid 1e-06: clip 0.14 s, overlap 0.000e+00 mm^2, gap -3.133e-06 mm^2, skin triangles 61916, + base below skin 31196
+    grid 1e-05: clip 0.09 s, overlap 0.000e+00 mm^2, gap 5.295e-06 mm^2, skin triangles 61916, + base below skin 31196
+  SIMPLIFY_PX 0.2500 (1.0 / s): 0.01 s, vertices 9530, max boundary deviation 0.3180 px (0.03205 mm), coverage valid False
+    grid None: clip 0.01 s, overlap 0.000e+00 mm^2, gap -1.478e-12 mm^2, skin triangles 44340, + base below skin 31196
+    grid 1e-06: clip 0.06 s, overlap 0.000e+00 mm^2, gap -3.097e-06 mm^2, skin triangles 44340, + base below skin 31196
+    grid 1e-05: clip 0.05 s, overlap 0.000e+00 mm^2, gap 5.448e-06 mm^2, skin triangles 44340, + base below skin 31196
+tracemalloc peak (smooth_labels + vectorize) 121 MiB
+== roadie-keep: artifacts/colors-runs/roadie-tol30-60-keep-v4-f64
+verify_colors 0.77 s; image 836 x 792 px, width 60.0 mm, sigma 2.5 px, supersample 4, palette 4, base 0
+silhouette 0.08 s; area 759.2469 mm^2, scale 0.100802 mm/px
+smooth_labels 0.79 s; fine 3344 x 3168
+vectorize 0.71 s; colors [0, 1, 2, 3]; raw vertices 28191; coverage_is_valid False
+  SIMPLIFY_PX 0.0000 (0.0 / s): 0.00 s, vertices 28191, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.04 s, overlap 0.000e+00 mm^2, gap 1.251e-12 mm^2, skin triangles 143788, + base below skin 31196
+    grid 1e-06: clip 0.12 s, overlap 0.000e+00 mm^2, gap -3.176e-06 mm^2, skin triangles 143788, + base below skin 31196
+    grid 1e-05: clip 0.16 s, overlap 0.000e+00 mm^2, gap 5.204e-06 mm^2, skin triangles 143788, + base below skin 31196
+  SIMPLIFY_PX 0.1250 (0.5 / s): 0.01 s, vertices 28191, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.03 s, overlap 0.000e+00 mm^2, gap 1.251e-12 mm^2, skin triangles 143788, + base below skin 31196
+    grid 1e-06: clip 0.13 s, overlap 0.000e+00 mm^2, gap -3.176e-06 mm^2, skin triangles 143788, + base below skin 31196
+    grid 1e-05: clip 0.13 s, overlap 0.000e+00 mm^2, gap 5.204e-06 mm^2, skin triangles 143788, + base below skin 31196
+  SIMPLIFY_PX 0.2500 (1.0 / s): 0.02 s, vertices 12153, max boundary deviation 0.3430 px (0.03457 mm), coverage valid False
+    grid None: clip 0.01 s, overlap 0.000e+00 mm^2, gap 1.251e-12 mm^2, skin triangles 79636, + base below skin 31196
+    grid 1e-06: clip 0.07 s, overlap 0.000e+00 mm^2, gap -3.176e-06 mm^2, skin triangles 79636, + base below skin 31196
+    grid 1e-05: clip 0.07 s, overlap 0.000e+00 mm^2, gap 5.204e-06 mm^2, skin triangles 79636, + base below skin 31196
+tracemalloc peak (smooth_labels + vectorize) 121 MiB
+== oddie-merge-blues: artifacts/colors-runs/oddie-60-merge-blues-v3-f64
+verify_colors 1.00 s; image 1024 x 1013 px, width 60.0 mm, sigma 2.5 px, supersample 4, palette 4, base 0
+silhouette 0.09 s; area 1677.8829 mm^2, scale 0.075017 mm/px
+smooth_labels 1.21 s; fine 4096 x 4052
+vectorize 0.81 s; colors [0, 1, 2, 3]; raw vertices 29069; coverage_is_valid False
+  SIMPLIFY_PX 0.0000 (0.0 / s): 0.00 s, vertices 29069, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.03 s, overlap 0.000e+00 mm^2, gap -2.728e-12 mm^2, skin triangles 65688, + base below skin 29020
+    grid 1e-06: clip 0.08 s, overlap 0.000e+00 mm^2, gap -1.097e-06 mm^2, skin triangles 65688, + base below skin 29020
+    grid 1e-05: clip 0.09 s, overlap 0.000e+00 mm^2, gap -3.065e-06 mm^2, skin triangles 65688, + base below skin 29020
+  SIMPLIFY_PX 0.1250 (0.5 / s): 0.01 s, vertices 29069, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.03 s, overlap 0.000e+00 mm^2, gap -2.728e-12 mm^2, skin triangles 65688, + base below skin 29020
+    grid 1e-06: clip 0.07 s, overlap 0.000e+00 mm^2, gap -1.097e-06 mm^2, skin triangles 65688, + base below skin 29020
+    grid 1e-05: clip 0.08 s, overlap 0.000e+00 mm^2, gap -3.065e-06 mm^2, skin triangles 65688, + base below skin 29020
+  SIMPLIFY_PX 0.2500 (1.0 / s): 0.01 s, vertices 11045, max boundary deviation 0.3599 px (0.02700 mm), coverage valid False
+    grid None: clip 0.01 s, overlap 0.000e+00 mm^2, gap -4.320e-12 mm^2, skin triangles 47272, + base below skin 29020
+    grid 1e-06: clip 0.05 s, overlap 0.000e+00 mm^2, gap -1.098e-06 mm^2, skin triangles 47272, + base below skin 29020
+    grid 1e-05: clip 0.06 s, overlap 0.000e+00 mm^2, gap -3.456e-06 mm^2, skin triangles 47272, + base below skin 29020
+tracemalloc peak (smooth_labels + vectorize) 160 MiB
+== oddie-keep-merge: artifacts/colors-runs/oddie-60-keep-merge-blues-greens-v4-f64
+verify_colors 1.38 s; image 1024 x 1013 px, width 60.0 mm, sigma 2.5 px, supersample 4, palette 4, base 0
+silhouette 0.09 s; area 1677.8829 mm^2, scale 0.075017 mm/px
+smooth_labels 1.22 s; fine 4096 x 4052
+vectorize 1.22 s; colors [0, 1, 2, 3]; raw vertices 46406; coverage_is_valid False
+  SIMPLIFY_PX 0.0000 (0.0 / s): 0.00 s, vertices 46406, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.06 s, overlap 0.000e+00 mm^2, gap 6.821e-12 mm^2, skin triangles 214496, + base below skin 29020
+    grid 1e-06: clip 0.15 s, overlap 0.000e+00 mm^2, gap -1.115e-06 mm^2, skin triangles 214496, + base below skin 29020
+    grid 1e-05: clip 0.14 s, overlap 0.000e+00 mm^2, gap -3.003e-06 mm^2, skin triangles 214496, + base below skin 29020
+  SIMPLIFY_PX 0.1250 (0.5 / s): 0.01 s, vertices 46406, max boundary deviation 0.0000 px (0.00000 mm), coverage valid False
+    grid None: clip 0.06 s, overlap 0.000e+00 mm^2, gap 6.821e-12 mm^2, skin triangles 214496, + base below skin 29020
+    grid 1e-06: clip 0.15 s, overlap 0.000e+00 mm^2, gap -1.115e-06 mm^2, skin triangles 214496, + base below skin 29020
+    grid 1e-05: clip 0.15 s, overlap 0.000e+00 mm^2, gap -3.003e-06 mm^2, skin triangles 214496, + base below skin 29020
+  SIMPLIFY_PX 0.2500 (1.0 / s): 0.03 s, vertices 22292, max boundary deviation 0.2791 px (0.02094 mm), coverage valid False
+    grid None: clip 0.02 s, overlap 0.000e+00 mm^2, gap 6.821e-12 mm^2, skin triangles 118040, + base below skin 29020
+    grid 1e-06: clip 0.08 s, overlap 0.000e+00 mm^2, gap -1.115e-06 mm^2, skin triangles 118040, + base below skin 29020
+    grid 1e-05: clip 0.08 s, overlap 0.000e+00 mm^2, gap -3.003e-06 mm^2, skin triangles 118040, + base below skin 29020
+tracemalloc peak (smooth_labels + vectorize) 160 MiB
+
