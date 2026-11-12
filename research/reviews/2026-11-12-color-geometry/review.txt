@@ -1,0 +1,37 @@
+1. **High — Spatially incorrect STL bodies can pass every geometry check.**  
+   [src/tdmg/color_checks.py:223](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_checks.py:223), also lines 277 and 467.
+
+   `body_export_check` compares bounds and volume. The partition and glue-fit checks inspect the source polygons, not spatial occupancy of the decoded STL.
+
+   **Confirmed by running fault injection:** inside a 20 × 20 silhouette, create three same-color squares at `[2,5]²`, `[8,11]²`, and `[14,17]²`. Move only the middle component’s mesh 1 mm in X, leaving its source metadata unchanged. Bounds and volume remain unchanged:
+   - AMS: a 3 mm² gap and a 3 mm² overlap with the base appear in the skin; every geometry check PASSes.
+   - Glue: the moved piece reaches X ≈ 11.8 beyond its pocket wall at X = 11; `F4.glue_fit` and every other geometry check still PASS.
+
+   This demonstrates a gate escape, **not an unmodified verified plan that triggers a mesher bug**. Validate decoded mesh occupancy against intended slabs/pockets; aggregate bounds and volume cannot establish equivalence.
+
+2. **Medium — The glue clearance margin underestimates chord error at shallow concave corners.**  
+   [src/tdmg/color_checks.py:325](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_checks.py:325).
+
+   The formula assumes every buffer chord subtends at most `π/(2·QUAD_SEGS)`. The installed GEOS does not guarantee that for partial arcs.
+
+   **Confirmed by running the normal generator:** use a 20 mm-wide polygon with a shallow 16.8° concave notch, inside a 24 × 24 silhouette, with all default glue parameters. GEOS represents the notch’s erosion arc with one chord. The resulting piece has minimum clearance **0.197854996 mm**, below the gate’s **0.198071193 mm** threshold. `F4.glue_fit` FAILs; all other checks PASS. No mesh or metadata was altered.
+
+   Derive the bound from the actual maximum chord angle, or constrain tessellation to satisfy the stated bound. The corresponding derivation in `color_glue.py` also needs correction.
+
+3. **Low — The clearance rule promises more than the implementation guarantees.**  
+   [rules/color.yaml:172](C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml:172).
+
+   Its summary says the gap is “at least this everywhere,” meaning 0.2 mm. The implementation deliberately accepts smaller gaps after its numerical margin; the recorded Oddie run reports approximately **0.198637 mm**, passing.
+
+   **Confirmed by code inspection and the recorded measurements; owner-plan reruns also passed.** Describe 0.2 mm as the nominal clearance and explain the bounded numerical shortfall. The generated reference repeats the inaccurate summary.
+
+4. **Low — The required session handoff describes an obsolete implementation state.**  
+   [docs/STATUS.md:153](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:153), also lines 23 and 270–281.
+
+   STATUS still says geometry is unbuilt and Tasks 6–7 are next. It also omits the later owner decision to skip glue for kept outlines. A subsequent session following `CLAUDE.md` receives incorrect next steps and outdated glue behavior.
+
+   **Confirmed by reading HEAD against its commits and implementation.**
+
+Validation: **457 focused tests passed**, and generated-doc consistency passed. All four owner plans completed in memory without FAILs, with IDs matching the records and the expected F3/F6 UNKNOWNs. Legacy `make_flat` outputs matched `218794d` byte-for-byte for both selections; `tdmg colors` records, images, and labels matched for all four plans.
+
+No files were modified. The full file-writing integration suite and cross-platform parity were not tested under this read-only Windows sandbox.

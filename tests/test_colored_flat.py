@@ -261,7 +261,7 @@ def test_written_stl_bytes_are_exactly_the_gated_ones(made):
 
 def test_record_identity_and_params(made):
     rec = made[0]
-    assert rec["schema"] == "tdmg.colorflat/1" and rec["algorithm"] == "colorflat-1"
+    assert rec["schema"] == "tdmg.colorflat/1" and rec["algorithm"] == "colorflat-2"
     ident = rec["identity"]
     assert set(ident) == {"algorithm", "colors_id", "selection_id", "mask_pixels_sha256",
                           "params"}

@@ -360,7 +360,8 @@ Codex critical review.
       - `parts.png`: the numbered diagram, each glue piece numbered at
         `point_on_surface`, with the list of pieces per color.
     - **The record, `colored.json`:**
-      - schema `tdmg.colorflat/1`, algorithm `colorflat-1`;
+      - schema `tdmg.colorflat/1`, algorithm `colorflat-1` (`colorflat-2` since the Codex review 3
+        glue clearance fix);
       - `colorflat_id` = SHA-256 of the canonical identity: the algorithm, `colors_id`,
         the selection's mask hash, and the params (width, thickness, printer, the three
         new rules and the R1 rules with their values, supersample, sigma);

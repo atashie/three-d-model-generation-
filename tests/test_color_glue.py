@@ -15,9 +15,10 @@ import trimesh
 from shapely import affinity
 
 import tdmg.color_glue
-from tdmg.checks import merge_exact
+from tdmg.checks import merge_exact, topology_checks
 from tdmg.color_checks import (
     ColorCheckError,
+    body_export_check,
     glue_checks,
     glue_fit_check,
     glue_fit_margin,
@@ -89,7 +90,7 @@ def assert_all_pass(glue):
 
 
 def margin():
-    return glue_fit_margin(C, OPENING, SQUARE_CELLS.grid_mm)["margin_mm"]
+    return glue_fit_margin(SQUARE_CELLS.grid_mm)["margin_mm"]
 
 
 R = OPENING / 2
@@ -159,17 +160,62 @@ def test_l_shape_concave_corner_gap_is_at_least_clearance_minus_margin():
     assert fit.status == "PASS"
     snap = snap_move_mm(glue.grid_mm)
     corner = shapely.Point(10, 10)  # the concave (reflex) pocket corner
-    # The chords around the concave corner are the closest: c cos(pi / (4 QUAD_SEGS)).
-    assert piece.distance(corner) == pytest.approx(C * (1 - CHORD), abs=snap)
+    # The shrink's chords around the concave corner come to c cos(pi / (4 QUAD_SEGS));
+    # the clearance fix erodes the piece by that shortfall, so it is c away to the snap.
+    assert piece.distance(corner) >= C - snap
+    assert piece.distance(corner) == pytest.approx(C, abs=snap)
     assert fit.measured["min_gap_mm"] >= C - margin()
-    assert fit.measured["min_gap_mm"] < C
-    # Away from it, the walls are exactly c away.
+    # The fix erodes the whole piece by that shortfall, so the straight walls are c
+    # plus it away.
+    short = glue.report["clearance_fix"]["largest_shortfall_mm"]
+    assert short == pytest.approx(C * CHORD, rel=1e-3)
     for wall in (shapely.LineString([(5, 5), (5, 15)]),
                  shapely.LineString([(5, 5), (15, 5)]),
                  shapely.LineString([(15, 5), (15, 10)]),
                  shapely.LineString([(5, 15), (10, 15)])):
-        assert piece.distance(wall) == pytest.approx(C, abs=snap)
+        assert piece.distance(wall) == pytest.approx(C + short, abs=snap)
     assert_all_pass(glue)
+
+
+def notch(degrees):
+    """A 20 mm-wide polygon whose top edge has a concave notch turning by degrees."""
+    h = 10 * math.tan(math.radians(degrees / 2))
+    return shapely.Polygon([(2, 2), (22, 2), (22, 12), (12, 12 - h), (2, 12)])
+
+
+@pytest.mark.parametrize("degrees", [3, 8, 11.25, 16, 16.8, 16.85, 20, 33, 60, 80])
+def test_a_shallow_concave_notch_keeps_the_clearance(degrees):
+    # Codex review 3: GEOS draws a round join of angle A with round(A / (pi / (2
+    # QUAD_SEGS))) chords, so a 16.8 degree arc is one chord, c (1 - cos(8.4 deg)) =
+    # 0.00215 mm short; that FAILed F4.glue_fit (gap 0.197855 mm). The clearance fix
+    # erodes the piece by its measured shortfall instead.
+    s24 = shapely.box(0, 0, 24, 24)
+    glue = glue_of(cells_from({1: [notch(degrees)]}, s24))
+    fit = glue_fit_check(glue)
+    snaps = fit.threshold["snap_move_mm"] + fit.threshold["pocket_move_mm"]
+    assert fit.measured["min_gap_mm"] >= C - snaps
+    assert fit.status == "PASS"
+    assert_all_pass(glue)
+
+
+def test_the_clearance_fix_is_reported():
+    glue = glue_of(cells_from({1: [notch(16.8)]}, shapely.box(0, 0, 24, 24)))
+    fix = glue.report["clearance_fix"]
+    assert fix["pieces_eroded"] == 1
+    assert fix["rounds"] >= 1
+    # The shortfall the shrink left: one 16.8 degree chord, c (1 - cos(8.4 deg)), plus
+    # at most the opening's chord error.
+    assert fix["largest_shortfall_mm"] >= C * (1 - math.cos(math.radians(8.4))) - 1e-9
+
+
+def test_a_piece_that_cannot_be_cleared_is_refused(monkeypatch):
+    monkeypatch.setattr(tdmg.color_glue, "CLEARANCE_ROUNDS", 0)
+    with pytest.raises(GlueError, match="a piece is still .* short of the clearance"):
+        glue_of(cells_from({1: [notch(16.8)]}, shapely.box(0, 0, 24, 24)))
+    # The square's piece needs no erosion, but its outward buffer's chords at the rounded
+    # corners come closer than c: the wall is grown, which also needs a round.
+    with pytest.raises(GlueError, match="the pocket wall is still .* short"):
+        glue_of(SQUARE_CELLS)
 
 
 # --- folding ----------------------------------------------------------------------------
@@ -336,9 +382,13 @@ def test_a_thin_band_between_two_blobs_becomes_base():
     assert left["leftover_mm2"] == pytest.approx(
         left["candidate_area_mm2"] - left["pocket_area_mm2"])
     # Uncovered: each blob's four corners, plus the band's stub that stays in the pocket
-    # (narrower than the opening; 0.029 mm^2 measured).
-    for row in glue.report["pockets"]:
-        assert 4 * corner_loss(R + C) < row["uncovered_mm2"] < 4 * corner_loss(R + C) + 0.05
+    # (narrower than the opening; 0.031 mm^2 measured), plus the band of the clearance
+    # fix's erosion along the piece (its perimeter x the shortfall, 0.021 mm^2).
+    short = glue.report["clearance_fix"]["largest_shortfall_mm"]
+    for row, piece in zip(glue.report["pockets"], glue.pieces, strict=True):
+        extra = piece.polygon.length * short
+        assert 4 * corner_loss(R + C) < row["uncovered_mm2"] < (
+            4 * corner_loss(R + C) + 0.05 + extra)
     assert_all_pass(glue)
 
 
@@ -405,6 +455,31 @@ def test_a_piece_moved_toward_its_wall_fails_glue_fit():
         "per_piece"][0]["inside"] is False
 
 
+def test_a_piece_moved_inside_the_bounds_fails_its_export_check():
+    # Codex review 3: three same-color squares; the middle piece's mesh moved 1 mm in x,
+    # past its pocket wall at x = 11. Bounds, volume and F1 stay as they were.
+    squares = [shapely.box(a, a, a + 3, a + 3) for a in (2, 8, 14)]
+    glue = glue_of(cells_from({1: squares}, S20))
+    assert len(glue.pieces) == 3
+    body = glue.bodies[1]
+    mesh = stored(body.mesh)
+    vertices = np.array(mesh.vertices)
+    middle = (vertices[:, 0] > 7.5) & (vertices[:, 0] < 11.5) & (vertices[:, 1] > 7.5) \
+        & (vertices[:, 1] < 11.5)
+    vertices[middle, 0] += 1.0
+    moved = trimesh.Trimesh(vertices, mesh.faces, process=False, validate=False)
+    assert body_export_check(mesh, body).status == "PASS"
+    assert {c.status for c in topology_checks(moved)} == {"PASS"}
+    check = body_export_check(moved, body)
+    assert check.status == "FAIL"
+    assert check.measured["max_bound_error_mm"] <= check.threshold["coord_tol_mm"]
+    assert check.measured["volume_error_mm3"] <= check.threshold["volume_tol_mm3"]
+    [row] = check.measured["occupancy"]
+    piece = glue.pieces[1].polygon
+    expected = shapely.symmetric_difference(piece, affinity.translate(piece, 1.0)).area
+    assert row["symmetric_difference_mm2"] == pytest.approx(expected)
+
+
 def test_an_empty_pocket_fails_glue_fit():
     glue = glue_of(SQUARE_CELLS)
     fit = glue_fit_check(dataclasses.replace(glue, pieces=()))
@@ -412,15 +487,18 @@ def test_an_empty_pocket_fails_glue_fit():
     assert fit.measured["empty_pockets"] == [1]
 
 
-def test_margin_is_the_two_chord_errors_and_the_two_snaps():
+def test_margin_is_the_two_snaps_and_the_rounding():
     g = 2.0 ** -19
-    m = glue_fit_margin(C, OPENING, g)
-    assert m["shrink_chord_mm"] == pytest.approx(C * CHORD)
-    assert m["opening_chord_mm"] == pytest.approx(OPENING / 2 * CHORD)
+    m = glue_fit_margin(g, rounding_mm=1e-14)
+    assert set(m) == {"margin_mm", "snap_move_mm", "pocket_move_mm", "rounding_mm"}
     assert m["snap_move_mm"] == m["pocket_move_mm"] == g * math.sqrt(2) / 2
+    assert m["rounding_mm"] == 1e-14
     assert m["margin_mm"] == pytest.approx(sum(v for k, v in m.items() if k != "margin_mm"))
-    joined = glue_fit_margin(C, OPENING, g, pinch_joined=True)
+    joined = glue_fit_margin(g, pinch_joined=True)
     assert joined["pocket_move_mm"] == g * math.sqrt(2) / 2 + PINCH_K * g
+    assert joined["rounding_mm"] == 0.0
+    # No chord terms: the construction measures and removes them (the clearance fix).
+    assert m["margin_mm"] < C * CHORD / 100
 
 
 # --- oblique S, several colors, determinism ----------------------------------------------
@@ -501,7 +579,7 @@ def test_glue_fit_boundary_probe():
     fit = glue_fit_check(glue)
     gap, limit = fit.measured["min_gap_mm"], fit.threshold["min_gap_mm"]
     piece = glue.pieces[0]
-    for step, status in ((gap - (limit + 1e-4), "PASS"), (gap - (limit - 1e-4), "FAIL")):
+    for step, status in ((gap - (limit + 1e-7), "PASS"), (gap - (limit - 1e-7), "FAIL")):
         moved = dataclasses.replace(piece, polygon=affinity.translate(piece.polygon, -step))
         probe = glue_fit_check(dataclasses.replace(glue, pieces=(moved,)))
         assert probe.status == status, (step, probe.measured["min_gap_mm"], limit)

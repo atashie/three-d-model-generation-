@@ -209,17 +209,25 @@ def test_grid_shift_is_reported_and_within_the_snap_bound(case):
 
 
 def test_a_sub_grid_sliver_is_absorbed_not_a_cell():
-    # The oblique case of tests/test_color_geometry.py leaves a 1.1e-16 mm^2 base-top part
-    # (S's arc against a color edge); on the grid it is not a cell of its own.
-    fine = np.kron(np.array([[0, 1, 2], [2, 3, 1]]), np.ones((5, 5))).astype(np.uint8)
-    full, transform = image_box(15, 10, 41.9)
-    silhouette = shapely.Point(20, 14).buffer(13, quad_segs=QUAD_SEGS).intersection(full)
-    regions = color_regions(fine, 1, transform, silhouette, n_colors=4, base_index=0,
-                            thin_width_mm=0.4)
+    # A base-top part far below one grid cell, along an inlay edge, is absorbed by the
+    # snap-rounded noding: it is not a cell of its own. Built by hand so it does not
+    # depend on GEOS rounding. (The test first used a sliver that color_regions left
+    # between a polygonal circle S and a color edge, 1.1e-16 mm^2 on Windows and Linux;
+    # on macOS arm64 that rounding differs, likely by fused multiply-adds, and no sliver
+    # arose, so the precondition failed there.) The sliver is a triangle on x = 5 with
+    # its apex 2^-49 mm to the left: every coordinate is a float64 number, its area is
+    # 3 x 2^-49 (5.3e-15 mm^2), and the grid here is 2^-20 mm.
+    s = shapely.box(0, 0, 10, 10)
+    apex = 5 - 2.0 ** -49
+    sliver = shapely.Polygon([(5, 2), (5, 8), (apex, 5)])
+    inlay = shapely.Polygon([(0, 0), (5, 0), (5, 2), (apex, 5), (5, 8), (5, 10), (0, 10)])
+    regions = ColorRegions({1: [inlay]}, [shapely.box(5, 0, 10, 10), sliver], {}, [])
     assert min(p.area for p in regions.base_top) < 1e-12
-    cells = color_cells(regions, silhouette, 0, fix_pinches=False)  # no diamond cells
+    cells = color_cells(regions, s, 0, fix_pinches=False)  # no diamond cells
+    assert cells.grid_mm == 2.0 ** -20
     assert min(c.area for c in cells.cells) > 1.0
     assert len(cells.cells) == sum(len(p) for p in regions.inlays.values()) + 1
+    assert sorted(cells.labels) == [0, 1]
 
 
 def tiny_tip_regions():
@@ -893,6 +901,64 @@ def test_a_body_changed_after_encoding_fails_its_export_check(change):
 def test_an_inlay_checked_against_another_body_fails():
     _, bodies = bodies_of("box")
     assert body_export_check(stored(bodies[1].mesh), bodies[2]).status == "FAIL"
+
+
+def moved_inside_bounds(mesh, box, dx=1.0):
+    """The mesh with the vertices inside box (x0, y0, x1, y1) moved dx in x: one
+    component moved, bounds and volume unchanged (the Codex review 3 fault)."""
+    vertices = np.array(mesh.vertices)
+    x0, y0, x1, y1 = box
+    inside = ((vertices[:, 0] > x0) & (vertices[:, 0] < x1) & (vertices[:, 1] > y0)
+              & (vertices[:, 1] < y1))
+    assert inside.any()
+    vertices[inside, 0] += dx
+    return trimesh.Trimesh(vertices, mesh.faces, process=False, validate=False)
+
+
+THREE_SQUARES = [shapely.box(a, a, a + 3, a + 3) for a in (2, 8, 14)]
+
+
+def test_a_component_moved_inside_the_bounds_fails_the_inlay_export_check():
+    # Three same-color squares in a 20 mm S; the middle one's mesh moved 1 mm in x. The
+    # bounds and the volume stay the same; the occupancy at mid-skin does not.
+    base_top = [shapely.box(0, 0, 20, 20).difference(shapely.union_all(THREE_SQUARES))]
+    cells = color_cells(ColorRegions({1: THREE_SQUARES}, base_top, {}, []),
+                        shapely.box(0, 0, 20, 20), 0)
+    bodies = ams_bodies(cells, thickness_mm=T, skin_mm=SKIN)
+    inlay = bodies[1]
+    mesh = stored(inlay.mesh)
+    good = body_export_check(mesh, inlay)
+    assert good.status == "PASS"
+    [row] = good.measured["occupancy"]
+    assert row["z_mm"] == pytest.approx(T - SKIN / 2)
+    assert row["symmetric_difference_mm2"] <= row["area_tol_mm2"]
+    moved = moved_inside_bounds(mesh, (7.5, 7.5, 11.5, 11.5))
+    assert {c.status for c in topology_checks(moved)} == {"PASS"}  # F1 cannot see it
+    check = body_export_check(moved, inlay)
+    assert check.status == "FAIL"
+    assert check.measured["max_bound_error_mm"] <= check.threshold["coord_tol_mm"]
+    assert check.measured["volume_error_mm3"] <= check.threshold["volume_tol_mm3"]
+    [row] = check.measured["occupancy"]
+    assert row["symmetric_difference_mm2"] == pytest.approx(2 * 3.0)  # 3 out, 3 in
+
+
+def test_a_component_moved_inside_the_bounds_fails_the_base_export_check():
+    # S is three separate strips; the base's middle component moved 1 mm in x.
+    strips = [shapely.box(a, 2, a + 3, 18) for a in (2, 8, 14)]
+    s = shapely.union_all(strips)
+    dot = shapely.box(3, 3, 4, 4)
+    cells = color_cells(ColorRegions({1: [dot]}, [s.difference(dot)], {}, []), s, 0)
+    base = ams_bodies(cells, thickness_mm=T, skin_mm=SKIN)[0]
+    mesh = stored(base.mesh)
+    assert body_export_check(mesh, base).status == "PASS"
+    check = body_export_check(moved_inside_bounds(mesh, (7.5, 0, 11.5, 20)), base)
+    assert check.status == "FAIL"
+    assert check.measured["max_bound_error_mm"] <= check.threshold["coord_tol_mm"]
+    assert check.measured["volume_error_mm3"] <= check.threshold["volume_tol_mm3"]
+    rows = check.measured["occupancy"]
+    assert [r["z_range_mm"] for r in rows] == [[0.0, T - SKIN], [T - SKIN, T]]
+    for row in rows:  # 16 mm^2 out and 16 mm^2 in, at both heights
+        assert row["symmetric_difference_mm2"] == pytest.approx(2 * 16.0)
 
 
 # --- ams_checks ---------------------------------------------------------------------

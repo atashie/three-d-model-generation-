@@ -13,7 +13,9 @@ Steps, on color_cells' labelled cells (the storage grid G, pinch-free):
    pinches, which color_cells has joined.)
 2. Shrink and clean: a candidate's region buffered by -clearance (round joins,
    tdmg.flat.QUAD_SEGS), then the R1 opening (flat.sliver.opening_width) and island rule
-   (tdmg.flat.open_parts, the same code as tdmg.flat.clean). The result is the
+   (tdmg.flat.open_parts, the same code as tdmg.flat.clean), then the clearance fix
+   (_clear_of: each part closer than the clearance to the region's boundary, measured,
+   is eroded by its shortfall) and the island rule again. The result is the
    candidate's pieces.
 3. Fold: repeatedly, smallest first, a candidate none of whose pieces reaches
    (color.glue.min_piece_side_mm)^2 is relabelled to the neighbour with the longest
@@ -21,11 +23,12 @@ Steps, on color_cells' labelled cells (the storage grid G, pinch-free):
    until nothing folds. Folding into the base removes the pocket.
 4. Small pieces and pockets (the amendment), once per remaining candidate: only its
    pieces of at least the min-piece area are kept. The leftover is the candidate minus
-   the kept pieces buffered by the clearance (round joins), cleaned with the R1 opening
-   and island rule; it becomes base color (thin bands, the dropped small pieces), so no
-   pocket is left without a piece. The pocket is the parts of the candidate minus the
-   leftover that hold a kept piece; parts that hold none (the cusps at the leftover's
-   rounded corners) join the leftover.
+   the kept pieces buffered by the clearance (round joins; grown where the measured
+   distance to the piece is below the clearance, _reach), cleaned with the R1 opening
+   and island rule and clipped back to outside that buffer; it becomes base color (thin
+   bands, the dropped small pieces), so no pocket is left without a piece. The pocket is
+   the parts of the candidate minus the leftover that hold a kept piece; parts that hold
+   none (the cusps at the leftover's rounded corners) join the leftover.
 5. Rebuild: the pockets (labelled by color) and the base (the gridded S minus the
    pockets) go through tdmg.color_geometry.color_cells again: one snap-rounded noding
    on the storage grid, plurality labels and pinch joining. The glue base and the
@@ -56,8 +59,22 @@ from tdmg.color_geometry import (
     _polygonal,
     _positive,
     color_cells,
+    vertex_dist,
 )
-from tdmg.flat import QUAD_SEGS, open_parts, order_key
+from tdmg.flat import QUAD_SEGS, open_parts, order_key, polygon_parts
+
+# Rounds of the clearance fix (_clear_of, _reach) before glue_geometry refuses. A stated
+# bound, not a rule. Each round erodes a part (or grows a wall) by its measured shortfall
+# plus DIST, so what is left short is only the new round joins' chord error on that small
+# offset: a fraction k of it. Measured 2026-11-12 (Shapely 2.2.0, GEOS 3.14.1): GEOS draws
+# a round join of angle A with round(A / (pi / (2 QUAD_SEGS))) chords, so one chord can
+# subtend up to 1.5 pi / (2 QUAD_SEGS), and k <= 1 - cos(3 pi / (8 QUAD_SEGS)) = 0.0108
+# (largest measured 0.01079, at a 16.85 degree notch). From a first shortfall of at most
+# about k (c + r) (0.0043 mm at c 0.2 mm, r 0.2 mm), 6 rounds bring it below 1e-14 mm,
+# under DIST. Measured: 1 round for every piece and buffer in the tests and on the four
+# owner plans (research/verification/2026-11-12-color-geometry/glue.txt; the report's
+# clearance_fix gives the rounds). 8 is a margin over the 6 derived.
+CLEARANCE_ROUNDS = 8
 
 
 class GlueError(ColorGeometryError):
@@ -199,6 +216,74 @@ def _target(neighbours: dict[int, float], base: int) -> tuple[int, float]:
     return best
 
 
+def _clear_of(parts: list[Polygon], wall, c: float, dist: float, what: str
+              ) -> tuple[list[Polygon], dict]:
+    """Erode each part until its distance to wall is at least c - dist.
+
+    wall: a boundary (lines); dist: the float64 rounding allowance (DIST,
+    tdmg.color_geometry.vertex_dist). The gap is shapely.distance, exact on the polygons
+    up to float64 rounding. While a part is short (gap g < c - dist), it is replaced by
+    the polygons of part.buffer(-(c - g + dist)) (round joins, QUAD_SEGS), each measured
+    again; one that erodes to nothing is dropped. Every point of an eroded polygon is at
+    least c - g + dist, less the new joins' chord error, inside the part, and every path
+    from it to wall crosses the part's boundary, which is at least g from wall; so what is
+    left short is at most that chord error, and CLEARANCE_ROUNDS bounds the rounds
+    (GlueError beyond, naming what). Returns (the polygons, by source part, then
+    tdmg.flat.order_key; {"eroded": source parts that needed a round, "rounds": the most
+    rounds, "largest_shortfall_mm": the largest first shortfall c - g, 0 if none}).
+    """
+    out, eroded, rounds, largest = [], 0, 0, 0.0
+    for part in parts:
+        todo, k = [part], 0
+        first = c - float(shapely.distance(part, wall))
+        while todo:
+            short = []
+            for p in todo:
+                gap = float(shapely.distance(p, wall))
+                if gap >= c - dist:
+                    out.append(p)
+                else:
+                    short.append((p, gap))
+            if not short:
+                break
+            if k == CLEARANCE_ROUNDS:
+                gap = min(g for _, g in short)
+                raise GlueError(f"{what}: a piece is still {c - gap:.6g} mm short of the "
+                                f"clearance {c} mm after {k} rounds of the clearance fix")
+            k += 1
+            todo = [q for p, gap in short for q in sorted(
+                polygon_parts(p.buffer(-(c - gap + dist), quad_segs=QUAD_SEGS))[0],
+                key=order_key)]
+        if k:
+            eroded += 1
+            rounds = max(rounds, k)
+            largest = max(largest, first)
+    return out, {"eroded": eroded, "rounds": rounds, "largest_shortfall_mm": largest}
+
+
+def _reach(kept_union, c: float, dist: float, what: str) -> tuple[shapely.Geometry, dict]:
+    """kept_union buffered out until its boundary is at least c - dist from kept_union.
+
+    kept_union.buffer(c) (round joins) draws each arc with chords whose ends lie on the
+    true offset, so a chord's middle comes closer to the piece (by up to c (1 - cos(3 pi /
+    (8 QUAD_SEGS))), see CLEARANCE_ROUNDS). While the measured gap g (shapely.distance of
+    kept_union to the buffer's boundary) is below c - dist, the buffer is buffered out
+    again by c - g + dist. Returns (the reach, {"rounds", "largest_shortfall_mm" (0 if
+    no round)}); GlueError after CLEARANCE_ROUNDS rounds.
+    """
+    reach = kept_union.buffer(c, quad_segs=QUAD_SEGS)
+    gap = float(shapely.distance(kept_union, reach.boundary))
+    first, k = c - gap, 0
+    while gap < c - dist:
+        if k == CLEARANCE_ROUNDS:
+            raise GlueError(f"{what}: the pocket wall is still {c - gap:.6g} mm short of "
+                            f"the clearance {c} mm after {k} rounds of the clearance fix")
+        k += 1
+        reach = reach.buffer(c - gap + dist, quad_segs=QUAD_SEGS)
+        gap = float(shapely.distance(kept_union, reach.boundary))
+    return reach, {"rounds": k, "largest_shortfall_mm": first if k else 0.0}
+
+
 def _fold(cells, labels: list[int], base: int, shrink, min_area: float) -> list[dict]:
     """Fold candidates in place (labels is changed), smallest first; returns the folds.
 
@@ -243,21 +328,29 @@ def glue_geometry(cells: Cells, *, thickness_mm, skin_mm, clearance_mm, min_piec
     applied to each shrunk candidate. All finite, bools refused; GlueError names the bad
     argument. The steps are the module docstring's.
 
-    Shrinking: a piece comes from the candidate region R buffered by -c with round joins.
-    The exact inward offset is {x in R : dist(x, boundary of R) >= c}, so every point of
-    the piece is at least c from R's boundary, at convex and concave corners alike
-    (convex corners stay sharp; around each concave corner the piece follows a circle of
-    radius c). GEOS draws that circle as QUAD_SEGS chords per quarter turn with their
-    ends on it, and a chord's middle is closer to the corner, at c cos(pi / (4
-    QUAD_SEGS)). So the gap to R's boundary is >= c everywhere except at concave corners,
-    where it can be short by that chord error, c (1 - cos(pi / (4 QUAD_SEGS))), about
-    0.001 mm at c = 0.2 mm. The opening that follows only removes material (it rounds the
-    piece's convex corners to radius opening_mm / 2 and cuts necks), apart from its own
-    chord error. Where the pocket's wall is the kept pieces' outward buffer by c instead,
-    it is c from the piece less that buffer's chord error, at most the same c (1 - cos(pi
-    / (4 QUAD_SEGS))), and the leftover's opening can reach past that buffer by its own
-    chord error, (opening_mm / 2) (1 - cos(pi / (4 QUAD_SEGS))).
-    tdmg.color_checks.glue_fit_margin adds these and the snaps.
+    Shrinking and the clearance (Codex review 3 fixed an earlier version that relied on
+    GEOS's chord error): a piece comes from the candidate region R buffered by -c with
+    round joins. The exact inward offset is {x in R : dist(x, boundary of R) >= c}, but
+    GEOS draws each round join with chords whose ends lie on the circle, so a chord's
+    middle is closer to R's concave corner; and it draws a join of angle A with round(A
+    / (pi / (2 QUAD_SEGS))) chords, so one chord can span up to 1.5 pi / (2 QUAD_SEGS): a
+    shallow 16.8 degree concave notch is one chord, c (1 - cos(8.4 deg)) = 0.00215 mm
+    short at c = 0.2 mm. The opening that follows can also poke out by its own chord
+    error. So the gap is not assumed; it is measured and fixed by construction:
+    - _clear_of: each part's distance to R's boundary (shapely.distance) is measured;
+      a part short by s = c - g is eroded by s + DIST (DIST = vertex_dist of R, float64
+      rounding) and measured again, at most CLEARANCE_ROUNDS times; parts that erode to
+      nothing or below the island area are dropped.
+    - _reach: where the wall is the kept pieces' outward buffer by c (a leftover given
+      to the base), that buffer's chords come closer to the piece in the same way; it
+      is grown by its measured shortfall until it is at least c - DIST from the pieces.
+    - The leftover's opening can poke back into that buffer by its own chord error, so
+      the cleaned leftover is intersected with the candidate minus the buffer.
+    So before the grid, every piece is at least c - DIST from its pocket's wall (R's
+    boundary or the leftover's, which lies outside the grown buffer), and eroding a
+    piece by s moves its walls away by s (a few micrometres) everywhere, not only at the
+    corner. tdmg.color_checks.glue_fit_margin keeps only the grid snaps and the
+    rounding.
 
     Leftovers (deviation from the amendment's wording, which made the pocket the
     candidate intersected with the buffer): candidate minus buffer, uncleaned, is
@@ -281,7 +374,10 @@ def glue_geometry(cells: Cells, *, thickness_mm, skin_mm, clearance_mm, min_piec
     "leftover": [per color with a remaining candidate: {"index", "candidates",
     "candidate_area_mm2", "pocket_area_mm2", "leftover_mm2" (to the base),
     "small_pieces" (dropped, below the min-piece area), "small_pieces_mm2"}],
-    "leftover_mm2" (total), "rebuild" (the rebuilt cells' report: grid shift, pinch
+    "leftover_mm2" (total), "clearance_fix": {"pieces_eroded" (parts the fix eroded,
+    over the remaining candidates, kept or not), "rounds", "largest_shortfall_mm",
+    "walls_grown" (candidates whose buffer _reach grew), "wall_rounds",
+    "wall_largest_shortfall_mm"}, "rebuild" (the rebuilt cells' report: grid shift, pinch
     joins), "silhouette_pinches", "pockets": [{"number", "index", "area_mm2", "pieces",
     "uncovered_mm2"}], "pieces": [{"number", "index", "area_mm2", "point_on_surface",
     "pocket", "pocket_area_mm2"}], "colors": [per color with pieces: {"index",
@@ -321,8 +417,11 @@ def glue_geometry(cells: Cells, *, thickness_mm, skin_mm, clearance_mm, min_piec
             region = shapely.union_all([cell_list[k] for k in comp])
             shrunk = region.buffer(-c, quad_segs=QUAD_SEGS)
             _, parts, _ = open_parts(shrunk, opening, min_island)
-            cache[key] = (region, parts)
-        return cache[key]
+            where = f"a color {label} candidate of {region.area:.6g} mm^2"
+            parts, fix = _clear_of(parts, region.boundary, c, vertex_dist([region]), where)
+            parts = sorted((p for p in parts if p.area >= min_island), key=order_key)
+            cache[key] = (region, parts, fix)
+        return cache[key][:2]
 
     folds = _fold(cell_list, labels, base, shrink, min_area)
 
@@ -330,22 +429,27 @@ def glue_geometry(cells: Cells, *, thickness_mm, skin_mm, clearance_mm, min_piec
     inlays: dict[int, list[Polygon]] = {}
     kept_pieces: list[tuple[int, list[Polygon]]] = []  # per candidate
     leftover: dict[int, dict] = {}
+    fixes, walls = [], []
     for label, comp in _components(_edge_lengths(cell_list), labels, base):
         region, parts = shrink(label, comp)
+        fixes.append(cache[(label, comp)][2])
         kept = [p for p in parts if p.area >= min_area]
         small = [p for p in parts if p.area < min_area]
         if not kept:  # _fold leaves no such candidate; refuse rather than build on it
             raise GlueError(f"a color {label} candidate of {region.area:.6g} mm^2 has no "
                             f"piece of at least {min_area:.6g} mm^2 after folding")
         # The leftover is what the kept pieces' clearance band does not reach, cleaned
-        # with the R1 rules (see the docstring, "Leftovers"); the pocket is the rest of
-        # the candidate.
+        # with the R1 rules (see the docstring, "Leftovers") and clipped back to outside
+        # the band; the pocket is the rest of the candidate.
         kept_union = shapely.union_all(kept)
-        reach = kept_union.buffer(c, quad_segs=QUAD_SEGS)
-        _, rest_parts, _ = open_parts(shapely.difference(region, reach), opening,
-                                      min_island)
-        remain = _polygonal(shapely.difference(region, shapely.union_all(rest_parts))
-                            if rest_parts else region)
+        where = f"a color {label} candidate of {region.area:.6g} mm^2"
+        reach, wall = _reach(kept_union, c, vertex_dist([region]), where)
+        walls.append(wall)
+        outside = shapely.difference(region, reach)
+        _, rest_parts, _ = open_parts(outside, opening, min_island)
+        rest = (shapely.intersection(shapely.union_all(rest_parts), outside)
+                if rest_parts else Polygon())
+        remain = _polygonal(region if rest.is_empty else shapely.difference(region, rest))
         # Parts with no kept piece (the cusps at a leftover's rounded corners, or bits
         # cut off by it) would be empty pockets: they go to the base with the leftover.
         polys = [q for q in remain if q.intersects(kept_union)]
@@ -433,6 +537,15 @@ def glue_geometry(cells: Cells, *, thickness_mm, skin_mm, clearance_mm, min_piec
               "opening_mm": opening, "min_island_mm2": min_island, "folds": folds,
               "leftover": rows,
               "leftover_mm2": float(sum(r["leftover_mm2"] for r in rows)),
+              "clearance_fix": {
+                  "pieces_eroded": sum(f["eroded"] for f in fixes),
+                  "rounds": max((f["rounds"] for f in fixes), default=0),
+                  "largest_shortfall_mm": max(
+                      (f["largest_shortfall_mm"] for f in fixes), default=0.0),
+                  "walls_grown": sum(1 for w in walls if w["rounds"]),
+                  "wall_rounds": max((w["rounds"] for w in walls), default=0),
+                  "wall_largest_shortfall_mm": max(
+                      (w["largest_shortfall_mm"] for w in walls), default=0.0)},
               "rebuild": rebuilt.report,
               "silhouette_pinches": rebuilt.report["pinches"]["silhouette_pinches"],
               "pockets": pocket_rows, "pieces": piece_rows, "colors": colors,

@@ -1,81 +1,84 @@
-# 2026-11-12, Windows 11 PC (12th Gen Intel(R) Core(TM) i9-12900K), commit d1d2b34 plus the uncommitted Task 5 working tree, after the owner's amendment to Decision 8 ("Fold small pieces too": fold when no piece reaches the min-piece area; keep only pieces >= it; leftover = candidate minus the kept pieces' clearance buffer, cleaned with the R1 opening and island rule, to the base; cells rebuilt by color_cells; checks include F4.glue_partition); replaces the first run (fold on total area), whose numbers are quoted in README.md and the plan; uv run python research/verification/2026-11-12-color-geometry/measure_glue.py
-== roadie-tol30-60-drop-v3-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 16 cells in; glue_geometry 1.13 s, glue_checks 1.05 s
+# 2026-11-12, Windows 11 PC (12th Gen Intel(R) Core(TM) i9-12900K), commit d209c49 plus the uncommitted Codex review 3 fixes (clearance fix by construction: pieces eroded and the kept pieces' buffer grown by their measured shortfalls, leftover clipped to outside the buffer; F4.glue_fit margin = the snaps + 3 DIST; occupancy in F2.export_matches_geometry); replaces the run of d1d2b34 plus the Task 5 working tree (in git), whose F4.glue_fit gaps were 0.198637-0.198953 mm against 0.198061-0.198068 mm; uv run python research/verification/2026-11-12-color-geometry/measure_glue.py
+== roadie-tol30-60-drop-v3-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 16 cells in; glue_geometry 1.54 s, glue_checks 1.86 s
   folds: 2
-    color 1 (1 cells, 3.855 mm^2 unshrunk; 1 pieces, 2.527 mm^2, largest 2.527 mm^2) -> base 0, shared 8.871 mm; neighbours 0: 8.871
-    color 3 (1 cells, 4.181 mm^2 unshrunk; 1 pieces, 2.679 mm^2, largest 2.679 mm^2) -> color 1, shared 5.04 mm; neighbours 0: 3.276, 1: 5.04, 2: 1.865
+    color 1 (1 cells, 3.855 mm^2 unshrunk; 1 pieces, 2.521 mm^2, largest 2.521 mm^2) -> base 0, shared 8.871 mm; neighbours 0: 8.871
+    color 3 (1 cells, 4.181 mm^2 unshrunk; 1 pieces, 2.673 mm^2, largest 2.673 mm^2) -> color 1, shared 5.04 mm; neighbours 0: 3.276, 1: 5.04, 2: 1.865
   leftover to the base: total 2.651 mm^2; per color:
-    color 1: 6 candidates, 211.8 mm^2 -> pockets 209.2 mm^2, leftover 2.651 mm^2; 1 small pieces dropped (1.544 mm^2)
+    color 1: 6 candidates, 211.8 mm^2 -> pockets 209.2 mm^2, leftover 2.651 mm^2; 1 small pieces dropped (1.539 mm^2)
     color 2: 1 candidates, 96.33 mm^2 -> pockets 96.33 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
   rebuild (information): grid 3.8147e-06 mm, 14 cells; pinches 0 joined in 0 rounds, area moved 0.00e+00 mm^2; silhouette pinches 0
   pockets 7, pieces 7; per color:
-    color 1: 6 pockets, 6 pieces, smallest 6.116 mm^2, largest 84.66 mm^2, total 176.6 mm^2
-    color 2: 1 pockets, 1 pieces, smallest 83.43 mm^2, largest 83.43 mm^2, total 83.43 mm^2
+    color 1: 6 pockets, 6 pieces, smallest 6.104 mm^2, largest 84.61 mm^2, total 176.5 mm^2
+    color 2: 1 pockets, 1 pieces, smallest 83.37 mm^2, largest 83.37 mm^2, total 83.37 mm^2
   empty pockets: 0
-  uncovered pocket area (information): total 1.585 mm^2; largest per pocket #1 0.373/94.16, #7 0.349/96.33, #3 0.227/39.39
+  clearance fix: 8 parts eroded in at most 1 rounds (largest shortfall 1.047e-03 mm); 7 buffers grown in at most 1 rounds (largest shortfall 1.207e-03 mm)
+  uncovered pocket area (information): total 1.809 mm^2; largest per pocket #1 0.419/94.16, #7 0.412/96.33, #3 0.265/39.39
   F4.glue_partition PASS: S xor cells 0.00e+00/1.85e-03 mm^2, pocket overlap 0.0e+00/5.2e-11 mm^2, outside S 0.0e+00 mm^2, base volume error 0.00e+00/5.54e-03 mm^3
-  F4.glue_fit PASS: min gap 0.198953 mm >= threshold 0.198068 mm (margin 1.932e-03: wall chord 9.631e-04, opening chord 9.631e-04, pocket move 2.697e-06, snap 2.697e-06); per piece smallest 3: #3 0.198953, #1 0.198997, #2 0.198997
+  F4.glue_fit PASS: min gap 0.199999 mm >= threshold 0.199995 mm (margin 5.395e-06: pocket move 2.697e-06, snap 2.697e-06, rounding 1.6e-13); per piece smallest 3: #5 0.199999, #1 0.200000, #2 0.200000
   base: 14 parts, plate triangles 61358 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-1: 6 parts, plate triangles 25056 / 1000000; 10 checks all PASS
+  color-1: 6 parts, plate triangles 40476 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-2: 1 parts, plate triangles 9908 / 1000000; 10 checks all PASS
+  color-2: 1 parts, plate triangles 16956 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-== roadie-tol30-60-keep-v4-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 20 cells in; glue_geometry 12.33 s, glue_checks 1.18 s
+== roadie-tol30-60-keep-v4-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 20 cells in; glue_geometry 14.06 s, glue_checks 2.22 s
   folds: 7
     color 1 (1 cells, 2.778 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> base 0, shared 10.43 mm; neighbours 0: 10.43, 2: 7.51
     color 1 (1 cells, 0.6941 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> base 0, shared 2.495 mm; neighbours 0: 2.495, 3: 1.638
-    color 2 (1 cells, 1.644 mm^2 unshrunk; 1 pieces, 0.7649 mm^2, largest 0.7649 mm^2) -> color 1, shared 4.612 mm; neighbours 0: 1.285, 1: 4.612
-    color 2 (1 cells, 2.659 mm^2 unshrunk; 1 pieces, 1.572 mm^2, largest 1.572 mm^2) -> base 0, shared 7.51 mm; neighbours 0: 7.51
-    color 2 (1 cells, 3.998 mm^2 unshrunk; 1 pieces, 2.098 mm^2, largest 2.098 mm^2) -> color 1, shared 11.79 mm; neighbours 1: 11.79
-    color 2 (1 cells, 4.322 mm^2 unshrunk; 1 pieces, 2.284 mm^2, largest 2.284 mm^2) -> color 1, shared 12.45 mm; neighbours 1: 12.45
-    color 2 (1 cells, 4.353 mm^2 unshrunk; 1 pieces, 2.367 mm^2, largest 2.367 mm^2) -> color 1, shared 12.55 mm; neighbours 1: 12.55
+    color 2 (1 cells, 1.644 mm^2 unshrunk; 1 pieces, 0.7616 mm^2, largest 0.7616 mm^2) -> color 1, shared 4.612 mm; neighbours 0: 1.285, 1: 4.612
+    color 2 (1 cells, 2.659 mm^2 unshrunk; 1 pieces, 1.567 mm^2, largest 1.567 mm^2) -> base 0, shared 7.51 mm; neighbours 0: 7.51
+    color 2 (1 cells, 3.998 mm^2 unshrunk; 1 pieces, 2.09 mm^2, largest 2.09 mm^2) -> color 1, shared 11.79 mm; neighbours 1: 11.79
+    color 2 (1 cells, 4.322 mm^2 unshrunk; 1 pieces, 2.276 mm^2, largest 2.276 mm^2) -> color 1, shared 12.45 mm; neighbours 1: 12.45
+    color 2 (1 cells, 4.353 mm^2 unshrunk; 1 pieces, 2.359 mm^2, largest 2.359 mm^2) -> color 1, shared 12.55 mm; neighbours 1: 12.55
   leftover to the base: total 206.8 mm^2; per color:
-    color 1: 1 candidates, 255.5 mm^2 -> pockets 48.65 mm^2, leftover 206.8 mm^2; 9 small pieces dropped (16.11 mm^2)
+    color 1: 1 candidates, 255.5 mm^2 -> pockets 48.66 mm^2, leftover 206.8 mm^2; 9 small pieces dropped (16.05 mm^2)
     color 2: 3 candidates, 133.4 mm^2 -> pockets 133.4 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
     color 3: 1 candidates, 67.19 mm^2 -> pockets 67.19 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
-  rebuild (information): grid 3.8147e-06 mm, 18 cells; pinches 2 joined in 2 rounds, area moved 8.18e-11 mm^2; silhouette pinches 0
+  rebuild (information): grid 3.8147e-06 mm, 11 cells; pinches 0 joined in 0 rounds, area moved 0.00e+00 mm^2; silhouette pinches 0
   pockets 8, pieces 8; per color:
-    color 1: 4 pockets, 4 pieces, smallest 4.194 mm^2, largest 13.61 mm^2, total 35.03 mm^2
-    color 2: 3 pockets, 3 pieces, smallest 17.73 mm^2, largest 69.8 mm^2, total 111.2 mm^2
-    color 3: 1 pockets, 1 pieces, smallest 54.96 mm^2, largest 54.96 mm^2, total 54.96 mm^2
+    color 1: 4 pockets, 4 pieces, smallest 4.18 mm^2, largest 13.6 mm^2, total 34.97 mm^2
+    color 2: 3 pockets, 3 pieces, smallest 17.7 mm^2, largest 69.76 mm^2, total 111.1 mm^2
+    color 3: 1 pockets, 1 pieces, smallest 54.9 mm^2, largest 54.9 mm^2, total 54.9 mm^2
   empty pockets: 0
-  uncovered pocket area (information): total 3.73 mm^2; largest per pocket #8 0.887/67.19, #4 0.802/7.89, #1 0.405/17.01
-  F4.glue_partition PASS: S xor cells 5.11e-07/1.85e-03 mm^2, pocket overlap 0.0e+00/6.4e-11 mm^2, outside S 2.0e-07 mm^2, base volume error 5.60e-07/5.54e-03 mm^3
-  F4.glue_fit PASS: min gap 0.198869 mm >= threshold 0.198061 mm (margin 1.939e-03: wall chord 9.631e-04, opening chord 9.631e-04, pocket move 1.033e-05, snap 2.697e-06); per piece smallest 3: #2 0.198869, #1 0.198925, #3 0.198958
-  base: 18 parts, plate triangles 80630 / 1000000; 10 checks all PASS
+  clearance fix: 17 parts eroded in at most 1 rounds (largest shortfall 1.470e-03 mm); 5 buffers grown in at most 1 rounds (largest shortfall 1.504e-03 mm)
+  uncovered pocket area (information): total 3.958 mm^2; largest per pocket #8 0.943/67.19, #4 0.817/7.89, #5 0.44/78.63
+  F4.glue_partition PASS: S xor cells 3.76e-07/1.85e-03 mm^2, pocket overlap 0.0e+00/6.4e-11 mm^2, outside S 2.0e-07 mm^2, base volume error 5.99e-07/5.54e-03 mm^3
+  F4.glue_fit PASS: min gap 0.199998 mm >= threshold 0.199995 mm (margin 5.395e-06: pocket move 2.697e-06, snap 2.697e-06, rounding 1.6e-13); per piece smallest 3: #3 0.199998, #8 0.200000, #1 0.200000
+  base: 11 parts, plate triangles 80898 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-1: 4 parts, plate triangles 8952 / 1000000; 10 checks all PASS
+  color-1: 4 parts, plate triangles 15508 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-2: 3 parts, plate triangles 19284 / 1000000; 10 checks all PASS
+  color-2: 3 parts, plate triangles 34148 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-3: 1 parts, plate triangles 10532 / 1000000; 10 checks all PASS
+  color-3: 1 parts, plate triangles 20360 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-== oddie-60-merge-blues-v3-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 8 cells in; glue_geometry 1.46 s, glue_checks 1.07 s
+== oddie-60-merge-blues-v3-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 8 cells in; glue_geometry 2.63 s, glue_checks 1.82 s
   folds: 2
-    color 3 (1 cells, 3.621 mm^2 unshrunk; 1 pieces, 2.207 mm^2, largest 2.207 mm^2) -> color 1, shared 9.49 mm; neighbours 1: 9.49
-    color 3 (1 cells, 4.437 mm^2 unshrunk; 1 pieces, 2.755 mm^2, largest 2.755 mm^2) -> color 1, shared 11.06 mm; neighbours 1: 11.06
+    color 3 (1 cells, 3.621 mm^2 unshrunk; 1 pieces, 2.201 mm^2, largest 2.201 mm^2) -> color 1, shared 9.49 mm; neighbours 1: 9.49
+    color 3 (1 cells, 4.437 mm^2 unshrunk; 1 pieces, 2.748 mm^2, largest 2.748 mm^2) -> color 1, shared 11.06 mm; neighbours 1: 11.06
   leftover to the base: total 0 mm^2; per color:
     color 1: 1 candidates, 593.8 mm^2 -> pockets 593.8 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
     color 2: 3 candidates, 430.2 mm^2 -> pockets 430.2 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
     color 3: 1 candidates, 28.06 mm^2 -> pockets 28.06 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
   rebuild (information): grid 7.62939e-06 mm, 6 cells; pinches 0 joined in 0 rounds, area moved 0.00e+00 mm^2; silhouette pinches 0
   pockets 5, pieces 5; per color:
-    color 1: 1 pockets, 1 pieces, smallest 568.3 mm^2, largest 568.3 mm^2, total 568.3 mm^2
-    color 2: 3 pockets, 3 pieces, smallest 71.1 mm^2, largest 225.3 mm^2, total 391.9 mm^2
-    color 3: 1 pockets, 1 pieces, smallest 23.98 mm^2, largest 23.98 mm^2, total 23.98 mm^2
+    color 1: 1 pockets, 1 pieces, smallest 568.1 mm^2, largest 568.1 mm^2, total 568.1 mm^2
+    color 2: 3 pockets, 3 pieces, smallest 71.05 mm^2, largest 225.2 mm^2, total 391.7 mm^2
+    color 3: 1 pockets, 1 pieces, smallest 23.96 mm^2, largest 23.96 mm^2, total 23.96 mm^2
   empty pockets: 0
-  uncovered pocket area (information): total 2.12 mm^2; largest per pocket #2 1.17/244.7, #4 0.294/80.25, #3 0.28/105.2
+  clearance fix: 5 parts eroded in at most 1 rounds (largest shortfall 1.360e-03 mm); 5 buffers grown in at most 1 rounds (largest shortfall 1.504e-03 mm)
+  uncovered pocket area (information): total 2.493 mm^2; largest per pocket #2 1.3/244.7, #1 0.388/593.8, #4 0.341/80.25
   F4.glue_partition PASS: S xor cells 0.00e+00/2.97e-03 mm^2, pocket overlap 0.0e+00/5.0e-11 mm^2, outside S 0.0e+00 mm^2, base volume error 0.00e+00/8.90e-03 mm^3
-  F4.glue_fit PASS: min gap 0.198637 mm >= threshold 0.198063 mm (margin 1.937e-03: wall chord 9.631e-04, opening chord 9.631e-04, pocket move 5.395e-06, snap 5.395e-06); per piece smallest 3: #2 0.198637, #1 0.198944, #3 0.198944
+  F4.glue_fit PASS: min gap 0.200000 mm >= threshold 0.199989 mm (margin 1.079e-05: pocket move 5.395e-06, snap 5.395e-06, rounding 1.8e-13); per piece smallest 3: #1 0.200000, #4 0.200000, #3 0.200000
   base: 6 parts, plate triangles 55820 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-1: 1 parts, plate triangles 18912 / 1000000; 10 checks all PASS
+  color-1: 1 parts, plate triangles 26184 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-2: 3 parts, plate triangles 26488 / 1000000; 10 checks all PASS
+  color-2: 3 parts, plate triangles 39132 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-3: 1 parts, plate triangles 2556 / 1000000; 10 checks all PASS
+  color-3: 1 parts, plate triangles 4144 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-== oddie-60-keep-merge-blues-greens-v4-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 17 cells in; glue_geometry 4.79 s, glue_checks 1.14 s
+== oddie-60-keep-merge-blues-greens-v4-f64: T 3.0 mm, d 0.6 mm, clearance 0.2 mm, min piece 2.0 mm (4.0 mm^2), opening 0.4 mm, island 0.64 mm^2, base 0; 17 cells in; glue_geometry 6.26 s, glue_checks 1.94 s
   folds: 10
     color 2 (1 cells, 11.51 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> base 0, shared 53.34 mm; neighbours 0: 53.34
     color 2 (1 cells, 10.54 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> color 1, shared 26.41 mm; neighbours 1: 26.41, 3: 22.17
@@ -84,23 +87,24 @@
     color 2 (1 cells, 3.377 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> base 0, shared 18.98 mm; neighbours 0: 18.98, 1: 0.5626
     color 2 (1 cells, 2.712 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> base 0, shared 9.64 mm; neighbours 0: 9.64, 1: 5.701
     color 2 (1 cells, 1.038 mm^2 unshrunk; 0 pieces, 0 mm^2, largest 0 mm^2) -> base 0, shared 7.202 mm; neighbours 0: 7.202
-    color 3 (1 cells, 3.621 mm^2 unshrunk; 1 pieces, 2.207 mm^2, largest 2.207 mm^2) -> color 1, shared 9.49 mm; neighbours 1: 9.49
-    color 3 (1 cells, 4.437 mm^2 unshrunk; 1 pieces, 2.755 mm^2, largest 2.755 mm^2) -> color 1, shared 11.06 mm; neighbours 1: 11.06
-    color 2 (1 cells, 192 mm^2 unshrunk; 4 pieces, 5.084 mm^2, largest 1.825 mm^2) -> base 0, shared 401.8 mm; neighbours 0: 401.8, 1: 154.8
+    color 3 (1 cells, 3.621 mm^2 unshrunk; 1 pieces, 2.201 mm^2, largest 2.201 mm^2) -> color 1, shared 9.49 mm; neighbours 1: 9.49
+    color 3 (1 cells, 4.437 mm^2 unshrunk; 1 pieces, 2.748 mm^2, largest 2.748 mm^2) -> color 1, shared 11.06 mm; neighbours 1: 11.06
+    color 2 (1 cells, 192 mm^2 unshrunk; 4 pieces, 5.065 mm^2, largest 1.819 mm^2) -> base 0, shared 401.8 mm; neighbours 0: 401.8, 1: 154.8
   leftover to the base: total 0 mm^2; per color:
     color 1: 2 candidates, 542.2 mm^2 -> pockets 542.2 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
     color 3: 1 candidates, 24.25 mm^2 -> pockets 24.25 mm^2, leftover 0 mm^2; 0 small pieces dropped (0 mm^2)
   rebuild (information): grid 7.62939e-06 mm, 4 cells; pinches 0 joined in 0 rounds, area moved 0.00e+00 mm^2; silhouette pinches 0
   pockets 3, pieces 4; per color:
-    color 1: 2 pockets, 3 pieces, smallest 56.53 mm^2, largest 395.3 mm^2, total 510 mm^2
-    color 3: 1 pockets, 1 pieces, smallest 20.47 mm^2, largest 20.47 mm^2, total 20.47 mm^2
+    color 1: 2 pockets, 3 pieces, smallest 56.5 mm^2, largest 395.2 mm^2, total 509.8 mm^2
+    color 3: 1 pockets, 1 pieces, smallest 20.45 mm^2, largest 20.45 mm^2, total 20.45 mm^2
   empty pockets: 0
-  uncovered pocket area (information): total 1.212 mm^2; largest per pocket #1 0.865/479.4, #2 0.234/62.79, #3 0.113/24.25
+  clearance fix: 4 parts eroded in at most 1 rounds (largest shortfall 1.054e-03 mm); 3 buffers grown in at most 1 rounds (largest shortfall 1.310e-03 mm)
+  uncovered pocket area (information): total 1.393 mm^2; largest per pocket #1 0.995/479.4, #2 0.265/62.79, #3 0.132/24.25
   F4.glue_partition PASS: S xor cells 0.00e+00/2.97e-03 mm^2, pocket overlap 0.0e+00/5.5e-11 mm^2, outside S 0.0e+00 mm^2, base volume error 0.00e+00/8.90e-03 mm^3
-  F4.glue_fit PASS: min gap 0.198944 mm >= threshold 0.198063 mm (margin 1.937e-03: wall chord 9.631e-04, opening chord 9.631e-04, pocket move 5.395e-06, snap 5.395e-06); per piece smallest 3: #1 0.198944, #2 0.198944, #3 0.198944
+  F4.glue_fit PASS: min gap 0.200000 mm >= threshold 0.199989 mm (margin 1.079e-05: pocket move 5.395e-06, snap 5.395e-06, rounding 1.8e-13); per piece smallest 3: #1 0.200000, #2 0.200000, #3 0.200000
   base: 4 parts, plate triangles 75868 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-1: 3 parts, plate triangles 29220 / 1000000; 10 checks all PASS
+  color-1: 3 parts, plate triangles 46008 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS
-  color-3: 1 parts, plate triangles 2244 / 1000000; 10 checks all PASS
+  color-3: 1 parts, plate triangles 3560 / 1000000; 10 checks all PASS
     F1.finite PASS, F1.no_degenerate_faces PASS, F1.no_duplicate_faces PASS, F1.edge_manifold PASS, F1.consistent_orientation PASS, F1.vertex_manifold PASS, F1.positive_volume PASS, F2.export_matches_geometry PASS, F2.fits_build_volume PASS, F5.triangles PASS

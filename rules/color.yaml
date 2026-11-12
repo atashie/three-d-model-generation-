@@ -169,7 +169,7 @@
 
 - id: color.glue.clearance_mm
   kind: hypothesis
-  summary: Gap per side between a glue piece and its pocket. Each piece is the pocket's shape buffered inwards by this much (round joins), so the gap is at least this everywhere.
+  summary: "Gap per side between a glue piece and its pocket (the nominal clearance). Each piece is the pocket's shape buffered inwards by this much (round joins), then eroded wherever the measured gap is short, so before snapping to the storage grid the gap is at least this (to float64 rounding). The built gap is at least this minus the grid snaps (a few micrometres); F4.glue_fit gates it."
   unit: mm
   default: 0.2
   scales_with_model: false

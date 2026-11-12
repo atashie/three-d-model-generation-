@@ -16,7 +16,7 @@ slicing) and the verdict are added by make_colored_flat in Task 6.
 from __future__ import annotations
 
 import io
-import math
+from itertools import pairwise
 
 import numpy as np
 import shapely
@@ -37,7 +37,7 @@ from tdmg.color_geometry import (
     vertex_dist,
 )
 from tdmg.color_glue import Glue
-from tdmg.flat import QUAD_SEGS, build_volume_check, encode_stl, export_match, triangle_check
+from tdmg.flat import build_volume_check, encode_stl, export_match, triangle_check
 from tdmg.profiles import PrinterProfile
 
 
@@ -220,20 +220,114 @@ def filaments_check(bodies: list[Body], *, colors, palette_cap) -> CheckResult:
                        "palette_cap)); one filament per body")
 
 
+def mesh_section(mesh: trimesh.Trimesh, z: float):
+    """The mesh's cross-section at height z, as a polygonal geometry (possibly empty).
+
+    Exact triangle-plane intersection: a vertex is above when its z >= z, an edge crosses
+    when one end is above and the other is not, and its crossing point is a + t (b - a),
+    t = (z - z_a) / (z_b - z_a), computed with the edge's ends in index order (a < b),
+    so the two triangles that share an edge get the same point, bit for bit. A triangle
+    with crossing edges has exactly two; their points make one segment. The segments are
+    noded (shapely.union_all) and shapely.build_area makes the polygons, holes by nesting
+    (even-odd). On an edge whose ends share x and y (a vertical wall edge, every
+    prism_mesh wall has them) the point is exactly that x, y, since b - a is 0 there; on
+    a wall's diagonal it lies within ULPS x eps x max|coordinate| of the edge's x, y
+    segment (body_export_check gives the bound).
+    """
+    v = np.asarray(mesh.vertices, dtype=np.float64)
+    f = np.asarray(mesh.faces, dtype=np.int64)
+    if not len(f):
+        return shapely.GeometryCollection()
+    above = v[:, 2] >= z
+    ends = np.stack([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]], axis=1)  # (n, 3, 2)
+    ends = np.sort(ends, axis=2)
+    a, b = ends[..., 0], ends[..., 1]
+    crossing = above[a] != above[b]
+    count = crossing.sum(axis=1)
+    if not count.any():
+        return shapely.GeometryCollection()
+    hit = count == 2  # 0 or 2 by parity; anything else cannot occur
+    if np.any((count != 0) & ~hit):
+        raise ColorCheckError("a triangle crosses the section plane on one edge only")
+    a, b, crossing = a[hit], b[hit], crossing[hit]
+    va, vb = v[a], v[b]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = (z - va[..., 2]) / (vb[..., 2] - va[..., 2])  # nan on edges that do not cross
+        points = va[..., :2] + t[..., None] * (vb[..., :2] - va[..., :2])  # (k, 3, 2)
+    order = np.argsort(~crossing, axis=1, kind="stable")[:, :2]  # the two crossing edges
+    segments = np.take_along_axis(points, order[..., None], axis=1)  # (k, 2, 2)
+    segments = segments[np.any(segments[:, 0] != segments[:, 1], axis=1)]
+    if not len(segments):
+        return shapely.GeometryCollection()
+    lines = shapely.union_all(shapely.linestrings(segments))
+    return shapely.build_area(lines)
+
+
+def occupancy_rows(mesh: trimesh.Trimesh, body: Body) -> list[dict]:
+    """Per z interval of the body, the mesh's section against the body's footprint.
+
+    The intervals are those between consecutive z levels of the body's slabs, so each
+    cell either covers an interval or does not; the footprint there is the union of the
+    cells that cover it. See body_export_check for the cut height and the tolerance.
+    """
+    levels = sorted({z for _, z0, z1 in body.slabs for z in (z0, z1)})
+    cells = [(c, z0, z1) for group, z0, z1 in body.slabs for c in group]
+    rows = []
+    for lo, hi in pairwise(levels):
+        z = (lo + hi) / 2
+        footprint = _union([c for c, z0, z1 in cells if z0 <= lo and hi <= z1])
+        section = mesh_section(mesh, z)
+        dist = vertex_dist([g for g in (footprint, section) if not g.is_empty])
+        tol = 2 * (float(section.length) + float(footprint.length)) * dist
+        diff = float(shapely.symmetric_difference(section, footprint).area)
+        rows.append({"z_range_mm": [lo, hi], "z_mm": z,
+                     "mesh_area_mm2": float(section.area),
+                     "expected_area_mm2": float(footprint.area),
+                     "symmetric_difference_mm2": diff, "area_tol_mm2": tol,
+                     "pass": diff <= tol})
+    return rows
+
+
 def body_export_check(mesh: trimesh.Trimesh, body: Body) -> CheckResult:
     """F2.export_matches_geometry for one body: the mesh read back is the body's solid.
 
-    It gates the STL encoding against the Body's own intended solid: the x and y bounds
-    of its cells, z = body.z_range_mm, volume = body.expected_volume_mm3, with
-    tdmg.flat.export_match's float32-storage tolerances and the intended solid's surface
-    area body.surface_mm2 (its tops, bottoms and the walls that prism_mesh builds). It
-    does not see T or d: those are checked by F4.color_partition's volume and by the
-    body tests (z ranges 0..T and T - d..T).
+    It gates the STL encoding against the Body's own intended solid:
+    - the x and y bounds of its cells, z = body.z_range_mm, volume =
+      body.expected_volume_mm3, with tdmg.flat.export_match's float32-storage tolerances
+      and the intended solid's surface area body.surface_mm2 (its tops, bottoms and the
+      walls that prism_mesh builds);
+    - occupancy (Codex review 3: bounds and volume miss a component moved inside the
+      bounds): for every z interval between consecutive levels of the body's slabs, the
+      mesh's section at mid-height (mesh_section) against the body's footprint there
+      (the union of the cells covering the interval); measured["occupancy"] has one row
+      per interval with the symmetric-difference area and its tolerance.
+    The occupancy tolerance (derived, not a rule): the cells' x, y are on the storage
+    grid, which float32 holds exactly (tdmg.color_geometry.storage_grid_mm), so STL
+    storage changes only z, and the mid-height cut, far from every float32-rounded level,
+    does not see z. The section's vertices are then the cells' own vertices, exact, plus
+    one crossing point per wall diagonal, computed as p + t (q - p): q - p is exact
+    (grid multiples), and the product and the sum are rounded once each, so the point is
+    within 1.5 eps max|coordinate| per axis, under DIST = ULPS x eps x max|coordinate|
+    (tdmg.color_geometry.vertex_dist), of its wall's x, y edge. That moves area by at
+    most the section's length x DIST / 2; the overlay's rounding is at most (the
+    section's length + the footprint's length) x DIST, as in F4.color_partition.
+    area_tol_mm2 = 2 (section length + footprint length) DIST covers both. PASS iff the
+    bounds, the volume and every interval are within their tolerances. It does not see
+    T or d: those are checked by F4.color_partition's volume and by the body tests
+    (z ranges 0..T and T - d..T).
     """
     bounds = shapely.total_bounds(np.asarray(body.parts, dtype=object))
-    return export_match(mesh, [float(v) for v in bounds],
+    base = export_match(mesh, [float(v) for v in bounds],
                         [float(v) for v in body.z_range_mm], body.expected_volume_mm3,
                         body.surface_mm2)
+    rows = occupancy_rows(mesh, body)
+    ok = base.status == "PASS" and all(r["pass"] for r in rows)
+    return CheckResult(
+        base.id, "PASS" if ok else "FAIL", base.measured | {"occupancy": rows},
+        base.threshold | {"occupancy_area_tol_mm2": [r["area_tol_mm2"] for r in rows]},
+        None, "tolerances cover float32 storage in the STL only, and float64 rounding "
+              "for the occupancy (each z interval's mid-height section against the "
+              "cells covering it); derived, not rules")
 
 
 def _same_cells(bodies: list[Body], cells: Cells) -> None:
@@ -293,42 +387,34 @@ def ams_checks(bodies: list[Body], cells: Cells, thickness_mm, *, colors, palett
 # --- glue route (Decision 9, F4.glue_fit) -----------------------------------------------
 
 
-def glue_fit_margin(clearance_mm: float, opening_mm: float, grid_mm: float, *,
-                    pinch_joined: bool = False) -> dict:
-    """How far below the clearance a correct piece's gap to its pocket wall can be.
+def glue_fit_margin(grid_mm: float, *, pinch_joined: bool = False,
+                    rounding_mm: float = 0.0) -> dict:
+    """How far below the clearance c a correct piece's gap to its pocket wall can be.
 
-    Derived, not a rule. With k = 1 - cos(pi / (4 QUAD_SEGS)), the bounds added:
-    - Chord error at the walls, c k: where the wall is the candidate's own boundary, the
-      inward buffer by c follows a circle of radius c around each concave corner, drawn
-      as chords whose ends lie on it, so a chord's middle is c k closer to the corner;
-      where the wall is the kept pieces' outward buffer by c (the edge of a leftover
-      given to the base, the "Fold small pieces too" amendment), that buffer's chords
-      are at most c k closer to the piece. Both are one term: a piece
-      point's distance to the pocket's boundary is the smaller of its distances to the
-      two kinds of wall, and each is bounded (tdmg.color_glue.glue_geometry's docstring).
-    - Opening chord error, r k with r = opening_mm / 2: the opening's polygonal erosion
-      keeps points down to r minus this from the edge of the region it opens, and
-      dilating them by r (a polygon inside the true disc) can reach outside that region
-      by at most this much (tdmg.flat._hausdorff_upper_bound, point 1, gives the same
-      bound for clean). At the first kind of wall it is the piece's opening reaching
-      past the shrunk piece; at the second, the leftover's opening reaching past the
-      region outside the buffer, into the clearance band. One term covers both.
+    Derived, not a rule. tdmg.color_glue.glue_geometry builds every piece, before the
+    grid, at least c - DIST from its pocket's wall by construction (the clearance fix:
+    pieces are eroded, and the kept pieces' outward buffer grown, by their measured
+    shortfalls; the leftover is clipped to outside that buffer). So the margin has no
+    chord-error term (an earlier version allowed c (1 - cos(pi / (4 QUAD_SEGS))) and the
+    opening's r (1 - cos(pi / (4 QUAD_SEGS))), which GEOS does not guarantee: it draws a
+    shallow arc with one chord; Codex review 3). The bounds added:
     - Piece snap, snap_move_mm(G) = G sqrt(2)/2: shapely.set_precision moves each
       piece's boundary by at most this.
     - Pocket snap, snap_move_mm(G) again: the pockets are rebuilt by color_cells (one
       snap-rounded noding of the pockets' and the base's boundaries), which moves the
       pocket boundary by at most this. When that rebuild joined a pinch (pinch_joined),
       a diamond of radius PINCH_K G can move it further, so PINCH_K G is added too.
-    Not bounded separately: the float64 rounding of GEOS's buffer vertices, about eps x
-    the coordinates (1e-14 mm at 60 mm), far below the snap terms (3e-6 mm at 60 mm).
+    - rounding_mm: float64 rounding, passed by glue_fit_check as 3 DIST (DIST = ULPS x
+      eps x max|coordinate| of the gridded S, tdmg.color_geometry.vertex_dist): the
+      clearance fix accepts gaps down to c - DIST, and the pocket's two overlays (the
+      leftover's clip and the candidate minus it) move its vertices by at most DIST each.
+      About 1e-13 mm at 60 mm, far below the snaps (3e-6 mm at 60 mm).
     """
-    factor = 1 - math.cos(math.pi / (4 * QUAD_SEGS))
-    chord = clearance_mm * factor
-    opening = opening_mm / 2 * factor
     snap = snap_move_mm(grid_mm)
     pocket = snap + (PINCH_K * grid_mm if pinch_joined else 0.0)
-    return {"margin_mm": chord + opening + snap + pocket, "shrink_chord_mm": chord,
-            "opening_chord_mm": opening, "snap_move_mm": snap, "pocket_move_mm": pocket}
+    rounding = float(rounding_mm)
+    return {"margin_mm": snap + pocket + rounding, "snap_move_mm": snap,
+            "pocket_move_mm": pocket, "rounding_mm": rounding}
 
 
 def _glue(glue) -> Glue:
@@ -346,14 +432,15 @@ def glue_fit_check(glue: Glue) -> CheckResult:
     inside = shapely.contains_properly(pocket, piece) and same_color = (the pocket's color
     is the piece's). PASS iff every piece is inside, in a pocket of its color,
     with gap_mm >= clearance_mm - margin_mm (glue_fit_margin, with pinch_joined when the
-    rebuilt cells have pinch fixes) and every pocket has a piece (empty_pockets lists the
+    rebuilt cells have pinch fixes, and rounding_mm = 3 vertex_dist of the gridded S) and
+    every pocket has a piece (empty_pockets lists the
     numbers of those that do not: a hole nothing fills). A piece in no pocket (number 0)
     FAILs. No pieces and no pockets: PASS, with min_gap_mm None. Reports the smallest gap
     overall and per piece.
     """
     glue = _glue(glue)
-    margin = glue_fit_margin(glue.clearance_mm, glue.opening_mm, glue.grid_mm,
-                             pinch_joined=bool(glue.cells.pinch_fixes))
+    margin = glue_fit_margin(glue.grid_mm, pinch_joined=bool(glue.cells.pinch_fixes),
+                             rounding_mm=3 * vertex_dist([glue.cells.silhouette]))
     limit = glue.clearance_mm - margin["margin_mm"]
     by_number = {p.number: p for p in glue.pockets}
     filled = {piece.pocket for piece in glue.pieces}
@@ -384,10 +471,11 @@ def glue_fit_check(glue: Glue) -> CheckResult:
          "empty_pockets": empty, "per_piece": rows},
         {"min_gap_mm": limit, "clearance_mm": glue.clearance_mm} | margin,
         "color.glue.clearance_mm",
-        f"threshold is the clearance minus a derived margin (the walls' and the opening's "
-        "chord error, c and r x (1 - cos(pi / (4 QUAD_SEGS))), and the piece's and the "
-        f"pocket's snap to the grid, G sqrt(2)/2 each{pinch}); every piece needs a "
-        "pocket of its color and every pocket a piece")
+        f"threshold is the clearance minus a derived margin (the piece's and the "
+        f"pocket's snap to the grid, G sqrt(2)/2 each{pinch}, and float64 rounding, 3 x "
+        "ULPS x eps x max|coordinate|); glue_geometry builds each piece at least the "
+        "clearance from its pocket's wall before the grid; every piece needs a pocket "
+        "of its color and every pocket a piece")
 
 
 def glue_partition_check(glue: Glue) -> CheckResult:

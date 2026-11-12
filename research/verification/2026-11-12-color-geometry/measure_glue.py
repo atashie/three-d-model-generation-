@@ -101,6 +101,11 @@ def main():
                   f"smallest {c['smallest_mm2']:.4g} mm^2, largest {c['largest_mm2']:.4g} "
                   f"mm^2, total {c['area_mm2']:.4g} mm^2")
         print(f"  empty pockets: {rep['empty_pockets']}")
+        fix = rep["clearance_fix"]
+        print(f"  clearance fix: {fix['pieces_eroded']} parts eroded in at most "
+              f"{fix['rounds']} rounds (largest shortfall {fix['largest_shortfall_mm']:.3e}"
+              f" mm); {fix['walls_grown']} buffers grown in at most {fix['wall_rounds']} "
+              f"rounds (largest shortfall {fix['wall_largest_shortfall_mm']:.3e} mm)")
         print(f"  uncovered pocket area (information): total {rep['uncovered_mm2']:.4g} "
               f"mm^2; largest per pocket "
               + ", ".join(f"#{p['number']} {p['uncovered_mm2']:.3g}/{p['area_mm2']:.4g}"
@@ -116,11 +121,10 @@ def main():
         print(f"  {fit.id} {fit.status}: min gap "
               f"{'none' if gap is None else f'{gap:.6f}'} mm >= threshold "
               f"{fit.threshold['min_gap_mm']:.6f} mm (margin "
-              f"{fit.threshold['margin_mm']:.3e}: wall chord "
-              f"{fit.threshold['shrink_chord_mm']:.3e}, opening chord "
-              f"{fit.threshold['opening_chord_mm']:.3e}, pocket move "
+              f"{fit.threshold['margin_mm']:.3e}: pocket move "
               f"{fit.threshold['pocket_move_mm']:.3e}, snap "
-              f"{fit.threshold['snap_move_mm']:.3e}); per piece smallest 3: "
+              f"{fit.threshold['snap_move_mm']:.3e}, rounding "
+              f"{fit.threshold['rounding_mm']:.1e}); per piece smallest 3: "
               + ", ".join(f"#{r['number']} {r['gap_mm']:.6f}"
                           for r in sorted(fit.measured["per_piece"],
                                           key=lambda r: (r["gap_mm"] is not None, r["gap_mm"] or 0))[:3]))

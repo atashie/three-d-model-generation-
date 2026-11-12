@@ -179,6 +179,30 @@ R1 opening and island rule, and parts of the pocket that hold no piece go to the
   margin then adds PINCH_K G to the pocket's move.
 - Time: `glue_geometry` 1.1–12.7 s, `glue_checks` 1.0–1.1 s.
 
+### Re-run after the Codex review 3 fixes (2026-11-12)
+
+`glue.txt` now holds this run (commit `d209c49` plus the uncommitted fixes); the table
+above is the run before, kept in git. The fixes: the clearance is made by construction
+(pieces eroded, and the kept pieces' buffer grown, by their measured shortfalls; the
+leftover clipped to outside the buffer), so F4.glue_fit's margin is only the grid snaps
+plus 3 x ULPS x eps x max|coordinate|; and F2.export_matches_geometry also compares each
+body's mid-height sections with its cells.
+
+| Plan | Smallest gap / threshold | Parts eroded / buffers grown (rounds) | Largest shortfall fixed | Uncovered | Piece triangles before → after |
+|---|---|---|---|---|---|
+| Roadie drop | 0.199999 / 0.199995 mm | 8 / 7 (1) | 1.21e-3 mm | 1.809 mm² (1.585) | 34,964 → 57,432 |
+| Roadie keep | 0.199998 / 0.199995 mm | 17 / 5 (1) | 1.50e-3 mm | 3.958 mm² (3.73) | 38,768 → 70,016 |
+| Oddie merge blues | 0.200000 / 0.199989 mm | 5 / 5 (1) | 1.50e-3 mm | 2.493 mm² (2.12) | 47,956 → 69,460 |
+| Oddie keep | 0.200000 / 0.199989 mm | 4 / 3 (1) | 1.31e-3 mm | 1.393 mm² (1.212) | 31,464 → 49,568 |
+
+- Folds, leftovers and piece counts are unchanged; pieces are a little smaller (by
+  their perimeter x the shortfall, e.g. 6.116 → 6.104 mm² for Roadie drop's smallest).
+- On Roadie keep the rebuild now has 11 cells and joins no pinch (18 cells and 2 pinches
+  before): the clipped leftover leaves no base pinch there.
+- Every body and plate check and F4.glue_partition still PASS. `bodies.txt` (the AMS
+  bodies, with the new occupancy rows) did not change apart from times, so it was not
+  rewritten.
+
 ## Task 7: the owner's review (2026-11-12)
 
 The owner reviewed `top.png` and `parts.png` of the four runs (`colored-runs.txt`). Their

@@ -1,9 +1,9 @@
 # Project status
 
-**Last updated:** 2026-11-12 (R2 step 2 under way: Tasks 1–5 of
-`docs/plans/2026-11-12-color-geometry.md` committed locally, not pushed; earlier: R2 step 1,
-F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
-with three commands, and R2 (flat multicolor) has its first command:
+**Last updated:** 2026-11-12 (R2 step 2 done: `tdmg flat --colors`, all 8 tasks of
+`docs/plans/2026-11-12-color-geometry.md`, with the Codex review handled; earlier: R2
+step 1, F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+with three commands, and R2 (flat multicolor) has two:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
 - **`tdmg flat`** (S2–S4, S8): makes a flat STL, smoothed by default (`--smooth-px 0`
@@ -20,7 +20,16 @@ with three commands, and R2 (flat multicolor) has its first command:
     `colors.json`.
   - **Not ready:** when more colors remain than the AMS allows, it marks the plan not
     ready and suggests merges.
-  - **Not built yet:** no geometry is made from the plan (design step 2).
+- **`tdmg flat SELECTION --colors PLAN`** (R2 step 2): turns a verified plan into gated
+  STL bodies.
+  - **AMS version:** a base plus one inlay per color in a 0.6 mm top skin, exactly the
+    approved preview.
+  - **Glue version:** a base with pockets, plus pieces shrunk by 0.2 mm. Small regions
+    are folded into a neighbour. A plan that keeps a drawn outline gets no glue version
+    (owner).
+  - **Outputs:** the STLs, `top.png`, `parts.png` and `colored.json`.
+  - **Not done yet:** it is not sliced or printed (steps 4–5), and there is no 3MF
+    (step 3).
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -52,7 +61,11 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI. For `5632ca4` (`F6.portability`, `slice-4`, and the portability Codex review fixes; run 43033039270, checked 2026-11-11), `ubuntu-latest` and `windows-latest` passed; `macos-15` did not run: GitHub cancelled it after no macOS runner picked it up ("The job was not acquired by Runner of type hosted even after multiple attempts"). CI then passed on all three OSes for `c93dfa1`, which adds only this STATUS note to `5632ca4` (run 43035563763, verified 2026-11-11); the real slicers are not installed in CI.
 
-Latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 review fixes):
+Latest local validation (2026-11-12, Windows PC, R2 step 2 after the Codex review 3 fixes):
+`uv run pytest -q` gave **2097 passed and 3 skipped** (the skips are the real-slicer tests);
+`uv run ruff check .` and `uv run python scripts/gen_docs.py --check` passed.
+
+Earlier, latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 review fixes):
 `uv run pytest -q` gave **1777 passed and 3 skipped** (after Codex review 2, `058f474`;
 it was 1760 at `ef4b2cf`). `uv run ruff check .` and
 `uv run python scripts/gen_docs.py --check` passed. R2 step 1 is pushed (`8a5856e..ef4b2cf`),
@@ -134,11 +147,10 @@ passed. These commits are pushed; for CI see above.
      unverified. Because `verify_colors` rebuilds, a plan made on the PC and checked on
      the Mac is refused if their results differ.
 2. **R2 design step 2: colored flat geometry** (`tdmg flat --colors`).
-   - **Progress (2026-11-12):** the plan `docs/plans/2026-11-12-color-geometry.md` was
+   - **Done (2026-11-12).** The plan `docs/plans/2026-11-12-color-geometry.md` was
      approved by the owner with its three starting values (rules `color.skin.depth_mm`
      0.6, `color.glue.clearance_mm` 0.2, `color.glue.min_piece_side_mm` 2.0; all
-     hypotheses, untested). Tasks 1–5 are done and committed locally (`a4a2a4f..18863c7`),
-     not pushed, so CI has not run on them:
+     hypotheses, untested). All 8 tasks are done:
      - Task 1, measured: the raw fine-map boundaries are within F5. No simplification.
      - Task 3: `tdmg.color_geometry.color_regions`. **Owner decision "Match preview"**:
        inlays are not cleaned (per-inlay trimming drew base-colored hairlines).
@@ -150,8 +162,17 @@ passed. These commits are pushed; for CI see above.
        too"**: kept outline bands are too thin for glue pieces, so in the glue version
        they mostly become base color (the AMS version keeps them). `F4.glue_fit` and
        `F4.glue_partition` pass on all four plans (`glue.txt`).
-     - Next: Task 6 (`make_colored_flat`, record, previews, CLI),
-       Task 7 (owner review), Task 8 (docs, Codex review, push, CI).
+     - Task 6: `tdmg flat --colors` (`tdmg.colored_flat`), its record and previews.
+     - Task 7: owner review. Verbatim: "teh colors match, but for the glued-together
+       versions of our images let's make sure to not add teh outline ... Everyting else
+       looks ok". So a plan that keeps a drawn outline gets no glue version.
+     - Task 8:
+       - docs updated;
+       - Codex review 3: 4 findings, all handled (`research/reviews/2026-11-12-color-geometry/`).
+         The main ones: an occupancy check on each decoded body, and the glue clearance
+         guaranteed by construction (`colorflat-2`);
+       - the macOS-only test failure fixed;
+       - CI result: see "Latest local validation" and the handoff.
    - **What it builds:** the base and top-skin inlays, plus the glue pieces with pockets.
    - **What it inherits:** the requirements in the color design's section "Requirements
      step 2 inherits from step 1".
@@ -267,8 +288,8 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest session (2026-11-12): R2 step 2, Tasks 1–5 of the color-geometry plan done.**
-  - **Commits:** `a4a2a4f..18863c7`, local only; push and CI come at Task 8.
+- **Latest session (2026-11-12): R2 step 2 (`tdmg flat --colors`) finished.**
+  - **Commits:** `a4a2a4f..HEAD`, pushed. The CI result is in the next bullet.
   - **Owner decisions:** the plan was approved with its three values. "Match preview":
     no cleaning of inlays (plan Decision 5 replacement).
   - **Controller decisions, recorded in the plan:**
@@ -276,9 +297,26 @@ The full list is in `docs/PLAN.md` section 13.
     - bodies meshed directly on the storage grid G = 2^(e−24);
     - pinch vertices joined by a 2G diamond, with S pinches left to F1;
     - checks named F4.*.
-  - **Owner decision (Task 5):** "Fold small pieces too" in the glue route.
-  - **Next:** plan Task 6 (`make_colored_flat`, `colored.json`, `top.png`, `parts.png`,
-    `tdmg flat --colors`), then Tasks 7–8.
+  - **CI:**
+    - The first run (43321934118, `d209c49`) failed on macOS only, on one test whose
+      precondition relied on a rounding sliver that does not arise on arm64. That test
+      now builds the sliver exactly.
+    - CI now writes failing tests as public annotations, because the logs need a sign-in.
+    - CI for the final commit: PENDING (fill in).
+  - **Owner decisions:**
+    - Task 5: "Fold small pieces too".
+    - Task 7: no glue version for a plan that keeps a drawn outline.
+  - **Next, when the owner says to proceed:** R2 step 3, the deterministic multicolor 3MF
+    writer (separate objects or one assembly, decided by import tests in OrcaSlicer and
+    PrusaSlicer; the owner confirms in Bambu Studio). Then step 4 (AMS slicing, face up
+    against face down) and step 5 (test strip and first prints).
+  - **Open:**
+    - Geometry is not bit-identical across platforms at the rounding level: macOS arm64
+      GEOS differs.
+    - `colored.json`'s environment does not record the platform.
+    - R1's single-body `F2.export_matches_geometry` still checks only bounds and volume
+      (Codex finding 1 applies to it).
+    - The three color rules are untested. Nothing has been printed from a color plan.
   - **Watch:** on Roadie with the outline kept, 14.3 mm² of the kept outline band is
     narrower than 0.4 mm. It is reported as information; the step 4 slicer checks judge
     it.

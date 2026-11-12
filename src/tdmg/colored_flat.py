@@ -85,7 +85,10 @@ from tdmg.smoothing import SmoothingError, smooth_labels
 
 RECORD_SCHEMA = "tdmg.colorflat/1"
 RECORD_NAME = "colored.json"
-ALGORITHM = "colorflat-1"
+# colorflat-2 (2026-11-12, Codex review 3): glue pieces are eroded until they clear their
+# region by the clearance, and pocket walls are grown to clear the pieces, so glue outputs
+# differ from colorflat-1 (never pushed with results; the owner-plan runs were re-made).
+ALGORITHM = "colorflat-2"
 SKIN_RULE = "color.skin.depth_mm"
 CLEARANCE_RULE = "color.glue.clearance_mm"
 MIN_SIDE_RULE = "color.glue.min_piece_side_mm"
