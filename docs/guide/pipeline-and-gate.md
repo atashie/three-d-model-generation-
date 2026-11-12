@@ -41,8 +41,10 @@ valid solid can still include an unwanted background.
   failed; 1 means a check failed (files written); 2 means an input or I/O error.
 - **`tdmg slice`** covers S9 (see below). It judges thin features from the G-code and
   replaces the placeholder F6 check with measured ones.
+- **`tdmg colors`** is the first half of S6 for flat multicolor (R2; see below). It
+  writes a color plan for review. It builds no geometry yet.
 
-There are no loops, bases or 3MF output yet.
+There are no loops, bases, colored geometry or 3MF output yet.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 
@@ -133,3 +135,50 @@ and flattens the A1 profiles (`--verify-only DIR` rechecks an install). Then pas
 `--slicer-dir DIR` or set `TDMG_ORCASLICER_DIR`. Every run re-hashes the whole app
 folder unless `--skip-tree-check` is given, which is recorded. `--timeout-s` overrides
 `slicer.orca.timeout_s`.
+
+## Color plans (`tdmg colors`, 2026-11-11)
+
+`tdmg colors SELECTION_DIR --width-mm W --out DIR` reads a verified `tdmg select` folder
+and suggests a palette for a multicolor print (attribute page:
+[C2 one body per filament](../print-types/attributes/color-multi.md)). Review its preview
+before any geometry is built.
+
+**What it does, in order:**
+1. It extracts `extract` colors (default 6, `color.extract.default_count`) inside the
+   mask, with k-means in CIELAB. The same input always gives the same palette.
+2. It finds the cartoon outline color (`color.outline.thin_share`). By default
+   (`outlines: drop`) the outline pixels go to the nearest other color; wide dark areas
+   such as a pupil stay (`color.outline.keep_area_width_ratio`). With `outlines: keep`
+   the lines are redrawn as one even band, `outline_width_mm` wide (default
+   `color.outline.keep_width`, 0.5 mm), along the drawing's lines and the outer edge.
+3. It applies the merges you chose (`merge`). It flags likely shade pairs
+   (`color.shade.max_hue_diff_deg`, `color.shade.min_chroma`) but never merges them
+   itself.
+4. It removes regions too thin or too small to print, with R1's
+   `flat.sliver.opening_width` and `flat.island.min_square_side`.
+5. It smooths all region borders together (`edges`: `smooth`, the default, `furry` or
+   `exact`).
+
+**Settings:** command-line flags override a YAML file given with `--config`, and the file
+overrides the rules and the printer profile. Unknown keys and values are refused. The
+keys are `colors` (the most colors in the final palette; default 4, the AMS lite's
+slots), `extract`, `edges`, `base` (`auto` is the largest color), `outlines`,
+`outline_color` (`auto`, `none` or an extraction index), `merge` (a list of
+`[from, into]` extraction indices) and `outline_width_mm`. For example:
+
+```yaml
+colors: 4
+outlines: keep
+merge: [[4, 1]]   # fold extracted color 4 into color 1
+```
+
+**Outputs:** `labels.png` (the region map), `regions.png` (the preview) and the record
+`colors.json`, whose `colors_id` hashes every input and setting. The preview shows the
+image, the extracted colors with their indices and flags, and the final regions.
+
+**Exit codes:** 0 means the plan is ready. 1 means the files are written but more colors
+remain than `colors` allows; choose merges from the preview and run again. A plan that is
+not ready cannot be built. 2 means an input, config or I/O error.
+
+**Not proven:** every color rule is an untested hypothesis set from two images, and
+nothing has been printed from a color plan.

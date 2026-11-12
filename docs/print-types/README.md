@@ -55,6 +55,7 @@ Every attribute and recipe page has these headings, in this order. `tests/test_d
 |---|---|
 | [attributes/geometry-flat.md](attributes/geometry-flat.md) | G1 flat / 2.5D extrusion |
 | [attributes/color-single.md](attributes/color-single.md) | C1 single filament |
+| [attributes/color-multi.md](attributes/color-multi.md) | C2 one body per filament (step 1: the color plan) |
 | [attributes/assembly-single.md](attributes/assembly-single.md) | L1 one print |
 | [recipes/r1-flat-single.md](recipes/r1-flat-single.md) | R1 flat single-color |
 
