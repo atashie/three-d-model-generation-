@@ -23,7 +23,18 @@ jobs:
       - name: Generated docs are current
         run: uv run python scripts/gen_docs.py --check
       - name: Tests
-        run: uv run pytest
+        shell: bash
+        # Job logs need a GitHub sign-in, but annotations are public through the API, so
+        # each failing test's short summary line is also written as an error annotation.
+        run: |
+          set -o pipefail
+          status=0
+          uv run pytest -rfE 2>&1 | tee "$RUNNER_TEMP/pytest.txt" || status=$?
+          if [ "$status" -ne 0 ]; then
+            grep -E '^(FAILED|ERROR) ' "$RUNNER_TEMP/pytest.txt" | cut -c1-900 \
+              | sed 's/^/::error title=pytest::/' || true
+          fi
+          exit "$status"
       - name: An installed wheel finds its packaged rules and profiles
         shell: bash
         run: |
