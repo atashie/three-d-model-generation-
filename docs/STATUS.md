@@ -25,8 +25,9 @@ The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body t
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
 every required check passed with the pinned slicers and the A1 profile. That is not a
 guarantee: the acceptance tolerance is still a hypothesis, nothing has been measured with
-calipers, and strength is not judged. The owner printed this same Roadie STL (Bambu
-Studio, matte PLA) and judged it "great" by eye. Not done yet: loop or base, 3MF. The R4
+calipers, and strength is not judged. The owner printed the flat-2 Roadie STL (Bambu
+Studio, matte PLA) and judged it "great" by eye. The current flat-3 STL differs from it
+by at most 4.6e-6 mm, and is also PRINTABLE. Not done yet: loop or base, 3MF. The R4
 backend is still open.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
@@ -65,7 +66,7 @@ passed. These commits are pushed; for CI see above.
 ## Next steps, in order
 
 1. **R2 color, step 1 (`tdmg colors`): done; CI passed for `ef4b2cf`.** Next is step 2
-   (item 2), after the owner answers the float64 question below. The design is
+   (item 2). The design is
    `docs/plans/2026-11-11-color-design.md`, and the plan is
    `docs/plans/2026-11-11-color-palette.md`. Tasks 1–8 are done; Task 7 was approved by
    the owner on 2026-11-11 ("amazing work. 1-4 are great").
@@ -80,12 +81,15 @@ passed. These commits are pushed; for CI see above.
        - A new fate, `band`, and the record schema is now `tdmg.colors/4`. Older plans in
          `artifacts/` are refused; remake them.
        - A subagent review of the fixes found three more gaps, also fixed.
-   - **Owner question (open):** the fine map (`smooth_labels`) and R1's outline
-     (`smooth_outline`) blur in float32, and their last bits depend on OpenCV's code
-     path. Measured: switching OpenCV's optimisations changed the outline of all five
-     owner selections and 3 fine pixels in a small test. In float64 the blur was the same
-     both ways. Moving both to float64 changes R1's outputs, including the files judged
-     PRINTABLE, so the owner decides. `labels.png` and `colors_id` are not affected.
+   - **Float64 blur (owner: "fix it now", 2026-11-11):** both blurs are now float64:
+     R1's outline is `flat-3`, and the colors fine map follows. With float32, the last
+     bits depended on OpenCV's code path; with float64 they are the same both ways on the
+     PC.
+     - **R1 re-run:** Roadie and Oddie are still **PRINTABLE**. Their shape moved by at
+       most 4.6e-6 mm, but the STLs are not byte-identical to the earlier ones.
+     - **Colors:** the four approved previews have identical labels and change by at most
+       88 pixels.
+     - **Record:** `research/reviews/2026-11-11-color-palette/README.md`.
    - **Modules:**
      - `tdmg.color` (quantize, from_labels, clean_regions, open_mask);
      - `tdmg.color_outline` (outline family, drop and keep, shade pairs);

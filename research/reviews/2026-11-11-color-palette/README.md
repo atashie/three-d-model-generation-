@@ -134,3 +134,43 @@ suggestions were left, and both are handled in the next commit:
   `test_verify_colors_checks_the_form_of_the_settings_block`.
 - The docs and the plan now say "every rebuildable record field" and list what is checked
   in form only.
+
+## Owner decision: float64 blur (flat-3), 2026-11-11
+
+**Owner, verbatim:** "fix it now" (the question was whether to move both blurs to float64
+now, re-checking R1, or leave it).
+
+**Change:** `smooth_outline` (R1) and `smooth_labels` (colors) now blur a float64 field.
+- **R1 versioning:** `FLAT_ALGORITHM_VERSION` is `flat-3`, the method text says float64,
+  and the golden flat id is re-pinned.
+- **Colors versioning:** `LABELS_METHOD` names float64, so `colors_id` changes. The
+  colors algorithm and record schema do not: `labels.png` does not depend on the blur.
+
+**Measured on the Windows PC (all files here):**
+- **Code-path stability:** with float64, toggling `cv2.setUseOptimized` gives the same
+  outline for all five owner selections ([opencv_paths_owner_f64.txt](opencv_paths_owner_f64.txt);
+  it was different for all five in float32). The fine map matches too.
+- **Overshoot of the image box:** at most 2.5e-15 px over the same kinds of masks as the
+  float32 measurement, against up to 1.9e-6 px before
+  ([overshoot_f64.py](overshoot_f64.py) → [overshoot_f64.txt](overshoot_f64.txt)). The
+  test allowance is now 1e-12 × max(σ, 1) px. Step 2 still intersects the outline with
+  the image box.
+- **R1 on the owner's models at 60 × 3 mm** ([flat3_compare.py](flat3_compare.py) →
+  [flat3_compare.txt](flat3_compare.txt)). The STLs are not byte-identical to the flat-2
+  ones (so not to the Roadie the owner printed). The shape moved by at most 4.6e-6 mm:
+  that is the Hausdorff distance of the mid-height sections, with a symmetric difference
+  below 2e-5 mm².
+  - **Roadie:** the same 31,200 facets.
+  - **Oddie:** 29,020 facets instead of 29,212. Its outline has 96 fewer points; the
+    shape is the same within that 4.6e-6 mm.
+  - **Re-sliced** with both pinned slicers: both are still **PRINTABLE**, every required
+    check PASS. Edge coverage and overprint equal the flat-2 values to about 1e-8 mm
+    (Roadie 0.2312 and 0.0133 mm, Oddie 0.2223 and 0.0130 mm). The slice_ids are
+    `86b7d85d…` (Roadie) and `a50ecead…` (Oddie), in
+    `artifacts/slice-runs/*-60x3-f64` (git-ignored).
+- **The owner's four approved previews**, remade ([previews_f64.py](previews_f64.py) →
+  [previews_f64.txt](previews_f64.txt)): `labels.png` is byte-identical in all four. The
+  preview pixels changed are 0 and 0 (Roadie), and 88 and 51 out of about 10 million
+  (Oddie).
+
+**Not shown:** that float64 is bit-identical on the Mac. The Mac has not run this.

@@ -117,9 +117,8 @@ Each needs a test print. None is done.
 - The rules rest on two images, and the wide-area rule on one example.
 - The owner-image tests ran on the Windows PC only, not on the Mac. A plan made on one
   machine and checked on another is refused if their results differ.
-- The smoothed region borders (the fine map) depend in their last float bits on which
-  internal code path OpenCV uses (measured on the PC: switching OpenCV's optimisations
-  changed 3 fine pixels in a small test). `labels.png` and `colors_id` do not depend on
-  it. R1's outline smoothing has the same property.
+- The smoothed region borders (the fine map) and R1's outline are now blurred in
+  float64. With float32, their last bits depended on which internal code path OpenCV
+  used. In float64 they are the same either way on the PC; this is not shown on the Mac.
 - Empty spots between parts of the subject are not filled. No evidence shows a need yet.
 - The color changes and the purge waste per change are not measured.

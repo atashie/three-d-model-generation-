@@ -107,8 +107,8 @@ from the flat record is carried along as information only.
 
 The slice verdict requires every check of the flat record except `F6.slicer` and
 `F3.thin_regions`, plus the F3 and F6 checks above. With both slicers, the owner's
-Roadie and Oddie (60 × 3 mm, smoothed) are **PRINTABLE** (2026-11-11,
-`research/verification/2026-11-11-prusaslicer-windows/`).
+Roadie and Oddie (60 × 3 mm, smoothed) are **PRINTABLE** (2026-11-11, and again after
+the float64 blur of flat-3; `research/verification/2026-11-11-prusaslicer-windows/`).
 
 ### What PRINTABLE means for you
 

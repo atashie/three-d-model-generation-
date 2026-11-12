@@ -1,0 +1,8 @@
+sigma 0.6: worst overshoot 1.67e-16 px
+sigma 1.0: worst overshoot 5e-16 px
+sigma 1.5: worst overshoot 5e-16 px
+sigma 2.5: worst overshoot 5e-16 px
+sigma 4.0: worst overshoot 8.33e-16 px
+sigma 6.0: worst overshoot 2.5e-15 px
+sigma 10.0: worst overshoot 0 px
+worst overshoot / sigma: 5e-16

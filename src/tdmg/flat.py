@@ -70,8 +70,10 @@ OPENING_RULE = "flat.sliver.opening_width"
 ISLAND_RULE = "flat.island.min_square_side"
 SMOOTH_RULE = "flat.smooth.sigma_px"
 # flat-2 (2026-11-10): the outline is smoothed by default (smooth_px), and params.smoothing
-# records it. flat-1 always used the exact pixel outline (smooth_px=0 here).
-FLAT_ALGORITHM_VERSION = "flat-2"
+# records it. flat-1 always used the exact pixel outline (smooth_px=0 here). flat-3
+# (2026-11-11): the smoothing blur is float64 (tdmg.smoothing), so the outline's last bits
+# no longer depend on OpenCV's code path; the owner chose to change it.
+FLAT_ALGORITHM_VERSION = "flat-3"
 RECORD_SCHEMA = "tdmg.flat/1"
 # outline.png display colours only; these are not thresholds.
 OUTLINE_KEPT = (128, 128, 128)        # grey: in the mask and in the final shape

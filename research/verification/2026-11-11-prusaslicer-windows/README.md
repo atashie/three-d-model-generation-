@@ -163,3 +163,13 @@ See `research/reviews/2026-11-11-portability/README.md`.
   layer's Z raised all FAIL.
 - **Re-run:** the owner models stay PRINTABLE with the same slice_ids; the controls give
   the same verdicts (`controls.txt`, re-run with the fixed code).
+
+## Addendum: re-run after the float64 blur (flat-3), 2026-11-11
+
+The owner chose to move the outline blur to float64
+(`research/reviews/2026-11-11-color-palette/README.md`, "Owner decision"). `tdmg flat`
+(flat-3) and `tdmg slice` (both pinned slicers) were re-run on Roadie and Oddie at
+60 × 3 mm (`artifacts/flat-runs/*-60x3-s5`, `artifacts/slice-runs/*-60x3-f64`).
+- **Verdict:** both are still PRINTABLE, with every required check PASS.
+- **Geometry:** it moved by at most 4.6e-6 mm. Oddie has 29,020 facets (was 29,212).
+- **The new STLs** are not byte-identical to the ones in the table above.

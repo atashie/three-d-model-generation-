@@ -8,8 +8,12 @@ map (tdmg.color): the same Gaussian per color, then an argmax on a supersampled 
 the same pixel-cell coordinates. Its docstring gives its method and coordinates.
 
 Method (METHOD):
-1. The mask (bool, or integer 0/255) becomes a float32 field, 1 on the foreground, padded
-   by PAD_PX zero pixels on every side.
+1. The mask (bool, or integer 0/255) becomes a float64 field, 1 on the foreground, padded
+   by PAD_PX zero pixels on every side. float64, not float32 (changed 2026-11-11, flat-3):
+   OpenCV's float32 blur gives last bits that depend on its code path (switching
+   cv2.setUseOptimized changed the outline of all five owner selections); its float64
+   blur gave the same bits both ways on every case measured on the Windows PC
+   (research/reviews/2026-11-11-color-palette/, finding 5).
 2. OpenCV GaussianBlur with sigma_px in x and y and BORDER_CONSTANT (zero), so the
    foreground never reflects at the image border. The pad is blurred too, so it holds
    the blur's true values there. Every pad value is at most (1 - w_0) / 2 < 0.5 (w_0 is
@@ -58,7 +62,7 @@ from tdmg.color import OUTSIDE
 
 LEVEL = 0.5   # midpoint between background (0) and foreground (1); see the docstring
 PAD_PX = 1    # zero pad so every contour closes (one pixel suffices; see the docstring)
-METHOD = ("Gaussian blur of the zero-extended binary mask (OpenCV GaussianBlur, "
+METHOD = ("Gaussian blur of the zero-extended binary mask (OpenCV GaussianBlur, float64, "
           "BORDER_CONSTANT, sigma_px in x and y), then the filled 0.5 iso-contour "
           "(contourpy serial, FillType.OuterOffset) in pixel-cell coordinates")
 
@@ -106,7 +110,7 @@ def smooth_outline(mask: np.ndarray, sigma_px: float) -> shapely.Geometry:
     cells = binary_cells(mask, SmoothingError)
     if not cells.any():
         raise SmoothingError("no foreground to smooth")
-    field = np.pad(cells.astype(np.float32), PAD_PX)
+    field = np.pad(cells.astype(np.float64), PAD_PX)
     field = cv2.GaussianBlur(field, (0, 0), sigma, sigmaY=sigma,
                              borderType=cv2.BORDER_CONSTANT)
     generator = contourpy.contour_generator(z=field, name="serial",
@@ -138,8 +142,8 @@ SUPERSAMPLE = 4
 _BAND_ROWS = 512
 
 LABELS_METHOD = ("nearest-label fill of OUTSIDE (exact squared distance, lowest label on "
-                 "ties), edge-replicated by one pixel; per color, the indicator blurred "
-                 "with OpenCV GaussianBlur (sigma_px in x and y, BORDER_REPLICATE); "
+                 "ties), edge-replicated by one pixel; per color, the float64 indicator "
+                 "blurred with OpenCV GaussianBlur (sigma_px in x and y, BORDER_REPLICATE); "
                  "bilinear samples at the fine pixel centres; argmax, lowest label on "
                  "ties. sigma 0: nearest upsample of the filled map")
 
@@ -278,21 +282,20 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     transform takes (x_mm = (x - x0) * scale, y_mm = (y1 - y) * scale).
 
     The fine map needs no pad, because smooth_outline's contour lies within the image box
-    [0, W] x [0, H] up to float32 rounding (measured below). Proof: smooth_outline pads
+    [0, W] x [0, H] up to float64 rounding (measured below). Proof: smooth_outline pads
     by one zero pixel. On the left, say, the pad's field is f(-1) = sum over the
     foreground (i >= 0, j) of w_{i+1} v_j and column 0's is f(0) = sum of
     w_i v_j (w, v: the normalised, symmetric 1-D weights in x and y). So f(-1) + f(0)
-    <= sum_j v_j sum_{i>=0} (w_i + w_{i+1}) = 1, up to float32 rounding. Linear
+    <= sum_j v_j sum_{i>=0} (w_i + w_{i+1}) = 1, up to float64 rounding. Linear
     interpolation between the centres -0.5 and 0.5 then crosses 0.5 at x >= 0, and no
     crossing lies between two pad centres (each is below 0.5). So when step 2 clips this
-    map to the R1 outline, it finds a label everywhere, except that float32 rounding of
-    the field puts smooth_outline's contour slightly outside the image box. Measured on
-    the Windows PC (2026-11-11) over full-image and border-touching random masks from
-    20 x 20 to 2000 x 1500 px: at most 5.6e-7 px at sigma 2.5, 9.0e-7 px at sigma 6.0
-    and 1.9e-6 px at sigma 10, about 2.2e-7 * sigma px (a field error df moves the
-    crossing by df / slope, and the slope is about 1 / (sigma sqrt(2 pi)) per px). So step
-    2 MUST intersect the R1 outline with the image box [0, W] x [0, H] before clipping
-    this map to it.
+    map to the R1 outline, it finds a label everywhere, except that float64 rounding of
+    the field can put smooth_outline's contour very slightly outside the image box.
+    Measured on the Windows PC (2026-11-11, flat-3) over full-image and border-touching
+    random masks from 20 x 20 to 2000 x 1500 px, sigma 0.6 to 10: at most 2.5e-15 px
+    (research/reviews/2026-11-11-color-palette/overshoot_f64.txt). With the earlier
+    float32 field it was up to 1.9e-6 px. So step 2 MUST still intersect the R1 outline
+    with the image box [0, W] x [0, H] before clipping this map to it.
 
     Method (LABELS_METHOD):
     1. Outside the mask: every OUTSIDE pixel takes the label of its nearest labelled pixel
@@ -301,7 +304,7 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
        pixel becoming an s x s block (np.repeat on both axes). No blur; steps 3-5 are
        skipped.
     3. The filled map is padded by one pixel by edge replication. For each label c, its
-       indicator (float32, 1 where the label is c) is blurred with the call that
+       indicator (float64, 1 where the label is c) is blurred with the call that
        smooth_outline makes: cv2.GaussianBlur, ksize (0, 0) (OpenCV derives the kernel
        from sigma), sigma_px in x and y, but BORDER_REPLICATE in place of BORDER_CONSTANT.
        Why the border differs: in smooth_outline everything beyond the image is
@@ -340,7 +343,7 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
         return _result(fine, (), s, sigma)
     padded = np.pad(filled, 1, mode="edge")
     present = np.unique(filled)                          # ascending label
-    fields = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma,
+    fields = [cv2.GaussianBlur((padded == c).astype(np.float64), (0, 0), sigma,
                                sigmaY=sigma, borderType=cv2.BORDER_REPLICATE)
               for c in present]
     row_lo, row_t = _linear_taps(h, s)

@@ -124,7 +124,7 @@ def test_a_single_color_fills_everything():
 def outline_field(mask: np.ndarray) -> np.ndarray:
     """smooth_outline's blurred field at the image pixel centres (its padded field's
     interior), computed with the same call smooth_outline makes."""
-    field = np.pad(mask.astype(np.float32), 1)
+    field = np.pad(mask.astype(np.float64), 1)
     field = cv2.GaussianBlur(field, (0, 0), SIGMA, sigmaY=SIGMA,
                              borderType=cv2.BORDER_CONSTANT)
     return field[1:-1, 1:-1]
@@ -144,7 +144,7 @@ def test_two_labels_at_supersample_1_are_smooth_outlines_field_above_half(name):
     # happens. Label 0's field is then smooth_outline's field: the masks are zero on the
     # image border, so edge replication gives the same zero extension that BORDER_CONSTANT
     # and the zero pad give. Label 1's field is the blur of 1 - mask, which is 1 - f up to
-    # float32 rounding, so label 0 wins exactly where f > 0.5, away from |f - 0.5| < 1e-6.
+    # float64 rounding, so label 0 wins exactly where f > 0.5, away from |f - 0.5| < 1e-6.
     mask = two_label_masks()[name]
     assert not (mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any())
     fine = fine_map(np.where(mask, 0, 1).astype(np.int32), SIGMA, 1)
@@ -196,16 +196,17 @@ def test_a_straight_edge_on_the_image_border_stays_put():
     assert (fine[:, :20 * s] == 0).all() and (fine[:, 20 * s:] == 1).all()
 
 
-# Measured on the Windows PC on 2026-11-11: the worst overshoot of smooth_outline's bounds
-# beyond [0, W] x [0, H], over full-image masks and random masks with foreground on two
-# borders, at sizes 20 x 20 to 2000 x 1500 (sigma 0.6 to 10, where 8 sigma fits):
-#   sigma 0.6: 4.5e-8, 1.0: 0, 1.5: 5.6e-8, 2.5: 5.6e-7, 4.0: 4.5e-7, 6.0: 9.0e-7,
-#   10.0: 1.9e-6 px; at most 2.2e-7 * sigma px.
-# Why it grows with sigma: a float32 error df in the field moves the 0.5 crossing by
-# df / slope, and the slope across an edge is about w_0 = 1 / (sigma sqrt(2 pi)) per px.
-# The allowance, 1e-6 * max(sigma, 1) px, is about 4.5 times the worst ratio measured.
+# Measured on the Windows PC on 2026-11-11 with the float64 field (flat-3): the worst
+# overshoot of smooth_outline's bounds beyond [0, W] x [0, H], over full-image masks and
+# random masks with foreground on two borders, at sizes 20 x 20 to 2000 x 1500 (sigma 0.6
+# to 10, where 8 sigma fits), is at most 2.5e-15 px, 5e-16 * sigma
+# (research/reviews/2026-11-11-color-palette/overshoot_f64.txt). With the earlier float32
+# field it was up to 1.9e-6 px. A field error df moves the 0.5 crossing by df / slope, and
+# the slope across an edge is about w_0 = 1 / (sigma sqrt(2 pi)) per px, so it grows with
+# sigma. The allowance, 1e-12 * max(sigma, 1) px, is far above the measured rounding and
+# far below anything that matters.
 def overshoot_allowance(sigma: float) -> float:
-    return 1e-6 * max(sigma, 1.0)
+    return 1e-12 * max(sigma, 1.0)
 
 
 def overshoot(mask: np.ndarray, sigma: float) -> float:
@@ -219,7 +220,7 @@ def test_smooth_outline_stays_inside_the_image(seed):
     # Why the fine map needs no pad: smooth_outline's contour lies within [0, W] x [0, H]
     # (smooth_labels' docstring gives the proof), so the fine map covers every point that
     # step 2 can clip to, even for foreground on the image border. The proof holds up to
-    # float32 rounding of the blurred field (see the measurement above), which is why
+    # float64 rounding of the blurred field (see the measurement above), which is why
     # step 2 must intersect the R1 outline with the image box.
     rng = np.random.default_rng(seed)
     h, w = int(rng.integers(20, 40)), int(rng.integers(20, 40))
@@ -409,7 +410,7 @@ def test_an_exactly_symmetric_blurred_tie_goes_to_the_lower_label():
         labels[:, 11:] = right
         labels[:, 10] = 2
         padded = np.pad(labels, 1, mode="edge")
-        f = [cv2.GaussianBlur((padded == c).astype(np.float32), (0, 0), sigma, sigmaY=sigma,
+        f = [cv2.GaussianBlur((padded == c).astype(np.float64), (0, 0), sigma, sigmaY=sigma,
                               borderType=cv2.BORDER_REPLICATE)[1:-1, 1:-1] for c in range(3)]
         if not np.array_equal(f[0][:, 10], f[1][:, 10]):
             pytest.skip("this OpenCV build does not give bit-equal mirrored blurred fields at "

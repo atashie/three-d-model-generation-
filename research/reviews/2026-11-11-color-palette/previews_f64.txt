@@ -1,0 +1,4 @@
+1-roadie-outline-dropped: exit 0; labels.png identical True; preview 3344x2032, pixels changed 0 of 6795008
+2-roadie-outline-kept: exit 0; labels.png identical True; preview 3344x2032, pixels changed 0 of 6795008
+3-oddie-kept-blues-and-greens-merged: exit 0; labels.png identical True; preview 4096x2474, pixels changed 88 of 10133504
+4-oddie-dropped-blues-merged: exit 0; labels.png identical True; preview 4096x2502, pixels changed 51 of 10248192

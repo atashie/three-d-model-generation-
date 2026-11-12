@@ -43,7 +43,9 @@ SPEC = SelectionSpec(instructions="Use only the bird.", remove_at=(DISC_SEED,),
 FILES = ("model.stl", "outline.png", "flat.json")
 # flat-1 (exact pixel outline) was 07270f3d5a676e08e221ecec991ed14fd02f9eda2eba8586d87ea17623c402e0.
 # Re-pinned for flat-2 (2026-11-10): smoothing on by default, and params.smoothing added.
-GOLDEN_FLAT_ID = "1d64c015d890492208b46c0e0ab6f6f6fbb45c3d20e7d19f1177b048028c2c6d"
+# flat-2 was 1d64c015d890492208b46c0e0ab6f6f6fbb45c3d20e7d19f1177b048028c2c6d.
+# Re-pinned for flat-3 (2026-11-11): the smoothing blur is float64.
+GOLDEN_FLAT_ID = "663cc73739e7bfe0aeb9038edc5d2eb4572fc94e3f1711b9ad8bfb53e0f1d5ce"
 SMOOTHING_KEYS = {"applied", "sigma_px", "method", "area_change_px2", "removed_area_px2",
                   "added_area_px2", "hausdorff_lower_bound_px",
                   "hausdorff_sample_step_px", "parts_exact_cleaned", "parts_smoothed_cleaned",
@@ -114,7 +116,7 @@ def test_roadie_record_contents(run, selection_dir):
     record, _ = run
     selection = json.loads((selection_dir / "selection.json").read_bytes())
     assert record["schema"] == RECORD_SCHEMA == "tdmg.flat/1"
-    assert record["algorithm"] == FLAT_ALGORITHM_VERSION == "flat-2"
+    assert record["algorithm"] == FLAT_ALGORITHM_VERSION == "flat-3"
     assert record["selection"] == {"selection_id": selection["selection_id"],
                                    "mask_pixels_sha256": selection["mask_pixels_sha256"]}
     params = record["params"]

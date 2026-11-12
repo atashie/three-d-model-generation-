@@ -1,0 +1,13 @@
+C:\Users\arikt\documents\github\three-d-model-generation-\research\reviews\2026-11-11-color-palette\flat3_compare.py:32: DeprecationWarning: DEPRECATED: replace `path.to_planar`->`path.to_2D), removal 1/1/2026
+  .to_planar(to_2D=np.eye(4))[0].polygons_full])
+roadie-tol30: STL sha256 flat-2 3d5d260194d75bc0, flat-3 861a8422b142cafc, identical False
+  facets 31200 -> 31200; volume 2277.740837 -> 2277.740807 mm^3; extents [59.970628, 49.404214, 3.0] -> [59.970628, 49.404214, 3.0]
+  largest vertex move (sorted vertices) 3.81e-06 mm
+  mid-height section: Hausdorff 3.81e-06 mm, symmetric difference 1.85e-05 mm^2, vertices 15603 -> 15603
+  flat-2: verdict PRINTABLE, edge_coverage 0.23120784952878973, edge_overprint 0.013257856009296085, FAIL checks [], portability PASS
+  flat-3: verdict PRINTABLE, edge_coverage 0.23120785697504878, edge_overprint 0.01325785705464348, FAIL checks [], portability PASS
+oddie: STL sha256 flat-2 8cc3ca1bbbc787f7, flat-3 466e7f3cc85693fd, identical False
+  facets 29212 -> 29020; volume 5033.648715 -> 5033.648700 mm^3; extents [59.986741, 65.870964, 3.0] -> [59.986741, 65.870964, 3.0]
+  mid-height section: Hausdorff 4.58e-06 mm, symmetric difference 1.69e-05 mm^2, vertices 14609 -> 14513
+  flat-2: verdict PRINTABLE, edge_coverage 0.22234656493533952, edge_overprint 0.012996279999143212, FAIL checks [], portability PASS
+  flat-3: verdict PRINTABLE, edge_coverage 0.22234656130346278, edge_overprint 0.01299628372443351, FAIL checks [], portability PASS

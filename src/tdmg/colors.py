@@ -529,7 +529,7 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
 
 
 # The record fields that build_colors(render=False) sets to None, because they depend on
-# the fine map (OpenCV's float32 blur, whose last bits depend on its code path), on the PNG
+# the fine map (an OpenCV blur, not shown to be bit-identical across machines), on the PNG
 # encoder or on the software versions. verify_colors compares every other field of a
 # rebuilt record with the stored one. Dotted names are nested fields.
 UNRENDERED_FIELDS = ("tdmg_version", "environment", "outputs", "regions_pixels_sha256",
