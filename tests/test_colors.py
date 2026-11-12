@@ -1722,7 +1722,7 @@ def test_verify_colors_ignores_only_the_unrendered_fields(done, sel, tmp_path):
     def edit(r):
         r["tdmg_version"] = "0.0.0-other"
         r["environment"] = {"python": "other"}
-        r["smoothing"]["vanished"] = [{"index": 0, "hex": "#000000"}]
+        r["smoothing"]["vanished"] = [{"index": 0, "hex": r["palette"][0]["hex"]}]
         r["settings"]["sources"]["colors"] = "config"
     _edit_record(d, edit)
     verify_colors(d, sel)
@@ -1747,4 +1747,45 @@ def test_a_color_the_kept_band_covers_has_fate_band(cartoon_done, tmp_path):
         r["outline"]["outlines"] = "drop"
     _edit_record(d, as_drop)
     with pytest.raises(ColorsError, match="covered by the kept band"):
+        verify_colors(d, sel)
+
+
+OPENING = "flat.sliver.opening_width"
+
+
+def test_verify_colors_refuses_rule_values_other_than_the_registrys(sel, tmp_path):
+    # Reviewer I-1: a lowered printability limit, with the record kept consistent.
+    lax = {**RULES, OPENING: RULES[OPENING].model_copy(update={"default": 0.3})}
+    run(sel, tmp_path / "lax", rules=lax)
+    verify_colors(tmp_path / "lax", sel, rules=lax)          # consistent with its own rules
+    with pytest.raises(ColorsError, match=r"other rule values .*flat.sliver.opening_width"):
+        verify_colors(tmp_path / "lax", sel)
+
+
+@pytest.mark.parametrize("change", [
+    lambda r: r["palette"][0].update(count=float(r["palette"][0]["count"])),
+    lambda r: r["input"].update(width_px=float(r["input"]["width_px"])),
+    lambda r: r["quantize"].update(iterations=r["quantize"]["iterations"] + 1e-10),
+], ids=["count", "width_px", "iterations"])
+def test_verify_colors_refuses_an_int_written_as_a_float(done, sel, tmp_path, change):
+    # Reviewer I-2: 200.0 == 200 in Python, but a record field keeps its type.
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_a_settings_copy_of_another_type(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, lambda r: r["settings"]["settings"].update(colors=4.0))
+    with pytest.raises(ColorsError, match="settings.settings"):
+        verify_colors(d, sel)
+
+
+@pytest.mark.parametrize("vanished", ["anything", [{"index": 9, "hex": "#000000"}],
+                                      [{"index": 0}]])
+def test_verify_colors_checks_the_form_of_vanished(done, sel, tmp_path, vanished):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, lambda r: r["smoothing"].update(vanished=vanished))
+    with pytest.raises(ColorsError, match="smoothing.vanished"):
         verify_colors(d, sel)

@@ -1,7 +1,7 @@
 # Project status
 
-**Last updated:** 2026-11-11 (R2 color step 1, Task 7 done and approved by the owner;
-earlier: F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+**Last updated:** 2026-11-11 (R2 color step 1 complete: Task 8 docs and Codex review
+done; earlier: F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
 with three commands, and R2 (flat multicolor) has its first command:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -50,11 +50,10 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI. For `5632ca4` (`F6.portability`, `slice-4`, and the portability Codex review fixes; run 43033039270, checked 2026-11-11), `ubuntu-latest` and `windows-latest` passed; `macos-15` did not run: GitHub cancelled it after no macOS runner picked it up ("The job was not acquired by Runner of type hosted even after multiple attempts"). CI then passed on all three OSes for `c93dfa1`, which adds only this STATUS note to `5632ca4` (run 43035563763, verified 2026-11-11); the real slicers are not installed in CI.
 
-Latest local validation (2026-11-11, Windows PC, R2 step 1 after Task 7e-b, commit `5d5b5a9`):
-`uv run pytest -q` gave **1733 passed and 3 skipped**; the CLI and docs tests also pass with
-`CI=true GITHUB_ACTIONS=true`. `uv run ruff check .` (now with E501, line length 100) and
-`uv run python scripts/gen_docs.py --check` passed. **About 45 commits since `8a5856e` are
-local only: not pushed, not CI-checked.** Earlier (portability, `slice-4`): 961 passed and 3 skipped,
+Latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 review fixes):
+`uv run pytest -q` gave **1760 passed and 3 skipped**. `uv run ruff check .` and
+`uv run python scripts/gen_docs.py --check` passed. CI for the push of R2 step 1: see
+below once recorded. Earlier (portability, `slice-4`): 961 passed and 3 skipped,
 both plain and with
 `CI=true GITHUB_ACTIONS=true`. The three skipped tests are the real-slicer tests, which
 passed on their own (3 passed) with the `TDMG_ORCASLICER_DIR=… TDMG_PRUSASLICER_DIR=…
@@ -64,17 +63,27 @@ passed. These commits are pushed; for CI see above.
 
 ## Next steps, in order
 
-1. **R2 color, step 1 (`tdmg colors`): finish Task 8.** The design is
+1. **R2 color, step 1 (`tdmg colors`): done, pending CI.** The design is
    `docs/plans/2026-11-11-color-design.md`, and the plan is
-   `docs/plans/2026-11-11-color-palette.md`. Tasks 1–7 are done; Task 7 was approved by
+   `docs/plans/2026-11-11-color-palette.md`. Tasks 1–8 are done; Task 7 was approved by
    the owner on 2026-11-11 ("amazing work. 1-4 are great").
-   - **Task 8 to do:**
-     - **Docs:** a new attribute page `docs/print-types/attributes/color-multi.md` with
-       the template headings; the pipeline guide's `tdmg colors` stage; the dependencies
-       page if needed.
-     - **Codex critical review** of `8a5856e..HEAD`, recorded in
-       `research/reviews/2026-11-11-color-palette/`, with each finding handled.
-     - **Push,** then record CI here.
+   - **Task 8:**
+     - **Docs:** `docs/print-types/attributes/color-multi.md` (C2) and the
+       "Color plans" section of `docs/guide/pipeline-and-gate.md`.
+     - **Codex review** of `8a5856e..e74689b`, with 9 findings, all handled
+       (`research/reviews/2026-11-11-color-palette/`).
+       - The main fix: `verify_colors` now rebuilds the plan from the selection and
+         requires identical labels and record. It also requires the recorded rule values
+         to be today's and `colors` to be within the printer's cap.
+       - A new fate, `band`, and the record schema is now `tdmg.colors/4`. Older plans in
+         `artifacts/` are refused; remake them.
+       - A subagent review of the fixes found three more gaps, also fixed.
+   - **Owner question (open):** the fine map (`smooth_labels`) and R1's outline
+     (`smooth_outline`) blur in float32, and their last bits depend on OpenCV's code
+     path. Measured: switching OpenCV's optimisations changed the outline of all five
+     owner selections and 3 fine pixels in a small test. In float64 the blur was the same
+     both ways. Moving both to float64 changes R1's outputs, including the files judged
+     PRINTABLE, so the owner decides. `labels.png` and `colors_id` are not affected.
    - **Modules:**
      - `tdmg.color` (quantize, from_labels, clean_regions, open_mask);
      - `tdmg.color_outline` (outline family, drop and keep, shade pairs);
@@ -82,8 +91,10 @@ passed. These commits are pushed; for CI see above.
      - `tdmg.color_config` (strict config keys: colors, extract, edges, base, outlines,
        outline_color, merge, outline_width_mm);
      - `tdmg.smoothing.smooth_labels`;
-     - `tdmg.colors` (`make_colors`, record schema `tdmg.colors/3`, preview);
-     - `tdmg.colors_verify.verify_colors` (step 2 must call it with the selection folder).
+     - `tdmg.colors` (`make_colors`, `build_colors`, record schema `tdmg.colors/4`,
+       preview);
+     - `tdmg.colors_verify.verify_colors` (step 2 must call it with the selection folder;
+       it rebuilds the plan, about 1.4 s for the owner's Oddie).
    - **Owner decisions:**
      - colors suggested from the image;
      - a top skin of 0.6 mm;
@@ -99,7 +110,8 @@ passed. These commits are pushed; for CI see above.
    - **All new rules are hypotheses,** untested. They rest on two images, and on one
      example (the pupil) for `color.outline.keep_area_width_ratio`.
    - **Open:** the owner fixtures have not been run on the Mac, so cross-platform parity is
-     unverified.
+     unverified. Because `verify_colors` rebuilds, a plan made on the PC and checked on
+     the Mac is refused if their results differ.
 2. **R2 design step 2: colored flat geometry** (`tdmg flat --colors`).
    - **What it builds:** the base and top-skin inlays, plus the glue pieces with pockets.
    - **What it inherits:** the requirements in the color design's section "Requirements

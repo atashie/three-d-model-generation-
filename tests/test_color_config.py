@@ -576,7 +576,9 @@ def test_an_outline_width_rule_at_the_opening_or_in_another_unit_is_refused():
     assert r.settings["outline_width_mm"] == 0.5
 
 
-@pytest.mark.parametrize("text", ["null\n", "~\n", "--- null\n", "# a comment\nnull\n"])
+# A bare document marker (---) starts a document holding null: not an empty file.
+@pytest.mark.parametrize("text", ["null\n", "~\n", "--- null\n", "# a comment\nnull\n",
+                                  "---\n", "--- # nothing\n"])
 def test_a_file_that_is_an_explicit_null_is_refused(tmp_path, text):
     # Only an empty or comment-only file means "no settings" (Codex review, Task 8).
     with pytest.raises(ColorConfigError, match="must be a mapping.*not null"):

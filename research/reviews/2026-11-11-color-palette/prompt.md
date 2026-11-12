@@ -1,0 +1,12 @@
+You are doing an independent, critical review of commits 8a5856e..HEAD in this repository (run `git log --oneline 8a5856e..HEAD` and `git diff 8a5856e..HEAD`). Read CLAUDE.md first: the project's rules (no unexplained numbers, rules with evidence in rules/*.yaml, docs agree with code, never call something verified unless it was run).
+
+What the commits build: R2 step 1, `tdmg colors`, which turns a verified `tdmg select` folder into a color plan for a multicolor flat print (design: docs/plans/2026-11-11-color-design.md; plan and dated decisions: docs/plans/2026-11-11-color-palette.md). Modules: src/tdmg/color.py, color_outline.py, color_plan.py, color_config.py, colors.py, colors_verify.py, smoothing.py (smooth_labels), selection.py, cli.py; rules/color.yaml; tests/test_color*.py, test_colors.py, test_smooth_labels.py; research in research/verification/2026-11-11-color-palette/; docs/print-types/attributes/color-multi.md and docs/guide/pipeline-and-gate.md.
+
+The next step (geometry) will trust a plan that passes `tdmg.colors_verify.verify_colors(colors_dir, selection_dir)`. So look hardest for:
+1. Ways a changed, tampered or inconsistent colors folder (or a mismatched selection) still passes verify_colors, or a plan written with ready false is accepted.
+2. Non-determinism: anything that can make two runs, or two machines (Windows vs macOS ARM), give different labels.png bytes or a different colors_id (float order, BLAS, sort stability, dict order, Pillow/OpenCV versions, platform-dependent rounding).
+3. Correctness bugs in quantize, clean_regions (fixed point, tie rules), outline drop/keep, merges and remaps (final_index through composed remaps), smooth_labels (gaps or doubly-labelled pixels), and the config precedence and refusals (YAML loader: duplicate keys, merge keys, nulls, bools as ints).
+4. Rules whose evidence locator text does not actually support the value, or numbers in code that should be rules.
+5. Docs or record text that claims more than the code does, or disagrees with it.
+
+Report each finding with severity (High/Medium/Low), file:line, a concrete failing scenario, and whether you confirmed it by running code or only by reading. Do not modify files. If you cannot run uv or pytest in the sandbox, use plain python reproductions where possible and say what you could not run. Owner images are in tests fixtures paths named in tests/conftest.py, if present on disk.

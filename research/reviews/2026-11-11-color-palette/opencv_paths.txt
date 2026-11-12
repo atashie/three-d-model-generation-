@@ -1,0 +1,12 @@
+diag float32 bitwise equal: False max diff: 1.7881393432617188e-07
+diag float64 bitwise equal: True max diff: 0.0
+diag smooth_labels fine pixels differing: 3
+rand40 float32 bitwise equal: False max diff: 8.940696716308594e-08
+rand40 float64 bitwise equal: True max diff: 0.0
+rand40 smooth_labels fine pixels differing: 0
+rand200 float32 bitwise equal: False max diff: 8.940696716308594e-08
+rand200 float64 bitwise equal: True max diff: 0.0
+rand200 smooth_labels fine pixels differing: 0
+blocks float32 bitwise equal: False max diff: 1.1920928955078125e-07
+blocks float64 bitwise equal: True max diff: 0.0
+blocks smooth_labels fine pixels differing: 0

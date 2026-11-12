@@ -555,3 +555,18 @@ Task 7 is complete.
   STATUS;
 - the Codex critical review, recorded in `research/reviews/`;
 - then the push and CI.
+
+### Task 8 result (2026-11-11, Windows PC)
+
+- **Docs:** `docs/print-types/attributes/color-multi.md` and the "Color plans" section of
+  `docs/guide/pipeline-and-gate.md`.
+- **Codex review:** `research/reviews/2026-11-11-color-palette/` lists 9 findings and how
+  each was handled.
+  - `verify_colors` now rebuilds the plan and requires identical labels and record.
+  - It also checks the printer cap, the method versions and the base index, and that the
+    rule values are today's.
+  - A new fate, `band`; the record schema is `tdmg.colors/4`.
+  - A null config document is refused.
+  - The OpenCV float32 path dependence is documented; the float64 change is left to the
+    owner.
+- **Step 1 is complete** once CI passes.

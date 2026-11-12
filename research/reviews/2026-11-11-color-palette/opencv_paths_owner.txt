@@ -1,0 +1,6 @@
+oddie smooth_outline wkb equal across switch: False
+roadie-tol20 smooth_outline wkb equal across switch: False
+roadie-tol30 smooth_outline wkb equal across switch: False
+roadie-tol30-repeat smooth_outline wkb equal across switch: False
+roadie-tol40 smooth_outline wkb equal across switch: False
+artifacts\colors-runs\oddie-60-default\labels.png f32 switch diff px: 0

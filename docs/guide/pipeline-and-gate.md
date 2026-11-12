@@ -181,11 +181,14 @@ remain than `colors` allows; choose merges from the preview and run again. A pla
 not ready cannot be built. 2 means an input, config or I/O error.
 
 **Checking a plan:** `tdmg.colors_verify.verify_colors` reads a plan back with its
-selection folder. It checks the record's own consistency and the printer's color cap, then
-runs the plan again from the selection and the recorded settings and rules. The labels and
-the record must come out the same (floats to the last digits), so a plan edited by hand is
-refused. A plan made on a machine whose results differ is refused too; the owner-image
-results are measured on the Windows PC only.
+selection folder (about 1.4 s for the owner's Oddie on the PC). It checks the record's
+own consistency, the printer's color cap and that the recorded rule values are today's.
+Then it runs the plan again from the selection and the recorded settings. The labels must
+come out the same, and so must every record field that can be rebuilt (floats to 1e-9,
+everything else exactly). So hand edits to the labels or to those fields are refused,
+even with the hashes updated. Not rebuilt: the preview image (only hashed), the software
+versions, and where each setting came from. A plan made on a machine whose results differ
+is refused too; the owner-image results are measured on the Windows PC only.
 
 **Not proven:** every color rule is an untested hypothesis set from two images, and
 nothing has been printed from a color plan.

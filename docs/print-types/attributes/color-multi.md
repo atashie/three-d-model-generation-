@@ -82,11 +82,12 @@ All of these are untested hypotheses. The color rules rest on two images.
 ## Required checks
 
 - **Step 1 (exists):** `verify_colors` re-reads the plan with its selection folder. It
-  checks the record's consistency, the printer's color cap and the method versions, then
-  runs the plan again from the selection and the recorded settings and rules: the labels
-  and the record must come out the same. So a folder changed by hand is refused, even with
-  its hashes updated. The plan must be ready. The preview (`regions.png`) is only hashed,
-  not redrawn.
+  checks the record's consistency, the printer's color cap, the method versions and that
+  the rule values are today's. Then it runs the plan again from the selection and the
+  recorded settings: the labels and every record field that can be rebuilt must come out
+  the same. So hand edits to them are refused, even with the hashes updated. The plan must
+  be ready. Not rebuilt: the preview (`regions.png`, only hashed), the software versions
+  and the settings' sources.
 - **Step 2 (planned):** each color body is closed; the bodies do not overlap; together
   they equal the R1 shape; the filament count is at most `colors`; the color changes
   read from the G-code match the plan.

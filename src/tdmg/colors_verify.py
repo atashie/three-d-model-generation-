@@ -175,13 +175,20 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
        outline.keep_width.px, as the keep width over that scale.
     8. The selection (read_selection, with the cutout): its selection_id, mask and cutout
        pixel hashes are the identity's, and labels.png is 255 exactly outside its mask.
-    9. The rebuild: tdmg.colors.build_colors(render=False) runs the plan again on the
-       selection with the identity's settings, printer and rule values (the registry's
-       rules, given or tdmg.rules.load_rules(), with their values replaced by the
-       identity's). labels.png's pixels must equal the rebuilt labels, and the record must
-       equal the rebuilt one in every field except UNRENDERED_FIELDS and settings (whose
-       sources and config hash cannot be rebuilt; settings.settings is checked in 3).
-       So a labels.png or record changed by hand, with its hashes updated, is refused.
+    9. The rebuild: the identity's rule values must equal the registry's (rules, given,
+       or tdmg.rules.load_rules()): a plan made with other values is refused, so changed
+       printability limits cannot pass (design, step-2 requirements). Then
+       tdmg.colors.build_colors(render=False) runs the plan again on the selection with
+       the identity's settings and printer. labels.png's pixels must equal the rebuilt
+       labels, and the record must equal the rebuilt one in every field except
+       UNRENDERED_FIELDS and settings (whose sources and config hash cannot be rebuilt;
+       settings.settings is checked in 3), floats to LAB_ABS_TOL and everything else
+       exactly, types included. So a labels.png or record changed by hand, with its hashes
+       updated, is refused. The compared fields include the preview block and the review
+       line, which are code constants: changing them (or flat.smooth.sigma_px, which the
+       preview's outer outline uses) makes every older plan fail, as it should, since such
+       a plan was not made by this code. smoothing.vanished is checked only in form (final
+       palette entries).
     The printer (checked first, with 2) is the profile the identity names, a known profile
     id; its nozzle must be the identity's, and settings.colors at most its palette cap.
     Settings must not be null, and the identity's methods must be SUPPORTED_METHODS.
@@ -308,7 +315,8 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
         "input.cutout_pixels_sha256": (inp["cutout_pixels_sha256"],
                                        ident["cutout_pixels_sha256"]),
         "input.mask_pixels_sha256": (inp["mask_pixels_sha256"], ident["mask_pixels_sha256"]),
-        "settings.settings": (record["settings"]["settings"], settings),
+        "settings.settings": (json.dumps(record["settings"]["settings"], sort_keys=True),
+                              json.dumps(settings, sort_keys=True)),   # 4.0 is not 4
         "width_mm": (record["width_mm"], width_mm),
         "printer": (record["printer"], ident["printer"]),
         "methods": (record["methods"], ident["methods"]),
@@ -372,6 +380,13 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
         if got != want:
             raise ColorsError(f"colors.json is inconsistent: {field} is not what width_mm, "
                               "the rules and labels.png give")
+    vanished = sm["vanished"]
+    if not isinstance(vanished, list) or not all(
+            isinstance(v, dict) and set(v) == {"index", "hex"} and type(v["index"]) is int
+            and 0 <= v["index"] < k and v["hex"] == palette[v["index"]]["hex"]
+            for v in vanished):
+        raise ColorsError("colors.json is inconsistent: smoothing.vanished must list final "
+                          "palette entries (index and hex)")
     sel = _check_selection(selection_dir, ident, inside)
     _check_rebuild(record, labels8, sel, settings, width_mm, supersample, printer,
                    registry)
@@ -695,11 +710,15 @@ def _check_rebuild(record: dict, labels8: np.ndarray, sel, settings: dict, width
     unknown = sorted(set(ident_rules) - set(registry))
     if unknown:
         raise ColorsError(f"identity.rules name rules the registry does not have: {unknown}")
-    rules = {**registry, **{rid: registry[rid].model_copy(update={"default": value})
-                            for rid, value in ident_rules.items()}}
+    changed = sorted(rid for rid, value in ident_rules.items()
+                     if value != float(registry[rid].default))
+    if changed:
+        raise ColorsError(f"this plan was made with other rule values than the registry's "
+                          f"({', '.join(changed)}); remake it with the current rules")
     try:
         rebuilt, _, rebuilt_labels = build_colors(sel, width_mm, settings, record["settings"],
-                                                  rules, printer, supersample, render=False)
+                                                  registry, printer, supersample,
+                                                  render=False)
     except (ColorConfigError, ColorError, ColorsError, SmoothingError) as e:
         raise ColorsError(f"the plan cannot be rebuilt from its identity: {e}") from None
     if not np.array_equal(rebuilt_labels, labels8):
@@ -716,10 +735,10 @@ def _check_rebuild(record: dict, labels8: np.ndarray, sel, settings: dict, width
 
 
 def _first_difference(got, want, path: str) -> str | None:
-    """The path of the first difference between two JSON values, or None. A float may
-    differ from the other number by LAB_ABS_TOL (last-digit differences of float
-    functions between C libraries, as for the Lab check); everything else, ints, bools
-    and strings included, must be equal."""
+    """The path of the first difference between two JSON values, or None. Two floats may
+    differ by LAB_ABS_TOL (last-digit differences of float functions between C libraries,
+    as for the Lab check); everything else must have the same type and value, so an int
+    never matches a float (a JSON round trip keeps 2.0 a float)."""
     if isinstance(got, dict) and isinstance(want, dict):
         if set(got) != set(want):
             return f"{path} (keys)"
@@ -736,9 +755,6 @@ def _first_difference(got, want, path: str) -> str | None:
             if where is not None:
                 return where
         return None
-    if (isinstance(got, float) or isinstance(want, float)) and not (
-            isinstance(got, bool) or isinstance(want, bool)):
-        same = (isinstance(got, numbers.Real) and isinstance(want, numbers.Real)
-                and math.isclose(got, want, rel_tol=0.0, abs_tol=LAB_ABS_TOL))
-        return None if same else path
+    if type(got) is float and type(want) is float:
+        return None if math.isclose(got, want, rel_tol=0.0, abs_tol=LAB_ABS_TOL) else path
     return None if type(got) is type(want) and got == want else path
