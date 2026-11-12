@@ -1,4 +1,4 @@
-Run 2026-11-12 on the Windows PC at ebb82f1: uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
+Run 2026-11-12 on the Windows PC (working tree after the Task 7 glue decision; runs re-made with that code): uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
 
 == roadie-tol30-60-drop-v3-f64
   colorflat_id d0cb07254772a388eabb7c1d43f2c96440ac77bfbe3910704eb8949ceab5e2a4; verdict NOT CERTIFIED
@@ -20,13 +20,8 @@ Run 2026-11-12 on the Windows PC at ebb82f1: uv run python research/verification
   ams  ams-color-1-451812 inlay #451812   86400 triangles, footprint 244.65 mm^2
   ams  ams-color-2-f5f5f5 inlay #f5f5f5   17156 triangles, footprint 150.34 mm^2
   ams  ams-color-3-f0f10a inlay #f0f10a    6660 triangles, footprint 67.19 mm^2
-  glue glue-base base  #f60606   80630 triangles, footprint 759.25 mm^2
-  glue glue-color-1-451812 pieces #451812    8952 triangles, footprint 35.03 mm^2
-  glue glue-color-2-f5f5f5 pieces #f5f5f5   19284 triangles, footprint 111.19 mm^2
-  glue glue-color-3-f0f10a pieces #f0f10a   10532 triangles, footprint 54.96 mm^2
-  folds (label, into, region mm^2): [(1, 0, 2.78), (1, 0, 0.69), (2, 1, 1.64), (2, 0, 2.66), (2, 1, 4.0), (2, 1, 4.32), (2, 1, 4.35)]
-  glue pieces: 8, smallest 4.19 mm^2, largest 69.80 mm^2; leftover to base 206.84 mm^2
-  warnings: []
+  glue: not built - the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)
+  warnings: ['glue version not built: the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)']
 == oddie-60-merge-blues-v3-f64
   colorflat_id 1bd715fe67a5c4767924183f5de57094b0df90afcfcbd73d64d1fef160b7b653; verdict NOT CERTIFIED
   non-PASS checks (all bodies and routes): ['F3.thin_regions UNKNOWN', 'F6.slicer UNKNOWN']
@@ -48,9 +43,5 @@ Run 2026-11-12 on the Windows PC at ebb82f1: uv run python research/verification
   ams  ams-color-1-547e9d inlay #547e9d   25156 triangles, footprint 523.63 mm^2
   ams  ams-color-2-0d100d inlay #0d100d  117684 triangles, footprint 236.31 mm^2
   ams  ams-color-3-dd4f47 inlay #dd4f47    4284 triangles, footprint 32.30 mm^2
-  glue glue-base base  #25561b   75868 triangles, footprint 1677.88 mm^2
-  glue glue-color-1-547e9d pieces #547e9d   29220 triangles, footprint 509.99 mm^2
-  glue glue-color-3-dd4f47 pieces #dd4f47    2244 triangles, footprint 20.47 mm^2
-  folds (label, into, region mm^2): [(2, 0, 11.51), (2, 1, 10.54), (2, 0, 8.57), (2, 0, 6.56), (2, 0, 3.38), (2, 0, 2.71), (2, 0, 1.04), (3, 1, 3.62), (3, 1, 4.44), (2, 0, 192.0)]
-  glue pieces: 4, smallest 20.47 mm^2, largest 395.28 mm^2; leftover to base 0.00 mm^2
-  warnings: ['color 2 #0d100d has no glue piece: all of its regions are too small for a piece (rule color.glue.min_piece_side_mm) and were folded, so the glue model does not use it']
+  glue: not built - the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)
+  warnings: ['glue version not built: the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)']

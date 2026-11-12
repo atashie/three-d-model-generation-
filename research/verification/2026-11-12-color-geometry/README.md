@@ -178,3 +178,21 @@ R1 opening and island rule, and parts of the pocket that hold no piece go to the
 - The rebuild joined 2 pinches on Roadie keep (area moved 8.2e-11 mm²); the F4.glue_fit
   margin then adds PINCH_K G to the pocket's move.
 - Time: `glue_geometry` 1.1–12.7 s, `glue_checks` 1.0–1.1 s.
+
+## Task 7: the owner's review (2026-11-12)
+
+The owner reviewed `top.png` and `parts.png` of the four runs (`colored-runs.txt`). Their
+answer, verbatim:
+
+> teh colors match, but for the glued-together versions of our images let's make sure to
+> not add teh outline - that would be unrealistic to glue on, I think. Everyting else
+> looks ok
+
+**What follows from it (controller, 2026-11-12):**
+- **The problem:** a colors plan does not record which pixels of the outline color are the
+  redrawn band and which are the image's own dark regions, such as Roadie's pupil. So
+  the band cannot be removed from an `outlines: keep` plan alone.
+- **The change:** for a plan with `outlines: keep`, `tdmg flat --colors` writes the AMS
+  version only, and says that a glue print needs the plan with `outlines: drop`. For the
+  owner's images, that is Roadie's and Oddie's drop plans, already reviewed above.
+- **Everything else** (colors, the other folds, piece sizes) is accepted.

@@ -298,6 +298,14 @@ Codex critical review.
        uncovered area that the glue fills: at most 3.73 mm² on the four plans
        (`glue.txt`). This keeps the owner's two aims (no empty pockets, small pieces
        folded).
+   - **Owner decision (Task 7 review, 2026-11-12): no outline in glue versions.** The
+     owner said: "for the glued-together versions of our images let's make sure to not
+     add teh outline - that would be unrealistic to glue on".
+     - A plan does not mark which outline-color pixels are the redrawn band.
+     - So for a plan with `outlines: keep`, the glue route is not built: no glue files
+       and no `parts.png`. The record and the CLI say why, and point to the plan with
+       `outlines: drop`.
+     - The AMS route is unchanged.
 9. **Checks** (design "Gate additions"), in `tdmg.color_checks`. Each is a `CheckResult`.
    - **Names (2026-11-12, before Task 4):** first written as C1.*; they are F4 checks,
      since PLAN section 4's F4 row already covers "Minimum color-region size" and

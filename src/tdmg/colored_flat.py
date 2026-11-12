@@ -10,7 +10,12 @@ make_colored_flat chains the pure steps and writes their outputs in make_flat's 
 2. S (Decision 2): tdmg.flat.silhouette, the outline step make_flat calls, at the plan's
    width with flat.smooth.sigma_px, here intersected with the image box.
 3. Regions, cells and bodies: smooth_labels with the plan's sigma and supersample,
-   color_regions, color_cells, ams_bodies and ams_checks; glue_geometry and glue_checks.
+   color_regions, color_cells, ams_bodies and ams_checks; glue_geometry and glue_checks,
+   except for a plan that drew a kept outline band (outlines: keep with an outline
+   family; Decision 8, owner decision at the Task 7 review: a kept outline is
+   unrealistic to glue on, and a plan does not mark which outline-color pixels are the
+   redrawn band), where the glue route is not built. A keep plan with no family
+   (outline_color none, or auto finding none) drew no band and builds glue as usual.
 4. Checks (Decision 9): every per-body, per-plate and assembly check of ams_checks and
    glue_checks, F3.thin_regions per body of both routes (information, UNKNOWN, as in tdmg
    flat) and F6.slicer UNKNOWN per route, so the verdict here is always NOT CERTIFIED.
@@ -91,6 +96,13 @@ COLORED_REQUIRED_CHECKS = F1_CHECK_IDS | {
     "F2.export_matches_geometry", "F2.fits_build_volume", "F3.thin_regions",
     "F4.color_partition", "F4.filaments", "F4.glue_partition", "F4.glue_fit",
     "F5.triangles", "F6.slicer"}
+# The checks only the glue route produces. Without a glue route (a drawn outline band)
+# they are not required; every other check still is, from the AMS route alone.
+GLUE_ONLY_CHECKS = frozenset({"F4.glue_partition", "F4.glue_fit"})
+GLUE_NOT_BUILT = ("the plan keeps the outline (outlines: keep with an outline family, so "
+                  "an outline band is drawn), and a kept outline is unrealistic to glue on "
+                  "(owner decision, Task 7 review); for a glue print, use a plan made with "
+                  "outlines: drop (tdmg colors --outlines drop)")
 # parts.png and top.png display only, not thresholds: a piece number is drawn in STRIP_TEXT
 # on a STRIP_BACKGROUND box with LABEL_PAD_PX of padding (at 1x, then enlarged like the
 # strip), and the number boxes and this module's swatches get a BORDER_PX frame in
@@ -104,11 +116,16 @@ PARTS_NOTE = ("parts.png: the glue model. Pockets ({skin} mm deep) are drawn in 
               "color on the base color; each number is one glue piece, {skin} mm thick and "
               "{clearance} mm smaller than its pocket on every side, printed where it sits "
               "in the model.")
-REVIEW = ("Open top.png and compare it with the plan's regions.png: the colors should match. "
-          "Open parts.png: check the folds and leftovers and that the pieces are a size you "
-          "can handle. The verdict stays NOT CERTIFIED: F3.thin_regions and F6.slicer are "
-          "UNKNOWN until the bodies are sliced (step 4 of the color design); tdmg slice does "
-          "not read this folder yet.")
+REVIEW_TOP = ("Open top.png and compare it with the plan's regions.png: the colors should "
+              "match. ")
+REVIEW_PARTS = ("Open parts.png: check the folds and leftovers and that the pieces are a "
+                "size you can handle. ")
+REVIEW_END = ("The verdict stays NOT CERTIFIED: F3.thin_regions and F6.slicer are UNKNOWN "
+              "until the bodies are sliced (step 4 of the color design); tdmg slice does "
+              "not read this folder yet.")
+REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_END
+REVIEW_NO_GLUE = REVIEW_TOP + "The glue version was not built: " + GLUE_NOT_BUILT + ". " \
+    + REVIEW_END
 
 
 class ColoredFlatError(FlatError):
@@ -357,7 +374,14 @@ def colored_environment() -> dict:
 def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width_mm=None,
                       printer=None, smooth_px=None) -> dict:
     """Make the AMS and glue bodies, top.png, parts.png and colored.json from a verified
-    color plan and its selection. Returns the record as written (JSON types).
+    color plan and its selection. Returns the record as written (JSON types). For a plan
+    that drew a kept outline band, the glue route is not built (no glue-*.stl, no
+    parts.png). The test is the verified plan's outline.keep_width: verify_colors pins it
+    to be set exactly under outlines: keep with a non-empty outline family, and null
+    otherwise (so a keep plan with no family builds glue as usual). Then the
+    record's glue section is {"built": false, "reason", "report": null} ({"built": true,
+    "reason": null, "report": glue_geometry's report} otherwise), a warning says why, and
+    the verdict's required set leaves out GLUE_ONLY_CHECKS (record: required_checks).
 
     Refused with FlatError before anything is written (ColoredFlatError, a FlatError,
     unless noted): any smooth_px (the reviewed preview drew the outline at
@@ -423,6 +447,8 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     opening_param, island_param = cleaning_params(rules, profile)
     opening, island = opening_param["value"], island_param["value"]
     sigma = float(rules[SMOOTH_RULE].default)
+    # A band was drawn exactly when keep_width is set (verify_colors: keep with a family).
+    build_glue = plan.record["outline"]["keep_width"] is None
     try:
         _, transform, parts, cleaning = silhouette(mask, plan.width_mm, sigma, opening,
                                                    island, image_box=True)
@@ -436,10 +462,11 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
         ams_result = ams_checks(ams, cells, thickness,
                                 colors=plan.record["identity"]["settings"]["colors"],
                                 palette_cap=cap, printer=profile, rules=rules)
-        glue = glue_geometry(cells, thickness_mm=thickness, skin_mm=skin,
-                             clearance_mm=clearance, min_piece_side_mm=side,
-                             opening_mm=opening, min_island_mm2=island)
-        glue_result = glue_checks(glue, printer=profile, rules=rules)
+        if build_glue:
+            glue = glue_geometry(cells, thickness_mm=thickness, skin_mm=skin,
+                                 clearance_mm=clearance, min_piece_side_mm=side,
+                                 opening_mm=opening, min_island_mm2=island)
+            glue_result = glue_checks(glue, printer=profile, rules=rules)
     except (ColorGeometryError, ColorCheckError, SmoothingError) as e:
         raise ColoredFlatError(f"the colored geometry was refused: {e}") from None
 
@@ -447,8 +474,10 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     base = plan.base_index
     files: dict[str, bytes] = {}
     body_rows = []
-    for route, bodies, result in (("ams", ams, ams_result), ("glue", glue.bodies,
-                                                             glue_result)):
+    routes = [("ams", ams, ams_result)]
+    if build_glue:
+        routes.append(("glue", glue.bodies, glue_result))
+    for route, bodies, result in routes:
         for body in bodies:
             name = body_file(route, body.index, hex_of[body.index], base)
             data = result["stl"][body.name]
@@ -471,7 +500,9 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                 row["top_area_mm2"] = float(sum(c.area for c in cells.of(body.index)))
             body_rows.append(row)
     assembly = {"ams": ams_result["assembly"] + [slicer_check()],
-                "glue": glue_result["assembly"] + [slicer_check()]}
+                "glue": glue_result["assembly"] + [slicer_check()] if build_glue else []}
+    required = COLORED_REQUIRED_CHECKS if build_glue else \
+        COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS
     all_checks = [CheckResult(**c) for b in body_rows for c in b["checks"]]
     all_checks += [c for route in ROUTES for c in assembly[route]]
 
@@ -480,16 +511,20 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     files["top.png"] = png_bytes(top_image(cells, plan.palette, transform, shape,
                                            ams_rows, skin))
     inlays = sorted(set(cells.labels) - {base})
-    files["parts.png"] = png_bytes(parts_image(glue, plan.palette, transform, shape,
-                                               skin_mm=skin, clearance_mm=clearance,
-                                               inlays=inlays))
-
     warnings = list(regions.warnings)
-    glued = {c["index"] for c in glue.report["colors"]}
-    for c in sorted(set(inlays) - glued):
-        warnings.append(f"color {c} {hex_of[c]} has no glue piece: all of its regions are "
-                        f"too small for a piece (rule {MIN_SIDE_RULE}) and were folded, so "
-                        "the glue model does not use it")
+    if build_glue:
+        files["parts.png"] = png_bytes(parts_image(glue, plan.palette, transform, shape,
+                                                   skin_mm=skin, clearance_mm=clearance,
+                                                   inlays=inlays))
+        glued = {c["index"] for c in glue.report["colors"]}
+        for c in sorted(set(inlays) - glued):
+            warnings.append(f"color {c} {hex_of[c]} has no glue piece: all of its regions "
+                            f"are too small for a piece (rule {MIN_SIDE_RULE}) and were "
+                            "folded, so the glue model does not use it")
+        glue_section = {"built": True, "reason": None, "report": glue.report}
+    else:
+        warnings.append(f"glue version not built: {GLUE_NOT_BUILT}")
+        glue_section = {"built": False, "reason": GLUE_NOT_BUILT, "report": None}
 
     params = {
         "width_mm": plan.width_mm, "thickness_mm": thickness, "printer": profile.id,
@@ -513,14 +548,15 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
         "palette": [{"index": p["index"], "hex": p["hex"], "rgb": p["rgb"],
                      "base": p["index"] == base} for p in plan.palette],
         "base_index": base, "transform": transform, "cleaning": cleaning,
-        "regions": regions.report, "cells": cells.report, "glue": glue.report,
+        "regions": regions.report, "cells": cells.report, "glue": glue_section,
         "bodies": body_rows,
         "assembly": {route: _dicts(assembly[route]) for route in ROUTES},
         "warnings": warnings,
-        "verdict": verdict(all_checks, COLORED_REQUIRED_CHECKS),
+        "required_checks": sorted(required),
+        "verdict": verdict(all_checks, required),
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
         "environment": colored_environment(),
-        "review": REVIEW,
+        "review": REVIEW if build_glue else REVIEW_NO_GLUE,
     }
     try:
         data = record_text(record)

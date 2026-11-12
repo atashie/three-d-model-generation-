@@ -22,6 +22,7 @@ from tdmg.cli import app
 from tdmg.colored_flat import (
     BORDER_PX,
     COLORED_REQUIRED_CHECKS,
+    GLUE_ONLY_CHECKS,
     RECORD_NAME,
     ColoredFlatError,
     body_file,
@@ -235,7 +236,7 @@ def test_files_and_their_hashes(made):
     expected_ams = ["ams-base.stl"] + [f"ams-color-{i}-{palette[i]}.stl" for i in inlays
                                        if any(b["index"] == i and b["route"] == "ams"
                                               for b in rec["bodies"])]
-    glued = [c["index"] for c in rec["glue"]["colors"]]
+    glued = [c["index"] for c in rec["glue"]["report"]["colors"]]
     expected_glue = ["glue-base.stl"] + [f"glue-color-{i}-{palette[i]}.stl" for i in glued]
     # The record is key-sorted JSON, so outputs come back sorted by name.
     assert list(rec["outputs"]) == sorted(expected_ams + expected_glue
@@ -380,8 +381,8 @@ def test_parts_png_has_a_number_box_per_piece(made):
     rgb = {p["index"]: tuple(p["rgb"]) for p in rec["palette"]}
     layout = paint_cells(list(glue.cells.cells), list(glue.cells.labels), rgb,
                          rec["transform"], (h, w))
-    boxes = label_boxes(rec["glue"]["pieces"], rec["transform"], (h, w))
-    assert len(boxes) == len(rec["glue"]["pieces"]) >= 2
+    boxes = label_boxes(rec["glue"]["report"]["pieces"], rec["transform"], (h, w))
+    assert len(boxes) == len(rec["glue"]["report"]["pieces"]) >= 2
     covered = np.zeros((h * P, w * P), bool)
     for number, top, left, bottom, right in boxes:
         # One number per piece: no two boxes overlap (on this fixture), and each box is
@@ -517,7 +518,7 @@ def test_a_plan_with_base_1(plan, tmp_path):
 def test_glue_rows_have_their_footprint_area(made):
     rec = made[0]
     pieces = {}
-    for row in rec["glue"]["pieces"]:
+    for row in rec["glue"]["report"]["pieces"]:
         pieces[row["index"]] = pieces.get(row["index"], 0.0) + row["area_mm2"]
     for b in rec["bodies"]:
         if b["route"] == "glue" and b["role"] == "pieces":
@@ -539,7 +540,7 @@ def _rules_with(**values):
 def test_a_color_with_no_glue_piece_is_reported(plan, made, tmp_path, monkeypatch):
     sel, colors, _ = plan
     largest = {}
-    for row in made[0]["glue"]["pieces"]:
+    for row in made[0]["glue"]["report"]["pieces"]:
         largest[row["index"]] = max(largest.get(row["index"], 0.0), row["area_mm2"])
     (small, a1), (_, a2) = sorted(largest.items(), key=lambda kv: kv[1])[:2]
     side = ((a1 + a2) / 2) ** 0.5              # folds the smallest color only
@@ -552,7 +553,7 @@ def test_a_color_with_no_glue_piece_is_reported(plan, made, tmp_path, monkeypatc
     assert any(b["route"] == "ams" and b["index"] == small for b in rec["bodies"])
     assert any(w.startswith(f"color {small} {hex_} has no glue piece")
                for w in rec["warnings"])
-    assert all(p["index"] != small for p in rec["glue"]["pieces"])
+    assert all(p["index"] != small for p in rec["glue"]["report"]["pieces"])
 
 
 @pytest.mark.parametrize("rule_id, value, param", [
@@ -592,3 +593,77 @@ def test_cli_reports_an_os_error_while_writing_with_exit_2(plan, tmp_path, monke
     assert r.exit_code == 2, r.output
     assert r.stderr.startswith("error: No space left on device")
     assert "Traceback" not in r.output
+
+
+# --- owner decision (Task 7 review): no glue route for a plan with outlines: keep ----------
+
+
+@pytest.fixture(scope="module")
+def keep(plan, tmp_path_factory):
+    sel = plan[0]
+    root = tmp_path_factory.mktemp("keep")
+    rec_plan = write_plan(sel, root / "colors", outlines="keep")
+    assert rec_plan["ready"] is True
+    assert rec_plan["identity"]["settings"]["outlines"] == "keep"
+    out = root / "out"
+    return make_colored_flat(sel, root / "colors", out, thickness_mm=3.0), out, root
+
+
+def test_record_says_the_glue_route_was_built(made):
+    glue = made[0]["glue"]
+    assert set(glue) == {"built", "reason", "report"}
+    assert glue["built"] is True and glue["reason"] is None and glue["report"]["pieces"]
+    assert made[0]["required_checks"] == sorted(COLORED_REQUIRED_CHECKS)
+
+
+def test_outlines_keep_builds_no_glue_route(keep):
+    rec, out, _ = keep
+    names = sorted(p.name for p in out.iterdir())
+    assert names == sorted([*rec["outputs"], RECORD_NAME])
+    assert all(n.startswith("ams-") for n in rec["outputs"] if n.endswith(".stl"))
+    assert "ams-base.stl" in names and "top.png" in names
+    assert "parts.png" not in names and not any(n.startswith("glue-") for n in names)
+    glue = rec["glue"]
+    assert set(glue) == {"built", "reason", "report"}
+    assert glue["built"] is False and glue["report"] is None
+    assert "outlines: keep" in glue["reason"]
+    assert all(b["route"] == "ams" for b in rec["bodies"])
+    assert rec["assembly"]["glue"] == []
+    assert any(w.startswith("glue version not built:") and "outlines: drop" in w
+               for w in rec["warnings"])
+    assert rec["required_checks"] == sorted(COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS)
+    ids = {c["id"] for b in rec["bodies"] for c in b["checks"]}
+    ids |= {c["id"] for cs in rec["assembly"].values() for c in cs}
+    assert ids == COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS
+    assert rec["verdict"] == "NOT CERTIFIED"
+    assert "parts.png" not in rec["review"]
+
+
+def test_cli_outlines_keep_says_why_and_opens_top_png_only(plan, keep, tmp_path):
+    sel = plan[0]
+    out = tmp_path / "out"
+    r = _cli(sel, keep[2] / "colors", out)
+    assert r.exit_code == 0, r.output
+    lines = r.stdout.splitlines()
+    assert any(line.startswith("glue: not built - the plan keeps the outline (outlines: "
+                               "keep with an outline family") for line in lines)
+    assert lines[-1] == "open top.png"
+    assert not (out / "parts.png").exists()
+    assert "warning: glue version not built:" in r.stderr
+
+
+def test_keep_with_no_outline_family_still_builds_the_glue_route(plan, keep, tmp_path):
+    """Only a drawn band skips the glue route: keep with outline_color none has no family
+    (keep_width null, KEEP_NO_EFFECT_NOTE), so the glue route is built as usual."""
+    sel = plan[0]
+    rec_plan = write_plan(sel, tmp_path / "colors", outlines="keep", outline_color="none")
+    assert rec_plan["ready"] is True
+    assert rec_plan["outline"]["family"] == [] and rec_plan["outline"]["keep_width"] is None
+    rec = make_colored_flat(sel, tmp_path / "colors", tmp_path / "out", thickness_mm=3.0)
+    assert rec["glue"]["built"] is True and rec["glue"]["report"]["pieces"]
+    assert "parts.png" in rec["outputs"] and "glue-base.stl" in rec["outputs"]
+    assert rec["required_checks"] == sorted(COLORED_REQUIRED_CHECKS)
+    assert not any(w.startswith("glue version not built") for w in rec["warnings"])
+    # The keep fixture's plan did draw a band: that is what skipped its glue route.
+    keep_plan = json.loads((keep[2] / "colors" / "colors.json").read_bytes())
+    assert keep_plan["outline"]["family"] and keep_plan["outline"]["keep_width"] is not None

@@ -5,7 +5,7 @@ Each run was made with the CLI (60 mm from the plan, 3 mm thick, rule defaults):
       --thickness-mm 3 --out artifacts/colored-runs/<plan>
 The output folders are git-ignored; this prints, from each colored.json, the id, the
 verdict, the non-PASS checks, every body (route, color, triangles, footprint area), the
-folds, the glue pieces and the warnings.
+folds, the glue pieces (or why the glue version was not built) and the warnings.
 
 Run: uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
 """
@@ -34,7 +34,11 @@ def main():
         for b in rec["bodies"]:
             print(f"  {b['route']:4} {b['name']:8} {b['role']:5} {b['hex']} "
                   f"{b['triangles']:7d} triangles, footprint {b['footprint_area_mm2']:.2f} mm^2")
-        glue = rec["glue"]
+        if not rec["glue"]["built"]:
+            print(f"  glue: not built - {rec['glue']['reason']}")
+            print(f"  warnings: {rec['warnings']}")
+            continue
+        glue = rec["glue"]["report"]
         folds = [(f["label"], f["into"], round(f["region_area_mm2"], 2)) for f in glue["folds"]]
         print(f"  folds (label, into, region mm^2): {folds}")
         pieces = glue["pieces"]

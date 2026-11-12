@@ -233,7 +233,9 @@ def flat(
     With --colors COLORS_DIR, write the AMS bodies (ams-base.stl,
     ams-color-<i>-<rrggbb>.stl), the glue bodies (glue-base.stl,
     glue-color-<i>-<rrggbb>.stl), top.png, parts.png and colored.json.
-    The exit codes are the same, with colored.json for flat.json.
+    The exit codes are the same, with colored.json for flat.json. A plan
+    that keeps a drawn outline band (outlines: keep with an outline
+    family) gets no glue bodies and no parts.png.
     """
     # Typer's Rich help keeps the single line breaks of every paragraph after the first,
     # so the list above renders line for line. Each line is under 76 characters, so an
@@ -298,14 +300,19 @@ def _colored_flat(selection: Path, colors_dir: Path, out: Path, **kw) -> None:
         size = " x ".join(f"{e:.2f}" for e in b["extents_mm"])
         typer.echo(f"{b['name']}: color {b['index']} {b['hex']} ({b['role']}), "
                    f"{b['triangles']} triangles, {b['volume_mm3']:.1f} mm3, {size} mm")
-    pieces = len(rec["glue"]["pieces"])
-    typer.echo(f"glue: {pieces} piece{'' if pieces == 1 else 's'}, "
-               f"{len(rec['glue']['folds'])} regions folded")
+    glue = rec["glue"]
+    if glue["built"]:
+        pieces = len(glue["report"]["pieces"])
+        typer.echo(f"glue: {pieces} piece{'' if pieces == 1 else 's'}, "
+                   f"{len(glue['report']['folds'])} regions folded")
+    else:
+        typer.echo(f"glue: not built - {glue['reason']}")
     typer.echo(f"colorflat_id {rec['colorflat_id']}")
     for name in rec["outputs"]:
         typer.echo(f"wrote {out / name}")
     typer.echo(f"wrote {out / COLORED_RECORD}")
-    typer.echo("open top.png and parts.png")
+    typer.echo("open top.png and parts.png" if "parts.png" in rec["outputs"]
+               else "open top.png")
     if any(c["status"] == "FAIL" for _, c in checks):
         raise typer.Exit(1)
 
