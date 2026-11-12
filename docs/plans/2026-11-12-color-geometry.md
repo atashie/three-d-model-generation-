@@ -325,6 +325,10 @@ Codex critical review.
 
    So the verdict is always NOT CERTIFIED, as for `tdmg flat`.
 10. **Outputs** (this settles the design's conflict: the 3MF writer is step 3).
+    - **File names (2026-11-12, before Task 6):** `tdmg.records.write_outputs` takes
+      plain file names only, which keeps its exclusive-create guarantees simple. So the
+      folders below become prefixes: `ams-base.stl`, `ams-color-<i>-<rrggbb>.stl`,
+      `glue-base.stl` and `glue-color-<i>-<rrggbb>.stl`.
     - **AMS:**
       - `ams/base.stl`;
       - `ams/color-<i>-<rrggbb>.stl`, one per inlay color, with final palette index i.
