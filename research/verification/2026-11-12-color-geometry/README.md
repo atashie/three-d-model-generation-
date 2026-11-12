@@ -117,3 +117,64 @@ PC).
   - The slicer checks in step 4 judge whether these print.
 - **Time of `color_regions`:** 2.2–7.9 s per plan. A synthetic 4096² map in the quality
   review took 23.6 s, most of it in the thin report's buffers.
+
+## Task 5: the glue route on the owner's plans (2026-11-12)
+
+**Script:** `measure_glue.py`. **Output:** `glue.txt` (commit `d1d2b34` plus the
+uncommitted Task 5 working tree, Windows PC). T 3.0 mm and the rule defaults: clearance
+0.2 mm, min piece 2.0 mm (4 mm²), skin 0.6 mm, opening 0.4 mm, island 0.64 mm².
+
+### First run: fold on a candidate's total area (the reason for the amendment)
+
+`glue.txt` held this run first; it was replaced by the run below. Its numbers:
+
+- Every glue body passed F1 and its export check; F2.fits_build_volume and F5.triangles
+  passed on every plate (at most 147,064 triangles, the Oddie keep base).
+- F4.glue_fit passed on all four. The smallest gap was 0.198531 mm (Roadie keep),
+  against a threshold of 0.198071 mm. That gap is below c minus the shrink's chord error
+  minus the snap (0.199034 mm), so the opening's chord error in the margin is needed: a
+  margin of only the shrink chord and the snap would FAIL that plan.
+- Folds: 2, 7, 2 and 9 (Roadie drop, Roadie keep, Oddie merge blues, Oddie keep).
+- **Thin outline bands did not survive the shrink:** on the two "keep" plans, the outline
+  color's pocket was mostly uncovered (180 of 255.5 mm² on Roadie keep, 183 of 192 mm²
+  on Oddie keep), and what remained was cut into small pieces (9 of 13 and 4 of 4 below
+  4 mm²). The owner chose "Fold small pieces too" (plan Decision 8, amendment).
+- Time: `glue_geometry` 0.8–10.4 s, `glue_checks` 1.1–2.0 s.
+
+### The amendment as first written failed on every plan (not kept)
+
+With the pocket = candidate ∩ (kept pieces buffered by the clearance), the leftover
+(candidate minus that buffer) was 1,867, 2,056, 2,971 and 2,499 parts on the four plans,
+1,842–2,959 of them below 0.01 mm²: the fine map's staircase teeth and the cusps at
+rounded corners, which the clearance band cannot reach. Rebuilding the cells from them
+on Roadie drop left 154 base pinches after 4 rounds of joining, so `color_cells`
+refused. Measured with a scratch script (not kept). So the leftover is cleaned with the
+R1 opening and island rule, and parts of the pocket that hold no piece go to the base
+(`tdmg.color_glue`, step 4).
+
+### Current run (amended rule)
+
+| Plan | Folds | Leftover to base | Small pieces dropped | Pockets / pieces | Smallest piece | Smallest gap / threshold | Uncovered | Base triangles |
+|---|---|---|---|---|---|---|---|---|
+| Roadie drop | 2 | 2.651 mm² | 1 (1.544 mm²) | 7 / 7 | 6.116 mm² | 0.198953 / 0.198068 mm | 1.585 mm² | 61,358 |
+| Roadie keep | 7 | 206.8 mm² (outline band) | 9 (16.11 mm²) | 8 / 8 | 4.194 mm² | 0.198869 / 0.198061 mm | 3.73 mm² | 80,630 |
+| Oddie merge blues | 2 | 0 | 0 | 5 / 5 | 23.98 mm² | 0.198637 / 0.198063 mm | 2.12 mm² | 55,820 |
+| Oddie keep | 10 | 0 | 0 | 3 / 4 | 20.47 mm² | 0.198944 / 0.198063 mm | 1.212 mm² | 75,868 |
+
+- Every body (the base and each color's pieces) passes F1 and its export check after
+  STL storage; F2.fits_build_volume, F5.triangles, F4.glue_partition and F4.glue_fit
+  pass on all four. No empty pockets.
+- **F4.glue_partition** (added in the quality review): the rebuilt cells against the
+  gridded S differ by 0 to 5.1e-7 mm² (bound 1.85e-3 to 2.97e-3 mm²), the pockets overlap
+  by 0, and the glue base's expected volume equals area(S) T - area(pockets) d to
+  5.6e-7 mm³ or better (bound 5.5e-3 to 8.9e-3 mm³).
+- **The outline bands:** on Roadie keep, 206.8 of the band's 255.5 mm² goes to the base,
+  and 4 pieces of 4.19–13.6 mm² are kept. On Oddie keep, the band (192 mm², 4 pieces of
+  at most 1.83 mm²) now folds whole into the base (the 10th fold), so color 2 has no
+  glue pieces at all.
+- **Uncovered** is now 1.2–3.7 mm² per plan (182 and 184 mm² on the keep plans before):
+  the corners rounded to r + c, the staircase teeth, and leftover parts narrower than
+  the opening.
+- The rebuild joined 2 pinches on Roadie keep (area moved 8.2e-11 mm²); the F4.glue_fit
+  margin then adds PINCH_K G to the pocket's move.
+- Time: `glue_geometry` 1.1–12.7 s, `glue_checks` 1.0–1.1 s.

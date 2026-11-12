@@ -262,6 +262,27 @@ def _hausdorff_upper_bound(boundary: float, step: float, radius: float,
     return boundary + step / 2 + max(radius, rho) + chord_error
 
 
+def open_parts(before, opening_mm: float,
+               min_island_mm2: float) -> tuple[shapely.Geometry, list[Polygon], list[float]]:
+    """clean's opening and island rule, without its checks and report.
+
+    before: a valid polygonal geometry (may be empty). The opening erodes by
+    opening_mm / 2 and dilates back (round joins, QUAD_SEGS); its polygons are sorted by
+    order_key, and those of area below min_island_mm2 are dropped. Returns (the eroded
+    geometry, the kept polygons, the dropped areas, largest first). The caller validates
+    the numbers (clean does; so does tdmg.color_glue). An empty result is not refused here.
+    """
+    radius = opening_mm / 2
+    eroded = before.buffer(-radius, quad_segs=QUAD_SEGS)
+    opened = eroded.buffer(radius, quad_segs=QUAD_SEGS)
+    candidates, _ = polygon_parts(opened)
+    candidates.sort(key=order_key)
+    parts = [p for p in candidates if p.area >= min_island_mm2]
+    dropped = sorted((float(p.area) for p in candidates if p.area < min_island_mm2),
+                     reverse=True)
+    return eroded, parts, dropped
+
+
 def clean(geom_mm, opening_mm: float, min_island_mm2: float,
           sample_step_mm: float) -> tuple[list[Polygon], dict]:
     """Open by opening_mm (round joins, QUAD_SEGS); split into polygons; drop small parts.
@@ -305,17 +326,11 @@ def clean(geom_mm, opening_mm: float, min_island_mm2: float,
         polys, skipped = polygon_parts(geom_mm)
         before = shapely.union_all(polys)
     radius = opening_mm / 2
-    eroded = before.buffer(-radius, quad_segs=QUAD_SEGS)
-    opened = eroded.buffer(radius, quad_segs=QUAD_SEGS)
+    eroded, parts, dropped = open_parts(before, opening_mm, min_island_mm2)
 
     inputs = np.asarray(polygon_parts(before)[0], dtype=object)
     shapely.prepare(eroded)
     vanished = inputs[~shapely.intersects(eroded, inputs)] if len(inputs) else inputs
-    candidates, _ = polygon_parts(opened)
-    candidates.sort(key=order_key)
-    parts = [p for p in candidates if p.area >= min_island_mm2]
-    dropped = sorted((float(p.area) for p in candidates if p.area < min_island_mm2),
-                     reverse=True)
     area_before = float(before.area)
     area_after = float(sum(p.area for p in parts))
     if not parts:

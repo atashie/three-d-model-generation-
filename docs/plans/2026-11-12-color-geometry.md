@@ -202,7 +202,8 @@ Codex critical review.
      Decision 5 replacement) extruded from T − d to T, in place.
    - **Glue base:**
      - S extruded to T, with a pocket of depth d for every glue region (Decision 8).
-     - It equals the AMS base when no region is folded.
+     - It equals the AMS base when no region is folded and no leftover goes to the base
+       (since the "Fold small pieces too" amendment, leftovers change it too).
    - **Glue piece:** z from 0 to d at its model x, y. Each color's plate prints its
      pieces where they sit in the model, so the parts sheet's numbers match the model
      directly. Neighbouring pieces cannot touch: each was shrunk by the clearance.
@@ -233,8 +234,10 @@ Codex critical review.
 8. **Glue regions: fold the tiny ones, then shrink.**
    - **Start:** each connected inlay polygon is a candidate piece.
    - **Shrink:** buffer it by −clearance (round joins, `QUAD_SEGS`). An inward buffer
-     keeps convex corners sharp and rounds concave ones, so the gap is at least the
-     clearance everywhere and never less.
+     keeps convex corners sharp and rounds concave ones, so the gap is the clearance
+     everywhere, less only by the polygonal chord error at concave corners
+     (c(1 − cos(π/32))) and the opening's chord error; `F4.glue_fit`'s derived margin
+     covers both (corrected 2026-11-12, Task 5 spec review).
    - **Clean:** apply the R1 opening and island rules to the shrunk piece.
    - **Fold:** a candidate is folded when its cleaned, shrunk area is below the
      min-piece area.
@@ -247,6 +250,44 @@ Codex critical review.
    - **Report:** per piece, its number, color and area. The record also gives the
      pocket area that no piece covers beyond the clearance band (a neck that the shrink
      removed), as a measured number.
+   - **Amended by the owner (2026-11-12, after Task 5's first run): "Fold small pieces
+     too".**
+     - **What the first run showed:** the kept outline bands (about 0.5 mm, narrower
+       than 2 × clearance + opening = 0.8 mm) mostly vanished in the shrink:
+       - Roadie keep: 180 of 255.5 mm² of the band's pocket was uncovered, with 13
+         fragments, 9 of them below 4 mm²;
+       - Oddie keep: 183 of 192 mm² uncovered.
+
+       Folding only on a candidate's total area left mostly empty pockets.
+     - **The rule now:**
+       1. **Folds:** a candidate folds whole, as before, when none of its shrunk,
+          cleaned pieces reaches the min-piece area. This repeats to a fixed point.
+       2. **Small pieces:** each remaining candidate keeps only its pieces of at least
+          the min-piece area.
+       3. **Pockets:** a pocket is the candidate ∩ (kept pieces buffered by the
+          clearance, round joins).
+       4. **Leftovers:** the rest of the candidate becomes base color, so no pocket is
+          left empty.
+       5. **Cells:** they are rebuilt from the pockets (`color_cells`: one noding on the
+          grid, with pinches joined), and the glue base is meshed from them.
+     - **Visible effect, which the owner accepted:** a thin outline mostly disappears in
+       the glue version only; the AMS version keeps it. For a glue print with outlines,
+       set the outline color as the base (`base: N`).
+     - The leftover area per color is reported.
+     - **Implementation note (controller, 2026-11-12, Task 5):** steps 3–4 as worded
+       left the fine map's staircase teeth and the rounded-corner cusps as leftover
+       parts: 1,867–2,971 per plan, most below 0.01 mm². The rebuild then refused on
+       154 base pinches (Roadie drop). So, as built:
+       - the leftover is cleaned with the R1 opening and island rules
+         (`open_parts(candidate − kept.buffer(c), opening, min_island)`);
+       - the pocket is the parts of the candidate minus the leftover that hold a kept
+         piece;
+       - pocket parts with no piece join the leftover, so no pocket is empty.
+
+       The cost is that leftover strips narrower than the opening stay in the pocket as
+       uncovered area that the glue fills: at most 3.73 mm² on the four plans
+       (`glue.txt`). This keeps the owner's two aims (no empty pockets, small pieces
+       folded).
 9. **Checks** (design "Gate additions"), in `tdmg.color_checks`. Each is a `CheckResult`.
    - **Names (2026-11-12, before Task 4):** first written as C1.*; they are F4 checks,
      since PLAN section 4's F4 row already covers "Minimum color-region size" and
@@ -266,6 +307,14 @@ Codex critical review.
        overlays; the snap bound for the grid, Decision 6 amendment).
    - **`F4.filaments`:** the number of non-empty AMS bodies is at most the plan's
      `colors` and the printer's palette cap.
+   - **`F4.glue_partition` (glue; added 2026-11-12 after the Task 5 quality review):**
+     the glue counterpart of `F4.color_partition`:
+     - the rebuilt glue cells cover raw S within the same derived snap bound;
+     - the pockets are pairwise disjoint and lie within S;
+     - the glue base's volume is area(S) × T − Σ area(pocket) × d, within the bound × T.
+
+     Without it, a region dropped in the rebuild would leave a hole in the base and
+     pass every other check.
    - **`F4.glue_fit`:** each piece, buffered by (clearance − a derived rounding margin), lies within
      its pocket. It reports the smallest measured gap.
    - **Triangles:** F5 on the sum over all AMS bodies (one plate), and on each glue
@@ -344,7 +393,7 @@ Codex critical review.
      rule in `rules/` (CLAUDE.md rule 2), not a literal.
 5. **Glue** (Decision 8). Tests:
    - a square inlay's measured gap is the clearance (to the grid);
-   - a concave corner's gap is at least the clearance;
+   - a concave corner's gap is at least the clearance minus the derived margin;
    - a tiny region surrounded by one color folds into it;
    - one touching two colors folds into the longer shared boundary;
    - one surrounded by the base leaves no pocket;
