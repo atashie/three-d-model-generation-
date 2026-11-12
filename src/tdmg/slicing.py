@@ -70,6 +70,7 @@ import trimesh
 
 from tdmg import __version__
 from tdmg.checks import CheckResult, verdict
+from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.flat import FLAT_REQUIRED_CHECKS, STL_COORD_RTOL, flat_identity
 from tdmg.flat import RECORD_SCHEMA as FLAT_SCHEMA
 from tdmg.portability import (
@@ -297,6 +298,11 @@ def _read_flat(flat_dir: Path) -> tuple[dict, bytes, bytes]:
         raw = path.read_bytes()
         record = json.loads(raw)
     except FileNotFoundError:
+        if (flat_dir / COLORED_RECORD).exists():
+            raise SlicerError(
+                f"{flat_dir} is a tdmg flat --colors folder ({COLORED_RECORD}); tdmg slice "
+                "cannot slice colored output yet (step 4 of the color design), only a "
+                "single-color tdmg flat folder with flat.json") from None
         raise SlicerError(f"{path} is missing; slice a tdmg flat output folder") from None
     except (OSError, ValueError) as err:
         raise SlicerError(f"cannot read {path}: {err}") from None

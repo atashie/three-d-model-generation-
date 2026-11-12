@@ -285,7 +285,8 @@ def extracted_swatch_box(index: int, height_px: int, n_final: int
     return _row_box(len(legend_rows("")) + n_final + 1 + index, height_px)
 
 
-def _enlarge(a: np.ndarray, s: int) -> np.ndarray:
+def enlarge(a: np.ndarray, s: int) -> np.ndarray:
+    """a with each pixel repeated s times along both axes (nearest-neighbour upscaling)."""
     return np.repeat(np.repeat(a, s, axis=0), s, axis=1)
 
 
@@ -310,7 +311,7 @@ def _inner_edge(region: np.ndarray) -> np.ndarray:
     return region & ~core
 
 
-def _strip(rows: list[tuple[tuple[int, int, int] | None, str]], width: int) -> np.ndarray:
+def swatch_strip(rows: list[tuple[tuple[int, int, int] | None, str]], width: int) -> np.ndarray:
     """The swatch strip at 1x: one ROW_PX row per entry, a swatch (or none) and its text.
 
     Text uses Pillow's built-in bitmap font (ImageFont.load_default_imagefont, Pillow
@@ -403,13 +404,13 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
     """
     h, w = mask.shape
     p = PREVIEW_SCALE
-    big_mask = _enlarge(mask, p)
+    big_mask = enlarge(mask, p)
     board = background(h * p, w * p)
-    left = np.where(big_mask[..., None], _enlarge(cutout_rgb, p), board)
+    left = np.where(big_mask[..., None], enlarge(cutout_rgb, p), board)
     pal = np.array([e["rgb"] for e in palette], np.uint8)
     right = np.where(outer[..., None], pal[_fine_to_preview(fine, h, w, supersample)],
                      board)
-    edge = _inner_edge(_enlarge(changed, p))
+    edge = _inner_edge(enlarge(changed, p))
     yy, xx = np.nonzero(edge)
     dash = ((yy + xx) // CHANGED_DASH_PX) % 2
     right[yy, xx] = np.array(CHANGED_DASH, np.uint8)[dash]
@@ -431,7 +432,7 @@ def _regions_image(cutout_rgb: np.ndarray, mask: np.ndarray, palette: list[dict]
         # The flagged pairs have their own rows above; the reason's list of them is not
         # repeated here (the record and the CLI keep the whole reason).
         rows.append((None, not_ready_line(not_ready_reason.split(FLAGGED)[0])))
-    strip = _enlarge(_strip(rows, 2 * w), p)
+    strip = enlarge(swatch_strip(rows, 2 * w), p)
     return np.concatenate([panels, strip], axis=0)
 
 

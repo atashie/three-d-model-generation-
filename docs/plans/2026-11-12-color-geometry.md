@@ -69,6 +69,16 @@ Codex critical review.
    - **Reuse:** the outline step of `make_flat` is factored into one function that both
      commands call, so the colored body cannot drift from the single-color one.
    - Call the cleaned silhouette S.
+   - **Implementation note (Task 6, 2026-11-12):** `make_flat` never intersected with
+     the image box, and adding it there changes its outline bytes even where nothing
+     overshoots. So the shared function `tdmg.flat.silhouette` takes `image_box=`, and
+     only the colored route sets it. A `tdmg flat --colors` base and a plain `tdmg flat`
+     body of the same selection may therefore differ at float64-rounding level. A plain
+     `tdmg flat` body is kept byte-identical to before.
+   - **One required check set (Task 6):** both routes (AMS and glue) are judged by one
+     required set. F6.slicer is UNKNOWN until step 4, so the verdict is NOT CERTIFIED
+     either way. Step 4 needs one set per route, so that a check missing from one route
+     is not hidden by the other route's copy.
 3. **Color regions come from the fine map, as a coverage.**
    - **Fine map:** `smooth_labels(labels, sigma_px, supersample)`, with the verified
      plan's values.

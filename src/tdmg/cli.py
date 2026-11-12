@@ -4,6 +4,7 @@ STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checke
 portability with the pinned PrusaSlicer). R2 adds `colors` (the color plan of a selection,
 for review); `make` and `check` follow."""
 
+import inspect
 from pathlib import Path
 from typing import Annotated
 
@@ -12,6 +13,8 @@ from pydantic import ValidationError
 
 from tdmg import __version__
 from tdmg.color_outline import THIN_SHARE_RULE
+from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
+from tdmg.colored_flat import make_colored_flat
 from tdmg.colors import ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
@@ -29,6 +32,9 @@ from tdmg.selection import (
 )
 from tdmg.slicer import SlicerError
 from tdmg.slicing import DO_NOT_PRINT, PRINT_THIS, PRUSA_DO_NOT_PRINT, make_slice
+
+# make_flat's default printer, shown in tdmg flat's help.
+FLAT_PRINTER = inspect.signature(make_flat).parameters["printer"].default
 
 app = typer.Typer(help="Image -> FDM-printable 3MF/STL. See docs/guide/00-start-here.md.",
                   no_args_is_help=True)
@@ -190,19 +196,29 @@ def _smoothing_line(record: dict) -> str:
 
 @app.command()
 def flat(
+    ctx: typer.Context,
     selection: Annotated[Path, typer.Argument(exists=True, file_okay=False,
                                               metavar="SELECTION_DIR",
                                               help="A tdmg select output folder.")],
-    width_mm: Annotated[float, typer.Option(
-        "--width-mm", help="Width of the selection in the model, in mm.")],
     thickness_mm: Annotated[float, typer.Option(
         "--thickness-mm", help="Thickness of the flat solid, in mm.")],
     out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
-    printer: Annotated[str, typer.Option(
-        "--printer", help="Printer profile id (see `tdmg printers`).")] = "bambu-a1",
+    width_mm: Annotated[float | None, typer.Option(
+        "--width-mm", help="Width of the selection in the model, in mm. Required, except "
+                           "with --colors, where it defaults to the plan's width and "
+                           "must equal it.")] = None,
+    printer: Annotated[str | None, typer.Option(
+        "--printer", help=f"Printer profile id (see `tdmg printers`); default {FLAT_PRINTER}, "
+                          "or with --colors the plan's printer, which it must equal.")
+    ] = None,
     smooth_px: Annotated[float | None, typer.Option(
         "--smooth-px", help="Gaussian smoothing of the outline in image pixels; default from "
-                            "rule flat.smooth.sigma_px; 0 keeps the exact pixel outline")] = None,
+                            "rule flat.smooth.sigma_px; 0 keeps the exact pixel outline. "
+                            "Not allowed with --colors.")] = None,
+    colors_dir: Annotated[Path | None, typer.Option(
+        "--colors", exists=True, file_okay=False, metavar="COLORS_DIR",
+        help="A tdmg colors output folder (a ready plan of this selection): make "
+             "the colored AMS and glue bodies instead.")] = None,
 ) -> None:
     """Make a flat solid from a selection: write model.stl, outline.png and flat.json.
 
@@ -213,13 +229,27 @@ def flat(
          while writing, which can leave a folder without flat.json:
          such a folder is incomplete and must not be used
     Exit 0 does not mean the part is certified; read verdict in flat.json.
+
+    With --colors COLORS_DIR, write the AMS bodies (ams-base.stl,
+    ams-color-<i>-<rrggbb>.stl), the glue bodies (glue-base.stl,
+    glue-color-<i>-<rrggbb>.stl), top.png, parts.png and colored.json.
+    The exit codes are the same, with colored.json for flat.json.
     """
     # Typer's Rich help keeps the single line breaks of every paragraph after the first,
     # so the list above renders line for line. Each line is under 76 characters, so an
     # 80-column terminal does not wrap it (tests/test_cli.py checks this).
+    if colors_dir is not None:
+        _colored_flat(selection, colors_dir, out, thickness_mm=thickness_mm,
+                      width_mm=width_mm, printer=printer, smooth_px=smooth_px)
+        return
+    if width_mm is None:
+        # Required without --colors: the same usage error (exit 2) and text that a
+        # required option gives.
+        ctx.fail("Missing option '--width-mm'.")
     try:
-        rec = make_flat(selection, width_mm, thickness_mm, out, printer=printer,
-                        smooth_px=smooth_px)
+        chosen = {} if printer is None else {"printer": printer}   # else make_flat's default
+        rec = make_flat(selection, width_mm, thickness_mm, out, smooth_px=smooth_px,
+                        **chosen)
     except (FlatError, SelectionError) as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -243,6 +273,40 @@ def flat(
                "cleaning changed")
     typer.echo(f"wrote {out / 'flat.json'}")
     if any(c["status"] == "FAIL" for c in rec["checks"]):
+        raise typer.Exit(1)
+
+
+def _colored_flat(selection: Path, colors_dir: Path, out: Path, **kw) -> None:
+    """tdmg flat --colors: make_colored_flat, its summary lines and flat's exit codes."""
+    try:
+        rec = make_colored_flat(selection, colors_dir, out, **kw)
+    except (FlatError, SelectionError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:              # unreadable input, unwritable output, disk full ...
+        _os_error(e)
+        raise typer.Exit(2) from None
+    typer.echo(f"verdict {rec['verdict']}")
+    for warning in rec["warnings"]:
+        typer.echo(f"warning: {warning}", err=True)
+    checks = [(b["name"], c) for b in rec["bodies"] for c in b["checks"]]
+    checks += [(route, c) for route, cs in rec["assembly"].items() for c in cs]
+    for where, c in checks:
+        if c["status"] != "PASS":
+            typer.echo(f"  {where}: {_check_line(c).lstrip()}")
+    for b in rec["bodies"]:
+        size = " x ".join(f"{e:.2f}" for e in b["extents_mm"])
+        typer.echo(f"{b['name']}: color {b['index']} {b['hex']} ({b['role']}), "
+                   f"{b['triangles']} triangles, {b['volume_mm3']:.1f} mm3, {size} mm")
+    pieces = len(rec["glue"]["pieces"])
+    typer.echo(f"glue: {pieces} piece{'' if pieces == 1 else 's'}, "
+               f"{len(rec['glue']['folds'])} regions folded")
+    typer.echo(f"colorflat_id {rec['colorflat_id']}")
+    for name in rec["outputs"]:
+        typer.echo(f"wrote {out / name}")
+    typer.echo(f"wrote {out / COLORED_RECORD}")
+    typer.echo("open top.png and parts.png")
+    if any(c["status"] == "FAIL" for _, c in checks):
         raise typer.Exit(1)
 
 

@@ -258,8 +258,9 @@ def ams_checks(bodies: list[Body], cells: Cells, thickness_mm, *, colors, palett
     (tdmg.checks.merge_exact), then gets topology_checks and body_export_check.
     Returns {"bodies": {name: [CheckResult]}, "assembly": [F4.color_partition,
     F4.filaments, F2.fits_build_volume on the extents of all gated meshes together,
-    F5.triangles on their total triangles (one plate)], "stl": {name: bytes}}: the writer
-    writes exactly the gated bytes.
+    F5.triangles on their total triangles (one plate)], "stl": {name: bytes}, "meshes":
+    {name: the gated mesh}}: the writer writes exactly the gated bytes, and the meshes
+    are those bytes parsed back and merged, for the record's summaries.
 
     Refused (ColorCheckError): no bodies, or bodies not built from these cells. They must
     be ams_bodies(cells): the base first with every cell as its parts, then one inlay per
@@ -285,7 +286,8 @@ def ams_checks(bodies: list[Body], cells: Cells, thickness_mm, *, colors, palett
     assembly = [color_partition_check(cells, bodies, thickness_mm),
                 filaments_check(bodies, colors=colors, palette_cap=palette_cap),
                 build_volume_check(plate, printer), triangle_check(plate, rules)]
-    return {"bodies": per_body, "assembly": assembly, "stl": stl}
+    meshes = {body.name: mesh for body, mesh in zip(bodies, gated, strict=True)}
+    return {"bodies": per_body, "assembly": assembly, "stl": stl, "meshes": meshes}
 
 
 # --- glue route (Decision 9, F4.glue_fit) -----------------------------------------------
@@ -449,15 +451,18 @@ def glue_checks(glue: Glue, *, printer: PrinterProfile, rules: dict) -> dict:
     body_export_check. Each body is its own plate: F2.fits_build_volume and F5.triangles
     on its gated mesh. Returns {"bodies": {name: [CheckResult]}, "plates": {name:
     [F2.fits_build_volume, F5.triangles]}, "assembly": [F4.glue_partition, F4.glue_fit],
-    "stl": {name: bytes}}: the writer writes exactly the gated bytes.
+    "stl": {name: bytes}, "meshes": {name: the gated mesh}}: the writer writes exactly
+    the gated bytes.
     """
     glue = _glue(glue)
-    per_body, plates, stl = {}, {}, {}
+    per_body, plates, stl, meshes = {}, {}, {}, {}
     for body in glue.bodies:
         data = encode_stl(body.mesh)
         mesh = merge_exact(trimesh.load(io.BytesIO(data), file_type="stl", process=False))
         per_body[body.name] = topology_checks(mesh) + [body_export_check(mesh, body)]
         plates[body.name] = [build_volume_check(mesh, printer), triangle_check(mesh, rules)]
         stl[body.name] = data
+        meshes[body.name] = mesh
     return {"bodies": per_body, "plates": plates,
-            "assembly": [glue_partition_check(glue), glue_fit_check(glue)], "stl": stl}
+            "assembly": [glue_partition_check(glue), glue_fit_check(glue)], "stl": stl,
+            "meshes": meshes}

@@ -607,7 +607,7 @@ def _outline_image(mask: np.ndarray, kept: np.ndarray) -> np.ndarray:
     return image
 
 
-def _read_selection(selection_dir: Path) -> tuple[dict, np.ndarray]:
+def read_flat_selection(selection_dir: Path) -> tuple[dict, np.ndarray]:
     """selection.json and the verified mask (bool, image-sized, read-only), by
     tdmg.selection.read_selection; its refusals become FlatError with the same message."""
     try:
@@ -633,12 +633,12 @@ def encode_stl(mesh: trimesh.Trimesh) -> bytes:
     return mesh.export(file_type="stl")
 
 
-def _mesh_summary(mesh: trimesh.Trimesh) -> dict:
+def mesh_summary(mesh: trimesh.Trimesh) -> dict:
     return {"triangles": len(mesh.faces), "bodies": _body_count(mesh),
             "volume_mm3": _signed_volume(mesh), "extents_mm": _extents(mesh)}
 
 
-def _flat_environment() -> dict:
+def flat_environment() -> dict:
     """records.environment() plus the geometry libraries the mesh bytes depend on."""
     return {**environment(), "shapely": shapely.__version__, "trimesh": trimesh.__version__,
             "manifold3d": package_version("manifold3d"),
@@ -667,11 +667,54 @@ SMOOTHING_ADVICE = ("; check outline.png, or use smooth_px 0 (--smooth-px 0) or 
                     "value")
 
 
-def _smoothed(mask: np.ndarray, sigma: dict) -> shapely.Geometry:
-    try:
-        return smooth_outline(mask, sigma["value"])
-    except SmoothingError as e:
-        raise FlatError(f"smoothing failed: {e}") from None
+def cleaning_params(rules: dict, profile: PrinterProfile) -> tuple[dict, dict]:
+    """The cleaning rules' values as recorded in params: (opening_mm, min_island_mm2).
+
+    opening_mm: {"value": flat.sliver.opening_width, "rule"}. min_island_mm2: {"value":
+    (flat.island.min_square_side x the profile's nozzle)^2, "rules", "nozzle_diameter_mm",
+    "formula"}. Shared by make_flat and tdmg.colored_flat, so both clean with, and record,
+    the same values.
+    """
+    opening = {"value": float(rules[OPENING_RULE].default), "rule": OPENING_RULE}
+    side = float(rules[ISLAND_RULE].default)
+    nozzle = float(profile.nozzle_diameter_mm)
+    min_island = {"value": (side * nozzle) ** 2, "rules": [ISLAND_RULE],
+                  "nozzle_diameter_mm": nozzle,
+                  "formula": "(min_square_side x nozzle_diameter_mm)^2"}
+    return opening, min_island
+
+
+def silhouette(mask: np.ndarray, width_mm: float, sigma_px: float | None, opening_mm: float,
+               min_island_mm2: float, *, image_box: bool = False
+               ) -> tuple[shapely.Geometry, dict, list[Polygon], dict]:
+    """R1's outline step: the outline, to_model and clean, shared by tdmg flat with and
+    without --colors so that the colored body cannot drift from the single-color one.
+
+    sigma_px None keeps the exact pixel outline (mask_outline); otherwise the outline is
+    smooth_outline(mask, sigma_px) (a SmoothingError becomes FlatError). image_box=True
+    then intersects it with the image box [0, W] x [0, H] in pixel units: the colored
+    route needs this, because the smoothed outline can overshoot the image by a few ulps
+    (research/reviews/2026-11-11-color-palette/overshoot_f64.txt) while the color
+    regions stay inside it (tdmg.smoothing.smooth_labels). make_flat does not pass it, so
+    its bytes are unchanged. to_model scales the outline to width_mm, and clean opens it
+    by opening_mm and drops islands below min_island_mm2, sampling the Hausdorff
+    measurement at HAUSDORFF_STEP_PX pixels. Returns (the outline in pixel units, the
+    transform, the cleaned parts, clean's report).
+    """
+    if sigma_px is None:
+        outline = mask_outline(mask)
+    else:
+        try:
+            outline = smooth_outline(mask, sigma_px)
+        except SmoothingError as e:
+            raise FlatError(f"smoothing failed: {e}") from None
+    if image_box:
+        h, w = mask.shape
+        outline = shapely.intersection(outline, shapely.box(0, 0, w, h))
+    model, transform = to_model(outline, width_mm)
+    parts, cleaning = clean(model, opening_mm, min_island_mm2,
+                            HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
+    return outline, transform, parts, cleaning
 
 
 def _regions(region, opening_mm: float, min_island_mm2: float) -> dict:
@@ -840,7 +883,7 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     width_mm = _require_positive("width_mm", width_mm)
     thickness_mm = _require_positive("thickness_mm", thickness_mm)
     smooth_value = _smooth_value(smooth_px)
-    selection, mask = _read_selection(Path(selection_dir))
+    selection, mask = read_flat_selection(Path(selection_dir))
     if printer not in printer_ids():
         raise FlatError(f"no printer profile {printer!r}; choose one of {printer_ids()}")
     profile = load_printer(printer)
@@ -850,21 +893,15 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
     except RecordError as e:
         raise FlatError(str(e)) from None
 
-    opening = {"value": float(rules[OPENING_RULE].default), "rule": OPENING_RULE}
-    side = float(rules[ISLAND_RULE].default)
-    nozzle = float(profile.nozzle_diameter_mm)
-    min_island = {"value": (side * nozzle) ** 2, "rules": [ISLAND_RULE],
-                  "nozzle_diameter_mm": nozzle,
-                  "formula": "(min_square_side x nozzle_diameter_mm)^2"}
+    opening, min_island = cleaning_params(rules, profile)
     if smooth_value is None:
         sigma = {"value": float(rules[SMOOTH_RULE].default), "rule": SMOOTH_RULE}
     else:                              # an explicit value: no rule set it
         sigma = None if smooth_value == 0 else {"value": smooth_value, "rule": None}
-    exact = mask_outline(mask)
-    outline = exact if sigma is None else _smoothed(mask, sigma)
-    model, transform = to_model(outline, width_mm)
-    parts, cleaning = clean(model, opening["value"], min_island["value"],
-                            HAUSDORFF_STEP_PX * transform["scale_mm_per_px"])
+    outline, transform, parts, cleaning = silhouette(
+        mask, width_mm, None if sigma is None else sigma["value"], opening["value"],
+        min_island["value"])
+    exact = outline if sigma is None else mask_outline(mask)
     if sigma is None:
         smoothing, warnings = dict(SMOOTHING_OFF), []
     else:
@@ -890,11 +927,11 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
         "params": params, "smoothing": smoothing,
         "warnings": warnings, "transform": transform,
         "cleaning": cleaning,
-        "mesh": _mesh_summary(gated),
+        "mesh": mesh_summary(gated),
         "checks": [c.as_dict() for c in checks],
         "verdict": verdict(checks, FLAT_REQUIRED_CHECKS),
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
-        "environment": _flat_environment(),
+        "environment": flat_environment(),
         "review": REVIEW,
     }
     try:
