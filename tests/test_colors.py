@@ -1789,3 +1789,16 @@ def test_verify_colors_checks_the_form_of_vanished(done, sel, tmp_path, vanished
     _edit_record(d, lambda r: r["smoothing"].update(vanished=vanished))
     with pytest.raises(ColorsError, match="smoothing.vanished"):
         verify_colors(d, sel)
+
+
+@pytest.mark.parametrize("change", [
+    lambda b: b.update(config_sha256="zz"),
+    lambda b: b.update(extra=1),
+    lambda b: b["sources"].update(colors="chat"),
+    lambda b: b["sources"].pop("edges"),
+], ids=["hash", "extra key", "unknown source", "missing source"])
+def test_verify_colors_checks_the_form_of_the_settings_block(done, sel, tmp_path, change):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, lambda r: change(r["settings"]))
+    with pytest.raises(ColorsError, match="settings must hold settings, sources"):
+        verify_colors(d, sel)

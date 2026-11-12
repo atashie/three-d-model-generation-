@@ -12,8 +12,10 @@ import io
 import json
 import math
 import numbers
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import get_args
 
 import numpy as np
 from PIL import Image
@@ -34,6 +36,7 @@ from tdmg.color_config import (
     SMOOTH_RULE,
     ColorConfig,
     ColorConfigError,
+    Source,
     check_base,
     check_extraction_indices,
     check_outline_width_setting,
@@ -75,6 +78,7 @@ from tdmg.smoothing import LABELS_METHOD, SmoothingError, check_supersample, sig
 
 EDGE_RULES = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE, "exact": None}
 SETTING_KEYS = KEYS
+SOURCES = get_args(Source)
 # The only methods this code implements. A record naming another version (older or newer)
 # is refused: the rebuild below, and design step 2's fine map, would silently use these.
 SUPPORTED_METHODS = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
@@ -306,6 +310,7 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
     _check_extraction_settings(settings, record["extraction"]["n_extracted"],
                                outline["family"], outline["core"])
     inp, sm, lim = record["input"], record["smoothing"], record["limits"]
+    _check_settings_block(record["settings"])
     rules = ident["rules"]
     nozzle = ident["nozzle_diameter_mm"]
     opening_mm = float(rules[OPENING_RULE])
@@ -421,6 +426,21 @@ def _check_palette(palette: list, base_index, base) -> int:
         raise ColorsError("colors.json is inconsistent: base_index and the palette's base "
                           "flags do not match settings.base")
     return want
+
+
+def _check_settings_block(block) -> None:
+    """The record's settings block, which the rebuild cannot reproduce: exactly settings,
+    sources (one known source per setting key) and config_sha256 (64 lowercase hex digits,
+    or null when no config file was given)."""
+    sha = block.get("config_sha256") if isinstance(block, dict) else None
+    if (not isinstance(block, dict) or set(block) != {"settings", "sources", "config_sha256"}
+            or not isinstance(block["sources"], dict)
+            or set(block["sources"]) != set(SETTING_KEYS)
+            or not all(v in SOURCES for v in block["sources"].values())
+            or not (sha is None or (isinstance(sha, str)
+                                    and re.fullmatch("[0-9a-f]{64}", sha)))):
+        raise ColorsError("colors.json is inconsistent: settings must hold settings, sources "
+                          "(a known source per setting) and config_sha256 (a SHA-256 or null)")
 
 
 def _check_extraction_settings(settings: dict, n_extracted, family, core) -> None:

@@ -126,3 +126,11 @@ each was checked and handled in the next commit:
   and greens merged) takes 1.45 s, or 1.37 s without the preview decode. The duplicate
   `edge_sigma_px` call is harmless and kept: it refuses a bad preset before the selection
   is read.
+
+**Re-review of `a671a8d`:** the reviewer re-ran its repros, and every fix held. Two
+suggestions were left, and both are handled in the next commit:
+- The settings block (`settings`, `sources` with a known source per key, and
+  `config_sha256` as a SHA-256 or null) is now checked in form. Test:
+  `test_verify_colors_checks_the_form_of_the_settings_block`.
+- The docs and the plan now say "every rebuildable record field" and list what is checked
+  in form only.

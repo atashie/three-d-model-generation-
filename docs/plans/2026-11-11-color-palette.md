@@ -562,7 +562,8 @@ Task 7 is complete.
   `docs/guide/pipeline-and-gate.md`.
 - **Codex review:** `research/reviews/2026-11-11-color-palette/` lists 9 findings and how
   each was handled.
-  - `verify_colors` now rebuilds the plan and requires identical labels and record.
+  - `verify_colors` now rebuilds the plan and requires identical labels and every
+    rebuildable record field.
   - It also checks the printer cap, the method versions and the base index, and that the
     rule values are today's.
   - A new fate, `band`; the record schema is `tdmg.colors/4`.
