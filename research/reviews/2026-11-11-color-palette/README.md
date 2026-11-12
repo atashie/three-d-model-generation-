@@ -174,3 +174,31 @@ now, re-checking R1, or leave it).
   (Oddie).
 
 **Not shown:** that float64 is bit-identical on the Mac. The Mac has not run this.
+
+**Review of the float64 change (subagent spec and quality review of `18e8d2b`):** the
+reviewer confirmed the code, the version bumps and every quoted number against the .txt
+outputs. It ran the tie test, which still runs (no skip) and passes. It found:
+- **I1: the cost figure in `smooth_labels`' docstring was a float32 measurement.**
+  Re-measured with [cost_f64.py](cost_f64.py) → [cost_f64.txt](cost_f64.txt): 4.30 s and
+  a 417 MiB tracemalloc peak, against 4.9 s and 356 MiB with float32. The docstring now
+  gives both.
+- **I2: "the fine map matches too" cited a case that already matched in float32.**
+  - `opencv_paths_owner_f64.txt` is the output of
+    [opencv_paths_owner.py](opencv_paths_owner.py), re-run on the float64 code. Its "f32"
+    label is left over from the script, and its one labels case (oddie-60-default) gave
+    0 in float32 too.
+  - The case that differed, Codex's 17 × 17 map, is now re-run with
+    [opencv_paths.py](opencv_paths.py) → [opencv_paths_f64.txt](opencv_paths_f64.txt): 0
+    fine pixels differ, against 3 with float32. So the fine-map claim rests on this file.
+- **I3: no regression test.** Added `test_results_do_not_depend_on_opencvs_optimised_code_path`
+  (tests/test_smooth_labels.py). It runs that 17 × 17 map through `smooth_labels`, and
+  its mask through `smooth_outline`, with the optimisations on and off. It runs on every
+  OS in CI, which gives some evidence for macOS and Linux.
+- **Suggestions:**
+  - **S1:** the test comment now says the overshoot allowance assumes small images.
+  - **S4:** the verification addendum now gives the slice_ids and how the shape was
+    compared.
+  - **S6:** the plan now notes the change is done.
+  - **Not changed:** S2 (a looser-than-needed band in one test), S3 (a float32 stub in a
+    monkeypatched test) and S5 (`to_planar` is deprecated in trimesh; the script is a
+    record).

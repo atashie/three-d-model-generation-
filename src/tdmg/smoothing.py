@@ -324,13 +324,16 @@ def smooth_labels(labels, sigma_px: float, supersample: int = SUPERSAMPLE,
     map, done in bands of _band_rows fine rows (a memory bound only; the result does not
     depend on it). Measured on the Windows PC (2026-11-11), a 2000 x 2000 map with 4
     colors inside a disc of radius 990 px, sigma 2.5, s 4 (an 8000 x 8000 fine map):
-    4.9 s (best of 3) and a tracemalloc peak of 356 MiB. The earlier version (int32
-    output, a full-size np.unique for vanished, git 9d66f8e) gave the same labels in
-    5.4 s with a peak of 636 MiB. tracemalloc counts numpy and Python allocations only,
+    with the float64 fields (flat-3), 4.30 s (best of 3) and a tracemalloc peak of
+    417 MiB (research/reviews/2026-11-11-color-palette/cost_f64.py). With float32 fields
+    it was 4.9 s and 356 MiB: the k coarse fields now take twice the memory
+    (4 x 2002^2 x 8 bytes = 122 MiB here). The earlier version (int32 output, a full-size
+    np.unique for vanished, git 9d66f8e) gave the same labels in 5.4 s with a peak of
+    636 MiB. tracemalloc counts numpy and Python allocations only,
     not OpenCV's own buffers (the blur's), so the true peak is somewhat higher. The output
     itself is H s x W s bytes for uint8 (61 MiB here); the rest is the fill's EDT
-    indices, the k coarse fields and a few float64 bands (_band_rows x W s x 8 bytes
-    each).
+    indices, the k coarse float64 fields and a few float64 bands (_band_rows x W s x 8
+    bytes each).
     """
     sigma = sigma_or_zero(sigma_px)
     s = check_supersample(supersample)

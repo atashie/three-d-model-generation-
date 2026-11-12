@@ -173,3 +173,7 @@ The owner chose to move the outline blur to float64
 - **Verdict:** both are still PRINTABLE, with every required check PASS.
 - **Geometry:** it moved by at most 4.6e-6 mm. Oddie has 29,020 facets (was 29,212).
 - **The new STLs** are not byte-identical to the ones in the table above.
+- **The new slice_ids:** `86b7d85d…` (Roadie) and `a50ecead…` (Oddie).
+- **How the shape was compared:** by the Hausdorff distance between the mid-height
+  sections of the old and new STL. For Oddie, whose vertex count changed, this is the
+  only shape comparison. See `research/reviews/2026-11-11-color-palette/flat3_compare.txt`.

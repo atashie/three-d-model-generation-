@@ -204,7 +204,9 @@ def test_a_straight_edge_on_the_image_border_stays_put():
 # field it was up to 1.9e-6 px. A field error df moves the 0.5 crossing by df / slope, and
 # the slope across an edge is about w_0 = 1 / (sigma sqrt(2 pi)) per px, so it grows with
 # sigma. The allowance, 1e-12 * max(sigma, 1) px, is far above the measured rounding and
-# far below anything that matters.
+# far below anything that matters. It assumes small images, as in the tests below (at most
+# 300 x 500): in float64 the floor is the float spacing at x = W (2.3e-13 px at W = 2000,
+# 9.1e-13 at 4096), so a test on large images must also allow that spacing.
 def overshoot_allowance(sigma: float) -> float:
     return 1e-12 * max(sigma, 1.0)
 
@@ -551,3 +553,26 @@ def test_owner_images_smooth_preset(name, owner_selection):
     assert fine.dtype == np.uint8
     assert digest32 == OWNER_FINE_SHA_INT32[name], PARITY
     assert digest == OWNER_FINE_SHA[name], PARITY
+
+
+# --- the float64 blur does not depend on OpenCV's code path (flat-3) -------------------
+
+def test_results_do_not_depend_on_opencvs_optimised_code_path():
+    # Why the blur is float64 (research/reviews/2026-11-11-color-palette/, finding 5): with
+    # float32, switching cv2.setUseOptimized changed 3 fine pixels of this 17 x 17 map and
+    # the outline of every owner selection. A float32 cast brought back would fail here, on
+    # every OS that CI runs (on a build whose two paths agree in float32 too, it cannot).
+    labels = np.zeros((17, 17), np.int32)
+    labels[np.triu_indices(17, 1)] = 1
+    np.fill_diagonal(labels, 2)
+    mask = labels == 0
+    was = cv2.useOptimized()
+    try:
+        results = []
+        for optimised in (True, False):
+            cv2.setUseOptimized(optimised)
+            results.append((smooth_labels(labels, 2.5, 4).fine.tobytes(),
+                            smooth_outline(mask, 2.5).wkb))
+    finally:
+        cv2.setUseOptimized(was)
+    assert results[0] == results[1]

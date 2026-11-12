@@ -569,5 +569,5 @@ Task 7 is complete.
   - A new fate, `band`; the record schema is `tdmg.colors/4`.
   - A null config document is refused.
   - The OpenCV float32 path dependence is documented; the float64 change is left to the
-    owner.
+    owner. (Done: the owner chose it, and it is flat-3, commit `18e8d2b`.)
 - **Step 1 is complete:** CI passed on all three OSes for `ef4b2cf` (run 43130647502).
