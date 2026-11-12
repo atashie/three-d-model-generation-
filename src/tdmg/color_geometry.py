@@ -499,14 +499,14 @@ def pinch_vertices(cells, labels, *, grid_mm=None) -> list[tuple[tuple[float, fl
     """The cell vertices where a label's cells meet in two or more separate angular runs.
 
     cells: polygons on the grid grid_mm (default: storage_grid_mm of their largest
-    |coordinate|; pass the Cells' G instead: snap rounding can carry the largest
-    coordinate up to exactly 2^e, where the default would be 2G and refuse vertices at
-    odd multiples of G; color_cells and ams_bodies always pass it) that tile without
-    overlap and share vertices exactly (as color_cells makes them); labels: one int per
-    cell. Around each vertex v the wedges between the incident edges are each claimed by one cell or by nobody (outside S); _vertex_runs
-    gives the exact construction. A label whose wedges form two or more runs, read
-    cyclically, pinches at v. Returns [(v, [pinching labels, ascending])], sorted by v.
-    Includes vertices where S itself pinches (color_cells does not fix those).
+    |coordinate|; pass the Cells' G instead: snap rounding can carry the largest coordinate
+    up to exactly 2^e, where the default would be 2G and refuse vertices at odd multiples of
+    G; color_cells and ams_bodies always pass it) that tile without overlap and share
+    vertices exactly (as color_cells makes them); labels: one int per cell. Around each
+    vertex v the wedges between the incident edges are each claimed by one cell or by nobody
+    (outside S); _vertex_runs gives the exact construction. A label whose wedges form two or
+    more runs, read cyclically, pinches at v. Returns [(v, [pinching labels, ascending])],
+    sorted by v. Includes vertices where S itself pinches (color_cells does not fix those).
     ColorGeometryError for coordinates off the grid.
     """
     cells = list(cells)
