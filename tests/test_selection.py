@@ -151,6 +151,16 @@ def _garbage(tmp_path):
     return p
 
 
+def _huge_text_png(tmp_path):
+    # Codex review 2 (2026-11-11), finding 1: Image.open raises ValueError for this.
+    from PIL import PngImagePlugin
+    info = PngImagePlugin.PngInfo()
+    info.add_text("k", "x" * (PngImagePlugin.MAX_TEXT_CHUNK + 1), zip=True)
+    p = tmp_path / "text.png"
+    Image.fromarray(np.zeros((4, 4), np.uint8)).save(p, pnginfo=info)
+    return p
+
+
 def _truncated_png(tmp_path):
     full = tmp_path / "full.png"
     Image.fromarray(np.zeros((200, 200), np.uint8)).save(full)   # 4x4 fails at open instead
@@ -165,7 +175,8 @@ def _truncated_png(tmp_path):
     (_two_frame_gif, "2 frames"),
     (_garbage, "not a readable image"),
     (_truncated_png, "not a readable image"),
-], ids=["16-bit", "multi-frame", "garbage", "truncated"])
+    (_huge_text_png, "not a readable image"),
+], ids=["16-bit", "multi-frame", "garbage", "truncated", "huge text chunk"])
 def test_load_image_rejects_inputs_it_cannot_decode_faithfully(tmp_path, make, message):
     with pytest.raises(SelectionError, match=message):
         load_image(make(tmp_path))
@@ -380,7 +391,8 @@ def test_bad_user_masks_raise(tmp_path):
     (_two_frame_gif, "2 frames"),
     (_garbage, "not a readable image"),
     (_truncated_png, "not a readable image"),
-], ids=["16-bit", "multi-frame", "garbage", "truncated"])
+    (_huge_text_png, "not a readable image"),
+], ids=["16-bit", "multi-frame", "garbage", "truncated", "huge text chunk"])
 def test_load_mask_rejects_files_it_cannot_decode_faithfully(tmp_path, make, message):
     with pytest.raises(SelectionError, match=message):
         load_mask(make(tmp_path), (4, 4))

@@ -1721,7 +1721,7 @@ def test_verify_colors_ignores_only_the_unrendered_fields(done, sel, tmp_path):
 
     def edit(r):
         r["tdmg_version"] = "0.0.0-other"
-        r["environment"] = {"python": "other"}
+        r["environment"] = {name: "other" for name in r["environment"]}   # form checked
         r["smoothing"]["vanished"] = [{"index": 0, "hex": r["palette"][0]["hex"]}]
         r["settings"]["sources"]["colors"] = "config"
     _edit_record(d, edit)
@@ -1801,4 +1801,45 @@ def test_verify_colors_checks_the_form_of_the_settings_block(done, sel, tmp_path
     d = _copy(done[1], tmp_path, "colors")
     _edit_record(d, lambda r: change(r["settings"]))
     with pytest.raises(ColorsError, match="settings must hold settings, sources"):
+        verify_colors(d, sel)
+
+
+@pytest.mark.parametrize("change", [
+    lambda r: r.pop("tdmg_version"),
+    lambda r: r.update(tdmg_version=7),
+    lambda r: r.update(tdmg_version=""),
+    lambda r: r.pop("environment"),
+    lambda r: r.update(environment=[]),
+    lambda r: r["environment"].pop("numpy"),
+    lambda r: r["environment"].update(numpy=2),
+    lambda r: r["environment"].update(extra="1"),
+], ids=["no version", "int version", "empty version", "no environment", "list environment",
+        "missing library", "int library version", "extra library"])
+def test_verify_colors_checks_the_form_of_the_software_fields(done, sel, tmp_path, change):
+    # Codex review 2, finding 2: these are not rebuilt (they may name an older version),
+    # so their form is checked instead.
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match="tdmg_version must be a version string"):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_accepts_an_older_tdmg_version(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, lambda r: r.update(tdmg_version="0.0.1"))
+    verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_a_png_pillow_will_not_decode(done, sel, tmp_path):
+    # Codex review 2, finding 1: a compressed text chunk over Pillow's MAX_TEXT_CHUNK made
+    # Image.open raise ValueError, which escaped as a raw ValueError.
+    from PIL import PngImagePlugin
+    d = _copy(done[1], tmp_path, "colors")
+    labels = np.array(Image.open(d / "labels.png"))
+    info = PngImagePlugin.PngInfo()
+    info.add_text("k", "x" * (PngImagePlugin.MAX_TEXT_CHUNK + 1), zip=True)
+    Image.fromarray(labels).save(d / "labels.png", pnginfo=info)
+    digest = hashlib.sha256((d / "labels.png").read_bytes()).hexdigest()
+    _edit_record(d, lambda r: r["outputs"].update({"labels.png": digest}))
+    with pytest.raises(ColorsError, match="labels.png is not a readable image"):
         verify_colors(d, sel)

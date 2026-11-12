@@ -1,0 +1,29 @@
+Found **three remaining issues**, none High severity. The earlier geometry and printer-cap bypasses are fixed in the reproductions I ran. No files were modified.
+
+1. **Medium — Malformed PNGs can escape as raw `ValueError`.** [colors_verify.py:692](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py:692)  
+   I inserted a compressed PNG text chunk exceeding Pillow’s per-chunk decompression limit into `labels.png`, then updated its recorded hash. `verify_colors` raised `ValueError: Decompressed data too large for PngImagePlugin.MAX_TEXT_CHUNK`, rather than `ColorsError`. Neither `_decode` nor the outer handler catches this exception. Callers handling the documented refusal exception receive an unexpected failure. This is a retained gap, not a new regression or an acceptance bypass. **Confirmed by running the public verifier with substituted file bytes in memory.**
+
+2. **Low — Excluded software fields receive no form checks.** [colors_verify.py:749](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py:749)  
+   Deleting both `environment` and `tdmg_version`, or replacing them with `7` and `[]`, still passes verification. They are stripped before comparison without checking their presence or types. This contradicts the [attribute page’s form-check claim](C:/Users/arikt/documents/github/three-d-model-generation-/docs/print-types/attributes/color-multi.md:89). These fields need not match the current environment, but malformed or missing provenance should be distinguished from valid historical provenance. **Confirmed by running code.**
+
+3. **Low — The review record overstates byte-for-byte preservation.** [README.md:95](C:/Users/arikt/documents/github/three-d-model-generation-/research/reviews/2026-11-11-color-palette/README.md:95)  
+   It says six ordinary cases produced byte-identical `make_colors` output. Every record changes schema from `tdmg.colors/3` to `/4`. Comparing the `e74689b` and `7359362` writers with shared runtime dependencies on Roadie gave identical PNGs, but different `colors.json` bytes, with `schema` the sole differing top-level field. The record should identify any normalization or exclusions used in that comparison. **Confirmed by running both writers with output captured in memory.**
+
+The original nine findings are handled as follows:
+
+| Finding | Review result |
+|---|---|
+| 1. Printer-cap bypass | Fixed; the forged five-color A1 plan was refused. |
+| 2. Relocated labels | Fixed; shifting labels while updating their hash was refused. |
+| 3. Invalid base | Fixed; the out-of-palette base was refused. |
+| 4. Band-erased colors | Fixed in the reproduced wide-band case. The branch logic also distinguishes merged sources, band removal, and subsequent cleanup correctly by inspection. |
+| 5. Float32 path dependence | Addressed by float64 and the passing optimization-switch regression test. Cross-machine bit identity remains unproven, as documented. |
+| 6. Unsupported methods | Fixed; an unknown labels method was refused. |
+| 7. Explicit YAML null | Fixed; `null`, `~`, and bare `---` were refused; comment-only input remained accepted. |
+| 8–9. Unsupported config example and outline-preservation claim | Corrected in the docs by inspection. |
+
+**The refactor does change refusal order for multiply invalid inputs.** With a single-color selection, `colors=2`, `extract=2`, `base=1`, and `supersample=0`, the old writer reports the invalid final-palette base; HEAD reports the invalid supersample first at [colors.py:552](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py:552). Both refuse without writing. I confirmed this in memory; it is an observable compatibility change, though not an acceptance defect.
+
+The registry check rejected a consistently generated plan using a changed opening rule, while accepting it with its matching custom registry. A different selection was refused, and even changed selection-record bytes were caught by the rebuild. The float tolerance is restricted to two floats; the intentionally excluded preview and provenance remain outside reconstruction assurance.
+
+Validation: **410 tests passed; 309 requiring temporary files were deselected.** Four current owner plans verified, and generated-doc checking passed. Re-running `flat3_compare.py` reproduced the recorded geometry and saved slice-result numbers. I found no stale current float32 measurement or missing version bump. `uv` failed on cache access, so I used `.venv/Scripts/python.exe` with disk-writing test features disabled. I did **not** rerun the slicers, full suite, or another operating system.

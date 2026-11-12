@@ -93,7 +93,10 @@ the real slicers.
 ## Review of the fixes (subagent spec and quality review of `7359362`)
 
 The reviewer compared the old and new code on seven inputs. `make_colors` output was
-byte-identical in six. In the seventh (the 5 mm band), it differed only by the schema,
+byte-identical in six. (Correction after Codex review 2: not byte-identical. Every record
+changed its `schema` from `tdmg.colors/3` to `/4`; Codex found that `schema` was the only
+differing top-level field on Roadie, and the PNGs were identical. The subagent's
+comparison must have set `schema` aside, which it did not record.) In the seventh (the 5 mm band), it differed only by the schema,
 the two `band` fates and the preview text that names them. The reviewer found these gaps;
 each was checked and handled in the next commit:
 
@@ -202,3 +205,35 @@ outputs. It ran the tie test, which still runs (no skip) and passes. It found:
   - **Not changed:** S2 (a looser-than-needed band in one test), S3 (a float32 stub in a
     monkeypatched test) and S5 (`to_planar` is deprecated in trimesh; the script is a
     record).
+
+## Codex review 2: the fixes and the float64 change (`e74689b..93e4f84`), 2026-11-11
+
+Prompt: [prompt-2.md](prompt-2.md); Codex's response, verbatim:
+[review-2.txt](review-2.txt). Codex judged the nine first-review findings fixed (it re-ran
+the reproductions for 1, 2, 3, 4, 6 and 7). It found no float32 measurement still shown as
+current and no missing version bump. Its three findings, each checked here:
+
+1. **Medium: a malformed PNG escaped as a raw `ValueError`.** Confirmed: Pillow's
+   `Image.open` raises `ValueError` for a compressed text chunk over
+   `PngImagePlugin.MAX_TEXT_CHUNK`. `_decode` in colors_verify.py caught only `OSError` and
+   `DecompressionBombError`. The same gap was in `tdmg.selection._open_checked`, which
+   reads the input image, the mask and the selection files. Both now catch `ValueError` and
+   refuse with their own error. Tests: `test_verify_colors_refuses_a_png_pillow_will_not_decode`
+   and a "huge text chunk" case in both decode tests of tests/test_selection.py.
+2. **Low: `tdmg_version` and `environment` were not checked at all.** Confirmed by
+   reading: they were removed before the comparison. Now `_check_provenance` checks their
+   form: a non-empty version string, and an environment with exactly the library names
+   `make_colors` records (`tdmg.colors.ENVIRONMENT_KEYS`), each a non-empty string. Their
+   values may still be older ones. Tests: `test_verify_colors_checks_the_form_of_the_software_fields`
+   (8 cases) and `test_verify_colors_accepts_an_older_tdmg_version`.
+3. **Low: this README said six outputs were byte-identical.** Confirmed: the schema
+   changed in all of them. Corrected in place above, marked as a correction.
+
+**Also reported, not changed:** for an input with several faults, `make_colors` now
+refuses a bad `supersample` before a bad `base` (`build_colors` checks supersample at
+its start; the old code checked it later, in `smooth_labels`). Both refuse without
+writing anything. Which fault is named first is not part of the contract.
+
+**Codex could not run:** the slicers, the full suite (`uv` failed on cache access in its
+sandbox, so 309 tests that write files were deselected) and another OS. The full suite
+here: 1777 passed, 3 skipped (the slicer tests).

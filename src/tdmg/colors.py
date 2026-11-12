@@ -528,6 +528,15 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     return json.loads(data)
 
 
+def colors_environment() -> dict:
+    """The library versions a colors record gives (provenance, never part of an id)."""
+    return {**environment(), "scipy": scipy.__version__}
+
+
+# The library names in a record's environment (verify_colors checks them in form only).
+ENVIRONMENT_KEYS = frozenset(colors_environment())
+
+
 # The record fields that build_colors(render=False) sets to None, because they depend on
 # the fine map (an OpenCV blur, not shown to be bit-identical across machines), on the PNG
 # encoder or on the software versions. verify_colors compares every other field of a
@@ -694,7 +703,7 @@ def build_colors(sel, width_mm: float, settings, record_settings: dict, rules: d
                     if render else None),
         # Decoded pixels, so a pixel difference can be told from a PNG encoding difference.
         "regions_pixels_sha256": pixels_sha256(regions) if render else None,
-        "environment": {**environment(), "scipy": scipy.__version__} if render else None,
+        "environment": colors_environment() if render else None,
         "review": REVIEW,
     }
     return record, files, labels8

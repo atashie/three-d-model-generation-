@@ -56,6 +56,7 @@ from tdmg.color_outline import (
 from tdmg.color_plan import FATES
 from tdmg.colors import (
     COLORS_ALGORITHM_VERSION,
+    ENVIRONMENT_KEYS,
     LABELS_OUTSIDE,
     OUTPUT_FILES,
     RECORD_NAME,
@@ -311,6 +312,7 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
                                outline["family"], outline["core"])
     inp, sm, lim = record["input"], record["smoothing"], record["limits"]
     _check_settings_block(record["settings"])
+    _check_provenance(record)
     rules = ident["rules"]
     nozzle = ident["nozzle_diameter_mm"]
     opening_mm = float(rules[OPENING_RULE])
@@ -441,6 +443,19 @@ def _check_settings_block(block) -> None:
                                     and re.fullmatch("[0-9a-f]{64}", sha)))):
         raise ColorsError("colors.json is inconsistent: settings must hold settings, sources "
                           "(a known source per setting) and config_sha256 (a SHA-256 or null)")
+
+
+def _check_provenance(record: dict) -> None:
+    """The software fields, which the rebuild cannot reproduce (they may name an older
+    version): tdmg_version a non-empty string, environment exactly the library names that
+    make_colors records, each with a non-empty string version."""
+    version, env = record.get("tdmg_version"), record.get("environment")
+    if (not isinstance(version, str) or not version or not isinstance(env, dict)
+            or set(env) != ENVIRONMENT_KEYS
+            or not all(isinstance(v, str) and v for v in env.values())):
+        raise ColorsError("colors.json is inconsistent: tdmg_version must be a version string "
+                          "and environment must give a version string for each of "
+                          f"{', '.join(sorted(ENVIRONMENT_KEYS))}")
 
 
 def _check_extraction_settings(settings: dict, n_extracted, family, core) -> None:
@@ -689,7 +704,8 @@ def _decode(data: bytes, name: str, mode: str) -> np.ndarray:
             if im.mode != mode:
                 raise ColorsError(f"{name} has mode {im.mode}, not {mode}")
             return np.asarray(im).copy()
-    except (OSError, Image.DecompressionBombError) as e:
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
+        # ValueError: e.g. a PNG text chunk over PngImagePlugin.MAX_TEXT_CHUNK
         raise ColorsError(f"{name} is not a readable image: {e}") from None
 
 

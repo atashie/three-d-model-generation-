@@ -186,10 +186,10 @@ own consistency, the printer's color cap and that the recorded rule values are t
 Then it runs the plan again from the selection and the recorded settings. The labels must
 come out the same, and so must every record field that can be rebuilt (floats to 1e-9,
 everything else exactly). So hand edits to the labels or to those fields are refused,
-even with the hashes updated. Not rebuilt: the preview image (only hashed), the software
-versions, where each setting came from and the config file's hash (checked in form only),
-and which colors vanished in smoothing (checked in form only). A plan made on a machine whose results differ
-is refused too; the owner-image results are measured on the Windows PC only.
+even with the hashes updated. Not rebuilt: the preview image (only hashed), and these,
+which are checked in form only: the software versions, where each setting came from, the
+config file's hash, and which colors vanished in smoothing. A plan made on a machine whose
+results differ is refused too; the owner-image results are measured on the Windows PC only.
 
 **Not proven:** every color rule is an untested hypothesis set from two images, and
 nothing has been printed from a color plan.

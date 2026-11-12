@@ -100,6 +100,8 @@ def _open_checked(path: Path, data: bytes) -> Image.Image:
     except Image.DecompressionBombError as e:
         raise SelectionError(f"{path.name} is larger than Pillow's safety limit "
                              f"({2 * Image.MAX_IMAGE_PIXELS} pixels)") from e
+    except ValueError as e:           # e.g. a PNG text chunk over MAX_TEXT_CHUNK
+        raise SelectionError(f"{path.name} is not a readable image: {e}") from e
     try:
         if im.mode in UNSUPPORTED_MODES or im.mode.startswith(UNSUPPORTED_MODE_PREFIX):
             raise SelectionError(f"{path.name} has mode {im.mode}: 16-bit and floating-point "
@@ -110,7 +112,7 @@ def _open_checked(path: Path, data: bytes) -> Image.Image:
                                  "want as a single image")
         try:
             im.load()
-        except OSError as e:          # e.g. "image file is truncated"
+        except (OSError, ValueError) as e:    # e.g. "image file is truncated"
             raise SelectionError(f"{path.name} is not a readable image: {e}") from e
     except SelectionError:
         im.close()
