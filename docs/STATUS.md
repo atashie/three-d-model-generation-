@@ -227,7 +227,18 @@ passed. These commits are pushed; for CI see above.
        connectivity FAILs on every color layer (neighbouring beads meet edge to edge);
      - color slices are checked at the plate placement only (no quarter turns), so a
        color swap on a symmetric model FAILs.
-   - **Next:** Task 6, wiring into `tdmg slice`.
+   - **CI for Task 5:** passed on all three OSes for `7d9b5b6` (run 43473200193).
+   - **Task 6 done** (`src/tdmg/color_slicing.py`): `tdmg slice COLORED_DIR` slices
+     face up and face down, each glue plate (as an R1 part), and checks `model.3mf` in
+     PrusaSlicer; record `tdmg.colorslice/1`, `colorslice-1`. Owner plans in
+     `artifacts/slice-runs/color-<plan>` (`owner-slices-task6.txt`): every face's F6
+     checks PASS, `F6.portability` on `model.3mf` PASSes on all four, but every face is
+     NOT CERTIFIED through the required F3 checks. Glue: `glue-color-1` on both drop plans
+     is PRINTABLE; the other plates are not (F3), so no glue route is printable.
+     Plan amendments: glue plates drop `F2.target_width` and check `F4.body_count`
+     against the glue report; the PrusaSlicer volume is information. Reviewed and
+     approved.
+   - **Next:** Task 7, the owner's review (default face; which F3 checks gate color).
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
