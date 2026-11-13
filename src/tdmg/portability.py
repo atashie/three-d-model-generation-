@@ -274,11 +274,13 @@ def gcode_args(stl: Path, gcode: Path, settings: dict[str, dict]) -> list[str]:
     return args
 
 
-def command_templates(settings: dict[str, dict]) -> dict[str, list[str]]:
-    """Both commands as recorded: placeholders, so the record holds no path."""
+def command_templates(settings: dict[str, dict],
+                      model: str = "<model.stl>") -> dict[str, list[str]]:
+    """Both commands as recorded: placeholders, so the record holds no path. model is the
+    model's placeholder ("<model.3mf>" for tdmg.color_slicing)."""
     exe = "<prusa-slicer-console.exe>"
-    return {"info": [exe, *info_args(Path("<model.stl>"))],
-            "gcode": [exe, *gcode_args(Path("<model.stl>"), Path(f"<{PRUSA_GCODE_NAME}>"),
+    return {"info": [exe, *info_args(Path(model))],
+            "gcode": [exe, *gcode_args(Path(model), Path(f"<{PRUSA_GCODE_NAME}>"),
                                        settings)]}
 
 
@@ -314,13 +316,15 @@ def _run(cmd_prefix: list[str], args: list[str], work: Path, timeout: float,
 
 def run_portability(cmd_prefix: list[str], stl: Path, settings: dict[str, dict],
                     workdir: Path, timeout: float, prusa: PrusaSlicer | None = None,
+                    placeholder: str = "<model.stl>",
                     ) -> tuple[PrusaRun, PrusaRun, bytes | None]:
     """Run --info and then --export-gcode on stl, each in its own new folder in workdir.
 
     cmd_prefix is [exe], or [sys.executable, fake_prusa.py] in tests; its program must be
     an absolute path. Each run gets the full timeout. The work folder, the model, the
-    program and, when given, the install's folder and exe are hidden in the output kept.
-    Returns both runs and the G-code's bytes (None when none was written).
+    program and, when given, the install's folder and exe are hidden in the output kept
+    (the model as placeholder). The model may be a 3MF (tdmg.color_slicing). Returns
+    both runs and the G-code's bytes (None when none was written).
     """
     if not Path(cmd_prefix[0]).is_absolute():
         raise SlicerError(f"the PrusaSlicer program {cmd_prefix[0]} must be an absolute path")
@@ -328,7 +332,7 @@ def run_portability(cmd_prefix: list[str], stl: Path, settings: dict[str, dict],
     if not work.is_dir() or any(work.iterdir()):
         raise SlicerError(f"PrusaSlicer work folder {work} must be an existing, empty folder")
     model = Path(stl).resolve()
-    hide = {str(work): "<work>", str(model): "<model.stl>",
+    hide = {str(work): "<work>", str(model): placeholder,
             str(Path(cmd_prefix[0])): "<prusa-slicer-console.exe>"}
     if prusa is not None:
         hide |= {str(prusa.root): "<prusaslicer-dir>",
@@ -689,7 +693,7 @@ class Expected:
     first_layer_mm: float
     layer_mm: float
     size_tol_mm: float
-    volume_tol_mm3: float
+    volume_tol_mm3: float | None     # None: the volume is not judged (portability_check)
 
     def as_dict(self) -> dict:
         return {"parts": self.parts, "facets": self.facets, "size_mm": self.size_mm,
@@ -710,23 +714,25 @@ def _ran(name: str, run: PrusaRun, timeout_rule: str | None) -> tuple[str | None
     return None, None
 
 
-def _info_failure(info: dict, exp: Expected) -> str | None:
+def _info_failure(info: dict, exp: Expected, model: str = "model.stl",
+                  source: str = "flat.json") -> str | None:
     if not info["manifold"] or info["open_edges"] is not None:     # any line, even 0
-        return f"PrusaSlicer reads model.stl as not manifold (open_edges {info['open_edges']})"
+        return f"PrusaSlicer reads {model} as not manifold (open_edges {info['open_edges']})"
     if info["repairs"]:
         found = ", ".join(f"{k} {v}" for k, v in info["repairs"].items())
         return f"PrusaSlicer repaired the mesh on import ({found})"
     if info["parts"] != exp.parts:
         bodies = "body" if exp.parts == 1 else "bodies"
-        return f"number_of_parts {info['parts']}, not the {exp.parts} {bodies} of flat.json"
+        return f"number_of_parts {info['parts']}, not the {exp.parts} {bodies} of {source}"
     if info["facets"] != exp.facets:
-        return f"number_of_facets {info['facets']}, not the {exp.facets} triangles of flat.json"
+        return f"number_of_facets {info['facets']}, not the {exp.facets} triangles of {source}"
     for key, got, want in zip(INFO_SIZES, info["size_mm"], exp.size_mm, strict=True):
         if abs(got - want) > exp.size_tol_mm:
-            return (f"{key} {got:g} mm, not {want:g} mm (flat.json; tolerance "
+            return (f"{key} {got:g} mm, not {want:g} mm ({source}; tolerance "
                     f"{exp.size_tol_mm:.2g} mm)")
-    if abs(info["volume_mm3"] - exp.volume_mm3) > exp.volume_tol_mm3:
-        return (f"volume {info['volume_mm3']:g} mm3, not {exp.volume_mm3:g} mm3 (flat.json; "
+    if (exp.volume_tol_mm3 is not None
+            and abs(info["volume_mm3"] - exp.volume_mm3) > exp.volume_tol_mm3):
+        return (f"volume {info['volume_mm3']:g} mm3, not {exp.volume_mm3:g} mm3 ({source}; "
                 f"tolerance {exp.volume_tol_mm3:.2g} mm3)")
     return None
 
@@ -752,7 +758,9 @@ def _motion_failure(layers: dict, exp: Expected) -> str | None:
 
 
 def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | None,
-                      exp: Expected, timeout_rule: str | None) -> tuple[CheckResult, dict]:
+                      exp: Expected, timeout_rule: str | None, *, model: str = "model.stl",
+                      source: str = "flat.json", meaning: str | None = None,
+                      volume_unjudged: str | None = None) -> tuple[CheckResult, dict]:
     """F6.portability from both runs, and the measurements for the record.
 
     PASS only if --info exits 0 and reads a manifold, unrepaired mesh with flat.json's
@@ -769,6 +777,12 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
     as the plan says. Otherwise FAIL, naming the first
     condition that failed. Output that cannot be read is a FAIL, not UNKNOWN: a configured,
     verified second reader that does not confirm the file has not passed it.
+
+    model and source name the file and the record in the notes; meaning replaces
+    PORTABILITY_MEANING and SHARED_READER_NOTE in a PASS note. With exp.volume_tol_mm3
+    None the volume is not compared, and a run that passes every other condition is
+    UNKNOWN, not PASS, with volume_unjudged as the reason (tdmg.color_slicing: no
+    tolerance is known for PrusaSlicer's 3MF volume).
     """
     parsed, info_problem = None, None
     if info_run.returncode == 0 and not info_run.timed_out:
@@ -791,7 +805,7 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
 
     reason, rule = _ran("--info", info_run, timeout_rule)
     if reason is None:
-        reason = info_problem or _info_failure(parsed, exp)
+        reason = info_problem or _info_failure(parsed, exp, model, source)
     if reason is None:
         reason, rule = _ran("--export-gcode", gcode_run, timeout_rule)
     if reason is None and gcode is None:
@@ -828,9 +842,14 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
                  "size_tol_mm": exp.size_tol_mm, "volume_mm3": exp.volume_mm3,
                  "volume_tol_mm3": exp.volume_tol_mm3, "layers": exp.layer_counts,
                  "top_z_mm": top}
-    if reason is None:
+    if reason is None and exp.volume_tol_mm3 is None:
+        check = CheckResult("F6.portability", "UNKNOWN", measured, threshold, None,
+                            "PrusaSlicer 2.9.7: every condition passed except the volume, "
+                            f"which is not judged: {volume_unjudged}. {PRUSA_GCODE_NOTE}")
+    elif reason is None:
+        said = meaning or f"{PORTABILITY_MEANING}. {SHARED_READER_NOTE}"
         check = CheckResult("F6.portability", "PASS", measured, threshold, None,
-                            f"{PORTABILITY_MEANING}. {SHARED_READER_NOTE}. {PRUSA_GCODE_NOTE}")
+                            f"{said}. {PRUSA_GCODE_NOTE}")
     else:
         check = CheckResult("F6.portability", "FAIL", measured, threshold, rule,
                             f"PrusaSlicer 2.9.7: {reason}")

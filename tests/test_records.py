@@ -147,3 +147,33 @@ def test_record_text_refuses_nan_and_unencodable_text():
         record_text({"x": float("inf")})
     with pytest.raises(UnicodeEncodeError):
         record_text({"x": "\ud800"})
+
+
+def test_subfolders_one_level_deep_are_written(tmp_path):
+    out = tmp_path / "a"
+    files = {"top.txt": b"t", "face-up/x.gcode": b"x", "face-up/y.json": b"y",
+             "face-down/x.gcode": b"z"}
+    write_outputs(out, files, "rec.json", RECORD, subfolders=True)
+    assert {str(p.relative_to(out)).replace("\\", "/") for p in out.rglob("*")
+            if p.is_file()} == {*files, "rec.json"}
+    assert (out / "face-down" / "x.gcode").read_bytes() == b"z"
+
+
+@pytest.mark.parametrize("bad", ["a/b/c.txt", "../x.txt", "a/..", "/x.txt", "a/", "a\\b.txt"])
+def test_unsafe_subfolder_names_are_refused(tmp_path, bad):
+    out = tmp_path / "a"
+    with pytest.raises(RecordError, match="name"):
+        write_outputs(out, {bad: b"x"}, "rec.json", RECORD, subfolders=True)
+    assert not out.exists()
+
+
+def test_a_subfolder_name_is_refused_without_subfolders(tmp_path):
+    with pytest.raises(RecordError, match="not a plain file name"):
+        write_outputs(tmp_path / "a", {"face-up/x": b"x"}, "rec.json", RECORD)
+
+
+def test_a_name_that_is_both_a_file_and_a_folder_is_refused(tmp_path):
+    with pytest.raises(RecordError, match="both a file and a folder"):
+        write_outputs(tmp_path / "a", {"x": b"1", "x/y": b"2"}, "rec.json", RECORD,
+                      subfolders=True)
+    assert not (tmp_path / "a").exists()

@@ -148,8 +148,8 @@ REVIEW_3MF = ("model.3mf holds the AMS bodies as one object with one shell per c
               "place; open it in your slicer and give each color a filament (palette.json "
               "lists the colors; the file names colors, not AMS slots). ")
 REVIEW_END = ("The verdict stays NOT CERTIFIED: F3.thin_regions and F6.slicer are UNKNOWN "
-              "until the bodies are sliced (step 4 of the color design); tdmg slice does "
-              "not read this folder yet.")
+              "until the bodies are sliced; tdmg slice slices this folder (face up, face "
+              "down and each glue plate) and judges each one.")
 REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_3MF + REVIEW_END
 REVIEW_NO_GLUE = REVIEW_TOP + "The glue version was not built: " + GLUE_NOT_BUILT + ". " \
     + REVIEW_3MF + REVIEW_END

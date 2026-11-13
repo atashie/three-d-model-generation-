@@ -4,7 +4,8 @@ It accepts only the two argument forms tdmg.portability builds (the measured for
     --info MODEL.stl
     --export-gcode MODEL.stl -o OUT.gcode --bed-shape B --max-print-height H
         --nozzle-diameter N --layer-height L --first-layer-height F --filament-diameter D
-Anything else exits 1, as every measured PrusaSlicer error did.
+Anything else exits 1, as every measured PrusaSlicer error did. MODEL may also be a .3mf
+written by tdmg.threemf (model.3mf, tdmg.color_slicing), read from its vertices.
 
 By default it reports what the real one reported for a good model: --info prints the STL's
 size, facet count, "manifold = yes", one part and the volume, to 6 decimals, from the STL
@@ -36,8 +37,10 @@ Its behaviour comes from the JSON file in $TDMG_FAKE_PRUSA_CONTROL, if set:
 import datetime
 import json
 import os
+import re
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -50,8 +53,27 @@ SETTINGS = ["--bed-shape", "--max-print-height", "--nozzle-diameter", "--layer-h
 FACET = np.dtype([("normal", "<f4", 3), ("vertices", "<f4", (3, 3)), ("attr", "<u2")])
 
 
+VERTEX = re.compile(rb'<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"/>')
+TRIANGLE = re.compile(rb'<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"')
+
+
+def _triangles_3mf(path: Path) -> np.ndarray:
+    """(N, 3, 3) vertices of every mesh of a 3MF written by tdmg.threemf (one <vertices>
+    and <triangles> list per mesh, indices per mesh), in file order."""
+    model = zipfile.ZipFile(path).read("3D/3dmodel.model")
+    out = []
+    for mesh in model.split(b"<mesh>")[1:]:
+        v = np.array([[float(a) for a in m] for m in VERTEX.findall(mesh)], np.float32)
+        f = np.array([[int(a) for a in m] for m in TRIANGLE.findall(mesh)], np.int64)
+        out.append(v.astype(np.float64)[f])
+    return np.concatenate(out)
+
+
 def _triangles(stl: Path) -> np.ndarray:
-    """(N, 3, 3) vertices, float32 widened to float64 (numpy only, so the fake starts fast)."""
+    """(N, 3, 3) vertices, float32 widened to float64 (numpy only, so the fake starts fast).
+    A .3mf is read with _triangles_3mf."""
+    if stl.suffix == ".3mf":
+        return _triangles_3mf(stl)
     data = stl.read_bytes()
     count = int(np.frombuffer(data, "<u4", 1, 80)[0])
     return np.frombuffer(data, FACET, count, 84)["vertices"].astype(np.float64)

@@ -16,7 +16,8 @@ The multicolor 3MF (docs/plans/2026-11-12-color-3mf.md, Decision 4): export_3mf_
 gated AMS meshes; make_colored_flat adds it to the AMS assembly checks.
 The OrcaSlicer-only slicing input (docs/plans/2026-11-13-color-slicing.md, Decision 2):
 orca_input_check (F2.orca_input_matches_bodies) reads orca-input.3mf back the same way,
-part by part, with each part's extruder. No required set holds it yet (Task 6 wires it).
+part by part, with each part's extruder; tdmg.color_slicing requires it for each
+face's verdict.
 """
 
 from __future__ import annotations

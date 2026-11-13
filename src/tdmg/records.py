@@ -74,18 +74,34 @@ def check_output_dir(out_dir: str | Path) -> bool:
     return not out.exists()
 
 
+def _plain(name: str) -> bool:
+    return not (name in ("", ".", "..") or "/" in name or "\\" in name
+                or Path(name).name != name)
+
+
 def write_outputs(out_dir: str | Path, files: dict[str, bytes], record_name: str,
-                  record_bytes: bytes, *, create_folder: bool | None = None) -> None:
+                  record_bytes: bytes, *, create_folder: bool | None = None,
+                  subfolders: bool = False) -> None:
     """Write each file with an exclusive create, then the record through os.replace.
 
-    Names are checked before anything touches the disk: each must be a plain file name.
-    create_folder is check_output_dir's result. A caller that runs check_output_dir before
-    its expensive encoding fails fast and passes the result here; when None, the check runs
-    here. create_folder=False for a folder that does not exist fails at the first write.
+    Names are checked before anything touches the disk: each must be a plain file name,
+    or, with subfolders, "<folder>/<file>" with both parts plain (one level only). Each
+    such folder is created new (exclusively) before its files. The record's name is
+    always plain. create_folder is check_output_dir's result. A caller that runs
+    check_output_dir before its expensive encoding fails fast and passes the result here;
+    when None, the check runs here. create_folder=False for a folder that does not exist
+    fails at the first write.
     """
+    folders = []
     for name in (*files, record_name):
-        if name in ("", ".", "..") or "/" in name or "\\" in name or Path(name).name != name:
+        parts = name.split("/") if subfolders and name != record_name else [name]
+        if len(parts) > 2 or not all(_plain(p) for p in parts):
             raise RecordError(f"output name {name!r} is not a plain file name")
+        if len(parts) == 2 and parts[0] not in folders:
+            folders.append(parts[0])
+    if set(folders) & set(files):
+        raise RecordError(f"output names {sorted(set(folders) & set(files))} are both a "
+                          "file and a folder")
     if record_name in files:
         raise RecordError(f"record name {record_name!r} is also one of the output files")
     out = Path(out_dir)
@@ -101,6 +117,8 @@ def write_outputs(out_dir: str | Path, files: dict[str, bytes], record_name: str
                 raise RecordError(busy) from None
             raise                        # e.g. a parent is a file: a plain OS error
     try:
+        for folder in folders:          # exclusive too: an existing one is another run's
+            (out / folder).mkdir()
         # Exclusive create: a second writer fails at its first file instead of overwriting.
         for name, data in files.items():
             with open(out / name, "xb") as f:

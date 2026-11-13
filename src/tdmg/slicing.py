@@ -62,7 +62,7 @@ import math
 import platform
 import re
 import tempfile
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -316,9 +316,9 @@ def _read_flat(flat_dir: Path) -> tuple[dict, bytes, bytes]:
     except FileNotFoundError:
         if (flat_dir / COLORED_RECORD).exists():
             raise SlicerError(
-                f"{flat_dir} is a tdmg flat --colors folder ({COLORED_RECORD}); tdmg slice "
-                "cannot slice colored output yet (step 4 of the color design), only a "
-                "single-color tdmg flat folder with flat.json") from None
+                f"{flat_dir} is a tdmg flat --colors folder ({COLORED_RECORD}): make_slice "
+                "slices a single-color tdmg flat folder with flat.json; tdmg slice sends "
+                "a colored folder to tdmg.color_slicing.make_color_slice") from None
         raise SlicerError(f"{path} is missing; slice a tdmg flat output folder") from None
     except (OSError, ValueError) as err:
         raise SlicerError(f"cannot read {path}: {err}") from None
@@ -456,6 +456,230 @@ def _expected_mesh(flat: dict) -> dict:
     return mesh
 
 
+@dataclass(frozen=True)
+class Context:
+    """What every part sliced in one run shares: the verified slicers, the profile bytes
+    as hash-checked, what is read from them, and the timeouts. Built by prepare."""
+    rules: dict
+    pin: object
+    slicer: Slicer
+    prusa: PrusaSlicer | None
+    profile_data: dict
+    process: dict
+    plate: object
+    flow: object
+    tolerance: float
+    elephant: float
+    timeout: dict
+    prusa_timeout: dict
+    check_tree: bool
+
+    def slicer_identity(self) -> dict:
+        """The pinned slicer as slice_id names it (version, exe and library hashes as
+        verified, the pinned app-tree hash and whether this run verified it)."""
+        verified = self.slicer.verified
+        return {"version": self.pin.version, "exe_sha256": verified["exe_sha256"],
+                "libraries": verified["libraries"],
+                "app_tree_sha256": self.pin.app_tree.sha256,
+                "app_tree_verified": "app_tree" in verified}
+
+    def profile_hashes(self) -> dict:
+        return {k: v["sha256"] for k, v in self.slicer.verified["profiles"].items()}
+
+    def f3_identity(self) -> dict:
+        return {"tolerance": {"rule": TOLERANCE_RULE, "value_mm": self.tolerance},
+                "elefant_foot_compensation_mm": self.elephant}
+
+    def trees_verified(self) -> bool:
+        return (self.slicer_identity()["app_tree_verified"]
+                and (self.prusa is None or self.prusa.identity()["app_tree_verified"]))
+
+    def slicer_record(self) -> dict:
+        identity = self.slicer_identity()
+        return {"name": self.pin.name, "version": self.pin.version, "pin": self.pin.id,
+                **{k: v for k, v in identity.items() if k != "version"},
+                "profiles": self.slicer.verified["profiles"], "platform": platform_key()}
+
+    def setup(self, allowed) -> Setup:
+        return Setup(self.plate, self.flow, self.tolerance, self.elephant, frozenset(allowed))
+
+    def settings(self) -> dict | None:
+        """PrusaSlicer's explicit settings from the profiles; None without PrusaSlicer."""
+        if self.prusa is None:
+            return None
+        # Both profiles parsed in prepare as JSON objects (plate_from_profile and
+        # flow_from_profile would have refused anything else).
+        return explicit_settings(json.loads(self.profile_data["machine"]), self.process,
+                                 json.loads(self.profile_data["filament"]))
+
+
+def prepare(slicer_dir, timeout_s, check_tree: bool, prusaslicer_dir) -> Context:
+    """Locate and verify both slicers and read the profiles (make_slice's setup steps, in
+    its order). SlicerError for anything refused."""
+    rules = load_rules()
+    timeout = _timeout(timeout_s, rules)
+    prusa_timeout = _timeout(timeout_s, rules, PRUSA_TIMEOUT_RULE)
+    pin = load_pin()
+    slicer = locate(slicer_dir, pin, full_tree=check_tree)
+    prusa = locate_prusaslicer(prusaslicer_dir, load_prusa_pin(), full_tree=check_tree)
+    profile_data = _profile_bytes(slicer)
+    try:
+        process = json.loads(profile_data["process"])
+    except ValueError as err:
+        raise SlicerError(f"cannot read {slicer.profiles['process']}: {err}") from None
+    try:
+        plate = plate_from_profile(json.loads(profile_data["machine"]))
+    except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
+        raise SlicerError(f"cannot read the plate from {slicer.profiles['machine']}: "
+                          f"{err}") from None
+    try:
+        flow = flow_from_profile(json.loads(profile_data["filament"]))
+    except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
+        raise SlicerError(f"cannot read the filament from {slicer.profiles['filament']}: "
+                          f"{err}") from None
+    return Context(rules, pin, slicer, prusa, profile_data, process, plate, flow,
+                   float(rules[TOLERANCE_RULE].default), elephant_foot_mm(process), timeout,
+                   prusa_timeout, check_tree)
+
+
+def expected_for_stl(stl: bytes, mesh: dict, allowed, process: dict) -> Expected:
+    """What PrusaSlicer must report for this STL: the record's mesh facts (checked by
+    _expected_mesh), the allowed layers, and R1's size and volume tolerances."""
+    return Expected(
+        parts=mesh["bodies"], facets=mesh["triangles"],
+        size_mm=[float(v) for v in mesh["extents_mm"]],
+        volume_mm3=float(mesh["volume_mm3"]), layer_counts=sorted(allowed),
+        first_layer_mm=float(process["initial_layer_print_height"]),
+        layer_mm=float(process["layer_height"]),
+        size_tol_mm=size_tolerance_mm(coordinate_max(stl)),
+        volume_tol_mm3=volume_tolerance_mm3(stl))
+
+
+def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict | None,
+              required=SLICE_REQUIRED_CHECKS) -> dict:
+    """Slice one STL as R1 does and judge it: OrcaSlicer, F6, F3 from its G-code and, with
+    PrusaSlicer, F6.portability. previous: the inherited checks; mesh: the record's mesh
+    facts PrusaSlicer is compared with (read only when PrusaSlicer is configured).
+
+    Returns the part: its checks (previous, then F3, F6 and F6.portability), the record
+    sections R1 writes (exit, stats, printed, checks, verdict, certification,
+    certification_note, portability, gcode, stderr_tail, log_written), the files by name
+    (plate_1.gcode or its .failed name, the statistics, the log, PrusaSlicer's G-code) and
+    the identity sections that depend on the STL ("portability")."""
+    z_min, z_max = stl_z_range(stl)
+    allowed = allowed_layer_counts(stl, ctx.process)
+    setup = ctx.setup(allowed)
+    settings, expected = ctx.settings(), None
+    if ctx.prusa is not None:
+        expected = expected_for_stl(stl, _expected_mesh({"mesh": mesh}), allowed, ctx.process)
+    prusa = ctx.prusa
+    with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
+        base = Path(tmp)
+        (base / "work").mkdir()
+        (base / "profiles").mkdir()
+        model = base / "model.stl"
+        model.write_bytes(stl)              # the bytes whose hash was just checked
+        profiles = {}
+        for kind in PROFILE_KINDS:
+            profiles[kind] = base / "profiles" / ctx.slicer.profiles[kind].name
+            profiles[kind].write_bytes(ctx.profile_data[kind])
+        run = run_slicer(slicer_command(ctx.slicer), model, profiles, base / "work",
+                         ctx.timeout["value"])
+        f6, stats = f6_checks(run, allowed, ctx.pin, timeout_rule=ctx.timeout["rule"])
+        gcode = ((run.out_dir / GCODE_NAME).read_bytes()
+                 if (run.out_dir / GCODE_NAME).is_file() else None)
+        exited = next(c for c in f6 if c.id == "F6.slicer_exit").status == "PASS"
+        f3, printed = f3_checks(gcode, stl, setup,
+                                None if exited else "the slicer failed (F6.slicer_exit)")
+        f6 = _cross_check_layers(f6, stats, printed)
+        prusa_gcode, measurements = None, None
+        if prusa is None:
+            portability = not_configured_check()
+        else:
+            (base / "prusa").mkdir()
+            info_run, gcode_run, prusa_gcode = run_portability(
+                prusa_command(prusa), model, settings, base / "prusa",
+                ctx.prusa_timeout["value"], prusa)
+            portability, measurements = portability_check(info_run, gcode_run, prusa_gcode,
+                                                          expected,
+                                                          ctx.prusa_timeout["rule"])
+        checks = f3 + f6 + [portability]
+        quarantined = any(c.status == "FAIL" for c in previous + checks if c.id in required)
+        files = {}
+        if gcode is not None:
+            files[FAILED_GCODE_NAME if quarantined else GCODE_NAME] = gcode
+        prusa_name = PRUSA_FAILED_GCODE_NAME if quarantined else PRUSA_GCODE_NAME
+        if prusa_gcode is not None:
+            files[prusa_name] = prusa_gcode
+        if (run.out_dir / STATS_NAME).is_file():
+            files[STATS_NAME] = (run.out_dir / STATS_NAME).read_bytes()
+        log_written = run.log_path.is_file()
+        if log_written:
+            files[LOG_NAME] = run.log_path.read_bytes()
+
+    all_checks = previous + checks
+    if prusa is None:
+        portability_record = {"configured": False, "reason": portability.note,
+                              "note": PRUSA_GCODE_NOTE, "slicer": None, "settings": None,
+                              "commands": None, "expected": None, "tolerances": None,
+                              "info": None, "gcode": None}
+    else:
+        written = prusa_gcode is not None
+        portability_record = {
+            "configured": True, "reason": None, "note": PRUSA_GCODE_NOTE,
+            "slicer": {"name": prusa.pin.name, "pin": prusa.pin.id, **prusa.identity()},
+            "settings": settings, "commands": command_templates(settings),
+            "expected": expected.as_dict(), "tolerances": measurements["tolerances"],
+            "info": measurements["info"],
+            "gcode": {**measurements["gcode"], "file": prusa_name if written else None,
+                      "quarantined": quarantined if written else None,
+                      **(prusa_gcode_hashes(prusa_gcode) if written else
+                         {"sha256": None, "normalised_sha256": None,
+                          "normalised_lines": None})}}
+    cert = certification(all_checks, required, ctx.trees_verified())
+    gcode_name = next((n for n in (GCODE_NAME, FAILED_GCODE_NAME) if n in files), None)
+    return {
+        "checks": all_checks, "files": files, "quarantined": quarantined,
+        "z": (z_min, z_max), "allowed": allowed,
+        "identity": {"portability": None if prusa is None else {
+            "slicer": prusa.identity(),
+            "settings": {k: v["value"] for k, v in settings.items()},
+            "commands": command_templates(settings)}},
+        "record": {
+            "exit": {**_exit_code(run, ctx.pin), "timed_out": run.timed_out},
+            "stats": stats, "printed": printed,
+            "checks": [c.as_dict() for c in all_checks],
+            "verdict": "PRINTABLE" if cert == "PRINTABLE" else "NOT CERTIFIED",
+            "certification": cert,
+            "certification_note": PRINTABLE_MEANING if cert == "PRINTABLE" else None,
+            "portability": portability_record,
+            "gcode": (None if gcode_name is None else
+                      {"file": gcode_name, "quarantined": quarantined,
+                       **gcode_hashes(files[gcode_name])}),
+            "stderr_tail": run.stderr, "log_written": log_written}}
+
+
+def _exit_code(run, pin) -> dict:
+    if run.timed_out:               # no code to decode; keep the platform's decoding rule
+        return {"raw": None, "signed": None, "name": None,
+                "decoding": decode_exit(0, platform_key(), pin)["decoding"]}
+    return decode_exit(run.returncode, platform_key(), pin)
+
+
+def store(record: dict, out_dir, files: dict, create_folder: bool, *,
+          subfolders: bool = False) -> None:
+    """Write the files and the record (slice.json, last). SlicerError on a failure."""
+    try:
+        data = record_text(record)
+    except (ValueError, UnicodeEncodeError) as err:
+        raise SlicerError(f"the record cannot be stored as strict JSON: {err}") from None
+    try:
+        write_outputs(out_dir, files, RECORD_NAME, data, create_folder=create_folder,
+                      subfolders=subfolders)
+    except RecordError as err:
+        raise SlicerError(str(err)) from None
+
+
 def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
                check_tree: bool = True, prusaslicer_dir=None) -> dict:
     """Slice a tdmg flat output folder and write the G-code, the statistics, the log
@@ -473,6 +697,9 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     one is given, it must verify, and the OrcaSlicer profiles must hold every setting
     PrusaSlicer is given, or the run is refused. PrusaSlicer runs --info and then
     --export-gcode, each with the same timeout.
+
+    A tdmg flat --colors folder (colored.json, no flat.json) is refused here; tdmg slice
+    sends it to tdmg.color_slicing.make_color_slice.
 
     slice_id is a SHA-256 of the canonical JSON of: the algorithm; the flat_id, which is
     lineage (it identifies the geometry request, not the checks); the model.stl hash; the
@@ -493,8 +720,8 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
     """
     flat_dir = Path(flat_dir)
     rules = load_rules()
-    timeout = _timeout(timeout_s, rules)
-    prusa_timeout = _timeout(timeout_s, rules, PRUSA_TIMEOUT_RULE)
+    _timeout(timeout_s, rules)                         # refused before anything else
+    _timeout(timeout_s, rules, PRUSA_TIMEOUT_RULE)
     flat, flat_raw, stl = _read_flat(flat_dir)
     # F3.thin_regions stays in the record as information; the note says so. Flat records
     # from older code do not say it, so the note is added unless it is already there.
@@ -504,136 +731,21 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         create_folder = check_output_dir(out_dir)
     except RecordError as err:
         raise SlicerError(str(err)) from None
-    pin = load_pin()
-    slicer = locate(slicer_dir, pin, full_tree=check_tree)
-    prusa = locate_prusaslicer(prusaslicer_dir, load_prusa_pin(), full_tree=check_tree)
-    profile_data = _profile_bytes(slicer)
-    try:
-        process = json.loads(profile_data["process"])
-    except ValueError as err:
-        raise SlicerError(f"cannot read {slicer.profiles['process']}: {err}") from None
-    try:
-        plate = plate_from_profile(json.loads(profile_data["machine"]))
-    except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
-        raise SlicerError(f"cannot read the plate from {slicer.profiles['machine']}: "
-                          f"{err}") from None
-    try:
-        flow = flow_from_profile(json.loads(profile_data["filament"]))
-    except (ValueError, AttributeError) as err:     # unreadable JSON, or not an object
-        raise SlicerError(f"cannot read the filament from {slicer.profiles['filament']}: "
-                          f"{err}") from None
+    ctx = prepare(slicer_dir, timeout_s, check_tree, prusaslicer_dir)
     thickness = float(flat["params"]["thickness_mm"])
-    z_min, z_max = stl_z_range(stl)
-    allowed = allowed_layer_counts(stl, process)
-    tolerance = float(rules[TOLERANCE_RULE].default)
-    elephant = elephant_foot_mm(process)
-    setup = Setup(plate, flow, tolerance, elephant, frozenset(allowed))
-    settings, expected = None, None
-    if prusa is not None:
-        # Both profiles parsed above as JSON objects (plate_from_profile and
-        # flow_from_profile would have refused anything else).
-        settings = explicit_settings(json.loads(profile_data["machine"]), process,
-                                     json.loads(profile_data["filament"]))
-        mesh = _expected_mesh(flat)
-        expected = Expected(
-            parts=mesh["bodies"], facets=mesh["triangles"],
-            size_mm=[float(v) for v in mesh["extents_mm"]],
-            volume_mm3=float(mesh["volume_mm3"]), layer_counts=sorted(allowed),
-            first_layer_mm=float(process["initial_layer_print_height"]),
-            layer_mm=float(process["layer_height"]),
-            size_tol_mm=size_tolerance_mm(coordinate_max(stl)),
-            volume_tol_mm3=volume_tolerance_mm3(stl))
-
-    with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
-        base = Path(tmp)
-        (base / "work").mkdir()
-        (base / "profiles").mkdir()
-        model = base / "model.stl"
-        model.write_bytes(stl)              # the bytes whose hash was just checked
-        profiles = {}
-        for kind in PROFILE_KINDS:
-            profiles[kind] = base / "profiles" / slicer.profiles[kind].name
-            profiles[kind].write_bytes(profile_data[kind])
-        run = run_slicer(slicer_command(slicer), model, profiles, base / "work",
-                         timeout["value"])
-        f6, stats = f6_checks(run, allowed, pin, timeout_rule=timeout["rule"])
-        gcode = ((run.out_dir / GCODE_NAME).read_bytes()
-                 if (run.out_dir / GCODE_NAME).is_file() else None)
-        exited = next(c for c in f6 if c.id == "F6.slicer_exit").status == "PASS"
-        f3, printed = f3_checks(gcode, stl, setup,
-                                None if exited else "the slicer failed (F6.slicer_exit)")
-        f6 = _cross_check_layers(f6, stats, printed)
-        prusa_gcode, measurements = None, None
-        if prusa is None:
-            portability = not_configured_check()
-        else:
-            (base / "prusa").mkdir()
-            info_run, gcode_run, prusa_gcode = run_portability(
-                prusa_command(prusa), model, settings, base / "prusa",
-                prusa_timeout["value"], prusa)
-            portability, measurements = portability_check(info_run, gcode_run, prusa_gcode,
-                                                          expected, prusa_timeout["rule"])
-        checks = f3 + f6 + [portability]
-        quarantined = any(c.status == "FAIL" for c in previous + checks
-                          if c.id in SLICE_REQUIRED_CHECKS)
-        files = {}
-        if gcode is not None:
-            files[FAILED_GCODE_NAME if quarantined else GCODE_NAME] = gcode
-        prusa_name = PRUSA_FAILED_GCODE_NAME if quarantined else PRUSA_GCODE_NAME
-        if prusa_gcode is not None:
-            files[prusa_name] = prusa_gcode
-        if (run.out_dir / STATS_NAME).is_file():
-            files[STATS_NAME] = (run.out_dir / STATS_NAME).read_bytes()
-        log_written = run.log_path.is_file()
-        if log_written:
-            files[LOG_NAME] = run.log_path.read_bytes()
-
-    if run.timed_out:               # no code to decode; keep the platform's decoding rule
-        exit_code = {"raw": None, "signed": None, "name": None,
-                     "decoding": decode_exit(0, platform_key(), pin)["decoding"]}
-    else:
-        exit_code = decode_exit(run.returncode, platform_key(), pin)
-    all_checks = previous + checks
-    verified = slicer.verified
+    part = slice_stl(ctx, stl, previous, flat.get("mesh") if isinstance(flat.get("mesh"),
+                                                                       dict) else {})
+    z_min, z_max = part["z"]
     flat_record_sha256 = hashlib.sha256(flat_raw).hexdigest()
-    slicer_identity = {"version": pin.version, "exe_sha256": verified["exe_sha256"],
-                       "libraries": verified["libraries"],
-                       "app_tree_sha256": pin.app_tree.sha256,
-                       "app_tree_verified": "app_tree" in verified}
     identity = {"algorithm": SLICE_ALGORITHM_VERSION, "flat_id": flat["flat_id"],
                 "model_stl_sha256": flat["outputs"]["model.stl"],
-                "slicer": slicer_identity,
-                "profiles": {k: v["sha256"] for k, v in verified["profiles"].items()},
+                "slicer": ctx.slicer_identity(),
+                "profiles": ctx.profile_hashes(),
                 "flat_record_sha256": flat_record_sha256,
                 "command": COMMAND_TEMPLATE,
-                "f3": {"tolerance": {"rule": TOLERANCE_RULE, "value_mm": tolerance},
-                       "elefant_foot_compensation_mm": elephant},
-                "portability": None if prusa is None else {
-                    "slicer": prusa.identity(),
-                    "settings": {k: v["value"] for k, v in settings.items()},
-                    "commands": command_templates(settings)}}
-    gcode_name = next((n for n in (GCODE_NAME, FAILED_GCODE_NAME) if n in files), None)
-    if prusa is None:
-        portability_record = {"configured": False, "reason": portability.note,
-                              "note": PRUSA_GCODE_NOTE, "slicer": None, "settings": None,
-                              "commands": None, "expected": None, "tolerances": None,
-                              "info": None, "gcode": None}
-    else:
-        written = prusa_gcode is not None
-        portability_record = {
-            "configured": True, "reason": None, "note": PRUSA_GCODE_NOTE,
-            "slicer": {"name": prusa.pin.name, "pin": prusa.pin.id, **prusa.identity()},
-            "settings": settings, "commands": command_templates(settings),
-            "expected": expected.as_dict(), "tolerances": measurements["tolerances"],
-            "info": measurements["info"],
-            "gcode": {**measurements["gcode"], "file": prusa_name if written else None,
-                      "quarantined": quarantined if written else None,
-                      **(prusa_gcode_hashes(prusa_gcode) if written else
-                         {"sha256": None, "normalised_sha256": None,
-                          "normalised_lines": None})}}
-    trees_verified = (slicer_identity["app_tree_verified"]
-                      and (prusa is None or prusa.identity()["app_tree_verified"]))
-    cert = certification(all_checks, SLICE_REQUIRED_CHECKS, trees_verified)
+                "f3": ctx.f3_identity(),
+                **part["identity"]}
+    files = part["files"]
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": SLICE_ALGORITHM_VERSION,
@@ -641,38 +753,16 @@ def make_slice(flat_dir, out_dir, slicer_dir=None, timeout_s=None,
         "links": {"flat_id": flat["flat_id"], "flat_record_sha256": flat_record_sha256,
                   "model_stl_sha256": flat["outputs"]["model.stl"],
                   "selection_id": flat["selection"]["selection_id"]},
-        "params": {"timeout_s": timeout, "prusaslicer_timeout_s": prusa_timeout,
+        "params": {"timeout_s": ctx.timeout, "prusaslicer_timeout_s": ctx.prusa_timeout,
                    "thickness_mm": thickness,
                    "stl_z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
-                   "expected_layer_counts": sorted(allowed)},
-        "slicer": {"name": pin.name, "version": pin.version, "pin": pin.id,
-                   **{k: v for k, v in slicer_identity.items() if k != "version"},
-                   "profiles": verified["profiles"],
-                   "platform": platform_key()},
+                   "expected_layer_counts": sorted(part["allowed"])},
+        "slicer": ctx.slicer_record(),
         "command": COMMAND_TEMPLATE,
-        "exit": {**exit_code, "timed_out": run.timed_out},
-        "stats": stats,
-        "printed": printed,
-        "checks": [c.as_dict() for c in all_checks],
-        "verdict": "PRINTABLE" if cert == "PRINTABLE" else "NOT CERTIFIED",
-        "certification": cert,
-        "certification_note": PRINTABLE_MEANING if cert == "PRINTABLE" else None,
-        "portability": portability_record,
-        "gcode": (None if gcode_name is None else
-                  {"file": gcode_name, "quarantined": quarantined,
-                   **gcode_hashes(files[gcode_name])}),
-        "stderr_tail": run.stderr,
-        "log_written": log_written,
+        **part["record"],
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
         "environment": {**environment(), "platform": platform.platform()},
         "review": REVIEW,
     }
-    try:
-        data = record_text(record)
-    except (ValueError, UnicodeEncodeError) as err:
-        raise SlicerError(f"the record cannot be stored as strict JSON: {err}") from None
-    try:
-        write_outputs(out_dir, files, RECORD_NAME, data, create_folder=create_folder)
-    except RecordError as err:
-        raise SlicerError(str(err)) from None
+    store(record, out_dir, files, create_folder)
     return record

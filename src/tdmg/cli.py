@@ -13,6 +13,14 @@ from pydantic import ValidationError
 
 from tdmg import __version__
 from tdmg.color_outline import THIN_SHARE_RULE
+from tdmg.color_slicing import (
+    COLOR_DO_NOT_PRINT,
+    COLOR_PRINT_THIS,
+    FACE_FOLDER,
+    FACES,
+    is_colored_folder,
+    make_color_slice,
+)
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
 from tdmg.colors import ColorsError, extracted_text, make_colors
@@ -321,9 +329,11 @@ def _colored_flat(selection: Path, colors_dir: Path, out: Path, **kw) -> None:
 
 
 def _portability_line(rec: dict) -> str:
-    """'portability: ...': PrusaSlicer's verdict and what it read, or why it did not run."""
-    check = next(c for c in rec["checks"] if c["id"] == "F6.portability")
-    port = rec["portability"]
+    """'portability: ...': PrusaSlicer's verdict and what it read, or why it did not run.
+    rec is a tdmg.slicing record, or a colorslice record's portability section."""
+    port = rec.get("portability", rec)
+    check = (port["check"] if "check" in port else
+             next(c for c in rec["checks"] if c["id"] == "F6.portability"))
     if not port["configured"]:
         return f"portability: {check['status']} - {port['reason']}"
     slicer = port["slicer"]
@@ -341,10 +351,55 @@ def _portability_line(rec: dict) -> str:
     return f"{head}{read}, {sliced}; {PRUSA_GCODE_NOTE}"
 
 
+def _number(value, unit: str, digits: int = 1) -> str:
+    return "?" if value is None else f"{value:.{digits}f} {unit}"
+
+
+def _filament_line(fmap: list[dict]) -> str:
+    """'filament 1: base #f60606, filament 2: color 1 #f5f5f5, ...'"""
+    return ", ".join(f"filament {f['filament']}: "
+                     + ("base" if f["role"] == "base" else f"color {f['index']}")
+                     + f" {f['hex']}" for f in fmap)
+
+
+def _color_slice_output(rec: dict, out: Path) -> None:
+    """tdmg slice's output for a colored folder (tdmg.color_slicing)."""
+    for face in FACES:
+        f = rec["faces"][face]
+        s = f["summary"]
+        changes = "?" if s["changes"] is None else str(s["changes"])
+        typer.echo(f"{FACE_FOLDER[face]}: {f['certification']}")
+        typer.echo(f"  {changes} color changes, flush {_number(s['flush_mm3'], 'mm3')}, "
+                   f"prime tower {_number(s['prime_tower_mm3'], 'mm3')}, time "
+                   f"{_number(s['time_s'], 's', 0)} (slicer estimates)")
+        if f["certification_note"]:
+            typer.echo(f"  {f['certification_note']}")
+    for name, plate in rec["glue"]["plates"].items():
+        typer.echo(f"{name} (glue plate, sliced as an R1 part): {plate['certification']}")
+    if not rec["glue"]["built"]:
+        typer.echo(f"glue: not built - {rec['glue']['reason']}")
+    typer.echo(_portability_line(rec["portability"]))
+    if not rec["slicer"]["app_tree_verified"]:
+        typer.echo("app tree not verified (--skip-tree-check)")
+    typer.echo(_filament_line(rec["filament_map"]))
+    if any(f["verdict"] == "PRINTABLE" for f in rec["faces"].values()):
+        typer.echo(COLOR_PRINT_THIS)
+    else:
+        typer.echo("no face is PRINTABLE: do not print yet; model.3mf is the file to print "
+                   "from once a face is, with the filaments above")
+    typer.echo(f"colorslice_id {rec['colorslice_id']}")
+    for name in rec["outputs"]:
+        evidence = Path(name).name in (PRUSA_GCODE_NAME, PRUSA_FAILED_GCODE_NAME)
+        typer.echo(f"wrote {out / name}"
+                   + (" (portability evidence only; not for printing)" if evidence else ""))
+    typer.echo(f"wrote {out / 'slice.json'}")
+
+
 @app.command("slice")
 def slice_(
-    flat_dir: Annotated[Path, typer.Argument(exists=True, file_okay=False, metavar="FLAT_DIR",
-                                             help="A tdmg flat output folder.")],
+    flat_dir: Annotated[Path, typer.Argument(
+        exists=True, file_okay=False, metavar="FLAT_DIR",
+        help="A tdmg flat output folder (single-color, or made with --colors).")],
     out: Annotated[Path, typer.Option("--out", help="New or empty folder for the outputs.")],
     slicer_dir: Annotated[Path | None, typer.Option(
         "--slicer-dir", help="OrcaSlicer folder from scripts/setup_orcaslicer.py; default "
@@ -370,6 +425,10 @@ def slice_(
     with admesh); prusaslicer.portability-only.gcode.txt is generic G-code,
     never for the A1.
 
+    A tdmg flat --colors folder is sliced face up and face down, each color
+    on its own filament, and each glue plate as a single-color part;
+    F6.portability then reads model.3mf.
+
     Exit codes:
       0  files written, and no check FAILed (UNKNOWN checks allowed)
       1  files written, and at least one check FAILed
@@ -379,15 +438,25 @@ def slice_(
          such a folder is incomplete and must not be used
     Exit 0 does not mean the part is certified; read verdict in slice.json.
     """
+    colored = is_colored_folder(flat_dir)
     try:
-        rec = make_slice(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s,
-                         check_tree=not skip_tree_check, prusaslicer_dir=prusaslicer_dir)
+        make = make_color_slice if colored else make_slice
+        rec = make(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s,
+                   check_tree=not skip_tree_check, prusaslicer_dir=prusaslicer_dir)
     except SlicerError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
     except OSError as e:              # unreadable input, unwritable output, disk full ...
         _os_error(e)
         raise typer.Exit(2) from None
+    if colored:
+        _color_slice_output(rec, out)
+        checks = [c for f in rec["faces"].values() for c in f["checks"]]
+        checks += [c for p in rec["glue"]["plates"].values() for c in p["checks"]]
+        if any(c["status"] == "FAIL" for c in checks + [rec["portability"]["check"]]):
+            typer.echo(COLOR_DO_NOT_PRINT)
+            raise typer.Exit(1)
+        return
     typer.echo(rec["certification"])     # the verdict, with the checks that block it
     if rec["certification_note"]:
         typer.echo(rec["certification_note"])     # what PRINTABLE means, and does not

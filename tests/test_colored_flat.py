@@ -487,12 +487,14 @@ def test_cli_flat_help_mentions_colors_and_keeps_lines_short():
     assert all(len(line) < 76 for line in lines)
 
 
-def test_slice_refuses_a_colored_folder(made, tmp_path):
+def test_slice_takes_a_colored_folder(made, tmp_path, monkeypatch):
+    """tdmg slice sends a colored folder to tdmg.color_slicing (tests/test_color_slice.py);
+    without a slicer it is refused as any slice is, with nothing written."""
+    monkeypatch.delenv("TDMG_ORCASLICER_DIR", raising=False)
     out = made[1]
     r = runner.invoke(app, ["slice", str(out), "--out", str(tmp_path / "s")])
     assert r.exit_code == 2, r.output
-    assert "is a tdmg flat --colors folder (colored.json); tdmg slice cannot slice " \
-           "colored output yet" in _plain(r.stderr)
+    assert "no slicer folder" in _plain(r.stderr)
     assert not (tmp_path / "s").exists()
 
 

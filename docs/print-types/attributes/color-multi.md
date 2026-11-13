@@ -13,11 +13,12 @@ The same color plan serves two routes:
 - **Glue:** the base has shallow pockets. Each color is printed separately and glued
   into its pocket.
 
-**Status (2026-11-13):** steps 1 to 3 exist. `tdmg colors` turns a selection into a
-reviewed color plan (step 1). `tdmg flat --colors` turns a ready plan into gated STL
+**Status (2026-11-13):** steps 1 to 3 exist, and step 4 is under way.
+`tdmg colors` turns a selection into a reviewed color plan (step 1). `tdmg flat --colors` turns a ready plan into gated STL
 bodies for both routes (step 2), and writes the AMS bodies as one multicolor
-`model.3mf` (step 3). The bodies are not sliced by `tdmg` (step 4), and nothing in this
-page is printed.
+`model.3mf` (step 3). `tdmg slice` slices the AMS version face up and face down, each
+color on its own filament, and each glue plate (step 4, Task 6; see
+`docs/guide/pipeline-and-gate.md`). Nothing in this page is printed.
 
 ## When to use / when not to
 
@@ -90,7 +91,7 @@ triangle with the 3MF Materials extension) and `palette.json` (what each shell i
 glue layout with each piece numbered, the folds and the leftovers); and the record
 `colored.json`, with `colorflat_id`. A plan with a drawn outline gets no `glue-*.stl` and
 no `parts.png`. The file names give the palette index and color, never AMS slots. There is
-no `DIR/flat.json`, so `tdmg slice` refuses the folder until step 4.
+no `DIR/flat.json`; `tdmg slice` reads `colored.json` instead (step 4).
 
 **On the owner's four approved plans** (Roadie and Oddie at 60 × 3 mm, Windows PC,
 `research/verification/2026-11-12-color-geometry/colored-runs.txt`), no check FAILed, so
@@ -176,8 +177,12 @@ source.
     base, and each color).
   - `F3.thin_regions` per body is information only (UNKNOWN), and `F6.slicer` is UNKNOWN
     until step 4. So the verdict is always NOT CERTIFIED.
-- **Step 4 (planned):** slice the bodies; the color changes read from the G-code must
-  match the plan.
+- **Step 4 (Task 6 done; Tasks 7 and 8 open):** `tdmg slice` slices both faces and the
+  glue plates. Per face, `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used`
+  read the G-code against the bodies, and every F3 result is required until the owner's
+  Task 7 review; so no face is PRINTABLE yet. `F6.portability` on `model.3mf` leaves the
+  volume unjudged (UNKNOWN). Owner plans:
+  `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.
 
 ## Calibration needed
 
@@ -207,11 +212,12 @@ Each needs a test print. None is done.
 
 ## Open gaps
 
-- Nothing is printed, and `tdmg` does not slice the colored bodies (step 4), so whether
-  thin parts print, the color changes and face up against face down are not known.
-- The OrcaSlicer CLI slices `model.3mf` on one filament; per-color filaments need the
-  slicer GUI (Bambu Studio was checked by the owner) or, for step 4, an Orca-specific
-  extra file or another route.
+- Nothing is printed. `tdmg slice` measures the color changes, the waste and the time
+  face up and face down, but the default face and whether a per-color F3 FAIL blocks
+  PRINTABLE are the owner's Task 7 decisions.
+- The OrcaSlicer CLI slices `model.3mf` on one filament, so `tdmg slice` gives OrcaSlicer
+  its own input, `orca-input.3mf`; per-color filaments for printing are assigned in the
+  slicer GUI (Bambu Studio was checked by the owner).
 - In `model.3mf` the shells touch along their shared walls. Each shell is closed on its
   own; the 3MF core spec treats touching shells only as a self-intersection warning
   (`format.3mf.self_intersection_is_warning`).

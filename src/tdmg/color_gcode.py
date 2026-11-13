@@ -79,8 +79,8 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   F6.color_time (the header's times) and F6.color_filament (model filament per tool from
   the G-code), each with the statistics' values beside them.
 
-Not wired into tdmg slice here (plan Task 6). Every rule and constant here is part of what
-the colorslice id will name (Task 6).
+tdmg.color_slicing runs these checks for each face in tdmg slice (plan Task 6). Every rule
+and constant here is part of what its colorslice_id names, through its algorithm label.
 """
 
 from __future__ import annotations

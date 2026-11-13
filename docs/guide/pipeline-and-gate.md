@@ -44,7 +44,8 @@ valid solid can still include an unwanted background.
 - **`tdmg colors`** is the first half of S6 for flat multicolor (R2; see below). It
   writes a color plan for review.
 - **`tdmg flat --colors`** builds the plan's colored bodies as STL files, for an AMS
-  print and for a glued print (see below). `tdmg slice` cannot slice them yet.
+  print and for a glued print (see below). `tdmg slice` slices them (see the last
+  section).
 
 There are no loops, bases or 3MF output yet.
 
@@ -264,8 +265,39 @@ CLI does not assign them from the file. For the glue version, open `parts.png`: 
 the legend lists the pieces per color, the folds and the leftovers. Check that the pieces
 are a size you can handle.
 
-**Not yet:** the folder has no `DIR/flat.json`, so `tdmg slice` refuses it until step 4
-of the color design. Nothing has been printed, and the
-three new rules are untested hypotheses. The runs on the owner's four plans are recorded
+**Slicing:** `tdmg slice DIR --out OUT` slices this folder (next section). Nothing has
+been printed, and the three new rules are untested hypotheses. The runs on the owner's four plans are recorded
 in `research/verification/2026-11-12-color-geometry/colored-runs.txt` (Windows PC only):
 no check FAILed on any of them.
+
+## Slicing a colored folder (`tdmg slice`, R2 step 4, 2026-11-13)
+
+`tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...]` on a `tdmg flat
+--colors` folder (plan `docs/plans/2026-11-13-color-slicing.md`, Task 6). The full guide
+follows in Task 8; in short:
+
+- **Refused, with nothing written:** no `colored.json`, another schema or algorithm, an
+  identity that does not match `colorflat_id`, or any listed file (STL, `model.3mf`,
+  `palette.json`, PNG) missing or changed since `tdmg flat --colors`. The colored record's
+  own checks are not a refusal: as with `DIR/flat.json`, they are carried into each verdict,
+  and a FAIL quarantines the G-code.
+- **Face up and face down:** each face writes `face-up/` or `face-down/` with
+  `orca-input.3mf` (the OrcaSlicer-only input, gated by `F2.orca_input_matches_bodies`; not
+  a deliverable), `plate_1.gcode` (or `.failed`) and the statistics. Each color is on its
+  own filament: `filaments/filament-<n>.json` is the pinned filament profile with only
+  `filament_colour` set. The checks are `F6.color_changes`, `F6.tool_placement`,
+  `F6.filaments_used`, R1's slicer F6 checks and every F3 result (silhouette and per tool,
+  all required until the owner's Task 7 review).
+- **Glue plates:** each `glue-*.stl` is sliced as an R1 part into its own folder, with R1's
+  checks and required set. `tdmg flat --colors` makes no `F2.target_width` or
+  `F4.body_count`, so R1 names them missing and a glue plate is not PRINTABLE.
+- **Portability:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded but not
+  judged (no tolerance is known for its 3MF volume), so `F6.portability` is at best
+  UNKNOWN, and no face is PRINTABLE yet.
+- **Record:** `OUT/slice.json`, schema `tdmg.colorslice/1`, with `colorslice_id`, a verdict
+  per face and per glue plate, and the filament for each color.
+- **Message:** the verdict and the changes, flush, prime tower and time per face, and the
+  filament for each color. To print, open `model.3mf` in Bambu Studio and assign the
+  filaments as listed; `tdmg`'s G-code is for checking only.
+
+The owner's four plans: `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.

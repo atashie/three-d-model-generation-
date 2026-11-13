@@ -1,8 +1,9 @@
 """A stand-in for orca-slicer.exe, run as [sys.executable, fake_orca.py, ...args].
 
 It accepts only the argument form tdmg.slicer.slicer_args builds (the measured form):
-    MODEL.stl --load-settings "MACHINE;PROCESS" --load-filaments FILAMENT --slice 0
-    --outputdir OUT --export-statistics --logfile LOG
+    MODEL --load-settings "MACHINE;PROCESS" --load-filaments FILAMENT[;FILAMENT...]
+    --slice 0 --outputdir OUT --export-statistics --logfile LOG
+(MODEL is model.stl, or orca-input.3mf for tdmg.color_slicing, with one filament per color).
 Anything else exits -2 (CLI_INVALID_PARAMS), as a real argument error would.
 
 Its behaviour comes from a JSON control file: the path in $TDMG_FAKE_ORCA_CONTROL if set
@@ -15,7 +16,8 @@ the model:
                G1 X10 Y10, which have no layer comments, so tdmg.printed cannot measure
                them and the F3 checks are UNKNOWN)
     stats      write plate_1.statistics.json (default true)
-    layers     summary.layer_count (default 100)
+    layers     summary.layer_count (default 100); "auto": the model's height at 0.2 mm
+               layers, 1 + round((height - 0.2) / 0.2), read from the STL or 3MF
     objects    number of entries in "objects" (default 1)
     log        write the log file (default: only when exit is nonzero, as the real slicer
                does without --debug; README addendum, item 1)
@@ -23,6 +25,8 @@ the model:
     grandchild start a child process that sleeps this many seconds and holds the output
                pipes open, as a slicer helper process might (default: none)
     cwd_file   write the working folder's path to this file
+    args_file  append one JSON line per run to this file: the arguments and the
+               text of each filament profile
     stderr     text to write to stderr
 """
 
@@ -35,6 +39,13 @@ import time
 from pathlib import Path
 
 
+def _height(model: Path) -> float:
+    """The z extent of a binary STL, or of a 3MF's vertices (sys.path holds tests/)."""
+    from fake_prusa import _triangles
+    z = _triangles(model)[:, :, 2]
+    return float(z.max() - z.min())
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 12:
         return -2
@@ -44,8 +55,9 @@ def main(argv: list[str]) -> int:
     if any(want is not None and got != want for got, want in zip(flags, expected, strict=True)):
         return -2
     settings, filament, out, log = flags[1], flags[3], Path(flags[7]), Path(flags[10])
-    if len(settings.split(";")) != 2 or not all(Path(p).is_file()
-                                                for p in [*settings.split(";"), filament]):
+    # One filament, or several separated by ";" (tdmg.color_slicing: one per color).
+    if len(settings.split(";")) != 2 or not all(Path(p).is_file() for p in
+                                                [*settings.split(";"), *filament.split(";")]):
         return -5
     model = Path(stl)
     if not model.is_file():
@@ -55,6 +67,10 @@ def main(argv: list[str]) -> int:
     control = json.loads(control_path.read_text()) if control_path.is_file() else {}
     if "cwd_file" in control:
         Path(control["cwd_file"]).write_text(os.getcwd())
+    if "args_file" in control:      # one line per run: the arguments, each filament's text
+        with open(control["args_file"], "a", encoding="utf-8") as f:
+            f.write(json.dumps({"argv": argv, "filaments": [
+                Path(p).read_text() for p in filament.split(";")]}) + "\n")
     if "stderr" in control:
         sys.stderr.write(control["stderr"])
         sys.stderr.flush()
@@ -70,10 +86,13 @@ def main(argv: list[str]) -> int:
                   f"{now:%Y-%m-%d} at {now:%H:%M:%S.%f}\n; HEADER_BLOCK_END\n")
         body = control.get("gcode_text", "G28\nG1 X10 Y10\n")
         (out / "plate_1.gcode").write_bytes((header + body).encode())
+    layers = control.get("layers", 100)
+    if layers == "auto":
+        layers = 1 + round((_height(model) - 0.2) / 0.2)
     if control.get("stats", True):
         stats = {"version": 1, "generator": "OrcaSlicer 2.5.0",
                  "units": {"time": "s", "length": "mm", "volume": "mm3", "weight": "g"},
-                 "summary": {"time": 766.104, "layer_count": control.get("layers", 100),
+                 "summary": {"time": 766.104, "layer_count": layers,
                              "volume": 2957.692, "weight": 3.7267},
                  "objects": [{"name": f"m{i}", "instance": 0, "volume": 1.0, "weight": 1.0}
                              for i in range(control.get("objects", 1))]}
