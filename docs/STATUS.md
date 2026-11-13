@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-13 (R2 step 3: `tdmg flat --colors` also writes a multicolor
-`model.3mf` and `palette.json`, plan `docs/plans/2026-11-12-color-3mf.md`; earlier: R2
-steps 1 and 2, F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+**Last updated:** 2026-11-13 (R2 step 4 started: plan `docs/plans/2026-11-13-color-slicing.md`
+approved; Task 1 fixed the pinned A1 profile, whose own start, end and filament-change
+G-code had been missing; R2 step 3 done earlier the same day). Phase 1 (R1, flat single-color) is under way,
 with three commands, and R2 (flat multicolor) has two:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -44,6 +44,14 @@ calipers, and strength is not judged. The owner printed the flat-2 Roadie STL (B
 Studio, matte PLA) and judged it "great" by eye. The current flat-3 STL differs from it
 by at most 4.6e-6 mm, and is also PRINTABLE. Not done yet: loop or base, 3MF. The R4
 backend is still open.
+
+**Important, found 2026-11-13:** until `slice-5`, every `tdmg slice` G-code started with
+generic start G-code, not the A1's own (the A1 preset's `include` templates were not
+flattened). Do not print a G-code from an earlier `tdmg slice` run. With the fix, both
+R1 models are PRINTABLE again with the same F3 numbers. `tdmg slice` now says to slice
+`model.stl` in Bambu Studio to print; `plate_1.gcode` is for checking only until it has
+been compared with Bambu Studio's own slice or printed. Record:
+`research/verification/2026-11-13-a1-profile-include/`.
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the only memory that travels between machines.
 
@@ -185,6 +193,17 @@ passed. These commits are pushed; for CI see above.
      step 2 inherits from step 1".
    - **What follows:** steps 3–5 (3MF writer, AMS slicing with the face-up/face-down
      measurement, then prints). Step 3 is item 2a.
+2b. **R2 design step 4: multicolor slicing** (`docs/plans/2026-11-13-color-slicing.md`,
+   approved 2026-11-13, "approved; please proceed").
+   - **Task 1 done:** the flattener resolves `include` as OrcaSlicer 2.5.0 does (source
+     read at the tag); template and default hashes pinned; `machine.json` is now
+     `bc1aadae…`. The G-code reader accepts the A1's firmware G-commands (an allowlist of
+     the 8 seen) only in the start/end code and the time-lapse blocks, which may not
+     extrude; the head position is unknown after them. Label `slice-5`. R1 re-run:
+     PRINTABLE, F3 identical, time 472 → 867 s (the A1 start code), weight −0.025 g (the
+     slicer's total; the model's E is identical). Spec and quality reviews done.
+   - **Next:** Task 2, the slicing experiment (OrcaSlicer-only input, face up and face
+     down, the four owner plans).
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
@@ -321,6 +340,14 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
+- **Latest (2026-11-13): R2 step 4, Task 1 done** (see item 2b and the note at the top).
+  - **Controller decisions in Task 1** (no owner input needed, recorded in the research
+    README): firmware G-commands are read only inside Custom and the template's
+    SKIPPABLE blocks, by allowlist; the print message stays "slice model.stl in Bambu
+    Studio" until the owner decides otherwise.
+  - **R1 runs:** `artifacts/slice-runs/*-60x3-slice5c` (PRINTABLE); `*-slice5` and
+    `*-slice5b` are superseded (same slice_id, NOT CERTIFIED with the older reader).
+  - **The old profiles** are kept in `artifacts/tools/orcaslicer-2.5.0/profiles-flat.previous/`.
 - **Latest session (2026-11-13): R2 step 3 (multicolor 3MF) finished.**
   - **Commits:** `ddd37c6..HEAD`, pushed.
   - **CI:** passed on macOS 15, Ubuntu and Windows for `2c47a90` (run 43431465068, verified 2026-11-13).
