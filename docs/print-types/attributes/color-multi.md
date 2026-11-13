@@ -167,7 +167,8 @@ source.
     rounding bounds); `F4.filaments` (the non-empty bodies are at most `colors` and the
     printer's slots); `F2.fits_build_volume` on all bodies together and `F5.triangles` on
     their sum, as one plate; `F2.export_3mf_matches_bodies` (lib3mf reads `model.3mf`
-    back, and each shell must be its body's gated mesh exactly, in its color).
+    back, and each shell must be its body's gated mesh exactly, in its color; the zip
+    holds only the writer's three parts, and the build item has no transform).
   - **Glue:** `F4.glue_partition` (the base's cells cover the silhouette, the pockets do
     not overlap and lie inside it, and the base's volume is right); `F4.glue_fit` (each
     piece, grown by the clearance less a derived rounding margin, lies inside its pocket;

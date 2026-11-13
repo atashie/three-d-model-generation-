@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-12 (R2 step 2 done: `tdmg flat --colors`, all 8 tasks of
-`docs/plans/2026-11-12-color-geometry.md`, with the Codex review handled; earlier: R2
-step 1, F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
+**Last updated:** 2026-11-13 (R2 step 3: `tdmg flat --colors` also writes a multicolor
+`model.3mf` and `palette.json`, plan `docs/plans/2026-11-12-color-3mf.md`; earlier: R2
+steps 1 and 2, F6.portability, first PRINTABLE). Phase 1 (R1, flat single-color) is under way,
 with three commands, and R2 (flat multicolor) has two:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -28,8 +28,13 @@ with three commands, and R2 (flat multicolor) has two:
     are folded into a neighbour. A plan that keeps a drawn outline gets no glue version
     (owner).
   - **Outputs:** the STLs, `top.png`, `parts.png` and `colored.json`.
-  - **Not done yet:** it is not sliced or printed (steps 4–5), and there is no 3MF
-    (step 3).
+  - **3MF (step 3):** `model.3mf` holds the AMS bodies as one object with one closed
+    shell per color, each triangle colored (3MF core and Materials only, no UUIDs,
+    byte-identical on repeat). `palette.json` says which shell is which color. The gate
+    reads the 3MF back with lib3mf and compares every shell exactly
+    (`F2.export_3mf_matches_bodies`). The owner opened one in Bambu Studio: in place,
+    filaments assignable, it slices.
+  - **Not done yet:** `tdmg` does not slice it, and nothing is printed (steps 4–5).
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -177,7 +182,29 @@ passed. These commits are pushed; for CI see above.
    - **What it inherits:** the requirements in the color design's section "Requirements
      step 2 inherits from step 1".
    - **What follows:** steps 3–5 (3MF writer, AMS slicing with the face-up/face-down
-     measurement, then prints).
+     measurement, then prints). Step 3 is item 2a.
+2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
+   - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
+   - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
+     portable encoding gives one filament per body in place in the OrcaSlicer CLI.
+     Separate objects are dropped to the bed by both CLIs, and PrusaSlicer crashes on
+     them. One object with one shell per color (encoding D) stays in place in both.
+   - **Owner's Bambu Studio check of the hand-made files:** A and D had all colors in
+     place; the Orca-metadata file was one color. Encoding D was chosen; the owner
+     assigns filaments in the slicer.
+   - **Tasks 2–4:** `src/tdmg/threemf.py` (writer and `palette.json`), the check
+     `F2.export_3mf_matches_bodies`, wiring (`colorflat-3`). The four owner plans were
+     re-run: the check passes on all four.
+   - **Task 5:** the owner opened the real Roadie drop `model.3mf` in Bambu Studio:
+     "1) yes. 2) yes. 3) yes" (in place, filaments assignable, slices). The pinned
+     OrcaSlicer and PrusaSlicer CLIs slice all four in place, exit 0; OrcaSlicer uses one
+     filament.
+   - **Task 6:** docs done; Codex review 4 and CI: see the handoff.
+   - **Carry into step 4:**
+     - the OrcaSlicer CLI prints `model.3mf` on one filament: measuring color changes
+       needs an Orca-specific extra file (PLAN point 7) or another route;
+     - the pinned A1 `machine_start_gcode` never selects a filament (Task 1 record,
+       Surprises). Check this before printing anything from step 4.
 3. **Caliper measurements,** if the owner gets calipers: three named dimensions within
    `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
 4. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID

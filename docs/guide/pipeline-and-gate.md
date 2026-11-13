@@ -240,8 +240,9 @@ glue version there are no `glue-*.stl` and no `parts.png`.
 **Checks:** every body gets F1 and `F2.export_matches_geometry` on its written bytes. The
 AMS bodies also get `F4.color_partition`, `F4.filaments`, `F2.fits_build_volume` and
 `F5.triangles` (as one plate), and `F2.export_3mf_matches_bodies` (lib3mf reads
-`model.3mf` back: one object in millimetres, each shell exactly its body's gated mesh,
-closed and oriented, in its color); the glue version gets `F4.glue_partition`,
+`model.3mf` back: only the writer's three zip parts, one object in millimetres with no
+build transform, each shell exactly its body's gated mesh, closed and oriented, in its
+color); the glue version gets `F4.glue_partition`,
 `F4.glue_fit`, and `F2.fits_build_volume` and `F5.triangles` per plate. `F3.thin_regions`
 is information only (UNKNOWN) and `F6.slicer` is UNKNOWN, so the verdict is always NOT
 CERTIFIED.
