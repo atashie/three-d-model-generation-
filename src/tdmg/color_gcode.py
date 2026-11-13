@@ -63,16 +63,25 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   config's filament_colour is the plan's colors in filament order.
 - F3 (R1's three G-code checks, tdmg.printed.judge_f3): on the silhouette (every tool's
   model extrusion against the union of the bodies' sections; R1's ids), and per tool
-  against its own body (ids "<F3 id>.T<n>"), all at the fixed placement. All of them are REQUIRED
-  for PRINTABLE until the owner's Task 7 review (controller decision, 2026-11-13; the
-  owner then decides which, if any, become information): without them a G-code that
-  prints half an inlay, only a dot of it, or half the base's first layer passes the F6
-  checks, since F6.tool_placement judges plastic outside a body and not a body left
-  unprinted. On the eight Task 2 G-codes the silhouette's F3.printed_connectivity FAILs on
-  every multicolor layer: neighbouring bodies' beads meet edge to edge at their shared
-  outline and the bead model leaves gaps of up to about 0.03 mm between them
-  (crosscheck_task5.py in research/verification/2026-11-13-color-slicing/). So these
-  G-codes are not PRINTABLE until Task 7. required_check_ids gives the required set.
+  against its own body (ids "<F3 id>.T<n>"), all at the fixed placement. Which are
+  required is the owner's decision of 2026-11-13, "Outer edge only" (plan Task 7):
+  - required (f3_required_ids): the silhouette's F3.edge_coverage and F3.edge_overprint,
+    and each tool's F3.edge_overprint;
+  - warnings (f3_warning_ids; recorded, not required): the silhouette's
+    F3.printed_connectivity (on the eight Task 2 G-codes it FAILs on every multicolor
+    layer: neighbouring bodies' beads meet edge to edge and the bead model leaves gaps of
+    up to about 0.03 mm, crosscheck_task5.py in
+    research/verification/2026-11-13-color-slicing/), and each tool's
+    F3.printed_connectivity and F3.edge_coverage (bands narrower than a bead that the
+    slicer skips, such as a kept outline line).
+  The F6 checks judge plastic outside a body, not a body left unprinted. Of the three
+  partly unprinted fixtures in tests/test_color_gcode.py (re-run 2026-11-13 with this
+  set): half the base's first layer is still caught by a required check (the
+  silhouette's F3.edge_coverage); half an inlay and only a dot of an inlay now only warn
+  (that tool's F3.edge_coverage, and for the dot also the silhouette's
+  F3.printed_connectivity), because the other colors' plastic is not checked against
+  the missing inlay's edge by a required check. The owner accepted this trade-off; no
+  check was added. required_check_ids gives the required set.
 - Information only, status UNKNOWN (as R1 keeps F3.thin_regions): F6.color_waste (flush
   from the FLUSH blocks and prime tower from its extrusion, in mm3 with the pinned
   profile's filament diameter, per tool and per change, with the M620.10 L words),
@@ -98,8 +107,10 @@ import trimesh
 from tdmg.checks import CheckResult
 from tdmg.orca_input import filament_map
 from tdmg.printed import (
+    COVERAGE,
     CUSTOM,
     F3_SLICE_CHECK_IDS,
+    OVERPRINT,
     OVERPRINT_BOUND_MM,
     TOLERANCE_RULE,
     Alignment,
@@ -130,9 +141,11 @@ COLOR_FILAMENT = "F6.color_filament"
 GATED_CHECK_IDS = (COLOR_CHANGES, TOOL_PLACEMENT, FILAMENTS_USED)
 INFO_CHECK_IDS = (COLOR_WASTE, COLOR_TIME, COLOR_FILAMENT)
 INFO_NOTE = "information only, not gated (docs/plans/2026-11-13-color-slicing.md, Decision 4)"
-F3_REQUIRED_NOTE = ("Required for PRINTABLE until the owner's Task 7 review "
-                    "(docs/plans/2026-11-13-color-slicing.md, Decision 4; controller "
-                    "decision 2026-11-13).")
+F3_REQUIRED_NOTE = ("Required for PRINTABLE (the owner's decision of 2026-11-13, "
+                    "\"Outer edge only\"; docs/plans/2026-11-13-color-slicing.md, Task 7).")
+F3_WARNING_NOTE = ("A warning, recorded and not required for PRINTABLE (the owner's "
+                   "decision of 2026-11-13, \"Outer edge only\"; "
+                   "docs/plans/2026-11-13-color-slicing.md, Task 7).")
 NO_FILAMENT = 255          # T255: the end code's unload
 NOT_A_FILAMENT = 1000      # T1000: written twice by the A1 start code
 # M600 (filament change) and M601 (pause): the pinned slicer writes neither for this
@@ -158,11 +171,34 @@ def per_tool_id(check_id: str, tool: int) -> str:
     return f"{check_id}.T{tool}"
 
 
-def f3_required_ids(tools: int) -> tuple[str, ...]:
-    """The F3 checks color_slice_checks returns for a plan of this many tools, all required
-    until the owner's Task 7 review: the silhouette's three, then each tool's three."""
+def f3_ids(tools: int) -> tuple[str, ...]:
+    """Every F3 check color_slice_checks returns for a plan of this many tools: the
+    silhouette's three, then each tool's three."""
     return (*F3_SLICE_CHECK_IDS,
             *(per_tool_id(c, t) for t in range(tools) for c in F3_SLICE_CHECK_IDS))
+
+
+def f3_required_ids(tools: int) -> tuple[str, ...]:
+    """The F3 checks PRINTABLE requires (the owner's "Outer edge only", 2026-11-13): the
+    silhouette's F3.edge_coverage and F3.edge_overprint, then each tool's
+    F3.edge_overprint."""
+    return (COVERAGE, OVERPRINT, *(per_tool_id(OVERPRINT, t) for t in range(tools)))
+
+
+def f3_warning_ids(tools: int) -> tuple[str, ...]:
+    """The F3 checks that are warnings: every F3 check not in f3_required_ids (the
+    silhouette's F3.printed_connectivity, each tool's F3.printed_connectivity and
+    F3.edge_coverage)."""
+    required = set(f3_required_ids(tools))
+    return tuple(c for c in f3_ids(tools) if c not in required)
+
+
+def f3_note(check_id: str) -> str:
+    """F3_REQUIRED_NOTE or F3_WARNING_NOTE for this F3 check id (silhouette or per tool)."""
+    base = check_id.rsplit(".T", 1)[0] if ".T" in check_id else check_id
+    tool = check_id != base
+    required = base == OVERPRINT or (base == COVERAGE and not tool)
+    return F3_REQUIRED_NOTE if required else F3_WARNING_NOTE
 
 
 def required_check_ids(tools: int) -> frozenset[str]:
@@ -570,10 +606,10 @@ def _all_unknown(reason: str, n: int, setup: Setup) -> list[CheckResult]:
                                                      TOLERANCE_RULE),
            _unknown(FILAMENTS_USED, reason)]
     out += [CheckResult(cid, "UNKNOWN", None, *f3_rule[cid],
-                        f"not measured: {reason}; {F3_REQUIRED_NOTE}")
+                        f"not measured: {reason}; {f3_note(cid)}")
             for cid in F3_SLICE_CHECK_IDS]
     out += [CheckResult(per_tool_id(cid, t), "UNKNOWN", None, *f3_rule[cid],
-                        f"not measured: {reason}; {F3_REQUIRED_NOTE}")
+                        f"not measured: {reason}; {f3_note(per_tool_id(cid, t))}")
             for t in range(n) for cid in F3_SLICE_CHECK_IDS]
     out += [CheckResult(cid, "UNKNOWN", None, None, None, f"not measured: {reason}; "
                         + INFO_NOTE) for cid in INFO_CHECK_IDS]
@@ -800,7 +836,7 @@ def _geometry(mc: Multicolor, shells: list[Shell], sets: list[list[int]],
                                 first_mm, tol_mm, angles=(PLACEMENT_ANGLE,))
     f3, sil_record = judge_f3(analysis, setup)
     f3 = [CheckResult(c.id, c.status, c.measured, c.threshold, c.rule,
-                      f"{c.note} {F3_REQUIRED_NOTE}") for c in f3]
+                      f"{c.note} {f3_note(c.id)}") for c in f3]
     stray = sorted({t for by in mc.model for t in by if t is None or not 0 <= t < n},
                    key=lambda t: (t is None, t))
     placement, tool_f3, tool_records = _placed(mc, sections, silhouette, sets, zs, last_h,
@@ -824,7 +860,8 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
                               tol_mm, angles=(angle,))
         checks, rec = judge_f3(an, setup, truncation=False)
         tool_f3 += [CheckResult(per_tool_id(c.id, t), c.status, c.measured, c.threshold,
-                                c.rule, f"{c.note} {F3_REQUIRED_NOTE}") for c in checks]
+                                c.rule, f"{c.note} {f3_note(per_tool_id(c.id, t))}")
+                    for c in checks]
         records[str(t)] = rec
         worst = None
         for k, m in enumerate(an.turns[0].layers):

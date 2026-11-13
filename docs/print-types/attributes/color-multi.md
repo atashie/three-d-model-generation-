@@ -177,12 +177,14 @@ source.
     base, and each color).
   - `F3.thin_regions` per body is information only (UNKNOWN), and `F6.slicer` is UNKNOWN
     until step 4. So the verdict is always NOT CERTIFIED.
-- **Step 4 (Task 6 done; Tasks 7 and 8 open):** `tdmg slice` slices both faces and the
-  glue plates. Per face, `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used`
-  read the G-code against the bodies, and every F3 result is required until the owner's
-  Task 7 review; so no face is PRINTABLE yet. `F6.portability` on `model.3mf` records the
-  volume as information. Owner plans:
-  `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.
+- **Step 4 (Tasks 6 and 7 done; Task 8 open):** `tdmg slice` slices face up by default
+  (the owner's choice; `--face down` or `both` on request) and the glue plates. Per face,
+  `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used` read the G-code against
+  the bodies. F3 is gated "outer edge only" (owner): the whole model's edge coverage and
+  overprint and each color's overprint are required; each color's coverage and all
+  connectivity are warnings. `F6.portability` on `model.3mf` records the volume as
+  information. Owner plans:
+  `research/verification/2026-11-13-color-slicing/owner-slices-task7.txt`.
 
 ## Calibration needed
 
@@ -212,9 +214,9 @@ Each needs a test print. None is done.
 
 ## Open gaps
 
-- Nothing is printed. `tdmg slice` measures the color changes, the waste and the time
-  face up and face down, but the default face and whether a per-color F3 FAIL blocks
-  PRINTABLE are the owner's Task 7 decisions.
+- Nothing is printed. Under "outer edge only", a color left partly unprinted inside
+  the model (half an inlay, or only a dot of it) only warns; half the base's first layer
+  is still caught (`tests/test_color_gcode.py`). The owner accepted this trade-off.
 - The OrcaSlicer CLI slices `model.3mf` on one filament, so `tdmg slice` gives OrcaSlicer
   its own input, `orca-input.3mf`; per-color filaments for printing are assigned in the
   slicer GUI (Bambu Studio was checked by the owner).

@@ -15,6 +15,7 @@ from tdmg import __version__
 from tdmg.color_outline import THIN_SHARE_RULE
 from tdmg.color_slicing import (
     COLOR_DO_NOT_PRINT,
+    DEFAULT_FACE,
     FACE_FOLDER,
     FACES,
     is_colored_folder,
@@ -364,7 +365,8 @@ def _filament_line(fmap: list[dict]) -> str:
 
 def _color_slice_output(rec: dict, out: Path) -> None:
     """tdmg slice's output for a colored folder (tdmg.color_slicing)."""
-    for face in FACES:
+    sliced = [face for face in FACES if face in rec["faces"]]
+    for face in sliced:
         f = rec["faces"][face]
         s = f["summary"]
         changes = "?" if s["changes"] is None else str(s["changes"])
@@ -374,6 +376,8 @@ def _color_slice_output(rec: dict, out: Path) -> None:
                    f"{_number(s['time_s'], 's', 0)} (slicer estimates)")
         if f["certification_note"]:
             typer.echo(f"  {f['certification_note']}")
+        for w in f["warnings"]:
+            typer.echo(f"  warning: {w['text']}")
     for name, plate in rec["glue"]["plates"].items():
         typer.echo(f"{name} (glue plate, sliced as an R1 part): {plate['certification']}")
     route = rec["glue"]["route"]
@@ -392,7 +396,7 @@ def _color_slice_output(rec: dict, out: Path) -> None:
     if not rec["slicer"]["app_tree_verified"]:
         typer.echo("app tree not verified (--skip-tree-check)")
     typer.echo(_filament_line(rec["filament_map"]))
-    message = print_message([f for f in FACES if rec["faces"][f]["verdict"] == "PRINTABLE"])
+    message = print_message([f for f in sliced if rec["faces"][f]["verdict"] == "PRINTABLE"])
     if message:
         typer.echo(message)
     else:
@@ -428,6 +432,9 @@ def slice_(
         "--prusaslicer-dir", help="PrusaSlicer folder from scripts/setup_prusaslicer.py, for "
                                   "F6.portability; default $TDMG_PRUSASLICER_DIR; without "
                                   "either, F6.portability is UNKNOWN")] = None,
+    face: Annotated[str, typer.Option(
+        "--face", help="For a tdmg flat --colors folder: the face(s) to slice, up, down or "
+                       "both; default up (the owner's default)")] = DEFAULT_FACE,
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
 
@@ -452,8 +459,11 @@ def slice_(
     colored = is_colored_folder(flat_dir)
     try:
         make = make_color_slice if colored else make_slice
+        if not colored and face != DEFAULT_FACE:
+            raise SlicerError("--face applies to a tdmg flat --colors folder only")
+        extra = {"face": face} if colored else {}
         rec = make(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s,
-                   check_tree=not skip_tree_check, prusaslicer_dir=prusaslicer_dir)
+                   check_tree=not skip_tree_check, prusaslicer_dir=prusaslicer_dir, **extra)
     except SlicerError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None

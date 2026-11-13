@@ -74,6 +74,8 @@ def orca(fake):
 
 
 def _run(colored_dir, out, root, **kw):
+    """make_color_slice; both faces unless the test says otherwise."""
+    kw.setdefault("face", "both")
     return cs.make_color_slice(colored_dir, out, root, **kw)
 
 
@@ -361,14 +363,14 @@ def test_the_print_message_names_the_printable_faces():
     for m in (up, down, both):
         assert "open model.3mf in Bambu Studio" in m
         assert "give each color the filament listed" in m
-        assert "face-up/plate_1.gcode and face-down/plate_1.gcode are for checking only" in m
+        assert "each face's plate_1.gcode is for checking only" in m
         assert "prusaslicer.portability-only.gcode.txt is not for printing" in m
     assert up.startswith("to print face up: ") and "it is face up" in up
     assert "turn" not in up.split(";")[0]
     assert down.startswith("to print face down: ")
     assert "turn it over" in down and "model.3mf is face up" in down
-    assert both.startswith("both faces are PRINTABLE; the default face is not set yet")
-    assert "Task 7" in both and "turn it over for face down" in both
+    assert both.startswith("both faces are PRINTABLE; the owner's default is face up")
+    assert "not set" not in both and "turn it over for face down" in both
 
 
 @pytest.mark.parametrize("faces", [("up",), ("down",), ("up", "down")])
@@ -376,7 +378,7 @@ def test_cli_printable_names_the_printable_faces(colored, orca, tmp_path, monkey
                                                  faces):
     _all_pass(monkeypatch, faces)
     r = runner.invoke(app, ["slice", str(colored), "--out", str(tmp_path / "s"),
-                            "--slicer-dir", str(orca())])
+                            "--slicer-dir", str(orca()), "--face", "both"])
     assert r.exit_code == 0, r.output
     lines = r.stdout.splitlines()
     for face in ("up", "down"):
@@ -391,14 +393,17 @@ def test_cli_printable_names_the_printable_faces(colored, orca, tmp_path, monkey
 def test_cli_output_for_a_colored_folder(colored, orca, tmp_path):
     out = tmp_path / "s"
     r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
-                            str(orca())])
+                            str(orca()), "--face", "both"])
     assert r.exit_code == 0, r.output            # no check FAILed (UNKNOWN ones only)
     rec = json.loads((out / "slice.json").read_bytes())
     lines = r.stdout.splitlines()
     assert lines[0] == f"face-up: {rec['faces']['up']['certification']}"
     assert lines[1] == ("  ? color changes, flush ?, prime tower ?, time ? (slicer "
                         "estimates)")
-    assert lines[2] == f"face-down: {rec['faces']['down']['certification']}"
+    assert f"face-down: {rec['faces']['down']['certification']}" in lines
+    for face in ("up", "down"):           # the warnings: each per-tool coverage not PASS
+        for w in rec["faces"][face]["warnings"]:
+            assert f"  warning: {w['text']}" in lines
     filament = ", ".join(
         f"filament {f['filament']}: "
         + ("base" if f["role"] == "base" else f"color {f['index']}") + f" {f['hex']}"
@@ -427,12 +432,12 @@ def test_cli_exit_1_and_refusal_exit_2(folder, orca, tmp_path):
         r["assembly"]["ams"][0]["status"] = "FAIL"
     _edit(folder, fail)
     r = runner.invoke(app, ["slice", str(folder), "--out", str(tmp_path / "a"),
-                            "--slicer-dir", str(orca())])
+                            "--slicer-dir", str(orca()), "--face", "both"])
     assert r.exit_code == 1, r.output
     assert cs.COLOR_DO_NOT_PRINT in r.stdout.splitlines()
     (folder / "ams-base.stl").unlink()
     r = runner.invoke(app, ["slice", str(folder), "--out", str(tmp_path / "b"),
-                            "--slicer-dir", str(orca())])
+                            "--slicer-dir", str(orca()), "--face", "both"])
     assert r.exit_code == 2
     assert "ams-base.stl is missing" in _plain(r.stderr)
     assert not (tmp_path / "b").exists()
@@ -489,7 +494,12 @@ def test_portability_fails_on_the_wrong_part_count(colored, orca, prusa,
                     reason="TDMG_ORCASLICER_DIR and TDMG_PRUSASLICER_DIR are not both set "
                            "to verified installs")
 def test_the_test_plan_slices_with_the_real_slicers(colored, tmp_path):
-    rec = cs.make_color_slice(colored, tmp_path / "s")
+    rec = cs.make_color_slice(colored, tmp_path / "s", face="both")
+    # Under "Outer edge only" (owner, 2026-11-13) both faces of the test plan are
+    # PRINTABLE (measured 2026-11-13); the connectivity warning remains.
+    for face in ("up", "down"):
+        assert rec["faces"][face]["certification"] == "PRINTABLE", face
+        assert any("edge to edge" in w["text"] for w in rec["faces"][face]["warnings"])
     n = len(rec["filament_map"])
     for face in ("up", "down"):
         by = {c["id"]: c["status"] for c in rec["faces"][face]["checks"]}
@@ -605,7 +615,7 @@ def test_a_failed_glue_fit_blocks_every_glue_plate(folder, tmp_path, orca):
     _edit(folder, fail)
     out = tmp_path / "out"
     r = runner.invoke(app, ["slice", str(folder), "--out", str(out), "--slicer-dir",
-                            str(orca())])
+                            str(orca()), "--face", "both"])
     assert r.exit_code == 1, r.output
     rec = json.loads((out / "slice.json").read_bytes())
     for name, plate in rec["glue"]["plates"].items():
@@ -688,3 +698,99 @@ def test_a_body_row_field_is_validated_before_slicing(folder, tmp_path, orca, ro
         _run(folder, out, orca())
     assert "colored.json" in str(err.value) and "flat.json" not in str(err.value)
     assert not out.exists()
+
+
+# --- The owner's Task 7 decisions: default face and F3 warnings ------------------------------
+
+def test_face_up_is_the_default(colored, orca, tmp_path):
+    out = tmp_path / "s"
+    r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
+                            str(orca())])
+    assert r.exit_code == 0, r.output
+    rec = json.loads((out / "slice.json").read_bytes())
+    assert list(rec["faces"]) == ["up"] and rec["params"]["face"] == "up"
+    assert not (out / "face-down").exists()
+    assert next(iter(rec["verdicts"])) == "face-up" and "face-down" not in rec["verdicts"]
+    assert not any(line.startswith("face-down") for line in r.stdout.splitlines())
+    assert cs.make_color_slice.__defaults__[-1] == "up"
+
+
+@pytest.mark.parametrize("face", ["down", "both"])
+def test_the_face_option(colored, orca, tmp_path, face):
+    rec = _run(colored, tmp_path / face, orca(), face=face)
+    assert list(rec["faces"]) == {"down": ["down"], "both": ["up", "down"]}[face]
+    up = _run(colored, tmp_path / "up", orca(), face="up")
+    assert up["colorslice_id"] != rec["colorslice_id"]          # the faces are in the id
+    if face == "both":
+        assert (rec["faces"]["up"]["orca_input"]["sha256"]
+                == up["faces"]["up"]["orca_input"]["sha256"])
+
+
+def test_a_bad_face_is_refused(colored, orca, tmp_path):
+    with pytest.raises(SlicerError, match="face must be one of"):
+        _run(colored, tmp_path / "a", orca(), face="side")
+    assert not (tmp_path / "a").exists()
+    r = runner.invoke(app, ["slice", str(colored), "--out", str(tmp_path / "b"),
+                            "--slicer-dir", str(orca()), "--face", "side"])
+    assert r.exit_code == 2 and "face must be one of" in _plain(r.stderr)
+
+
+def test_the_face_option_is_refused_for_a_single_color_folder(orca, tmp_path):
+    flat = tmp_path / "flat"
+    flat.mkdir()
+    (flat / "flat.json").write_text("{}")
+    r = runner.invoke(app, ["slice", str(flat), "--out", str(tmp_path / "b"),
+                            "--slicer-dir", str(orca()), "--face", "down"])
+    assert r.exit_code == 2 and "--face applies to a tdmg flat --colors folder only" \
+        in _plain(r.stderr)
+
+
+def test_face_warnings_are_recorded_and_named():
+    fmap = [{"filament": 1, "role": "base", "index": 0, "hex": "#f60606"},
+            {"filament": 2, "role": "inlay", "index": 1, "hex": "#451812"}]
+    checks = [CheckResult("F3.edge_coverage.T1", "FAIL", {"max_gap_mm": 4.994}, None, None,
+                          "x"),
+              CheckResult("F3.edge_coverage.T0", "PASS", {"max_gap_mm": 0.1}, None, None, ""),
+              CheckResult("F3.edge_coverage", "FAIL", {"max_gap_mm": 9.0}, None, None, ""),
+              CheckResult("F3.printed_connectivity", "FAIL", None, None, None, ""),
+              CheckResult("F3.printed_connectivity.T0", "FAIL", None, None, None, ""),
+              CheckResult("F3.printed_connectivity.T1", "PASS", None, None, None, "")]
+    warnings = cs.face_warnings(checks, fmap)
+    assert [w["text"] for w in warnings] == [
+        ("color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (thin "
+        "areas the slicer skips)"),
+        "printed colors meet edge to edge (connectivity check, information)"]
+    assert warnings[1]["ids"] == ["F3.printed_connectivity", "F3.printed_connectivity.T0"]
+    # The silhouette's coverage is required, not a warning: it is not listed.
+    assert all("F3.edge_coverage" not in w["ids"] for w in warnings)
+
+
+def test_warnings_do_not_block_printable(colored, orca, tmp_path, monkeypatch):
+    """Only the required checks are made PASS; the per-tool coverage and connectivity
+    warnings stay as measured (UNKNOWN on the fake), and the face is PRINTABLE."""
+    _all_pass(monkeypatch, ("up",))
+    rec = _run(colored, tmp_path / "a", orca(), face="up")
+    f = rec["faces"]["up"]
+    assert f["verdict"] == "PRINTABLE", f["certification"]
+    assert f["warnings"] and all(w["status"] != "PASS" for w in f["warnings"])
+
+
+ROADIE_DROP = (Path(__file__).resolve().parents[1]
+               / "artifacts/colored-runs/roadie-tol30-60-drop-v3-f64")
+
+
+@pytest.mark.slicer
+@pytest.mark.skipif(not (os.environ.get("TDMG_ORCASLICER_DIR")
+                         and os.environ.get("TDMG_PRUSASLICER_DIR")
+                         and (ROADIE_DROP / "colored.json").is_file()),
+                    reason="needs both slicers and the owner's Roadie drop plan "
+                           "(artifacts/colored-runs, git-ignored)")
+def test_the_roadie_drop_plan_is_printable_face_up(tmp_path):
+    rec = cs.make_color_slice(ROADIE_DROP, tmp_path / "s")
+    assert list(rec["faces"]) == ["up"]
+    up = rec["faces"]["up"]
+    assert up["certification"] == "PRINTABLE", up["certification"]
+    assert up["summary"]["changes"] == 9
+    texts = [w["text"] for w in up["warnings"]]
+    assert "printed colors meet edge to edge (connectivity check, information)" in texts
+    assert any(t.startswith("base #f60606 (filament 1): edges up to 0.28 mm") for t in texts)

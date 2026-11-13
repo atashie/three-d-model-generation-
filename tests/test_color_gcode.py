@@ -34,6 +34,7 @@ from tdmg.color_gcode import (
     TOOL_PLACEMENT,
     color_slice_checks,
     f3_required_ids,
+    f3_warning_ids,
     layer_sets,
     min_changes,
     per_tool_id,
@@ -198,12 +199,19 @@ def test_a_correct_two_layer_print_passes():
     assert checks[TOOL_PLACEMENT].measured["angle_deg"] == 0
     assert record["silhouette"]["alignment"]["angle_deg"] == 0
     assert [t["angle_deg"] for t in record["silhouette"]["alignment"]["scores"]] == [0]
-    # Every F3 here is required until Task 7, the silhouette's and each tool's.
+    # The owner's "Outer edge only" (Task 7, 2026-11-13): the silhouette's coverage and
+    # overprint and each tool's overprint are required; the rest of F3 are warnings.
     required = required_check_ids(3)
-    assert required == frozenset((*GATED_CHECK_IDS, *F3_SLICE_CHECK_IDS, *(
-        per_tool_id(c, t) for t in range(3) for c in F3_SLICE_CHECK_IDS)))
-    assert all("Required for PRINTABLE" in checks[i].note for i in required
-               if i.startswith("F3."))
+    assert required == frozenset((*GATED_CHECK_IDS, "F3.edge_coverage", "F3.edge_overprint",
+                                  *(per_tool_id("F3.edge_overprint", t) for t in range(3))))
+    warnings = set(f3_warning_ids(3))
+    assert warnings == {"F3.printed_connectivity", *(
+        per_tool_id(c, t) for t in range(3)
+        for c in ("F3.printed_connectivity", "F3.edge_coverage"))}
+    assert not warnings & required
+    assert all("Required for PRINTABLE" in checks[i].note and "Outer edge only"
+               in checks[i].note for i in required if i.startswith("F3."))
+    assert all("A warning, recorded and not required" in checks[i].note for i in warnings)
     assert not required & set(INFO_CHECK_IDS)
     assert verdict(list(checks.values()), set(required)) == "PRINTABLE"
     for cid in INFO_CHECK_IDS:
@@ -443,19 +451,28 @@ def printable(checks, tools=3):
     return verdict(list(checks.values()), set(required_check_ids(tools))) == "PRINTABLE"
 
 
-@pytest.mark.parametrize(("steps1", "steps2"), [
-    ([SQUARE], [RING, 1, shapely.box(2, 6, 5, 14), 2, B]),     # half of inlay 1
-    ([SQUARE], [RING, 1, shapely.box(4, 9, 5, 10), 2, B]),     # only a dot of inlay 1
-    ([shapely.box(0, 0, 20, 10)], [RING, 1, A, 2, B]),         # half the base's layer 1
+@pytest.mark.parametrize(("steps1", "steps2", "caught", "warned"), [
+    # half of inlay 1: only its own coverage warns
+    ([SQUARE], [RING, 1, shapely.box(2, 6, 5, 14), 2, B], [], ["F3.edge_coverage.T1"]),
+    # only a dot of inlay 1: its coverage and the silhouette's connectivity warn
+    ([SQUARE], [RING, 1, shapely.box(4, 9, 5, 10), 2, B], [],
+     ["F3.printed_connectivity", "F3.edge_coverage.T1"]),
+    # half the base's layer 1: still caught by the silhouette's required coverage
+    ([shapely.box(0, 0, 20, 10)], [RING, 1, A, 2, B], ["F3.edge_coverage"],
+     ["F3.edge_coverage.T0"]),
 ], ids=["half inlay", "dot inlay", "half base L1"])
-def test_a_body_left_partly_unprinted_fails_a_required_f3_check(steps1, steps2):
+def test_a_body_left_partly_unprinted_after_the_owner_decision(steps1, steps2, caught,
+                                                               warned):
+    """The F6 checks pass these: they judge plastic outside a body, not a body left
+    unprinted. Under "Outer edge only" (owner, 2026-11-13) half the base's first layer is
+    still caught by a required check; half an inlay and a dot of one only warn (the
+    trade-off the owner accepted)."""
     checks, _ = run(text_of(steps1, steps2))
-    # The F6 checks alone pass these: they judge plastic outside a body, not a body left
-    # unprinted. The F3 checks catch them, and they are required.
     assert status(checks) == ["PASS"] * 3
-    failed = [i for i in sorted(required_check_ids(3)) if checks[i].status == "FAIL"]
-    assert failed and all(i.startswith("F3.") for i in failed), failed
-    assert not printable(checks)
+    failed = [i for i in sorted(required_check_ids(3)) if checks[i].status != "PASS"]
+    assert failed == caught
+    assert [i for i in f3_warning_ids(3) if checks[i].status != "PASS"] == warned
+    assert printable(checks) == (not caught)
 
 
 def _tower_line(y):
@@ -621,13 +638,17 @@ def test_the_real_slicer_passes_all_three_checks(face, tmp_path):
     assert m["changes"] == m["info_statistics_filament_changes"]
     assert by[COLOR_WASTE].measured["prime_tower_mm3"] > 0
     assert by[TOOL_PLACEMENT].measured["prime_tower_into_model_mm"] is None
-    # The expected verdict until the owner's Task 7 review: NOT CERTIFIED, and only by the
-    # required F3 checks (the silhouette's connectivity FAILs on every multicolor layer:
-    # neighbouring bodies' beads meet edge to edge; research record, Task 5 addendum).
+    # Under the owner's "Outer edge only" (Task 7, 2026-11-13) the silhouette's
+    # connectivity is a warning: it still FAILs on every multicolor layer (neighbouring
+    # bodies' beads meet edge to edge; research record, Task 5 addendum). The Roadie drop
+    # plan is PRINTABLE face up; face down its silhouette edge coverage is UNKNOWN (0.251
+    # against 0.275 mm, Task 5), so it is not. The synthetic plan: PRINTABLE both faces.
     required = required_check_ids(len(shells))
-    assert verdict(checks, set(required)) == "NOT CERTIFIED"
+    want = "NOT CERTIFIED" if (kind, face) == ("owner", "down") else "PRINTABLE"
+    assert verdict(checks, set(required)) == want, (
+        kind, face, [(i, by[i].status) for i in sorted(required) if by[i].status != "PASS"])
     not_passing = [i for i in sorted(required) if by[i].status != "PASS"]
-    assert not_passing and all(i.startswith("F3.") for i in not_passing), not_passing
+    assert all(i.startswith("F3.") for i in not_passing), not_passing
     assert by["F3.printed_connectivity"].status == "FAIL", (kind, by[
         "F3.printed_connectivity"].note)
     json.dumps([c.as_dict() for c in checks], allow_nan=False)

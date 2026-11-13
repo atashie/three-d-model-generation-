@@ -272,9 +272,9 @@ no check FAILed on any of them.
 
 ## Slicing a colored folder (`tdmg slice`, R2 step 4, 2026-11-13)
 
-`tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...]` on a `tdmg flat
---colors` folder (plan `docs/plans/2026-11-13-color-slicing.md`, Task 6). The full guide
-follows in Task 8; in short:
+`tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...] [--face up|down|both]`
+on a `tdmg flat --colors` folder (plan `docs/plans/2026-11-13-color-slicing.md`, Tasks 6
+and 7). The full guide follows in Task 8; in short:
 
 - **Refused, with nothing written:** no `colored.json`, another schema or algorithm, an
   identity that does not match `colorflat_id`, or any listed file (STL, `model.3mf`,
@@ -283,13 +283,18 @@ follows in Task 8; in short:
   and a FAIL quarantines the G-code. As in R1, a file changed together with its hash in
   `colored.json` is not detected; `colorslice_id` records the lineage (the hash of
   `colored.json`).
-- **Face up and face down:** each face writes `face-up/` or `face-down/` with
+- **Faces:** face up by default (the owner's decision, Task 7); `--face down` or `--face
+  both` on request. Each face sliced writes `face-up/` or `face-down/` with
   `orca-input.3mf` (the OrcaSlicer-only input, gated by `F2.orca_input_matches_bodies`; not
   a deliverable), `plate_1.gcode` (or `.failed`) and the statistics. Each color is on its
   own filament: `filaments/filament-<n>.json` is the pinned filament profile with only
   `filament_colour` set. The checks are `F6.color_changes`, `F6.tool_placement`,
-  `F6.filaments_used`, R1's slicer F6 checks and every F3 result (silhouette and per tool,
-  all required until the owner's Task 7 review).
+  `F6.filaments_used`, R1's slicer F6 checks and F3 gated "outer edge only" (the owner's
+  decision, Task 7): the whole model's `F3.edge_coverage` and `F3.edge_overprint` and each
+  color's `F3.edge_overprint` are required. Each color's `F3.edge_coverage` and every
+  `F3.printed_connectivity` are warnings: recorded in the face's `warnings` and printed
+  when they do not pass, so a thin line the slicer skips (such as a kept outline) is
+  reported, not blocking.
 - **Glue plates:** each `glue-*.stl` is sliced as an R1 part into its own folder, with R1's
   checks and required set, except `F2.target_width`, which does not apply to a plate of
   pieces. `F4.body_count` requires the plate's bodies to be its pieces in the glue report
@@ -306,6 +311,8 @@ follows in Task 8; in short:
   filament for each color. To print, open `model.3mf` in Bambu Studio and assign the
   filaments as listed; `tdmg`'s G-code is for checking only. `model.3mf` is face up: when
   only face down is PRINTABLE, the message says to turn it over; when both are, it says
-  that the default face is not set yet (Task 7).
+  that the owner's default is face up. Each warning that does not pass is printed, for
+  example "warning: color 1 #451812 (filament 2): edges up to 4.99 mm from its printed
+  lines (thin areas the slicer skips)".
 
 The owner's four plans: `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.

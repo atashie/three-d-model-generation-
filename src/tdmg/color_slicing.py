@@ -86,6 +86,8 @@ from tdmg.color_gcode import (
     COLOR_TIME,
     COLOR_WASTE,
     color_slice_checks,
+    f3_warning_ids,
+    per_tool_id,
     required_check_ids,
 )
 from tdmg.colored_flat import (
@@ -116,6 +118,7 @@ from tdmg.portability import (
     run_portability,
     size_tolerance_mm,
 )
+from tdmg.printed import CONNECTIVITY, COVERAGE
 from tdmg.records import (
     RecordError,
     canonical_json,
@@ -210,18 +213,52 @@ COLOR_PRINTABLE_MEANING = (
     "(acceptance.dimension.tolerance) is still a hypothesis, no calibration print has been "
     "measured, no tdmg G-code has been printed, and strength is not judged.")
 PRINT_TAIL = (
-    "give each color the filament listed; face-up/plate_1.gcode and face-down/plate_1.gcode "
-    "are for checking only (tdmg's G-code is not yet printed or compared with Bambu "
-    f"Studio's own slice); {PRUSA_GCODE_NAME} is not for printing")
+    "give each color the filament listed; each face's plate_1.gcode is for checking only "
+    "(tdmg's G-code is not yet printed or compared with Bambu Studio's own slice); "
+    f"{PRUSA_GCODE_NAME} is not for printing")
+# The owner's default face (plan Task 7, 2026-11-13: "Face up (Recommended)").
+DEFAULT_FACE = "up"
+FACE_CHOICES = {"up": ("up",), "down": ("down",), "both": ("up", "down")}
 PRINT_FACE = {
     ("up",): "to print face up: open model.3mf in Bambu Studio (it is face up) and "
              + PRINT_TAIL,
     ("down",): "to print face down: open model.3mf in Bambu Studio and turn it over "
                "(model.3mf is face up; face down is it turned 180 degrees about the y axis, "
                "the inlays on the bed), then " + PRINT_TAIL,
-    ("up", "down"): "both faces are PRINTABLE; the default face is not set yet (the owner's "
-                    "Task 7 decision): open model.3mf in Bambu Studio (it is face up; turn "
-                    "it over for face down) and " + PRINT_TAIL}
+    ("up", "down"): "both faces are PRINTABLE; the owner's default is face up (plan Task "
+                    "7): open model.3mf in Bambu Studio (it is face up; turn it over for "
+                    "face down) and " + PRINT_TAIL}
+
+
+def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
+    """The face's warning checks (tdmg.color_gcode.f3_warning_ids) that do not PASS, for
+    the record and the CLI: one per tool whose F3.edge_coverage does not pass, with its
+    largest gap, and one for all the connectivity checks together (not per layer)."""
+    by = {c.id: c for c in checks}
+    warn = set(f3_warning_ids(len(fmap)))
+    out = []
+    for t, f in enumerate(fmap):
+        c = by.get(per_tool_id(COVERAGE, t))
+        if c is None or c.id not in warn or c.status == "PASS":
+            continue
+        gap = (c.measured or {}).get("max_gap_mm") if isinstance(c.measured, dict) else None
+        who = ("base" if f["role"] == "base" else f"color {f['index']}") + \
+            f" {f['hex']} (filament {f['filament']})"
+        text = (f"{who}: edges up to {gap:.2f} mm from its printed lines (thin areas the "
+                "slicer skips)" if gap is not None else
+                f"{who}: edge coverage {c.status} ({c.note.split(';')[0]})")
+        out.append({"ids": [c.id], "status": c.status, "filament": f["filament"],
+                    "index": f["index"], "hex": f["hex"], "max_gap_mm": gap,
+                    "text": text})
+    conn = [i for i in (CONNECTIVITY, *(per_tool_id(CONNECTIVITY, t)
+                                         for t in range(len(fmap))))
+            if i in by and i in warn and by[i].status != "PASS"]
+    if conn:
+        out.append({"ids": conn, "status": sorted({by[i].status for i in conn}),
+                    "filament": None, "index": None, "hex": None, "max_gap_mm": None,
+                    "text": "printed colors meet edge to edge (connectivity check, "
+                            "information)"})
+    return out
 
 
 def print_message(printable_faces) -> str | None:
@@ -239,13 +276,16 @@ def glue_route(plates: dict) -> dict:
 COLOR_DO_NOT_PRINT = (f"a check FAILed: the G-code of that face or plate is kept as "
                       f"{FAILED_GCODE_NAME}; do not print it")
 COLOR_REVIEW = (
-    "Each face (face-up, face-down) was sliced from orca-input.3mf, each color on its own "
-    "filament (filament_map). Open its plate_1.gcode in a G-code preview to check the "
+    "Each face sliced (face up by default; face-up/, face-down/) is sliced from "
+    "orca-input.3mf, each color on its own filament (filament_map). Open its plate_1.gcode "
+    "in a G-code preview to check the "
     "colors, the layers and the prime tower; it is for checking only, not for printing. To "
     "print, open model.3mf in Bambu Studio and assign the filaments as listed. Changes, "
     "flush, prime tower and time are information (F6.color_waste, F6.color_time), from the "
-    "G-code; time is the slicer's estimate. Every F3 result (silhouette and per tool) is "
-    "required until the owner's Task 7 review. Glue plates are sliced as R1 parts. "
+    "G-code; time is the slicer's estimate. F3 is gated outer edge only (the owner's "
+    "decision, Task 7): the silhouette's edge coverage and overprint and each tool's "
+    "overprint are required; each tool's coverage and all connectivity are warnings "
+    "(the face's warnings). Glue plates are sliced as R1 parts. "
     "F6.portability runs PrusaSlicer 2.9.7 on model.3mf when --prusaslicer-dir or "
     "TDMG_PRUSASLICER_DIR is given; its volume is information, not a condition. "
     "When any required check FAILs, that G-code is kept as plate_1.gcode.failed; do not "
@@ -614,6 +654,7 @@ def slice_face(ctx: Context, face: str, shells: list[Shell], filaments: list[dic
         "certification_note": COLOR_PRINTABLE_MEANING if cert == "PRINTABLE" else None,
         "required_checks": sorted(required),
         "summary": _face_summary(color),
+        "warnings": face_warnings(color, fmap),
         "params": {"z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
                    "expected_layer_counts": sorted(allowed)},
         "exit": {**_exit_code(run, ctx.pin), "timed_out": run.timed_out},
@@ -719,14 +760,20 @@ def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, st
 
 
 def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
-                     check_tree: bool = True, prusaslicer_dir=None) -> dict:
+                     check_tree: bool = True, prusaslicer_dir=None,
+                     face: str = DEFAULT_FACE) -> dict:
     """Slice a tdmg flat --colors folder (module docstring) and write, in out_dir:
     face-up/ and face-down/ (orca-input.3mf, plate_1.gcode or plate_1.gcode.failed, the
     statistics, the log when written), filaments/ (the derived filament profiles), one
     folder per glue plate (R1's files), PrusaSlicer's G-code from model.3mf, and slice.json
-    last. Returns the record. SlicerError for a refused input, with nothing written."""
+    last. Returns the record. SlicerError for a refused input, with nothing written.
+    face: "up" (the default, the owner's decision of 2026-11-13), "down" or "both"; only
+    the faces sliced are in the record and in colorslice_id ("faces")."""
     colored_dir = Path(colored_dir)
     _timeout(timeout_s, load_rules())                  # refused before anything else
+    if face not in FACE_CHOICES:
+        raise SlicerError(f"face must be one of {sorted(FACE_CHOICES)}, not {face!r}")
+    sliced = FACE_CHOICES[face]
     record_in, raw, files_in = read_colored(colored_dir)
     shells = ams_shells(record_in, files_in)
     model_3mf = files_in[MODEL_3MF]
@@ -760,9 +807,9 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     fmap = filament_map(shells)
     filaments = filament_profiles(ctx.profile_data["filament"], fmap)
     colored_sha = _sha(raw)
-    faces = {"up": shells, "down": turn_over(shells)}
+    faces = {"up": shells, "down": turn_over(shells) if "down" in sliced else None}
     allowed = allowed_counts(shells, ctx.process)
-    if allowed_counts(faces["down"], ctx.process) != allowed:
+    if "down" in sliced and allowed_counts(faces["down"], ctx.process) != allowed:
         raise SlicerError("the turned bodies allow other layer counts than face up")
 
     portability, port_section, prusa_gcode, port_identity = _portability(
@@ -783,11 +830,11 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     port_section["check"] = portability.as_dict()
 
     face_records, face_ids = {}, {}
-    for face in FACES:
-        done = slice_face(ctx, face, faces[face], filaments, inherited, inherited_required,
+    for side in sliced:
+        done = slice_face(ctx, side, faces[side], filaments, inherited, inherited_required,
                           portability, allowed)
-        face_records[face] = done["record"]
-        face_ids[face] = done["identity"]
+        face_records[side] = done["record"]
+        face_ids[side] = done["identity"]
         files.update(done["files"])
 
     plates = {}
@@ -803,7 +850,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     template = command_template(len(shells))
     identity = {"algorithm": COLORSLICE_ALGORITHM, "colorflat_id": record_in["colorflat_id"],
                 "colored_record_sha256": colored_sha,
-                "faces": {face: face_ids[face] for face in FACES},
+                "faces": {f: face_ids[f] for f in sliced},
                 "slicer": ctx.slicer_identity(), "profiles": ctx.profile_hashes(),
                 "filaments": [f["sha256"] for f in filaments], "command": template,
                 "f3": ctx.f3_identity(), "portability": port_identity,
@@ -820,7 +867,8 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
                   "palette_sha256": _sha(files_in[PALETTE_NAME]),
                   "colors_id": record_in["identity"].get("colors_id"),
                   "selection_id": record_in["identity"].get("selection_id")},
-        "params": {"timeout_s": ctx.timeout, "prusaslicer_timeout_s": ctx.prusa_timeout,
+        "params": {"face": face, "timeout_s": ctx.timeout,
+                   "prusaslicer_timeout_s": ctx.prusa_timeout,
                    "thickness_mm": (record_in["identity"].get("params") or {}).get(
                        "thickness_mm"),
                    "z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
@@ -843,7 +891,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
         "faces": face_records,
         "glue": {"built": glue["built"], "reason": glue.get("reason"), "plates": plates,
                  "route": glue_route(plates) if glue["built"] else None},
-        "verdicts": {**{FACE_FOLDER[f]: face_records[f]["verdict"] for f in FACES},
+        "verdicts": {**{FACE_FOLDER[f]: face_records[f]["verdict"] for f in sliced},
                      **{name: p["verdict"] for name, p in plates.items()}},
         "outputs": {name: _sha(data) for name, data in files.items()},
         "environment": {**environment(), "platform": platform.platform()},
