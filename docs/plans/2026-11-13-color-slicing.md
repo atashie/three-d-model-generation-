@@ -92,6 +92,16 @@ the last task.
    - **Encoding:** B_msc (Task 1 evidence), built from the same gated meshes as
      `model.3mf`, with each part's `extruder` set to its palette index + 1.
    - **The base is filament 1**, so the start G-code loads the base color.
+     - **Amended after Task 2 (controller, 2026-11-13):** that holds face up only. The
+       A1 start code loads OrcaSlicer's first tool on layer 1
+       (`initial_no_support_extruder`). Face down, every color is on layer 1, and
+       OrcaSlicer chose filament 2, 3 or 4 in three of the four plans. That is normal
+       printer behaviour, so the requirement is now: the start block loads exactly one
+       filament, and it is the first tool that prints on layer 1.
+   - **Filament profiles (added after Task 2):** OrcaSlicer computes the flush volumes
+     and the tool order from `filament_colour`, which the 3MF does not carry. So each
+     filament is the pinned profile with only `filament_colour` set to its palette color.
+     The record holds each derived profile's hash and proves that only that key differs.
    - **Writer:** deterministic, like `tdmg.threemf`.
    - **Check:** a new gate check reads it back and requires each part to be its body
      exactly. It is `model.3mf`'s check, adapted to parts.
@@ -115,6 +125,21 @@ the last task.
      - the G-code's tool changes (`T<n>` below 255, after the start G-code) must equal
        that minimum. If OrcaSlicer orders tools differently, the check FAILs, and Task 2
        records why before any rule is relaxed.
+     - **Amended after Task 2 (controller, 2026-11-13):** OrcaSlicer orders each layer
+       without looking ahead. Face down it made 10 changes where the true minimum is 9,
+       on every plan with the profile colors. The gated rule is now:
+       - (a) each layer's set of tools in the G-code equals the set of bodies on that
+         layer (from the bodies);
+       - (b) on each layer, every tool prints in one contiguous run;
+       - (c) the change count equals Σ over layers (colors − 1), plus the layer
+         boundaries where the next layer's first tool differs from the previous layer's
+         last.
+       - The true minimum is recorded as information.
+       - **What counts:** a change is one `T<n>` (n < 255) after the first
+         `; CHANGE_LAYER` and before the end block, inside `M620 S<n>A` … `M621 S<n>A`
+         and `; CP TOOLCHANGE START` … `END`. The start load and the end unload
+         (`T255`) are not changes. Evidence:
+         `research/verification/2026-11-13-color-slicing/README.md`.
    - **`F6.tool_placement`:** each tool extrudes only on its body's layers, and within
      its body's footprint, with the same bead model and tolerance as R1's
      F3 (no new number). Every body is printed by its own tool. This is
