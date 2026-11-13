@@ -302,6 +302,55 @@ def test_an_edited_3mf_fails(edit, what):
         assert c.measured["item_ok"] is False
 
 
+def test_a_tiny_scale_that_lib3mf_calls_no_transform_fails():
+    # Codex review 4, finding 1: lib3mf's HasObjectTransform treats a matrix this close to
+    # identity as none, but other readers apply it (trimesh: x max 20.002 on a 20 mm box).
+    shells = gated_shells("box")
+    root = model_of(write_multishell_3mf(shells))
+    root.find(f".//{Q}item").set("transform", "1.0001 0 0 0 1 0 0 0 1 0 0 0")
+    c = export_3mf_check(repack(root), shells)
+    assert c.status == "FAIL"
+    assert c.measured["item_ok"] is False
+    assert c.measured["item_transform"][0][0] == pytest.approx(1.0001)
+
+
+def _with_entries(data: bytes, entries) -> bytes:
+    """data's zip with (name, bytes) entries put before its own, metadata as the writer's."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        own = [(i.filename, z.read(i)) for i in z.infolist()]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, part in [*entries, *own]:
+            z.writestr(zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0)), part)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("alias", ["3D/3DMODEL.MODEL", "/3D/3dmodel.model", "3D/extra.xml"])
+def test_an_extra_or_aliased_package_part_fails(alias):
+    # Codex review 4, finding 2: a case or leading-slash alias of the model part, holding
+    # other geometry, is ignored by lib3mf but loaded by trimesh. Only the writer's three
+    # parts are allowed.
+    shells = gated_shells("box")
+    data = write_multishell_3mf(shells)
+    root = model_of(data)
+    _vertex_moved(root)
+    bad = _with_entries(data, [(alias, etree.tostring(root, xml_declaration=True,
+                                                       encoding="UTF-8"))])
+    c = export_3mf_check(bad, shells)
+    assert c.status == "FAIL"
+    assert alias in c.measured["package_parts"]
+    assert c.threshold["package_parts"] == ["[Content_Types].xml", "_rels/.rels",
+                                            MODEL_PART]
+
+
+def test_the_package_parts_are_measured_on_a_pass():
+    shells = gated_shells("box")
+    c = export_3mf_check(write_multishell_3mf(shells), shells)
+    assert c.status == "PASS"
+    assert c.measured["package_parts"] == c.threshold["package_parts"]
+    assert c.measured["item_transform"] == [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]]
+
+
 def test_a_missing_shell_fails():
     shells = gated_shells("box")
     c = export_3mf_check(write_multishell_3mf(shells[:-1]), shells)

@@ -64,6 +64,7 @@ NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
 REL_3D = "http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"
 NS_XML = "http://www.w3.org/XML/1998/namespace"
 MODEL_PART = "3D/3dmodel.model"
+PART_NAMES = ("[Content_Types].xml", "_rels/.rels", MODEL_PART)   # the zip entries, in order
 UNIT = "millimeter"
 OBJECT_NAME = "model"          # the single object's name, as in the import-tested file D
 COLOR_GROUP_ID = 1             # resource ids: the colorgroup, then the object
@@ -236,8 +237,7 @@ def package(model: bytes) -> bytes:
     """The 3MF zip of one model part, with fixed entry order, dates, modes and method."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        for name, data in (("[Content_Types].xml", CONTENT_TYPES), ("_rels/.rels", RELS),
-                           (MODEL_PART, model)):
+        for name, data in zip(PART_NAMES, (CONTENT_TYPES, RELS, model), strict=True):
             info = zipfile.ZipInfo(name, ZIP_DATE)
             info.compress_type = ZIP_COMPRESSION
             info.create_system = ZIP_UNIX

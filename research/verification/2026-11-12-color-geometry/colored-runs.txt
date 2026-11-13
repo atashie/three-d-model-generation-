@@ -1,4 +1,4 @@
-Run 2026-11-12 on the Windows PC at c937c19 (colorflat-3: model.3mf and palette.json added; runs re-made with that code): uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
+Run 2026-11-13 on the Windows PC after the Codex review 4 fixes (colorflat-3; the 3MF check also reads the zip's part names and the exact build transform; model.3mf, STL and PNG bytes unchanged; earlier run 2026-11-12 at c937c19 gave the same lines below): uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
 
 == roadie-tol30-60-drop-v3-f64
   colorflat_id ec79a684fddc7733f2d7065d9db3155a2d8b5aeacd2d46d863637abcb5e4616f; verdict NOT CERTIFIED

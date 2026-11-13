@@ -288,6 +288,10 @@ printed.
 - **Volumes:** the `palette.json` volumes sum to 2277.741 mm³ (Roadie) and 5033.649 mm³
   (Oddie). PrusaSlicer's `--info` volumes are 0.03 to 1.23 mm³ below those. The cause
   was not investigated.
+  - **Correction (2026-11-13, Codex review 4):** not all are below. Roadie keep's 2277.991
+    mm³ is 0.250 mm³ *above* the palette sum. The differences, PrusaSlicer minus palette,
+    are −0.025 (Roadie drop), +0.250 (Roadie keep), −0.237 (Oddie merge blues) and
+    −1.233 mm³ (Oddie keep, merge blues and greens). The cause is still not investigated.
 - **Parts:** PrusaSlicer splits the one object into connected shells, so its part count is
   the number of connected pieces, not the number of colors.
 - **OrcaSlicer** logs "found 3mf from other vendor, split as instance" and arranges the one

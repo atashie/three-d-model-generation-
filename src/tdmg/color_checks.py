@@ -19,6 +19,7 @@ gated AMS meshes; make_colored_flat adds it to the AMS assembly checks.
 from __future__ import annotations
 
 import io
+import zipfile
 from itertools import pairwise
 
 import lib3mf
@@ -43,7 +44,15 @@ from tdmg.color_geometry import (
 from tdmg.color_glue import Glue
 from tdmg.flat import build_volume_check, encode_stl, export_match, triangle_check
 from tdmg.profiles import PrinterProfile
-from tdmg.threemf import OBJECT_NAME, UNIT, Shell, check_shells, color_3mf, shell_ranges
+from tdmg.threemf import (
+    OBJECT_NAME,
+    PART_NAMES,
+    UNIT,
+    Shell,
+    check_shells,
+    color_3mf,
+    shell_ranges,
+)
 
 
 class ColorCheckError(ValueError):
@@ -413,6 +422,9 @@ def _bad_directed_edges(faces: np.ndarray) -> int:
     return int(np.count_nonzero(~ok)) + repeated
 
 
+IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]
+
+
 def _read_3mf(data: bytes) -> dict:
     """The facts export_3mf_check compares, read by lib3mf (strict mode) from the bytes."""
     wrapper = lib3mf.get_wrapper()
@@ -436,9 +448,12 @@ def _read_3mf(data: bytes) -> dict:
     bi = model.GetBuildItems()
     while bi.MoveNext():
         item = bi.GetCurrent()
-        items.append({"object_id": item.GetObjectResourceID(),
-                      "transform": item.HasObjectTransform()})
+        fields = [list(row) for row in item.GetObjectTransform().Fields]
+        items.append({"object_id": item.GetObjectResourceID(), "fields": fields,
+                      "transform": item.HasObjectTransform() or fields != IDENTITY})
     facts["build_items"] = len(items)
+    if len(items) == 1:
+        facts["item_transform"] = items[0]["fields"]
     groups = {}
     cg = model.GetColorGroups()
     while cg.MoveNext():
@@ -477,9 +492,14 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
     bytes parsed back and merged exactly), base first, then inlays by index. data is
     read back by lib3mf 2.x in strict mode, an independent reader (from the bytes; no
     file). PASS iff:
+    - the zip's entry names are exactly tdmg.threemf.PART_NAMES, in order (read with
+      zipfile, not lib3mf: lib3mf ignores a case or leading-slash alias of the model part
+      that another reader, such as trimesh, may load instead; Codex review 4);
     - no reader warnings; unit millimeter; exactly one object, a mesh of type model named
       tdmg.threemf.OBJECT_NAME; exactly one build item, on that object, with no
-      transform; one color group;
+      transform: HasObjectTransform false and the matrix exactly the identity
+      (HasObjectTransform alone calls a matrix within lib3mf's tolerance of identity,
+      such as a 1.0001 scale, no transform; Codex review 4); one color group;
     - the object's vertices and triangles split into the shells in order
       (tdmg.threemf.shell_ranges): shell i's vertices equal its gated mesh's vertices
       exactly, compared as float32 arrays in the same order (both sides are float32
@@ -512,16 +532,22 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
             "shell by index; colors per triangle. The shells touch along shared walls: a "
             "self-intersection warning in the 3MF core (rule "
             "format.3mf.self_intersection_is_warning)")
+    expected["package_parts"] = list(PART_NAMES)
     try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            parts = [i.filename for i in z.infolist()]
         facts = _read_3mf(data)
-    except (lib3mf.ELib3MFException, ValueError) as exc:   # not a readable 3MF
+    except (lib3mf.ELib3MFException, ValueError, zipfile.BadZipFile) as exc:   # unreadable
         return CheckResult("F2.export_3mf_matches_bodies", "FAIL",
                            {"read_error": str(exc)}, expected, None, note)
     v, f, colors = facts.pop("_v", None), facts.pop("_f", None), facts.pop("_colors", None)
     measured = {k: facts.get(k) for k in (
         "reader_warnings", "unit", "objects", "mesh_objects", "build_items", "item_ok",
-        "color_groups", "object_name", "object_type", "manifold_and_oriented")}
-    ok = (not facts["reader_warnings"] and facts["unit"].lower() == UNIT
+        "item_transform", "color_groups", "object_name", "object_type",
+        "manifold_and_oriented")}
+    measured["package_parts"] = parts
+    ok = (parts == list(PART_NAMES) and not facts["reader_warnings"]
+          and facts["unit"].lower() == UNIT
           and facts["objects"] == 1 and facts["mesh_objects"] == 1
           and facts.get("item_ok") is True and facts["build_items"] == 1
           and facts["color_groups"] == 1 and facts.get("object_name") == OBJECT_NAME
