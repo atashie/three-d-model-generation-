@@ -322,8 +322,8 @@ The full list is in `docs/PLAN.md` section 13.
 ## Compaction handoff
 
 - **Latest session (2026-11-13): R2 step 3 (multicolor 3MF) finished.**
-  - **Commits:** `ddd37c6..HEAD`. Push and CI: see the next bullet.
-  - **CI:** pending at the time of writing; the result is reported to the owner.
+  - **Commits:** `ddd37c6..HEAD`, pushed.
+  - **CI:** passed on macOS 15, Ubuntu and Windows for `2c47a90` (run 43431465068, verified 2026-11-13).
   - **Owner answers:** the plan was approved; the hand-made files in Bambu Studio ("A and
     D had all colors in place", encoding D chosen); the real `model.3mf`: "1) yes. 2) yes.
     3) yes".
