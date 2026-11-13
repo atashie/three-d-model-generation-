@@ -1,0 +1,16 @@
+keys: old 109, new 108
+only in old: ['include']
+only in new: []
+changed: ['change_filament_gcode', 'machine_end_gcode', 'machine_start_gcode', 'time_lapse_gcode']
+machine_start_gcode: template 12310 chars; old flat 577; new flat 12310; new == template: True; template == old: False; template == default: False; template keys: ['instantiation', 'machine_start_gcode', 'name', 'type']
+machine_end_gcode: template 2902 chars; old flat 1358; new flat 2902; new == template: True; template == old: False; template == default: False; template keys: ['instantiation', 'machine_end_gcode', 'name', 'type']
+time_lapse_gcode: template 1388 chars; old flat 429; new flat 1388; new == template: True; template == old: False; template == default: False; template keys: ['instantiation', 'name', 'time_lapse_gcode', 'type']
+change_filament_gcode: template 6156 chars; old flat 4030; new flat 6156; new == template: True; template == old: False; template == default: False; template keys: ['change_filament_gcode', 'instantiation', 'name', 'type']
+layer_change_gcode: template 149 chars; old flat 149; new flat 149; new == template: True; template == old: True; template == default: False; template keys: ['instantiation', 'layer_change_gcode', 'name', 'type']
+new machine_start_gcode, first 5 lines:
+  ;===== machine: A1 =========================
+  ;===== date: 20260513 ==================
+  G392 S0
+  M9833.2
+  ;M400
+M620 lines in new start: 5

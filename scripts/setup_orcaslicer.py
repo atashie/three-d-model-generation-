@@ -3,6 +3,7 @@
     uv run python scripts/setup_orcaslicer.py --dest artifacts/tools/orcaslicer-2.5.0
     uv run python scripts/setup_orcaslicer.py --dest DIR --zip PATH   # an already downloaded zip
     uv run python scripts/setup_orcaslicer.py --verify-only DIR       # check hashes only
+    uv run python scripts/setup_orcaslicer.py --profiles-only DIR     # re-flatten the profiles
 
 Everything is checked against profiles/slicers/orcaslicer-2.5.0.yaml:
 1. download the release asset to DIR/download/ (or take --zip) and check its SHA-256;
@@ -13,10 +14,15 @@ Everything is checked against profiles/slicers/orcaslicer-2.5.0.yaml:
    files and source-manifest.json against the pinned hashes before writing
    DIR/profiles-flat/.
 --verify-only checks the same hashes, including the whole app tree, without downloading.
+--profiles-only checks the installed app (whole tree), flattens the profiles again (step 3)
+and swaps them in; the old DIR/profiles-flat/ is kept as DIR/profiles-flat.previous/.
 
 The merge is the one in research/verification/2026-11-10-orcaslicer-windows/
-flatten_profiles.py, which produced the pinned hashes: each chain parent first, child keys
-override, the pin's drop_keys removed, "name" set to the leaf preset and "from" to "User".
+flatten_profiles.py (each chain parent first, child keys override, the pin's drop_keys
+removed, "name" set to the leaf preset and "from" to "User"), plus, since 2026-11-13, the
+templates a preset's include key names, layered between its parent and its own keys as
+OrcaSlicer v2.5.0 does. research/verification/2026-11-13-a1-profile-include/
+flatten_with_include.py produced the pinned hashes.
 That script wrote its files with Path.write_text on Windows, so they have CRLF line ends;
 this one writes the same bytes explicitly.
 
@@ -44,7 +50,7 @@ from _slicer_setup import SetupError
 from _slicer_setup import check_hash as _check
 from _slicer_setup import require_empty as _require_empty
 
-from tdmg.slicer import SlicerError, SlicerPin, load_pin, verify_install
+from tdmg.slicer import SlicerError, SlicerPin, load_pin, verify_app, verify_install, verify_tree
 
 USER_AGENT = "tdmg-setup-orcaslicer"
 MAX_CHAIN = 20        # inherits links followed before refusing (guards against a cycle)
@@ -75,35 +81,79 @@ def _json_bytes(obj) -> bytes:
     return json.dumps(obj, indent=1, sort_keys=True).replace("\n", "\r\n").encode("ascii")
 
 
+# Keys of a template preset that OrcaSlicer reads as attributes, not as settings
+# (ConfigBase::load_from_json); none is layered into the includer.
+TEMPLATE_ATTRIBUTES = ("type", "name", "instantiation")
+# Attributes a template may not have: OrcaSlicer would follow its inherits or include, and
+# the others are not expected in a template. This flattener refuses rather than guess.
+TEMPLATE_REFUSED = ("inherits", "include", "from", "setting_id", "filament_id", "description",
+                    "version", "url", "renamed_from", "is_custom_defined")
+
+
+def _include_names(cfg: dict, where: str) -> list[str]:
+    """The preset names in cfg's include key: an array of names, or one bare name."""
+    names = cfg.get("include", [])
+    if isinstance(names, str):
+        names = [names]
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise SetupError(f"{where}: include must be a name or a list of names")
+    return names
+
+
 def flatten(pin: SlicerPin) -> dict[str, bytes]:
-    """The flattened profiles and source-manifest.json, as bytes, every hash checked."""
+    """The flattened profiles and source-manifest.json, as bytes, every hash checked.
+
+    Each preset resolves as OrcaSlicer v2.5.0 resolves a vendor preset
+    (PresetBundle::resolve_vendor_preset): its parent's resolved keys, then the own keys of
+    each preset its include key names, in the order listed, then its own keys. The
+    included templates must be pinned like the chain files.
+    """
     prof = pin.profiles
     base = prof.source_base + prof.vendor
     index = json.loads(fetch(base + ".json"))
-    names = {}
+    names: dict[str, dict[str, str]] = {}
     for kind in ("machine_list", "process_list", "filament_list", "machine_model_list"):
-        for entry in index.get(kind, []):
-            names[entry["name"]] = entry["sub_path"]
+        names[kind] = {entry["name"]: entry["sub_path"] for entry in index.get(kind, [])}
+    every = {n: sub for listed in names.values() for n, sub in listed.items()}
     seen: dict[str, str] = {}
+
+    def get(sub: str) -> dict:
+        if sub not in prof.upstream_sha256:
+            raise SetupError(f"upstream file {sub} is not in the pin's manifest")
+        raw = fetch(base + "/" + urllib.parse.quote(sub))
+        digest = hashlib.sha256(raw).hexdigest()
+        _check(f"upstream file {sub}", digest, prof.upstream_sha256[sub])
+        seen[sub] = digest
+        return json.loads(raw)
 
     def chain(name: str) -> list[dict]:
         configs = []
         while name:
             if len(configs) >= MAX_CHAIN:
                 raise SetupError(f"preset chain longer than {MAX_CHAIN} at {name!r}")
-            if name not in names:
+            if name not in every:
                 raise SetupError(f"preset {name!r} is not in the {prof.vendor} index")
-            sub = names[name]
-            if sub not in prof.upstream_sha256:
-                raise SetupError(f"upstream file {sub} is not in the pin's manifest")
-            raw = fetch(base + "/" + urllib.parse.quote(sub))
-            digest = hashlib.sha256(raw).hexdigest()
-            _check(f"upstream file {sub}", digest, prof.upstream_sha256[sub])
-            seen[sub] = digest
-            cfg = json.loads(raw)
+            cfg = get(every[name])
             configs.insert(0, cfg)
             name = cfg.get("inherits")
         return configs
+
+    def template(name: str, kind: str) -> dict:
+        """A template's settings; OrcaSlicer finds it among the same kind's presets."""
+        listed = names[kind + "_list"]
+        if name not in listed:
+            raise SetupError(f"included preset {name!r} is not in the {prof.vendor} "
+                             f"{kind}_list")
+        sub = listed[name]
+        cfg = get(sub)
+        bad = sorted(k for k in cfg if k in TEMPLATE_REFUSED)
+        if bad:
+            raise SetupError(f"included template {sub} has {bad}, which this flattener does "
+                             "not resolve")
+        if cfg.get("name") != name:
+            raise SetupError(f"included template {sub} is named {cfg.get('name')!r}, "
+                             f"not {name!r}")
+        return {k: v for k, v in cfg.items() if k not in TEMPLATE_ATTRIBUTES}
 
     out = {}
     for kind in ("machine", "process", "filament"):
@@ -112,8 +162,13 @@ def flatten(pin: SlicerPin) -> dict[str, bytes]:
         got = [c["name"] for c in configs]
         if got != p.chain:
             raise SetupError(f"{kind} chain {got} differs from the pin's {p.chain}")
+        included = [n for cfg in configs for n in _include_names(cfg, cfg["name"])]
+        if included != p.includes:
+            raise SetupError(f"{kind} includes {included} differ from the pin's {p.includes}")
         merged: dict = {}
         for cfg in configs:
+            for name in _include_names(cfg, cfg["name"]):
+                merged.update(template(name, kind))
             merged.update(cfg)
         for key in prof.drop_keys:
             merged.pop(key, None)
@@ -124,7 +179,8 @@ def flatten(pin: SlicerPin) -> dict[str, bytes]:
         out[p.file] = data
     unused = sorted(set(prof.upstream_sha256) - set(seen))
     if unused:
-        raise SetupError(f"pinned upstream files were not part of any chain: {unused}")
+        raise SetupError(f"pinned upstream files were not part of any chain or include: "
+                         f"{unused}")
     manifest = _json_bytes({"tag": pin.tag, "files_sha256": seen})
     _check("source-manifest.json", hashlib.sha256(manifest).hexdigest(), prof.manifest_sha256)
     out["source-manifest.json"] = manifest
@@ -146,6 +202,33 @@ def write_profiles(dest: Path, pin: SlicerPin, files: dict[str, bytes]) -> None:
         raise
 
 
+PREVIOUS_SUFFIX = ".previous"
+
+
+def replace_profiles(dest: Path) -> dict:
+    """Re-flatten the profiles of an installed, verified app; keep the old folder."""
+    check_platform()
+    pin = load_pin()
+    verify_app(dest, pin)               # the exe and libraries,
+    verify_tree(dest, pin)              # and every file of the app tree
+    profiles = flatten(pin)
+    folder = dest / pin.profiles.folder
+    kept = folder.with_name(folder.name + PREVIOUS_SUFFIX)
+    if kept.exists():
+        raise SetupError(f"{kept} exists; move or delete it first")
+    tmp = Path(tempfile.mkdtemp(dir=dest, prefix=".profiles-"))
+    try:
+        for name, data in profiles.items():
+            (tmp / name).write_bytes(data)
+        if folder.exists():
+            os.replace(folder, kept)
+        os.replace(tmp, folder)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return verify_install(dest, pin, full_tree=True)
+
+
 def setup(dest: Path, zip_path: Path | None = None) -> dict:
     check_platform()
     pin = load_pin()
@@ -164,11 +247,16 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--dest", type=Path, help="folder to install into")
     mode.add_argument("--verify-only", type=Path, metavar="DIR",
                       help="check an existing install's hashes; download nothing")
+    mode.add_argument("--profiles-only", type=Path, metavar="DIR",
+                      help="flatten the profiles again for a verified install; keep the "
+                           "old ones as profiles-flat.previous")
     parser.add_argument("--zip", type=Path, help="use this downloaded release zip")
     args = parser.parse_args(argv)
     try:
         if args.verify_only is not None:
             found = verify_install(args.verify_only, load_pin(), full_tree=True)
+        elif args.profiles_only is not None:
+            found = replace_profiles(args.profiles_only)
         else:
             found = setup(args.dest, args.zip)
     except (SetupError, SlicerError) as err:

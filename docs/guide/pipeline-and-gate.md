@@ -115,9 +115,12 @@ the float64 blur of flat-3; `research/verification/2026-11-11-prusaslicer-window
 ### What PRINTABLE means for you
 
 PRINTABLE means: every check this project requires passed, for this exact file, with
-these exact slicer versions and the A1 profile. Print `plate_1.gcode` on the A1, or open
-`model.stl` in Bambu Studio and slice it there. It is a strong "nothing we know how to
-measure is wrong", not a promise:
+these exact slicer versions and the A1 profile. To print, open `model.stl` in Bambu Studio
+and slice it there; `tdmg slice` says so. `plate_1.gcode` is for checking only: no G-code
+from `tdmg` has been printed, and until 2026-11-13 the pinned A1 profile lacked the A1's
+own start, end and filament-change G-code
+(`research/verification/2026-11-13-a1-profile-include/`). PRINTABLE is a strong "nothing
+we know how to measure is wrong", not a promise:
 
 - **Size accuracy is not proven.** The 0.2 mm tolerance in `acceptance.dimension.tolerance`
   is a hypothesis until a print is measured with calipers.
@@ -133,7 +136,9 @@ counted as exit 2.
 
 Setup is explicit and Windows x64 only: `uv run python scripts/setup_orcaslicer.py
 --dest artifacts/tools/orcaslicer-2.5.0` downloads and hash-checks the pinned release
-and flattens the A1 profiles (`--verify-only DIR` rechecks an install). Then pass
+and flattens the A1 profiles, resolving each preset's `inherits` and `include` as
+OrcaSlicer 2.5.0 does (`--verify-only DIR` rechecks an install; `--profiles-only DIR`
+flattens the profiles again for a verified install). Then pass
 `--slicer-dir DIR` or set `TDMG_ORCASLICER_DIR`. Every run re-hashes the whole app
 folder unless `--skip-tree-check` is given, which is recorded. `--timeout-s` overrides
 `slicer.orca.timeout_s`.

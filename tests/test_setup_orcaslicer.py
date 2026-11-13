@@ -210,7 +210,7 @@ def _flat_pin(raw, expected, **override):
     chains = {"machine": ["base_m", "M"], "process": ["base_p", "P"],
               "filament": ["base_f", "F"]}
     flat = {k: p.model_copy(update={"preset": chains[k][-1], "chain": chains[k],
-                                    "sha256": _sha(expected[p.file])})
+                                    "includes": [], "sha256": _sha(expected[p.file])})
             for k, p in PIN.profiles.flat.items()}
     upstream = {path: _sha(data) for path, data in raw.items()}
     upstream.update(override.get("upstream", {}))
@@ -242,8 +242,9 @@ def test_flatten_refuses_a_manifest_that_differs_from_the_pin(monkeypatch):
 
 def test_json_bytes_reproduce_the_research_manifest():
     # Parsed, so the checkout's line ends do not matter; the bytes the research script
-    # wrote (CRLF) are pinned by hash (README addendum, item 5).
-    record = REPO_ROOT / "research" / "verification" / "2026-11-10-orcaslicer-windows"
+    # wrote (CRLF) are pinned by hash (2026-11-10 README addendum, item 5; the 2026-11-13
+    # record's manifest adds the A1 templates).
+    record = REPO_ROOT / "research" / "verification" / "2026-11-13-a1-profile-include"
     manifest = json.loads((record / "source-manifest.json").read_text(encoding="utf-8"))
     assert _sha(setup._json_bytes(manifest)) == PIN.profiles.manifest_sha256
     assert manifest["files_sha256"] == PIN.profiles.upstream_sha256
@@ -296,6 +297,144 @@ def test_flatten_refuses_a_different_chain(monkeypatch):
         setup.flatten(pin)
 
 
+# --- include: template presets layered between the parent and the preset ----------------
+# OrcaSlicer v2.5.0, PresetBundle::resolve_vendor_preset: the parent's resolved config,
+# then each included preset's own keys in the order listed, then the preset's own keys
+# (research/verification/2026-11-13-a1-profile-include/README.md).
+
+T1 = "M template g"
+T2 = "M template h"
+
+
+def _upstream_with_include():
+    """_upstream, with the machine chain including two templates (M) and one (base_m)."""
+    raw, index, _ = _upstream()
+    files = {
+        "machine/base_m.json": {"name": "base_m", "a": "1", "b": "1", "g": "base",
+                                "from": "system", "instantiation": "false",
+                                "include": "TB"},          # one bare name is allowed
+        "machine/M.json": {"name": "M", "inherits": "base_m", "b": "2", "setting_id": "X",
+                           "description": "d", "include": [T1, T2]},
+        "machine/TB.json": {"type": "machine", "name": "TB", "instantiation": "false",
+                            "a": "tb", "b": "tb"},
+        "machine/T1.json": {"type": "machine", "name": T1, "instantiation": "false",
+                            "g": "t1", "h": "t1"},
+        "machine/T2.json": {"type": "machine", "name": T2, "instantiation": "false",
+                            "h": "t2", "b": "t2"},
+    }
+    raw.update({path: json.dumps(cfg).encode() for path, cfg in files.items()})
+    index["machine_list"] += [{"name": "TB", "sub_path": "machine/TB.json"},
+                              {"name": T1, "sub_path": "machine/T1.json"},
+                              {"name": T2, "sub_path": "machine/T2.json"}]
+    # Written by hand: base_m's include goes under base_m's own keys (a and b stay 1);
+    # M's includes go over base_m in order (g from T1, h from T2), under M's own b.
+    # The templates' type, name and instantiation are not config keys; include is dropped.
+    expected = _upstream()[2]
+    expected["machine.json"] = _crlf_json(
+        {"name": "M", "a": "1", "b": "2", "g": "t1", "h": "t2", "from": "User"})
+    return raw, index, expected
+
+
+INCLUDES = ["TB", T1, T2]
+
+
+def _include_pin(raw, expected, includes=INCLUDES, **override):
+    pin = _flat_pin(raw, expected, **override)
+    flat = dict(pin.profiles.flat)
+    flat["machine"] = flat["machine"].model_copy(update={"includes": includes})
+    return _pin_with(flat=flat, upstream=pin.profiles.upstream_sha256,
+                     manifest=pin.profiles.manifest_sha256)
+
+
+def test_pin_includes_default_to_none_for_process_and_filament():
+    assert PIN.profiles.flat["process"].includes == []
+    assert PIN.profiles.flat["filament"].includes == []
+    assert "include" in PIN.profiles.drop_keys
+
+
+def test_flatten_layers_includes_between_parent_and_preset(monkeypatch):
+    raw, index, expected = _upstream_with_include()
+    served = []
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, served))
+    out = setup.flatten(_include_pin(raw, expected))
+    assert {k: out[k] for k in expected} == expected
+    manifest = json.loads(out["source-manifest.json"])
+    assert manifest["files_sha256"] == {p: _sha(d) for p, d in raw.items()}
+    assert "include" not in json.loads(out["machine.json"])
+
+
+def test_flatten_without_include_is_unchanged_by_the_include_support(monkeypatch):
+    raw, index, expected = _upstream()
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    out = setup.flatten(_flat_pin(raw, expected))
+    assert {k: out[k] for k in expected} == expected
+
+
+def test_flatten_refuses_a_template_missing_from_the_pin(monkeypatch):
+    raw, index, expected = _upstream_with_include()
+    pin = _include_pin(raw, expected)
+    upstream = dict(pin.profiles.upstream_sha256)
+    del upstream["machine/T2.json"]
+    pin = _pin_with(flat=pin.profiles.flat, upstream=upstream)
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    with pytest.raises(setup.SetupError, match="machine/T2.json.*not in the pin"):
+        setup.flatten(pin)
+
+
+def test_flatten_refuses_a_changed_template(monkeypatch):
+    raw, index, expected = _upstream_with_include()
+    pin = _include_pin(raw, expected)
+    raw["machine/T1.json"] = json.dumps({"type": "machine", "name": T1, "g": "x"}).encode()
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    with pytest.raises(setup.SetupError, match="machine/T1.json.*does not match the pin"):
+        setup.flatten(pin)
+
+
+def test_flatten_refuses_includes_that_differ_from_the_pin(monkeypatch):
+    raw, index, expected = _upstream_with_include()
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    for wrong in ([], ["TB", T2, T1], ["TB", T1]):
+        with pytest.raises(setup.SetupError, match="includes"):
+            setup.flatten(_include_pin(raw, expected, includes=wrong))
+
+
+def test_flatten_refuses_a_pinned_template_nothing_includes(monkeypatch):
+    raw, index, expected = _upstream()
+    t1 = _upstream_with_include()[0]["machine/T1.json"]
+    index["machine_list"].append({"name": T1, "sub_path": "machine/T1.json"})
+    pin = _flat_pin(raw, expected, upstream={"machine/T1.json": _sha(t1)})
+    raw["machine/T1.json"] = t1
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    with pytest.raises(setup.SetupError, match="machine/T1.json"):
+        setup.flatten(pin)
+
+
+def test_flatten_refuses_an_include_not_in_the_kinds_index(monkeypatch):
+    raw, index, expected = _upstream_with_include()
+    # OrcaSlicer looks an include up among the presets of the same collection only.
+    entry = next(e for e in index["machine_list"] if e["name"] == T2)
+    index["machine_list"].remove(entry)
+    index["process_list"].append(entry)
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    with pytest.raises(setup.SetupError, match="not in the BBL machine_list"):
+        setup.flatten(_include_pin(raw, expected))
+
+
+@pytest.mark.parametrize("extra", [{"inherits": "base_m"}, {"include": ["TB"]},
+                                   {"name": "another name"}, {"setting_id": "S"}])
+def test_flatten_refuses_a_template_it_cannot_resolve_like_orcaslicer(monkeypatch, extra):
+    # A template's own inherits or include would be followed by OrcaSlicer; this
+    # flattener does not model that, so it refuses rather than merge something else.
+    raw, index, expected = _upstream_with_include()
+    cfg = json.loads(raw["machine/T1.json"])
+    cfg.update(extra)
+    raw["machine/T1.json"] = json.dumps(cfg).encode()
+    pin = _include_pin(raw, expected)
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    with pytest.raises(setup.SetupError, match="template"):
+        setup.flatten(pin)
+
+
 def test_write_profiles_refuses_a_non_empty_folder(tmp_path):
     (tmp_path / "profiles-flat").mkdir()
     (tmp_path / "profiles-flat" / "old.json").write_bytes(b"{}")
@@ -330,6 +469,67 @@ def test_setup_end_to_end_with_fake_downloads(tmp_path, monkeypatch, capsys):
     (dest / "app" / "resources" / "added.txt").write_bytes(b"+")
     assert setup.main(["--verify-only", str(dest)]) == 2
     assert "app tree" in capsys.readouterr().err
+
+
+def test_profiles_only_replaces_the_flat_profiles_and_keeps_the_old_ones(tmp_path,
+                                                                          monkeypatch):
+    raw, index, expected = _upstream()
+    archive = _zip(MEMBERS)
+    flat_pin = _flat_pin(raw, expected)
+    pin = _pin_with(release_sha=_sha(archive), app=MEMBERS, flat=flat_pin.profiles.flat,
+                    upstream=flat_pin.profiles.upstream_sha256,
+                    manifest=flat_pin.profiles.manifest_sha256)
+    calls = []
+    monkeypatch.setattr(setup, "check_platform", lambda: None)
+    monkeypatch.setattr(setup, "load_pin", lambda: pin)
+    monkeypatch.setattr(setup, "download", _fake_download(archive, calls))
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    dest = tmp_path / "orca"
+    dest.mkdir()
+    setup.install_app(dest, pin)
+    old = dest / "profiles-flat"
+    old.mkdir()
+    (old / "machine.json").write_bytes(b"old profile")
+    calls.clear()
+    assert setup.main(["--profiles-only", str(dest)]) == 0
+    assert calls == []                                   # no app download
+    assert {p.name: p.read_bytes() for p in old.iterdir()
+            if p.name != "source-manifest.json"} == expected
+    assert (dest / "profiles-flat.previous" / "machine.json").read_bytes() == b"old profile"
+    assert setup.main(["--verify-only", str(dest)]) == 0
+    # A second run would overwrite the kept copy, so it is refused until it is moved.
+    assert setup.main(["--profiles-only", str(dest)]) == 2
+
+
+def test_profiles_only_refuses_without_a_verified_app_and_writes_nothing(tmp_path,
+                                                                         monkeypatch, capsys):
+    raw, index, expected = _upstream()
+    monkeypatch.setattr(setup, "check_platform", lambda: None)
+    monkeypatch.setattr(setup, "load_pin", lambda: _flat_pin(raw, expected))
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "orca-slicer.exe").write_bytes(b"not the pinned exe")
+    assert setup.main(["--profiles-only", str(tmp_path)]) == 2
+    assert "does not match the pin" in capsys.readouterr().err
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["app"]
+
+
+def test_profiles_only_writes_nothing_when_flattening_fails(tmp_path, monkeypatch):
+    raw, index, expected = _upstream()
+    archive = _zip(MEMBERS)
+    pin = _pin_with(release_sha=_sha(archive), app=MEMBERS,
+                    flat=_flat_pin(raw, expected, flat={"process": _sha(b"x")}).profiles.flat,
+                    upstream=_flat_pin(raw, expected).profiles.upstream_sha256)
+    monkeypatch.setattr(setup, "check_platform", lambda: None)
+    monkeypatch.setattr(setup, "load_pin", lambda: pin)
+    monkeypatch.setattr(setup, "download", _fake_download(archive, []))
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    setup.install_app(tmp_path, pin)
+    (tmp_path / "profiles-flat").mkdir()
+    (tmp_path / "profiles-flat" / "machine.json").write_bytes(b"old")
+    assert setup.main(["--profiles-only", str(tmp_path)]) == 2
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["app", "download", "profiles-flat"]
+    assert (tmp_path / "profiles-flat" / "machine.json").read_bytes() == b"old"
 
 
 # --- Platform and command line --------------------------------------------------------

@@ -1,5 +1,6 @@
 """The OrcaSlicer pin and wrapper (docs/plans/2026-11-10-slicer-check.md)."""
 
+import ast
 import hashlib
 import json
 import subprocess
@@ -32,13 +33,16 @@ from tdmg.slicer import (
 )
 
 RECORD = REPO_ROOT / "research" / "verification" / "2026-11-10-orcaslicer-windows"
+# The profile hashes since the include fix (2026-11-13); the install and app hashes, and
+# the chains, are still the 2026-11-10 record's.
+PROFILE_RECORD = REPO_ROOT / "research" / "verification" / "2026-11-13-a1-profile-include"
 PIN = load_pin()
 
 
-def _hash_lines(name: str) -> dict[str, str]:
+def _hash_lines(name: str, record=RECORD) -> dict[str, str]:
     """`<sha256> *<path>` lines (sha256sum's binary-mode output) as {path: sha256}."""
     out = {}
-    for line in (RECORD / name).read_text(encoding="utf-8").splitlines():
+    for line in (record / name).read_text(encoding="utf-8").splitlines():
         if line.strip():
             digest, path = line.split(" *", 1)
             out[path] = digest
@@ -56,11 +60,38 @@ def test_pin_hashes_equal_the_research_record():
     install = _hash_lines("install-hashes.txt")
     assert PIN.release.sha256 == install["download/" + PIN.release.asset]
     assert PIN.exe.sha256 == install[PIN.exe.path]
-    flattened = _hash_lines("flattened-hashes.txt")
+    flattened = _hash_lines("flattened-hashes.txt", PROFILE_RECORD)
     assert {p.file: p.sha256 for p in PIN.profiles.flat.values()} == flattened
-    manifest = json.loads((RECORD / "source-manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((PROFILE_RECORD / "source-manifest.json").read_text(encoding="utf-8"))
     assert manifest["tag"] == PIN.tag
     assert PIN.profiles.upstream_sha256 == manifest["files_sha256"]
+    # The 2026-11-10 record is kept as it was: only the machine profile and the manifest
+    # changed, and the new manifest adds the five A1 templates to the old one's files.
+    old_flat = _hash_lines("flattened-hashes.txt")
+    assert {f: h for f, h in flattened.items() if f != "machine.json"} == {
+        f: h for f, h in old_flat.items() if f != "machine.json"}
+    assert flattened["machine.json"] != old_flat["machine.json"]
+    old_manifest = json.loads((RECORD / "source-manifest.json").read_text(encoding="utf-8"))
+    added = set(manifest["files_sha256"]) - set(old_manifest["files_sha256"])
+    assert {k: v for k, v in manifest["files_sha256"].items() if k not in added} == (
+        old_manifest["files_sha256"])
+    assert sorted(added) == sorted(
+        f"machine/{name}.json" for name in PIN.profiles.flat["machine"].includes)
+
+
+def test_pin_includes_equal_the_research_record():
+    # flatten-output.txt: "<leaf> chain: ... keys N", then "  includes: [...]" (a Python list).
+    lines = (PROFILE_RECORD / "flatten-output.txt").read_text(encoding="utf-8").splitlines()
+    found = {}
+    for i, line in enumerate(lines):
+        if " chain: " in line:
+            found[line.split(" chain: ")[0]] = ast.literal_eval(
+                lines[i + 1].removeprefix("  includes: "))
+    assert {p.preset: p.includes for p in PIN.profiles.flat.values()} == found
+    assert found["Bambu Lab A1 0.4 nozzle"] == [
+        f"Bambu Lab A1 0.4 nozzle template {key}" for key in (
+            "machine_start_gcode", "machine_end_gcode", "time_lapse_gcode",
+            "change_filament_gcode", "layer_change_gcode")]
 
 
 def test_pin_app_tree_and_library_equal_the_research_record():

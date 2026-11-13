@@ -1,0 +1,38 @@
+Short quotes from OrcaSlicer at tag v2.5.0 (AGPL-3.0), kept as evidence only. Fetched
+2026-11-13 from https://raw.githubusercontent.com/OrcaSlicer/OrcaSlicer/v2.5.0/<path>.
+Each line is "<file>:<line>: <text>", the text verbatim.
+
+sha256 of the fetched files:
+70e0c6667ccee0d6f43714710de06bf97ea1175b98b42894f71ba8d58e8b76ee  src/libslic3r/PresetBundle.cpp
+5c98b46619d21055c41196268fc094a5b4a2e059c888689860355658b0569426  src/libslic3r/Preset.cpp
+e200e8fb12e5ea70e458f9742ff0ba564ca8882af8c0d3616415ae0258547d91  src/libslic3r/PresetBundle.hpp
+bcaca98e54b5e41db01e3cdd9330837575db391cd8d0246ef3c3151b3c491a5b  src/libslic3r/Preset.hpp
+199fc394a323a0e245eb3a6f2e4d56b01d85755139377e419b52d8aaa58000a7  src/libslic3r/Config.cpp
+92b776fa9718275abc27b3bdf1a31a5faa2d7e40eeb6341c7db7a4d7a1cfb159  src/libslic3r/PrintConfig.cpp
+
+src/libslic3r/Preset.hpp:76: #define BBL_JSON_KEY_INCLUDES       "include"
+src/libslic3r/Config.cpp:977: else if (!load_inherits_to_config && ascii_iequals(it.key(), BBL_JSON_KEY_INCLUDES)) {
+src/libslic3r/Config.cpp:978: key_values.emplace(BBL_JSON_KEY_INCLUDES, it.value().dump());
+src/libslic3r/PresetBundle.cpp:7781: PresetBundle::PresetInstall PresetBundle::resolve_vendor_preset(const CachedPreset& entry, const VendorInstall& install) const
+src/libslic3r/PresetBundle.cpp:7828: out.config = *default_config;
+src/libslic3r/PresetBundle.cpp:7829: // Layer each included preset's own keys over the parent, in the order listed;
+src/libslic3r/PresetBundle.cpp:7830: // this preset's own keys go on top.
+src/libslic3r/PresetBundle.cpp:7831: for (const std::string& name : entry.includes) {
+src/libslic3r/PresetBundle.cpp:7832: auto it = install.include_maps.find(name);
+src/libslic3r/PresetBundle.cpp:7837: out.config.apply(it->second);
+src/libslic3r/PresetBundle.cpp:7839: out.config.apply(entry.config_src);
+src/libslic3r/PresetBundle.cpp:7840: // Record what a base states, its diff against the default, for the presets
+src/libslic3r/PresetBundle.cpp:7841: // that include it. It is taken before extend_default_config_length pads every
+src/libslic3r/PresetBundle.cpp:7844: if (entry.instantiation == "false" && install.included.count(preset_name) != 0) {
+src/libslic3r/PresetBundle.cpp:7846: out.included->apply_only(out.config, out.config.diff(presets_collection.default_preset_for(out.config).config));
+src/libslic3r/PresetBundle.cpp:7967: install.include_maps.emplace(preset_name, std::move(*resolved.included));
+src/libslic3r/PresetBundle.cpp:8434: entry.config_src.load_from_json(subfile, substitution_context, false, key_values, reason);
+src/libslic3r/PresetBundle.cpp:8441: // A file that states no instantiation and is named as G-code, or has no
+src/libslic3r/PresetBundle.cpp:8442: // name, is a template that is only there to be included. A nameless one
+src/libslic3r/PresetBundle.cpp:8473: // An array of names, or one bare name; load_from_json kept the JSON text.
+src/libslic3r/PresetBundle.cpp:8476: includes = nlohmann::json::array({std::move(includes)});
+src/libslic3r/PrintConfig.cpp:7004: def->set_default_value(new ConfigOptionString("G28 ; home all axes\nG1 Z5 F5000 ; lift nozzle\n"));   (machine_start_gcode, added at 6997)
+src/libslic3r/PrintConfig.cpp:2510: def->set_default_value(new ConfigOptionString("M104 S0 ; turn off temperature\nG28 X0  ; home X axis\nM84     ; disable motors\n"));   (machine_end_gcode, 2503)
+src/libslic3r/PrintConfig.cpp:5302: def->set_default_value(new ConfigOptionString());   (layer_change_gcode, 5295)
+src/libslic3r/PrintConfig.cpp:5310: def->set_default_value(new ConfigOptionString());   (time_lapse_gcode, 5304)
+src/libslic3r/PrintConfig.cpp:8108: def->set_default_value(new ConfigOptionString());   (change_filament_gcode, 8101)

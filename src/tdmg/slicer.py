@@ -99,6 +99,10 @@ class FlatProfile(_Model):
     file: str
     preset: str
     chain: list[str] = Field(min_length=1, description="Inheritance chain, root first")
+    includes: list[str] = Field(
+        default_factory=list,
+        description="Template presets named by the chain's include keys, root first, each "
+                    "preset's in the order listed")
     sha256: Sha256
 
     @model_validator(mode="after")
