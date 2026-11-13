@@ -13,12 +13,17 @@ The same color plan serves two routes:
 - **Glue:** the base has shallow pockets. Each color is printed separately and glued
   into its pocket.
 
-**Status (2026-11-13):** steps 1 to 3 exist, and step 4 is under way.
-`tdmg colors` turns a selection into a reviewed color plan (step 1). `tdmg flat --colors` turns a ready plan into gated STL
-bodies for both routes (step 2), and writes the AMS bodies as one multicolor
-`model.3mf` (step 3). `tdmg slice` slices the AMS version face up and face down, each
-color on its own filament, and each glue plate (step 4, Task 6; see
-`docs/guide/pipeline-and-gate.md`). Nothing in this page is printed.
+**Status (2026-11-13):** steps 1 to 4 are done; step 5 (prints) is next.
+- `tdmg colors` turns a selection into a reviewed color plan (step 1).
+- `tdmg flat --colors` turns a ready plan into gated STL bodies for both routes
+  (step 2), and writes the AMS bodies as one multicolor `model.3mf` (step 3).
+- `tdmg slice` slices the AMS version with the pinned OrcaSlicer, each color on its own
+  filament, face up by default, and checks the G-code against the bodies. It also
+  slices each glue plate (step 4; see the
+  [pipeline guide](../../guide/pipeline-and-gate.md)).
+
+On the owner's four plans, face up is PRINTABLE, with warnings. Nothing in this page is
+printed.
 
 ## When to use / when not to
 
@@ -112,6 +117,41 @@ OrcaSlicer and PrusaSlicer CLIs slice all four plans' `model.3mf` in place (exit
 OrcaSlicer prints everything with one filament: the CLI does not assign filaments from
 the file's colors. Assign the filaments in the slicer, using `palette.json`.
 
+**Step 4, slicing:** `tdmg slice COLORED_DIR --out DIR [--face up|down|both]` (design:
+[the step 4 plan](../../plans/2026-11-13-color-slicing.md)).
+- **The input for OrcaSlicer:** `orca-input.3mf`, written from the same gated meshes as
+  `model.3mf`, with one part per body and a settings file that puts each part on its own
+  filament. It is a slicer input, not a deliverable. The base is filament 1; the inlays
+  follow by palette index.
+- **The filament profiles:** the pinned filament profile with only `filament_colour` set
+  to each color, because OrcaSlicer computes the flush and the tool order from it.
+- **Faces:** face up by default (owner decision, 2026-11-13). Face down is the model
+  turned 180° about the y axis; every coordinate stays an exact float32 number.
+- **Outputs:** `face-up/` (and `face-down/` on request) with `orca-input.3mf`,
+  `plate_1.gcode` (or `plate_1.gcode.failed`) and the slicer statistics; `filaments/`
+  with the profiles; one folder per glue plate with R1's files; PrusaSlicer's
+  `prusaslicer.portability-only.gcode.txt` from `model.3mf`; and the record `slice.json`
+  (schema `tdmg.colorslice/1`, with `colorslice_id`).
+- **The message:** per face, the verdict, the color changes, flush, prime tower and time,
+  and the warnings. Then the filament for each color. To print, open `model.3mf` in
+  Bambu Studio and give each color the filament listed; `tdmg`'s G-code is for checking
+  only.
+
+**On the owner's four plans** (face up, 2026-11-13,
+`research/verification/2026-11-13-color-slicing/owner-slices-task7.txt`): all four are
+PRINTABLE, with warnings. Each has 9 color changes (the minimum) and a prime tower of
+1054.7 mm³. The flush is 951.3 mm³ (both Roadie plans), 900.0 mm³ (Oddie merge blues) and
+600.0 mm³ (Oddie keep). The slicer's time estimate is 1873 to 2124 s.
+- **The keep plans:** the slicer skips the thin outline lines inside the picture; the outer
+  outline band prints. The outline color's largest edge gap is 4.99 mm (Roadie) and
+  4.72 mm (Oddie), reported as a warning.
+- **Face down** was measured too: about half the prime tower (548–592 mm³), and the time
+  within 2 minutes. Roadie drop face down is NOT CERTIFIED (the whole model's edge
+  coverage is UNKNOWN), and on the keep plans layer 1 skips most of the outline color.
+- **The glue route** is not printable on either drop plan: the glue base and some small
+  color plates FAIL F3 (Roadie drop: `glue-color-2`; Oddie merge blues: `glue-color-2`
+  and `glue-color-3`).
+
 ## Parameters
 
 - `color.extract.default_count`: how many colors to extract before merges.
@@ -150,6 +190,10 @@ source.
 | A color is missing from the glue version | All its regions are too small for a piece, so they were folded | A warning in the record and the command's output; `parts.png` lists the color as "no pieces (all folded)" | Print larger, or use the AMS version |
 | No glue version at all | The plan keeps a drawn outline | The command prints "glue: not built" with the reason | Make the plan with `outlines: drop` |
 | A glue piece does not drop in, or sits loose | The printer's error differs from `color.glue.clearance_mm` | `F4.glue_fit` checks the model only, not the print | The clearance test strip (step 5) |
+| Thin outline lines missing in the print | A kept outline line is narrower than the slicer prints; the slicer skips it | That color's `F3.edge_coverage` in `tdmg slice` (a warning, not blocking) | Accept it (the outer band prints), make the plan with a wider `outline_width_mm`, or use `outlines: drop` |
+| A color on the wrong body, or the print turned | The slicer input or the tool order is wrong | `F6.tool_placement` and `F6.filaments_used` (required) | None needed: the face is NOT CERTIFIED |
+| More color changes than needed | OrcaSlicer orders each layer without looking ahead (face down) | `F6.color_changes` records the true minimum beside the count | Print face up (the default) |
+| A connectivity warning on every plan | Two colors' beads meet edge to edge; the bead model leaves a hairline between them | `F3.printed_connectivity` (a warning) | None needed; the outer edge is still checked |
 
 ## Required checks
 
@@ -176,15 +220,29 @@ source.
     it reports the smallest gap); `F2.fits_build_volume` and `F5.triangles` per plate (the
     base, and each color).
   - `F3.thin_regions` per body is information only (UNKNOWN), and `F6.slicer` is UNKNOWN
-    until step 4. So the verdict is always NOT CERTIFIED.
-- **Step 4 (Tasks 6 and 7 done; Task 8 open):** `tdmg slice` slices face up by default
-  (the owner's choice; `--face down` or `both` on request) and the glue plates. Per face,
-  `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used` read the G-code against
-  the bodies. F3 is gated "outer edge only" (owner): the whole model's edge coverage and
-  overprint and each color's overprint are required; each color's coverage and all
-  connectivity are warnings. `F6.portability` on `model.3mf` records the volume as
-  information. Owner plans:
-  `research/verification/2026-11-13-color-slicing/owner-slices-task7.txt`.
+    in `colored.json`. So that record's verdict is always NOT CERTIFIED; `tdmg slice`
+    replaces `F6.slicer` with measured checks.
+- **Step 4 (exists):** `tdmg slice` on the colored folder. Each face sliced requires:
+  - the colored record's AMS checks;
+  - `F2.orca_input_matches_bodies`: `orca-input.3mf` is exactly the writer's bytes, and
+    lib3mf reads each part back as its body's gated mesh, on its own filament;
+  - `F6.color_changes`: each layer's tools are its bodies, each tool prints in one run
+    per layer, the change count follows from the layers, each change is inside the A1's
+    change code, and the start code loads exactly one filament, the first one on layer 1;
+  - `F6.tool_placement`: each tool prints only on its body's layers and inside its
+    body's outline, within the F3 allowance, at the slicer's placement (not turned);
+    every body is printed by its own tool; the prime tower stays out of the model;
+  - `F6.filaments_used`: exactly the plan's filaments, one per body, in its colors;
+  - R1's `F6.slicer_exit`, `F6.gcode_present`, `F6.layer_count` and `F6.single_object`;
+  - F3 "outer edge only" (owner decision, 2026-11-13): the whole model's
+    `F3.edge_coverage` and `F3.edge_overprint`, and each color's `F3.edge_overprint`;
+  - `F6.portability` on `model.3mf` (PrusaSlicer; its volume is information only).
+
+  **Warnings**, recorded and printed but never blocking: each color's
+  `F3.edge_coverage`, and every `F3.printed_connectivity`. **Information** (UNKNOWN):
+  `F6.color_waste`, `F6.color_time` and `F6.color_filament`. Each glue plate requires
+  R1's checks except `F2.target_width`, with `F4.body_count` against its pieces, and the
+  glue assembly's `F4.glue_fit` and `F4.glue_partition`.
 
 ## Calibration needed
 
@@ -192,7 +250,10 @@ source.
   do 0.6 mm glue pieces survive handling?
 - The pocket clearance for the glue route (`color.glue.clearance_mm`).
 - The smallest piece a person can glue (`color.glue.min_piece_side_mm`).
-- Whether a 0.5 mm kept outline prints cleanly.
+- Whether a 0.5 mm kept outline prints cleanly. The slicer already skips the thin
+  interior lines (step 4).
+- Whether OrcaSlicer's flush amounts give clean colors. They are the slicer's, measured
+  and not tuned.
 
 Each needs a test print. None is done.
 
@@ -203,20 +264,45 @@ Each needs a test print. None is done.
 - The design and the owner's decisions:
   [R2 color design](../../plans/2026-11-11-color-design.md),
   [the step 1 plan](../../plans/2026-11-11-color-palette.md),
-  [the step 2 plan](../../plans/2026-11-12-color-geometry.md) and
-  [the step 3 plan](../../plans/2026-11-12-color-3mf.md).
+  [the step 2 plan](../../plans/2026-11-12-color-geometry.md),
+  [the step 3 plan](../../plans/2026-11-12-color-3mf.md) and
+  [the step 4 plan](../../plans/2026-11-13-color-slicing.md) (with the owner's Task 7
+  decisions).
 - The step 2 measurements, the owner-plan runs and the owner's review:
   [the color geometry record](../../../research/verification/2026-11-12-color-geometry/README.md)
   (`colored-runs.txt`, `bodies.txt`, `glue.txt`).
 - The 3MF encoding tests, the re-import of the four plans and the owner's Bambu Studio
   checks: [the color 3MF record](../../../research/verification/2026-11-12-color-3mf/README.md).
+- The A1 profile fix (the A1's own start and change G-code) and the G-code reader's
+  firmware rule:
+  [the A1 profile record](../../../research/verification/2026-11-13-a1-profile-include/README.md).
+- The slicing experiment (16 slices: tool order, counting rules, markers, flush and
+  prime tower, face up against face down), the owner-plan slices and the owner's review
+  material: [the color slicing record](../../../research/verification/2026-11-13-color-slicing/README.md)
+  (`owner-slices-task7.txt`, `owner-review.txt`).
 - The AMS lite's 4 slots: `profiles/printers/bambu-a1.yaml`.
 
 ## Open gaps
 
-- Nothing is printed. Under "outer edge only", a color left partly unprinted inside
-  the model (half an inlay, or only a dot of it) only warns; half the base's first layer
-  is still caught (`tests/test_color_gcode.py`). The owner accepted this trade-off.
+- Nothing is printed, single-color or multicolor, from `tdmg`'s G-code. The G-code is
+  not compared with Bambu Studio's own slice of `model.3mf`, which is what the owner
+  would print.
+- Under "outer edge only", a color left partly unprinted inside the model (half an
+  inlay, or only a dot of it) only warns; half the base's first layer is still caught
+  (`tests/test_color_gcode.py`). The owner accepted this trade-off.
+- On the keep plans, the slicer skips the thin outline lines inside the picture. This is
+  reported as a warning, not fixed.
+- PrusaSlicer's volume for `model.3mf` differs from the bodies' sum by −1.23 to
+  +0.25 mm³ on the owner plans. The cause is not known, so the volume is information only.
+- Face down was not re-run with the final F3 rule except on Roadie drop. Why
+  OrcaSlicer skips most of the outline color on face-down layer 1 is not tested (it
+  prints layer 1 with 0.5 mm lines; that this is the cause is an inference).
+- How OrcaSlicer computes each flush amount, and how its statistics split the flush per
+  filament, were not read from its source.
+- The slicing experiment measured 4-color plans only (all four owner plans have 4
+  colors).
+- The glue route is not printable on either owner plan that has one (F3 FAILs on the
+  glue base and on some small plates).
 - The OrcaSlicer CLI slices `model.3mf` on one filament, so `tdmg slice` gives OrcaSlicer
   its own input, `orca-input.3mf`; per-color filaments for printing are assigned in the
   slicer GUI (Bambu Studio was checked by the owner).
@@ -235,4 +321,5 @@ Each needs a test print. None is done.
   float64. With float32, their last bits depended on which internal code path OpenCV
   used. In float64 they are the same either way on the PC; this is not shown on the Mac.
 - Empty spots between parts of the subject are not filled. No evidence shows a need yet.
-- The color changes and the purge waste per change are not measured.
+- The color changes and the flush and prime-tower waste are measured from the slicer's
+  G-code only, not on a print.

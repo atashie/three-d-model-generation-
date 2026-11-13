@@ -443,9 +443,9 @@ def slice_(
     with admesh); prusaslicer.portability-only.gcode.txt is generic G-code,
     never for the A1.
 
-    A tdmg flat --colors folder is sliced face up and face down, each color
-    on its own filament, and each glue plate as a single-color part;
-    F6.portability then reads model.3mf.
+    A tdmg flat --colors folder is sliced face up (--face down or both on
+    request), each color on its own filament, and each glue plate as a
+    single-color part; F6.portability then reads model.3mf.
 
     Exit codes:
       0  files written, and no required check FAILed (UNKNOWN checks

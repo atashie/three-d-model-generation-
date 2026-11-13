@@ -9,11 +9,14 @@
 | Bed / build plate | The heated surface the print sits on. The A1's printable volume is 256 × 256 × 256 mm |
 | Bridge | A horizontal span printed in mid-air between two supports |
 | Calibration print | A small test print that measures what your printer actually does, such as the smallest gap that stays free |
+| Color change (tool change) | The printer unloads one filament and loads another during a multicolor print. Each change costs time and some plastic (flush and prime tower) |
 | Clearance | A deliberate gap between surfaces that must move or fit. Measured as radial, vertical, or first-layer gap |
 | Elephant foot | The first layer spreading wider than designed because it is pressed onto the bed. Slicers offset it by shrinking the first layer's outline ("elephant-foot compensation", 0.075 mm in the pinned A1 profile) |
 | Extrusion width / perimeter | The width of one line of plastic, about the nozzle diameter. Walls print most reliably as whole numbers of perimeters |
+| Flush | Plastic pushed out at a color change to clear the old color from the nozzle |
 | Footprint (printed) | The area a layer of G-code covers with plastic: the union of its beads |
 | FDM | Fused deposition modelling: melting filament and laying it down layer by layer |
+| Face up / face down | How a flat multicolor model lies on the bed: face up has its colors in the top layers; face down is turned 180° about the y axis, with the colors in the first layers, on the bed |
 | Flexi | A print-in-place articulated model whose segments move after printing |
 | G-code | The printer's instructions, made by the slicer |
 | Gap infill | Thin lines a slicer lays in spaces too narrow for a full wall, such as a tapered tip |
@@ -24,6 +27,7 @@
 | Mesh | A surface made of triangles |
 | Normal | The direction a triangle faces. Printable meshes have all normals pointing outward |
 | Overhang | A surface leaning outward over empty space |
+| Prime tower | A small tower beside the model, printed at the color changes, so that the new color flows evenly before it reaches the model |
 | Print-in-place | Moving parts printed already assembled, separated by clearances |
 | Recipe | A named combination of geometry, joints, color, and assembly that this project implements |
 | Slicer | Software that cuts a mesh into layers and makes G-code, for example Bambu Studio or OrcaSlicer |

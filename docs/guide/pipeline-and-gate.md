@@ -40,14 +40,15 @@ valid solid can still include an unwanted background.
   Its verdict is therefore always NOT CERTIFIED. Exit code 0 means only that no check
   failed; 1 means a check failed (files written); 2 means an input or I/O error.
 - **`tdmg slice`** covers S9 (see below). It judges thin features from the G-code and
-  replaces the placeholder F6 check with measured ones.
+  replaces the placeholder F6 check with measured ones. It also slices a
+  `tdmg flat --colors` folder, each color on its own filament (the last section).
 - **`tdmg colors`** is the first half of S6 for flat multicolor (R2; see below). It
   writes a color plan for review.
 - **`tdmg flat --colors`** builds the plan's colored bodies as STL files, for an AMS
-  print and for a glued print (see below). `tdmg slice` slices them (see the last
-  section).
+  print and for a glued print, and writes the AMS bodies as one multicolor `model.3mf`
+  (see below). `tdmg slice` slices them (see the last section).
 
-There are no loops, bases or 3MF output yet.
+There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.
 
@@ -112,6 +113,40 @@ The slice verdict requires every check of the flat record except `F6.slicer` and
 `F3.thin_regions`, plus the F3 and F6 checks above. With both slicers, the owner's
 Roadie and Oddie (60 × 3 mm, smoothed) are **PRINTABLE** (2026-11-11, and again after
 the float64 blur of flat-3; `research/verification/2026-11-11-prusaslicer-windows/`).
+They are PRINTABLE again with the fixed A1 profile (`slice-5`, 2026-11-13, next section).
+
+### The A1 profile and the G-code reader (`slice-5`, 2026-11-13)
+
+- **What was wrong:** the A1 machine preset has an `include` key. It names five template
+  presets: the start, end, time-lapse, filament-change and layer-change G-code. The
+  flattener followed only `inherits`, so the flat `machine.json` held the generic G-code
+  of the parent presets. Its start G-code had 577 characters and did not load the AMS.
+- **The fix:** `scripts/setup_orcaslicer.py` now resolves `include` as OrcaSlicer 2.5.0
+  does, read from its source at tag v2.5.0. A preset is its parent's resolved settings,
+  then each included template in the order listed, then the preset's own keys. Every
+  template file is pinned by hash, and a template that does not match the pin is
+  refused. The start G-code is now the A1's own: 12,310 characters, with the AMS load
+  (`M620`). `--profiles-only DIR` flattens the profiles again for a verified install.
+- **The label:** the slice algorithm is now `slice-5`, so a `slice_id` made with the
+  old profile differs from a new one.
+- **The firmware G-command rule:** the A1 G-code holds Bambu firmware commands that are
+  not moves, such as G392 and G39.3. `tdmg.printed` accepts only the ones the pinned A1
+  template writes: G392, G380, G39, G39.3, G39.4, G29.2, G29.4 and G2814
+  (`FIRMWARE_G_COMMANDS`). It accepts them in two places only:
+  - in FEATURE "Custom" (the start and end code);
+  - in the time-lapse code that runs at each layer change, between the template's
+    `; SKIPPABLE_START` and `; SKIPPABLE_END` lines. Such a block may not extrude.
+
+  After a firmware command, the head position is unknown until the next absolute X, Y
+  and Z. Any other G-command outside the reader's list is refused everywhere, so the F3
+  checks are UNKNOWN, never PASS.
+- **The R1 re-runs:** Roadie and Oddie are PRINTABLE, with the same F3 numbers as on
+  2026-11-11. The slicer's time estimate is longer with the fixed profile (Roadie
+  471.9 → 866.7 s, Oddie 484.2 → 876.1 s), and its weight estimate is 0.025 g lower.
+  Record: `research/verification/2026-11-13-a1-profile-include/`.
+- **The print message:** when the verdict is PRINTABLE, `tdmg slice` says: "slice
+  model.stl in Bambu Studio to print; plate_1.gcode is for checking only (tdmg's G-code
+  is not yet printed or compared with Bambu Studio's own slice); …".
 
 ### What PRINTABLE means for you
 
@@ -245,10 +280,16 @@ glue version there are no `glue-*.stl` and no `parts.png`.
 
 **Checks:** every body gets F1 and `F2.export_matches_geometry` on its written bytes. The
 AMS bodies also get `F4.color_partition`, `F4.filaments`, `F2.fits_build_volume` and
-`F5.triangles` (as one plate), and `F2.export_3mf_matches_bodies` (lib3mf reads
-`model.3mf` back: only the writer's three zip parts, one object in millimetres with no
-build transform, each shell exactly its body's gated mesh, closed and oriented, in its
-color); the glue version gets `F4.glue_partition`,
+`F5.triangles` (as one plate), and `F2.export_3mf_matches_bodies`. That check requires:
+- the zip holds only the writer's three parts, and the content-types and relationships
+  parts are the writer's bytes;
+- the model part is exactly the bytes the writer makes for the gated bodies (since
+  2026-11-13). lib3mf reads data it does not compare, such as slicer paint data, without
+  a warning, and a slicer can act on it, so the bytes are compared too;
+- lib3mf reads `model.3mf` back as one object in millimetres with no build transform,
+  each shell exactly its body's gated mesh, closed and oriented, in its color.
+
+The glue version gets `F4.glue_partition`,
 `F4.glue_fit`, and `F2.fits_build_volume` and `F5.triangles` per plate. `F3.thin_regions`
 is information only (UNKNOWN) and `F6.slicer` is UNKNOWN, so the verdict is always NOT
 CERTIFIED.
@@ -272,48 +313,167 @@ no check FAILed on any of them.
 
 ## Slicing a colored folder (`tdmg slice`, R2 step 4, 2026-11-13)
 
-`tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...] [--face up|down|both]`
-on a `tdmg flat --colors` folder (plan `docs/plans/2026-11-13-color-slicing.md`, Tasks 6
-and 7). The full guide follows in Task 8; in short:
+```
+tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...] [--face up|down|both]
+```
 
-- **Refused, with nothing written:** no `colored.json`, another schema or algorithm, an
-  identity that does not match `colorflat_id`, or any listed file (STL, `model.3mf`,
-  `palette.json`, PNG) missing or changed since `tdmg flat --colors`. The colored record's
-  own checks are not a refusal: as with `DIR/flat.json`, they are carried into each verdict,
-  and a FAIL quarantines the G-code. As in R1, a file changed together with its hash in
-  `colored.json` is not detected; `colorslice_id` records the lineage (the hash of
-  `colored.json`).
-- **Faces:** face up by default (the owner's decision, Task 7); `--face down` or `--face
-  both` on request. Each face sliced writes `face-up/` or `face-down/` with
-  `orca-input.3mf` (the OrcaSlicer-only input, gated by `F2.orca_input_matches_bodies`; not
-  a deliverable), `plate_1.gcode` (or `.failed`) and the statistics. Each color is on its
-  own filament: `filaments/filament-<n>.json` is the pinned filament profile with only
-  `filament_colour` set. The checks are `F6.color_changes`, `F6.tool_placement`,
-  `F6.filaments_used`, R1's slicer F6 checks and F3 gated "outer edge only" (the owner's
-  decision, Task 7): the whole model's `F3.edge_coverage` and `F3.edge_overprint` and each
-  color's `F3.edge_overprint` are required. Each color's `F3.edge_coverage` and every
-  `F3.printed_connectivity` are warnings: recorded in the face's `warnings` and printed
-  when they do not pass, so a thin line the slicer skips (such as a kept outline) is
-  reported, not blocking.
-- **Glue plates:** each `glue-*.stl` is sliced as an R1 part into its own folder, with R1's
-  checks and required set, except `F2.target_width`, which does not apply to a plate of
-  pieces. `F4.body_count` requires the plate's bodies to be its pieces in the glue report
-  (1 for the base), and the glue assembly's `F4.glue_fit` and `F4.glue_partition` are
-  required too. A glue print needs every plate, so the glue route is printable only when
-  every glue plate is PRINTABLE; the message names the plates that block it.
-- **Portability:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded but not
-  a condition: plan Decision 6 asks for one manifold object that slices, and no
-  derivation of PrusaSlicer's 3MF volume exists. The difference from the palette sum is
-  recorded.
-- **Record:** `OUT/slice.json`, schema `tdmg.colorslice/1`, with `colorslice_id`, a verdict
-  per face and per glue plate, and the filament for each color.
-- **Message:** the verdict and the changes, flush, prime tower and time per face, and the
-  filament for each color. To print, open `model.3mf` in Bambu Studio and assign the
-  filaments as listed; `tdmg`'s G-code is for checking only. `model.3mf` is face up: when
-  only face down is PRINTABLE, the message says to turn it over; when both are, it says
-  that the owner's default is face up. Each warning that does not pass is printed, for
-  example "warning: color 1 #451812 (filament 2): edges up to 4.99 mm from its printed
-  lines (for example thin areas the slicer skips, or a part left unprinted)". Warnings
-  never block a face or set exit code 1; only a required check that FAILs does.
+`DIR` is a `tdmg flat --colors` folder (plan `docs/plans/2026-11-13-color-slicing.md`).
+The command slices the AMS version with the pinned OrcaSlicer, each color on its own
+filament, and checks the G-code against the gated bodies. It also slices each glue plate
+as an R1 part. It prints nothing.
 
-The owner's four plans: `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.
+**Terms:**
+- **Face up:** the model as built, with the colors in the top 0.6 mm. `model.3mf` is face
+  up.
+- **Face down:** the model turned 180° about the y axis, so the colors are in the first
+  three layers, on the bed. It is a rotation, not a mirror: turned back over, the face
+  reads the right way round.
+- **Color change (tool change):** the printer unloads one filament and loads another
+  during the print.
+- **Flush:** plastic pushed out at a change to clear the old color from the nozzle.
+- **Prime tower:** a small tower beside the model, printed at the changes, so that the new
+  color flows evenly before it reaches the model.
+
+**Refused, with nothing written:**
+- no `colored.json`, another schema or algorithm, or an identity that does not match
+  `colorflat_id`;
+- any listed file (STL, `model.3mf`, `palette.json`, PNG) missing or changed since
+  `tdmg flat --colors`;
+- AMS STLs that, read back as the gate reads them, do not match `model.3mf`;
+- `--face` on a single-color folder;
+- everything R1 refuses (output folder, slicers, profiles, timeout).
+
+The colored record's own checks are not a refusal: as with `DIR/flat.json`, they are
+carried into each verdict, and a FAIL quarantines the G-code. As in R1, a file changed
+together with its hash in `colored.json` is not detected; `colorslice_id` records the
+lineage (the hash of `colored.json`).
+
+**Faces:** face up by default (the owner's decision, plan Task 7: "Face up
+(Recommended)"). `--face down` or `--face both` on request. Only the faces sliced are in
+the record.
+
+**Outputs, in `OUT`:**
+- `face-up/` (and `face-down/` when sliced):
+  - `orca-input.3mf`: the OrcaSlicer-only input. It holds the same gated meshes as
+    `model.3mf`, one part per body, and a settings file that puts each part on its
+    filament. The OrcaSlicer CLI prints `model.3mf` on one filament, so it needs this
+    file. It is **not a deliverable**: print from `model.3mf`.
+  - `plate_1.gcode` (or `plate_1.gcode.failed`) and `plate_1.statistics.json`.
+- `filaments/filament-<n>.json`: the pinned filament profile with only `filament_colour`
+  set to the color. OrcaSlicer computes the flush and the tool order from that color.
+  These are not pinned profiles; their hashes are recorded.
+- one folder per glue plate (`glue-base/`, `glue-color-<i>-<rrggbb>/`), with R1's files;
+- `prusaslicer.portability-only.gcode.txt`, sliced from `model.3mf` (never print it);
+- `slice.json`, schema `tdmg.colorslice/1`, with `colorslice_id`, written last.
+
+**Filaments:** the base is always filament 1. The inlays follow by palette index
+(filament 2, 3, …), whatever the base's palette index. `filament_map` in the record, and
+the message, give the filament for each color.
+
+**Checks per face.** Every expected value comes from the gated bodies, not from the
+slicer's own report.
+- **`F2.orca_input_matches_bodies`:** `model.3mf`'s check, adapted to parts. The zip
+  parts, the model part and the settings file must be exactly the writer's bytes.
+  lib3mf reads each part back: its vertices and triangles must be its body's exactly,
+  closed and oriented, on its own filament.
+- **`F6.color_changes`:**
+  - each layer's set of tools in the G-code equals the set of bodies on that layer;
+  - on each layer, each tool prints in one run;
+  - the number of changes equals the sum over layers of (colors on the layer − 1), plus
+    one for each layer whose first tool differs from the previous layer's last;
+  - each change lies inside the A1's change code (`M620 S<n>A` … `M621 S<n>A`, in a
+    `; CP TOOLCHANGE` block);
+  - the start code loads exactly one filament, and it is the first tool on layer 1.
+
+  The true minimum number of changes is recorded as information. OrcaSlicer orders each
+  layer without looking ahead, so face down it can use one change more than the minimum
+  (Roadie drop: 10 against 9).
+- **`F6.tool_placement`:** each tool prints only on its body's layers and inside its
+  body's outline, within the F3 allowance (0.2 mm; 0.275 mm on layer 1). Every body is
+  printed by its own tool. The prime tower does not reach into the model. The model is
+  judged where OrcaSlicer places it (centred, not turned), so a print with two colors
+  swapped, or turned by 90°, 180° or 270°, FAILs. (R1 still accepts any quarter turn.)
+- **`F6.filaments_used`:** exactly the plan's filaments are loaded and used, one per
+  body, in the plan's colors.
+- **R1's slicer checks:** `F6.slicer_exit`, `F6.gcode_present`, `F6.layer_count` and
+  `F6.single_object`.
+- **F3, gated "outer edge only"** (the owner's decision, plan Task 7). The F3 checks run on
+  the whole model (all tools together) and on each tool against its own body.
+  - **Required:** the whole model's `F3.edge_coverage` and `F3.edge_overprint`, and each
+    tool's `F3.edge_overprint`.
+  - **Warnings** (recorded in the face's `warnings`, never blocking): each tool's
+    `F3.edge_coverage`, and every `F3.printed_connectivity`. Colors that meet edge to
+    edge always fail connectivity: in the bead model, the beads of two colors leave a
+    hairline gap (up to about 0.03 mm). A thin line the slicer skips, such as a kept
+    outline line, shows as a coverage warning.
+  - **The trade-off:** a color left partly unprinted inside the model (half an inlay)
+    only warns. Half of the base's first layer is still caught. The owner accepted this.
+- **`F6.portability`:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded
+  but is not a condition: no derivation of PrusaSlicer's 3MF volume exists.
+- **Information only (UNKNOWN):** `F6.color_waste` (flush and prime tower, in mm³),
+  `F6.color_time` (the slicer's time estimate) and `F6.color_filament` (the filament
+  per tool, read from the G-code). The statistics' values are recorded beside them.
+
+**The G-code reader:** the multicolor G-code is read by R1's strict reader, with three
+additions for the prime tower: its extrusion is kept apart from the model; the
+`; CP TOOLCHANGE` blocks must pair, and inside them the firmware G-commands are read as
+in Custom; and the dwell `G4` is accepted in the prime tower. A second pass reads the
+change structure: the `T<n>` commands, the `M620`/`M621` pairs and the flush blocks.
+G-code that either pass cannot read gives UNKNOWN, never PASS.
+
+**Glue plates:** each `glue-*.stl` is sliced as an R1 part into its own folder, with R1's
+checks and required set, except `F2.target_width`, which does not apply to a plate of
+pieces. `F4.body_count` requires the plate's bodies to be its pieces in the glue report
+(1 for the base), and the glue assembly's `F4.glue_fit` and `F4.glue_partition` are
+required too. A glue print needs every plate, so the glue route is printable only when
+every glue plate is PRINTABLE; the message names the plates that block it.
+
+**Verdicts:** one per face and one per glue plate. A face is PRINTABLE only if every
+required check passes: the colored record's AMS checks, the checks above and
+`F6.portability`. A required check that FAILs quarantines that G-code
+(`plate_1.gcode.failed`). An UNKNOWN does not quarantine it, but the verdict is NOT
+CERTIFIED.
+
+**Message:** per face, the verdict, the changes, flush, prime tower and time, and each
+warning that does not pass. For example: "warning: color 1 #451812 (filament 2): edges up
+to 4.99 mm from its printed lines (for example thin areas the slicer skips, or a part left
+unprinted)". Then the filament for each color, and what to print:
+- face up PRINTABLE: "to print face up: open model.3mf in Bambu Studio (it is face up)
+  and give each color the filament listed; …";
+- only face down PRINTABLE: the message says to turn `model.3mf` over;
+- both PRINTABLE: it says that the owner's default is face up.
+
+`tdmg`'s G-code is for checking only: it is not yet printed or compared with Bambu
+Studio's own slice.
+
+**Exit codes:** 0 means the files are written and no required check FAILed (UNKNOWN
+checks and warnings are allowed). 1 means a required check FAILed (files written). 2
+means an input or setup error, with nothing written. A warning never sets exit code 1.
+
+**The owner's four plans** (60 × 3 mm, 4 colors each, face up, 2026-11-13, Windows PC):
+all four are **PRINTABLE**, with warnings. The numbers are the slicer's.
+
+| Plan | Changes | Flush mm³ | Prime tower mm³ | Time s | Coverage warnings (largest gap) |
+|---|---|---|---|---|---|
+| Roadie drop | 9 | 951.3 | 1054.7 | 1873 | base 0.28 mm |
+| Roadie keep | 9 | 951.3 | 1054.7 | 2002 | base 1.59 mm; color 1 (the outline color) 4.99 mm; color 2 0.23 mm |
+| Oddie merge blues | 9 | 900.0 | 1054.7 | 1910 | base 0.20 mm |
+| Oddie keep | 9 | 600.0 | 1054.7 | 2124 | base 0.23 mm; color 2 (the outline color) 4.72 mm |
+
+- **Connectivity:** every plan also has the connectivity warning.
+- **The keep plans:** the thin outline lines inside the picture are not printed. The
+  outer outline band is.
+- **Face down** (measured in Tasks 2 and 6): the prime tower is about half (548–592 mm³),
+  because it stops after the last change. The time is within 2 minutes of face up.
+  Roadie drop face down is NOT CERTIFIED (the whole model's edge coverage is UNKNOWN:
+  0.251 mm against 0.275 mm). On the keep plans, face down layer 1 skips most of the
+  outline color, and the whole model's edge coverage FAILs (1.179 and 0.637 mm).
+- **The glue route** on the two drop plans is not printable: `glue-base` FAILs
+  `F3.edge_coverage`, and one or two small color plates FAIL F3.
+
+Records: `research/verification/2026-11-13-color-slicing/` (`README.md`,
+`owner-slices-task7.txt`, `owner-review.txt`).
+
+**Not proven:** nothing multicolor has been printed. `tdmg`'s G-code has not been
+compared with Bambu Studio's slice. The flush amounts are OrcaSlicer's, measured and not
+tuned.

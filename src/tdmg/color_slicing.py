@@ -1,8 +1,9 @@
 """tdmg slice for a tdmg flat --colors folder (docs/plans/2026-11-13-color-slicing.md,
 Decisions 2 to 7 as amended, and Task 6).
 
-make_color_slice slices the AMS version face up and face down with the pinned OrcaSlicer,
-each color on its own filament, slices each glue plate as an R1 part, runs F6.portability
+make_color_slice slices the AMS version face up (the default), face down or both with the
+pinned OrcaSlicer, each color on its own filament, slices each glue plate as an R1 part,
+runs F6.portability
 on the portable model.3mf with the pinned PrusaSlicer, and writes slice.json (schema
 tdmg.colorslice/1) last. It prints nothing.
 

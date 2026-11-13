@@ -67,6 +67,16 @@ This is R2, flat multicolor (docs/PLAN.md section 3; roadmap step 3 in section 1
 3. **`tdmg slice`** handles the 3MF with AMS settings in the pinned OrcaSlicer. It reports
    the color changes, the flush and prime-tower waste and the time from the G-code and
    the statistics. The glue STLs are each gated as R1 parts.
+   - **As built (step 4, 2026-11-13; `docs/plans/2026-11-13-color-slicing.md`):**
+     OrcaSlicer slices its own input, `orca-input.3mf` (the same gated meshes, one part
+     per body, each on its own filament), not `model.3mf`, which it prints on one
+     filament. `model.3mf` stays the file to print from. The counts and waste are read
+     from the G-code only; the statistics are recorded beside them. The change-count rule
+     is per layer and allows OrcaSlicer's order without look-ahead (see the "Gate
+     additions" note below). Decision 5: both faces were measured; the owner chose face
+     up as the default (`--face up|down|both`; there is no `face` key in a config file).
+     F3 is gated "outer edge only" (owner, Task 7). The pinned A1 profile was fixed first,
+     so its G-code has the A1's own start and change code.
 
 ### The color module (`tdmg.color`)
 
@@ -142,6 +152,9 @@ face: auto           # auto | up | down
 - The number of filaments is at most N.
 - The color changes read from the G-code equal the sum over layers of (colors on the
   layer − 1).
+  - **As built (step 4):** plus one for each layer whose first tool differs from the
+    previous layer's last (`F6.color_changes`). Face up this equals the minimum, 9, on
+    all four owner plans; face down OrcaSlicer used 10 on Roadie drop.
 - Each glue piece and the base pass the R1 checks, and each piece fits its pocket with
   the stated clearance.
 
