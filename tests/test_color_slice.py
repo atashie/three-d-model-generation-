@@ -497,3 +497,43 @@ def test_the_body_count_check_compares_the_stl_with_the_report():
     assert cs.glue_body_count_check(data, 2).status == "PASS"
     bad = cs.glue_body_count_check(data, 3)
     assert (bad.status, bad.measured, bad.threshold) == ("FAIL", 2, 3)
+
+
+# --- A PRINTABLE glue plate -----------------------------------------------------------------
+
+def _f3_pass(monkeypatch):
+    """R1's F3 checks PASS (the fake G-code cannot be measured)."""
+    import tdmg.slicing
+    from tdmg.printed import F3_SLICE_CHECK_IDS
+
+    def passing(gcode, stl, setup, not_measured=None):
+        return ([CheckResult(cid, "PASS", None, None, None, "test") for cid in F3_SLICE_CHECK_IDS],
+                {"measured": False, "layer_count": None})
+    monkeypatch.setattr(tdmg.slicing, "f3_checks", passing)
+
+
+def test_a_printable_glue_plate_names_its_own_stl(colored, orca, prusa, tmp_path,
+                                                  monkeypatch):
+    from tdmg.portability import portability_meaning
+    from tdmg.slicing import PRINTABLE_MEANING, printable_meaning
+    _f3_pass(monkeypatch)
+    out = tmp_path / "s"
+    r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
+                            str(orca()), "--prusaslicer-dir", str(prusa())])
+    rec = json.loads((out / "slice.json").read_bytes())
+    base = rec["glue"]["plates"]["glue-base"]     # one body, so the fake's 1 part is right
+    assert base["certification"] == "PRINTABLE", base["certification"]
+    assert base["certification_note"] == printable_meaning("glue-base.stl")
+    assert "glue-base.stl" in base["certification_note"]
+    assert "model.stl" not in base["certification_note"]
+    port = next(c for c in base["checks"] if c["id"] == "F6.portability")
+    assert portability_meaning("glue-base.stl") in port["note"]
+    assert "model.stl" not in port["note"]
+    # R1's texts are unchanged.
+    assert printable_meaning() == PRINTABLE_MEANING and "model.stl" in PRINTABLE_MEANING
+    lines = r.stdout.splitlines()
+    assert ("glue-base: slice glue-base.stl in Bambu Studio to print; its plate_1.gcode is "
+            "for checking only") in lines
+    printable = {n for n, p in rec["glue"]["plates"].items() if p["verdict"] == "PRINTABLE"}
+    assert sum("in Bambu Studio to print; its plate_1.gcode" in line for line in lines) \
+        == len(printable)

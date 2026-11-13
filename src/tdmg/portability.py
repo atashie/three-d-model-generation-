@@ -78,11 +78,16 @@ PRUSA_FAILED_GCODE_NAME = PRUSA_GCODE_NAME + ".failed"
 PRUSA_GCODE_NOTE = (f"{PRUSA_GCODE_NAME} is generic G-code for a generic printer, not Bambu "
                     "firmware G-code and not for the A1: it is evidence of portability only; "
                     "never print it")
-PORTABILITY_MEANING = (
-    "a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read "
-    "agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full "
-    "height, with extrusion on every layer, given the A1 bed, nozzle, layer and filament "
-    "settings (its other settings are PrusaSlicer's defaults)")
+def portability_meaning(model: str = "model.stl") -> str:
+    """What F6.portability shows for an STL, naming it (model.stl for R1; a glue plate's STL
+    for tdmg.color_slicing)."""
+    return (f"a second slicer (PrusaSlicer 2.9.7) accepts {model} as modelled (its admesh "
+            "read agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices "
+            "its full height, with extrusion on every layer, given the A1 bed, nozzle, layer "
+            "and filament settings (its other settings are PrusaSlicer's defaults)")
+
+
+PORTABILITY_MEANING = portability_meaning()
 SHARED_READER_NOTE = ("OrcaSlicer and PrusaSlicer share the admesh STL reader, so a 3MF output "
                       "must re-run portability with truly different readers")
 # The settings passed on the command line, each from one key of the hash-checked OrcaSlicer

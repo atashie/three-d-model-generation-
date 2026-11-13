@@ -89,6 +89,7 @@ from tdmg.portability import (
     locate_prusaslicer,
     not_configured_check,
     portability_check,
+    portability_meaning,
     prusa_gcode_hashes,
     run_portability,
     size_tolerance_mm,
@@ -191,12 +192,18 @@ DO_NOT_PRINT = f"a check FAILed: do not print this G-code; it is kept as {FAILED
 # Added to DO_NOT_PRINT only when PrusaSlicer wrote its G-code.
 PRUSA_DO_NOT_PRINT = f" (and PrusaSlicer's as {PRUSA_FAILED_GCODE_NAME})"
 TREE_NOT_VERIFIED = "app tree not verified (--skip-tree-check)"
-PRINTABLE_MEANING = (
-    "PRINTABLE means every required gate check passed for this file with the pinned slicers "
-    "(OrcaSlicer 2.5.0 and, for portability, PrusaSlicer 2.9.7) and the A1 profile; for "
-    f"portability, {PORTABILITY_MEANING}. {SHARED_READER_NOTE}. It is not a guarantee: the "
-    "acceptance tolerance (acceptance.dimension.tolerance) is still a hypothesis, no "
-    "calibration print has been measured, and strength is not judged.")
+def printable_meaning(model: str = "model.stl") -> str:
+    """What PRINTABLE means, naming the STL (model.stl for R1; a glue plate's STL for
+    tdmg.color_slicing)."""
+    return ("PRINTABLE means every required gate check passed for this file with the pinned "
+            "slicers (OrcaSlicer 2.5.0 and, for portability, PrusaSlicer 2.9.7) and the A1 "
+            f"profile; for portability, {portability_meaning(model)}. {SHARED_READER_NOTE}. "
+            "It is not a guarantee: the acceptance tolerance "
+            "(acceptance.dimension.tolerance) is still a hypothesis, no calibration print "
+            "has been measured, and strength is not judged.")
+
+
+PRINTABLE_MEANING = printable_meaning()
 # plate_1.gcode is not offered for printing: no G-code from tdmg has been printed or
 # compared with Bambu Studio's own slice (before 2026-11-13 the pinned A1 profile also
 # lacked the A1's own G-code; docs/plans/2026-11-13-color-slicing.md, Decision 1).
@@ -556,7 +563,8 @@ def expected_for_stl(stl: bytes, mesh: dict, allowed, process: dict) -> Expected
 
 
 def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict | None,
-              required=SLICE_REQUIRED_CHECKS) -> dict:
+              required=SLICE_REQUIRED_CHECKS, model_name: str = "model.stl",
+              source: str = "flat.json") -> dict:
     """Slice one STL as R1 does and judge it: OrcaSlicer, F6, F3 from its G-code and, with
     PrusaSlicer, F6.portability. previous: the inherited checks; mesh: the record's mesh
     facts PrusaSlicer is compared with (read only when PrusaSlicer is configured).
@@ -565,7 +573,8 @@ def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict 
     sections R1 writes (exit, stats, printed, checks, verdict, certification,
     certification_note, portability, gcode, stderr_tail, log_written), the files by name
     (plate_1.gcode or its .failed name, the statistics, the log, PrusaSlicer's G-code) and
-    the identity sections that depend on the STL ("portability")."""
+    the identity sections that depend on the STL ("portability"). model_name and source
+    name the STL and its record in the notes (R1: model.stl and flat.json)."""
     z_min, z_max = stl_z_range(stl)
     allowed = allowed_layer_counts(stl, ctx.process)
     setup = ctx.setup(allowed)
@@ -600,9 +609,10 @@ def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict 
             info_run, gcode_run, prusa_gcode = run_portability(
                 prusa_command(prusa), model, settings, base / "prusa",
                 ctx.prusa_timeout["value"], prusa)
-            portability, measurements = portability_check(info_run, gcode_run, prusa_gcode,
-                                                          expected,
-                                                          ctx.prusa_timeout["rule"])
+            portability, measurements = portability_check(
+                info_run, gcode_run, prusa_gcode, expected, ctx.prusa_timeout["rule"],
+                model=model_name, source=source,
+                meaning=f"{portability_meaning(model_name)}. {SHARED_READER_NOTE}")
         checks = f3 + f6 + [portability]
         quarantined = any(c.status == "FAIL" for c in previous + checks if c.id in required)
         files = {}
@@ -651,7 +661,8 @@ def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict 
             "checks": [c.as_dict() for c in all_checks],
             "verdict": "PRINTABLE" if cert == "PRINTABLE" else "NOT CERTIFIED",
             "certification": cert,
-            "certification_note": PRINTABLE_MEANING if cert == "PRINTABLE" else None,
+            "certification_note": (printable_meaning(model_name) if cert == "PRINTABLE"
+                                   else None),
             "portability": portability_record,
             "gcode": (None if gcode_name is None else
                       {"file": gcode_name, "quarantined": quarantined,

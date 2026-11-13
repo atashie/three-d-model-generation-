@@ -38,7 +38,7 @@ from tdmg.selection import (
     select_subject,
     write_selection,
 )
-from tdmg.slicer import SlicerError
+from tdmg.slicer import GCODE_NAME, SlicerError
 from tdmg.slicing import DO_NOT_PRINT, PRINT_THIS, PRUSA_DO_NOT_PRINT, make_slice
 
 # make_flat's default printer, shown in tdmg flat's help.
@@ -376,6 +376,9 @@ def _color_slice_output(rec: dict, out: Path) -> None:
             typer.echo(f"  {f['certification_note']}")
     for name, plate in rec["glue"]["plates"].items():
         typer.echo(f"{name} (glue plate, sliced as an R1 part): {plate['certification']}")
+        if plate["certification"] == "PRINTABLE":     # R1's rule: never tdmg's G-code
+            typer.echo(f"{name}: slice {plate['plate']} in Bambu Studio to print; its "
+                       f"{GCODE_NAME} is for checking only")
     if not rec["glue"]["built"]:
         typer.echo(f"glue: not built - {rec['glue']['reason']}")
     typer.echo(_portability_line(rec["portability"]))

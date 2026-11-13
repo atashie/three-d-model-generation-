@@ -628,7 +628,8 @@ def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, st
     previous = (_checks(row.get("checks"), row["file"]) + assembly
                 + [glue_body_count_check(stl, pieces)])
     mesh = {k: row.get(k) for k in ("bodies", "triangles", "extents_mm", "volume_mm3")}
-    part = slice_stl(ctx, stl, previous, mesh, required=GLUE_REQUIRED_CHECKS)
+    part = slice_stl(ctx, stl, previous, mesh, required=GLUE_REQUIRED_CHECKS,
+                     model_name=row["file"], source="colored.json")
     z_min, z_max = part["z"]
     identity = {"algorithm": SLICE_ALGORITHM_VERSION, "colorflat_id": record["colorflat_id"],
                 "colored_record_sha256": colored_sha, "plate": row["file"],
