@@ -963,3 +963,83 @@ def test_a_relative_extrusion_from_an_unknown_position_is_refused_not_dropped():
     block = "; SKIPPABLE_START\nG91\nG1 Z1\nG1 Z-1\n; SKIPPABLE_END\n"
     with pytest.raises(UnsupportedGcode, match="unknown position"):
         parse(_two_layers(block, after="G1 Z.2\nG1 X1 Y0 E.1\n"))
+
+
+# --- Multicolor G-code: parse_gcode(prime_tower=True), for tdmg.color_gcode -------------
+
+# A tool change as the A1 template writes it (research/verification/2026-11-13-color-
+# slicing/README.md, Markers): in FEATURE "Prime tower", G392 and G4 S0 inside the CP
+# TOOLCHANGE block, a helical lift G3 Z... P1 without E, and tower beads with an arc.
+CHANGE = ("; FEATURE: Prime tower\n; LINE_WIDTH: 0.5\n; CP TOOLCHANGE START\n"
+          "G1 E-1.2 F1800\nM620 S1A\nG392 S0\nG1 X267 F18000\nT1\n"
+          "M620.10 A1 F523 L10 H0.4 T240\nM622 J1\nG1 E-2\nM623\nM621 S1A\nG392 S0\n"
+          "G1 X20 Y220 F42000\nG1 Z.2\nG4 S0\nG3 Z.6 I1.217 J0 P1 F42000\nG1 Z.2\n"
+          "G1 X25 Y220 E0.2\nG3 X25 Y221 I0 J0.5 E0.05\nG4 S0\n; CP TOOLCHANGE END\n")
+
+
+def _tower(change: str = CHANGE, after: str = GOOD) -> str:
+    return gcode([layer(0.2, GOOD + change + after)])
+
+
+def tparse(text):
+    return parse_gcode(text, PLATE, prime_tower=True)
+
+
+def test_a_tool_change_is_refused_without_prime_tower():
+    with pytest.raises(UnsupportedGcode, match="G392"):
+        parse(_tower())
+
+
+def test_the_prime_tower_is_read_apart_from_the_model():
+    lay = tparse(_tower())[0.2]
+    assert {s.feature for s in lay.segments} == {"Outer wall"}
+    assert len(lay.segments) == 2                      # GOOD before and after the change
+    assert {s.feature for s in lay.tower} == {"Prime tower"}
+    assert lay.tower[0][:4] == (20, 220, 25, 220) and len(lay.tower) > 2   # line, then arc
+    # Each segment names its line; the arc's chords share one.
+    lines = tparse(_tower()).get(0.2)
+    text_lines = _tower().splitlines()
+    assert {text_lines[s.line - 1] for s in lines.tower} == {
+        "G1 X25 Y220 E0.2", "G3 X25 Y221 I0 J0.5 E0.05"}
+    assert text_lines[lines.segments[0].line - 1] == "G1 X101 Y100 E.1"
+
+
+def test_tower_amounts_are_not_checked_but_model_amounts_still_are():
+    text = gcode([layer(0.2, CHANGE.replace("E0.2", "E5"))])
+    assert len(parse_gcode(text, PLATE, FLOW, prime_tower=True)[0.2].tower) > 0
+    bad = "; FEATURE: Outer wall\n; LINE_WIDTH: 0.42\nG1 X100 Y100\nG1 X101 Y100 E5\n"
+    with pytest.raises(UnsupportedGcode, match="extrusion amount"):
+        parse_gcode(gcode([layer(0.2, CHANGE + bad)]), PLATE, FLOW, prime_tower=True)
+
+
+@pytest.mark.parametrize(("change", "message"), [
+    (CHANGE.replace("; CP TOOLCHANGE END\n", ""), "without a CP TOOLCHANGE END"),
+    (CHANGE + "; CP TOOLCHANGE END\n", "without a CP TOOLCHANGE START"),
+    (CHANGE.replace("G1 E-1.2", "; CP TOOLCHANGE START\nG1 E-1.2"), "inside the one"),
+    (CHANGE.replace("G392 S0\nG1 X267", "G4 X1\nG1 X267"), "not a dwell"),
+    (CHANGE.replace("G392 S0\nG1 X267", "G4 S-1\nG1 X267"), "not a dwell"),
+    (CHANGE.replace("G392 S0\nG1 X267", "G5 S0\nG1 X267"), "not a firmware G-command"),
+    (CHANGE.replace("G392 S0\nG1 X267", "G392 S0 E-1\nG1 X267"), "E word"),
+    # After the firmware's G392 and M623 the position is unknown until an absolute move.
+    (CHANGE.replace("G1 X20 Y220 F42000\n", ""), "unknown position"),
+    (CHANGE.replace("G3 X25 Y221 I0 J0.5", "G3 X25 Y221 R0.5"), "R-form"),
+    (CHANGE.replace("G3 X25 Y221 I0 J0.5", "G3 X25 Y221 I0 J0.5 P1"), r"P \(turns\)"),
+    (CHANGE.replace("G1 Z.2\nG1 X25", "G1 Z.4\nG1 X25"), "commanded Z"),
+    (CHANGE.replace("; LINE_WIDTH: 0.5\n", "; LINE_WIDTH: 0\n"), "LINE_WIDTH"),
+])
+def test_what_the_prime_tower_reader_cannot_read_is_refused(change, message):
+    with pytest.raises(UnsupportedGcode, match=message):
+        tparse(_tower(change))
+
+
+def test_a_dwell_outside_a_tool_change_is_still_refused():
+    with pytest.raises(UnsupportedGcode, match="G4"):
+        tparse(gcode([layer(0.2, GOOD + "; FEATURE: Prime tower\nG4 S0\n")]))
+    with pytest.raises(UnsupportedGcode, match="G4"):
+        tparse(gcode([layer(0.2, GOOD + "; CP TOOLCHANGE START\nG4 S0\n"
+                                          "; CP TOOLCHANGE END\n")]))
+
+
+def test_other_features_stay_refused_with_prime_tower():
+    with pytest.raises(UnsupportedGcode, match="'Brim'"):
+        tparse(gcode([layer(0.2, GOOD + path_moves([(90, 90), (95, 90)], feature="Brim"))]))

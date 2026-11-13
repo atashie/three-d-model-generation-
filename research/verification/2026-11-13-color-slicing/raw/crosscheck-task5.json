@@ -1,0 +1,1722 @@
+{
+ "roadie-tol30-60-drop-v3-f64-up": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "PASS",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "FAIL",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "FAIL",
+   "F3.edge_coverage.T1": "PASS",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "PASS",
+   "F3.edge_coverage.T2": "PASS",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     3,
+     1,
+     2
+    ],
+    "14": [
+     2,
+     0,
+     3,
+     1
+    ],
+    "15": [
+     1,
+     2,
+     0,
+     3
+    ]
+   },
+   "flush_mm3": 951.28,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 1873,
+   "model_mm3": [
+    1539.994,
+    117.08,
+    56.0,
+    1.642
+   ],
+   "tower_mm3": [
+    838.238,
+    61.844,
+    61.844,
+    92.766
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    251.28,
+    200.0,
+    300.0
+   ]
+  },
+  "record": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     3,
+     1,
+     2
+    ],
+    "14": [
+     2,
+     0,
+     3,
+     1
+    ],
+    "15": [
+     1,
+     2,
+     0,
+     3
+    ]
+   },
+   "flush_mm3": 951.28,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 1873,
+   "model_mm3": [
+    1539.994,
+    117.08,
+    56.0,
+    1.642
+   ],
+   "tower_mm3": [
+    838.238,
+    61.844,
+    61.844,
+    92.766
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    251.28,
+    200.0,
+    300.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.013205015953912432,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "1": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.01331499740396316,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "2": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.011929753990136006,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 14
+   },
+   "3": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.0,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 2.6 mm, has 11 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 11 at model (38.59, 24.70) mm; the layer's largest edge gap is at model (49.06, 9.41) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 0.231 mm against 0.275 mm, at bed (122.26, 148.40), model (24.27, 45.11) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 2.6 mm, prints 0.013 mm outside against 0.2 mm, at bed (157.42, 115.12), model (59.43, 11.83) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 20.0
+ },
+ "roadie-tol30-60-drop-v3-f64-down": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "UNKNOWN",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "FAIL",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "FAIL",
+   "F3.edge_coverage.T1": "PASS",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "PASS",
+   "F3.edge_coverage.T2": "PASS",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 2,
+   "changes": 10,
+   "rule_c": 10,
+   "minimum": 9,
+   "statistics_changes": 10,
+   "orders": {
+    "1": [
+     2,
+     0,
+     3,
+     1
+    ],
+    "2": [
+     1,
+     2,
+     3,
+     0
+    ],
+    "3": [
+     0,
+     3,
+     1,
+     2
+    ]
+   },
+   "flush_mm3": 1051.28,
+   "prime_tower_mm3": 592.449,
+   "time_s": 1897,
+   "model_mm3": [
+    1533.018,
+    112.518,
+    54.615,
+    1.709
+   ],
+   "tower_mm3": [
+    345.781,
+    76.951,
+    61.844,
+    107.873
+   ],
+   "flush_by_tool_mm3": [
+    300.0,
+    251.28,
+    200.0,
+    300.0
+   ]
+  },
+  "record": {
+   "start_load": 2,
+   "changes": 10,
+   "rule_c": 10,
+   "minimum": 9,
+   "statistics_changes": 10,
+   "orders": {
+    "1": [
+     2,
+     0,
+     3,
+     1
+    ],
+    "2": [
+     1,
+     2,
+     3,
+     0
+    ],
+    "3": [
+     0,
+     3,
+     1,
+     2
+    ]
+   },
+   "flush_mm3": 1051.28,
+   "prime_tower_mm3": 592.449,
+   "time_s": 1897,
+   "model_mm3": [
+    1533.018,
+    112.518,
+    54.615,
+    1.709
+   ],
+   "tower_mm3": [
+    345.781,
+    76.951,
+    61.844,
+    107.873
+   ],
+   "flush_by_tool_mm3": [
+    300.0,
+    251.28,
+    200.0,
+    300.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.014058206962560599,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 4
+   },
+   "1": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.012907258926231494,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "2": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.013586381337115533,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "3": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.0,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 0.2 mm, has 12 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 12 at model (21.44, 24.70) mm; the layer's largest edge gap is at model (18.91, 36.06) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 0.251 mm against 0.275 mm, at bed (116.90, 139.36), model (18.91, 36.06) mm; within sampling uncertainty on 1 layer(s). The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.8 mm, prints 0.014 mm outside against 0.2 mm, at bed (111.66, 120.22), model (13.67, 16.92) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 17.8
+ },
+ "roadie-tol30-60-keep-v4-f64-up": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "PASS",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "FAIL",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "FAIL",
+   "F3.edge_coverage.T1": "FAIL",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "FAIL",
+   "F3.edge_coverage.T2": "FAIL",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "14": [
+     3,
+     0,
+     1,
+     2
+    ],
+    "15": [
+     2,
+     3,
+     0,
+     1
+    ]
+   },
+   "flush_mm3": 951.28,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 2002,
+   "model_mm3": [
+    1448.522,
+    171.315,
+    79.385,
+    37.269
+   ],
+   "tower_mm3": [
+    838.238,
+    92.766,
+    61.844,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    300.0,
+    251.28,
+    200.0
+   ]
+  },
+  "record": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "14": [
+     3,
+     0,
+     1,
+     2
+    ],
+    "15": [
+     2,
+     3,
+     0,
+     1
+    ]
+   },
+   "flush_mm3": 951.28,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 2002,
+   "model_mm3": [
+    1448.522,
+    171.315,
+    79.385,
+    37.269
+   ],
+   "tower_mm3": [
+    838.238,
+    92.766,
+    61.844,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    300.0,
+    251.28,
+    200.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.013205015953912432,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "1": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.025342193603506754,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "2": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.0008532714843738632,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "3": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.000597656249993861,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 2.6 mm, has 14 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 14 at model (38.59, 24.70) mm; the layer's largest edge gap is at model (48.65, 15.61) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 0.231 mm against 0.275 mm, at bed (122.26, 148.40), model (24.27, 45.11) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 2.8 mm, prints 0.013 mm outside against 0.2 mm, at bed (122.39, 113.52), model (24.40, 10.22) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 33.5
+ },
+ "roadie-tol30-60-keep-v4-f64-down": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "FAIL",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "FAIL",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "FAIL",
+   "F3.edge_coverage.T1": "FAIL",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "FAIL",
+   "F3.edge_coverage.T2": "FAIL",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 3,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "1": [
+     3,
+     2,
+     0,
+     1
+    ],
+    "2": [
+     1,
+     0,
+     3,
+     2
+    ],
+    "3": [
+     2,
+     3,
+     1,
+     0
+    ]
+   },
+   "flush_mm3": 923.84,
+   "prime_tower_mm3": 548.161,
+   "time_s": 1922,
+   "model_mm3": [
+    1447.261,
+    131.025,
+    77.699,
+    35.321
+   ],
+   "tower_mm3": [
+    332.415,
+    76.951,
+    76.951,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    300.0,
+    200.0,
+    200.0,
+    223.84
+   ]
+  },
+  "record": {
+   "start_load": 3,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "1": [
+     3,
+     2,
+     0,
+     1
+    ],
+    "2": [
+     1,
+     0,
+     3,
+     2
+    ],
+    "3": [
+     2,
+     3,
+     1,
+     0
+    ]
+   },
+   "flush_mm3": 923.84,
+   "prime_tower_mm3": 548.161,
+   "time_s": 1922,
+   "model_mm3": [
+    1447.261,
+    131.025,
+    77.699,
+    35.321
+   ],
+   "tower_mm3": [
+    332.415,
+    76.951,
+    76.951,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    300.0,
+    200.0,
+    200.0,
+    223.84
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.014058206962560599,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 4
+   },
+   "1": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.025342193603520972,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "2": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.0008532714843738632,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "3": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.000597656249993861,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 0.2 mm, has 64 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 64 at model (21.44, 24.70) mm; the layer's largest edge gap is at model (17.21, 25.09) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 1.179 mm against 0.275 mm, at bed (115.19, 128.39), model (17.21, 25.09) mm; 1 layer(s) are over. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.8 mm, prints 0.014 mm outside against 0.2 mm, at bed (111.66, 120.22), model (13.67, 16.92) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 30.3
+ },
+ "oddie-60-merge-blues-v3-f64-up": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "PASS",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "PASS",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "PASS",
+   "F3.edge_coverage.T1": "PASS",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "PASS",
+   "F3.edge_coverage.T2": "PASS",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "FAIL",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     2,
+     1,
+     3
+    ],
+    "14": [
+     3,
+     1,
+     0,
+     2
+    ],
+    "15": [
+     2,
+     3,
+     1,
+     0
+    ]
+   },
+   "flush_mm3": 900.0,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 1910,
+   "model_mm3": [
+    2756.434,
+    343.257,
+    249.993,
+    18.902
+   ],
+   "tower_mm3": [
+    838.238,
+    92.766,
+    61.844,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    300.0,
+    200.0,
+    200.0
+   ]
+  },
+  "record": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     2,
+     1,
+     3
+    ],
+    "14": [
+     3,
+     1,
+     0,
+     2
+    ],
+    "15": [
+     2,
+     3,
+     1,
+     0
+    ]
+   },
+   "flush_mm3": 900.0,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 1910,
+   "model_mm3": [
+    2756.434,
+    343.257,
+    249.993,
+    18.902
+   ],
+   "tower_mm3": [
+    838.238,
+    92.766,
+    61.844,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    300.0,
+    200.0,
+    200.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.01300544097068723,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "1": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.013005975732426123,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "2": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.01932357788086847,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "3": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.00014102172850982697,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 2.6 mm, has 5 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 5 at model (30.83, 32.94) mm; the layer's largest edge gap is at model (7.58, 33.76) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 2.6 mm, leaves 0.152 mm against 0.2 mm, at bed (105.58, 128.82), model (7.58, 33.76) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 2.6 mm, prints 0.013 mm outside against 0.2 mm, at bed (126.82, 103.83), model (28.82, 8.76) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 19.8
+ },
+ "oddie-60-merge-blues-v3-f64-down": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "PASS",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "PASS",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "FAIL",
+   "F3.edge_coverage.T1": "PASS",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "PASS",
+   "F3.edge_coverage.T2": "FAIL",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "1": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "2": [
+     3,
+     1,
+     0,
+     2
+    ],
+    "3": [
+     2,
+     3,
+     1,
+     0
+    ]
+   },
+   "flush_mm3": 900.0,
+   "prime_tower_mm3": 548.161,
+   "time_s": 1868,
+   "model_mm3": [
+    2758.805,
+    342.192,
+    246.863,
+    18.365
+   ],
+   "tower_mm3": [
+    286.386,
+    107.873,
+    76.951,
+    76.951
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    300.0,
+    200.0,
+    200.0
+   ]
+  },
+  "record": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "1": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "2": [
+     3,
+     1,
+     0,
+     2
+    ],
+    "3": [
+     2,
+     3,
+     1,
+     0
+    ]
+   },
+   "flush_mm3": 900.0,
+   "prime_tower_mm3": 548.161,
+   "time_s": 1868,
+   "model_mm3": [
+    2758.805,
+    342.192,
+    246.863,
+    18.365
+   ],
+   "tower_mm3": [
+    286.386,
+    107.873,
+    76.951,
+    76.951
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    300.0,
+    200.0,
+    200.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.012474304558279478,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 15
+   },
+   "1": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.0121592571458842,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "2": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.01932357788086847,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "3": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.00014102172852403783,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 0.2 mm, has 4 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 4 at model (29.16, 32.93) mm; the layer's largest edge gap is at model (41.73, 57.54) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 0.244 mm against 0.275 mm, at bed (139.74, 152.60), model (41.73, 57.54) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.4 mm, prints 0.013 mm outside against 0.2 mm, at bed (132.42, 158.93), model (34.42, 63.87) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 21.7
+ },
+ "oddie-60-keep-merge-blues-greens-v4-f64-up": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "PASS",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "FAIL",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "PASS",
+   "F3.edge_coverage.T1": "PASS",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "FAIL",
+   "F3.edge_coverage.T2": "FAIL",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     2,
+     1,
+     3
+    ],
+    "14": [
+     3,
+     0,
+     2,
+     1
+    ],
+    "15": [
+     1,
+     3,
+     0,
+     2
+    ]
+   },
+   "flush_mm3": 600.0,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 2124,
+   "model_mm3": [
+    2888.732,
+    301.32,
+    159.256,
+    17.009
+   ],
+   "tower_mm3": [
+    838.238,
+    61.844,
+    92.766,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    200.0,
+    0.0,
+    200.0
+   ]
+  },
+  "record": {
+   "start_load": 0,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "13": [
+     0,
+     2,
+     1,
+     3
+    ],
+    "14": [
+     3,
+     0,
+     2,
+     1
+    ],
+    "15": [
+     1,
+     3,
+     0,
+     2
+    ]
+   },
+   "flush_mm3": 600.0,
+   "prime_tower_mm3": 1054.692,
+   "time_s": 2124,
+   "model_mm3": [
+    2888.732,
+    301.32,
+    159.256,
+    17.009
+   ],
+   "tower_mm3": [
+    838.238,
+    61.844,
+    92.766,
+    61.844
+   ],
+   "flush_by_tool_mm3": [
+    200.0,
+    200.0,
+    0.0,
+    200.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.01300544097068723,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "1": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.0005885925292972162,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "2": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.018725860595708358,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   },
+   "3": {
+    "layers": [
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.0,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 13
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 2.6 mm, has 18 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 18 at model (30.83, 32.94) mm; the layer's largest edge gap is at model (18.25, 57.58) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 0.221 mm against 0.275 mm, at bed (157.95, 135.55), model (59.95, 40.49) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.4 mm, prints 0.013 mm outside against 0.2 mm, at bed (126.82, 103.83), model (28.82, 8.76) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 29.4
+ },
+ "oddie-60-keep-merge-blues-greens-v4-f64-down": {
+  "statuses": {
+   "F6.color_changes": "PASS",
+   "F6.tool_placement": "PASS",
+   "F6.filaments_used": "PASS",
+   "F3.printed_connectivity": "FAIL",
+   "F3.edge_coverage": "FAIL",
+   "F3.edge_overprint": "PASS"
+  },
+  "per_tool_f3": {
+   "F3.printed_connectivity.T0": "FAIL",
+   "F3.edge_coverage.T0": "FAIL",
+   "F3.edge_overprint.T0": "PASS",
+   "F3.printed_connectivity.T1": "PASS",
+   "F3.edge_coverage.T1": "PASS",
+   "F3.edge_overprint.T1": "PASS",
+   "F3.printed_connectivity.T2": "FAIL",
+   "F3.edge_coverage.T2": "FAIL",
+   "F3.edge_overprint.T2": "PASS",
+   "F3.printed_connectivity.T3": "PASS",
+   "F3.edge_coverage.T3": "PASS",
+   "F3.edge_overprint.T3": "PASS"
+  },
+  "mine": {
+   "start_load": 1,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "1": [
+     1,
+     0,
+     3,
+     2
+    ],
+    "2": [
+     2,
+     0,
+     1,
+     3
+    ],
+    "3": [
+     3,
+     1,
+     2,
+     0
+    ]
+   },
+   "flush_mm3": 800.0,
+   "prime_tower_mm3": 548.161,
+   "time_s": 2096,
+   "model_mm3": [
+    2884.85,
+    299.861,
+    112.947,
+    16.356
+   ],
+   "tower_mm3": [
+    332.415,
+    61.844,
+    76.951,
+    76.951
+   ],
+   "flush_by_tool_mm3": [
+    300.0,
+    200.0,
+    100.0,
+    200.0
+   ]
+  },
+  "record": {
+   "start_load": 1,
+   "changes": 9,
+   "rule_c": 9,
+   "minimum": 9,
+   "statistics_changes": 9,
+   "orders": {
+    "1": [
+     1,
+     0,
+     3,
+     2
+    ],
+    "2": [
+     2,
+     0,
+     1,
+     3
+    ],
+    "3": [
+     3,
+     1,
+     2,
+     0
+    ]
+   },
+   "flush_mm3": 800.0,
+   "prime_tower_mm3": 548.161,
+   "time_s": 2096,
+   "model_mm3": [
+    2884.85,
+    299.861,
+    112.947,
+    16.356
+   ],
+   "tower_mm3": [
+    332.415,
+    61.844,
+    76.951,
+    76.951
+   ],
+   "flush_by_tool_mm3": [
+    300.0,
+    200.0,
+    100.0,
+    200.0
+   ]
+  },
+  "differ": [],
+  "tool_placement": {
+   "0": {
+    "layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "body_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "max_outside_mm": 0.012474304558279478,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 15
+   },
+   "1": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.0005885925292972161,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "2": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.018725860595708355,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   },
+   "3": {
+    "layers": [
+     1,
+     2,
+     3
+    ],
+    "body_layers": [
+     1,
+     2,
+     3
+    ],
+    "max_outside_mm": 0.0,
+    "at_allowance_mm": 0.2,
+    "worst_layer": 2
+   }
+  },
+  "tool_placement_note": "Each tool's model extrusion, as beads of their stated widths, against its own body's section at each layer's mid-height, placed as F3 places the whole model: the largest distance of its plastic outside the body to the body, against the tolerance (plus elefant_foot_compensation on the first layer). Every tool prints only its own body, on its layers.",
+  "filaments_used_note": "One filament per body, tool n for the body at shell position n (filament n + 1). Exactly the plan's 4 filaments are loaded and print, with its colors.",
+  "f3_notes": {
+   "F3.printed_connectivity": "Parts and holes of the printed footprint matched one to one with the model section's, per layer; a void inside the model (sparse infill) is not a hole. 3 of 15 layers differ; the first, z = 0.2 mm, has 31 printed part(s) for the model's 1 and 0 printed hole(s) for its 0. Unmatched: a model part overlapping 31 at model (29.16, 32.93) mm; the layer's largest edge gap is at model (38.54, 2.55) mm: a connection or a hole of the model is not printed as such. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_coverage": "The largest distance from a model-edge sample (every 0.05 mm; the true largest is at most 0.025 mm more) to printed plastic, with the model's bounding box centred on the plate as the slicer places it, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 0.2 mm, leaves 0.637 mm against 0.275 mm, at bed (136.54, 97.62), model (38.54, 2.55) mm; 1 layer(s) are over. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)",
+   "F3.edge_overprint": "The largest distance from printed plastic outside the model to the model region (sampled every 0.05 mm on and inside that plastic; the true largest is at most 0.060 mm more), with the model's bounding box centred on the plate, against the tolerance, plus the profile's elefant_foot_compensation on the first layer. The worst layer, z = 3 mm, prints 0.012 mm outside against 0.2 mm, at bed (113.52, 109.73), model (15.51, 14.67) mm. The bead model (each extrusion a line of its stated width with round ends) approximates real plastic. Strength is not judged: a single thin line is printed but may be fragile. Measured for the pinned OrcaSlicer and A1 profile only. information only until the owner decides whether a multicolor F3 FAIL blocks PRINTABLE (docs/plans/2026-11-13-color-slicing.md, Task 7)"
+  },
+  "seconds": 31.2
+ }
+}

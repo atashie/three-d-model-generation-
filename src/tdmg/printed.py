@@ -34,7 +34,7 @@ from __future__ import annotations
 import io
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import numpy as np
@@ -109,6 +109,25 @@ FIRMWARE_G_COMMANDS = frozenset({"G392", "G380", "G39", "G39.3", "G39.4", "G29.2
 # after every SKIPPABLE_END, the X, Y and commanded Z are unknown.
 SKIPPABLE_START = "SKIPPABLE_START"
 SKIPPABLE_END = "SKIPPABLE_END"
+# Multicolor G-code only (parse_gcode(prime_tower=True), for tdmg.color_gcode), from the
+# eight Task 2 G-codes (research/verification/2026-11-13-color-slicing/README.md, "Note for
+# the G-code reader", and test_color_gcode's real-G-code tests):
+# - FEATURE "Prime tower": where each tool change happens and the new tool primes; not the
+#   model. Its extrusions get the model's position, arc, width and commanded-Z checks but
+#   are kept apart in Layer.tower. Their amounts are not checked against the bead model:
+#   written E over the model formula (Flow.e_per_mm at the layer height, over the chord
+#   length) has median 1.0204 (min 1.0185, max 1.0219, 8,533 tower moves), about
+#   1 / filament_flow_ratio (0.98): the tower does not apply the flow ratio. Only its
+#   volume is reported, as information.
+# - "; CP TOOLCHANGE START" ... "; CP TOOLCHANGE END": the A1 change template runs inside
+#   it and writes G392 there. The blocks must pair and not nest; inside one, the
+#   FIRMWARE_G_COMMANDS are accepted as in Custom (the position is then unknown), and the
+#   dwell G4 (written as G4 S0, twice per change) with S or P words at least 0, in FEATURE
+#   "Prime tower" only; G4 does not move the head.
+PRIME_TOWER = "Prime tower"
+DWELL = "G4"
+TOOLCHANGE_START = "CP TOOLCHANGE START"
+TOOLCHANGE_END = "CP TOOLCHANGE END"
 # A word: an upper-case letter and a plain decimal number (no exponent, nan or inf).
 WORD = re.compile(r"([A-Z])(-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))")
 CONNECTIVITY = "F3.printed_connectivity"
@@ -254,13 +273,16 @@ class Segment(NamedTuple):
     y1: float
     width: float
     feature: str
+    line: int = 0               # the G-code line (1-based) of the move it is part of
 
 
 @dataclass(frozen=True)
 class Layer:
     z: float                    # "; Z_HEIGHT:", the top of the layer
     height: float               # "; LAYER_HEIGHT:"
-    segments: list[Segment]
+    segments: list[Segment]     # the model's extrusions
+    # The prime tower's extrusions (parse_gcode(prime_tower=True) only; else always empty).
+    tower: list[Segment] = field(default_factory=list)
 
     @property
     def mid_z(self) -> float:
@@ -330,8 +352,18 @@ def _arc(x, y, nx, ny, words, clockwise, plate: Plate,
     return [*pts, (nx, ny)], length, abs(a1 - a0)
 
 
-def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float, Layer]:
+def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
+                prime_tower: bool = False) -> dict[float, Layer]:
     """{z: Layer} for every "; Z_HEIGHT:" layer, with its extruding moves.
+
+    prime_tower=True is for multicolor G-code (tdmg.color_gcode) and changes three things
+    only (PRIME_TOWER): an extrusion in FEATURE "Prime tower" passes every check a model
+    extrusion does except the feature and the amount, and goes into Layer.tower instead of
+    Layer.segments; "; CP TOOLCHANGE START" ... "; CP TOOLCHANGE END" blocks must pair, and
+    inside one the FIRMWARE_G_COMMANDS are read as in Custom; and there, in FEATURE "Prime
+    tower", G4 (a dwell) is accepted. Everything else below holds as stated. Without it
+    (R1), all three are refused as before (the CP TOOLCHANGE comments are then ignored, as
+    every other comment is). Each Segment carries the line number of its move.
 
     An extruding move is a G1, G2 or G3 with a positive E that moves in X or Y. Moves in
     FEATURE "Custom", the start and end code, are excluded; on the A1 that includes the
@@ -399,6 +431,7 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     model_lines: list[int] = []            # lines of model extrusions
     custom_lines: list[int] = []           # lines of Custom extrusions
     skippable = None                       # the line of an open SKIPPABLE_START
+    change = None                          # the line of an open CP TOOLCHANGE START
     for lineno, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if line.startswith(";"):
@@ -414,6 +447,16 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                                            "SKIPPABLE_START")
                 skippable = None
                 x = y = z_cmd = None           # whether the block ran is not known
+            elif prime_tower and tag == TOOLCHANGE_START:
+                if change is not None:
+                    raise UnsupportedGcode(f"line {lineno}: {TOOLCHANGE_START} inside the one "
+                                           f"opened at line {change}")
+                change = lineno
+            elif prime_tower and tag == TOOLCHANGE_END:
+                if change is None:
+                    raise UnsupportedGcode(f"line {lineno}: {TOOLCHANGE_END} without a "
+                                           f"{TOOLCHANGE_START}")
+                change = None
             elif tag.startswith("FEATURE:") and skippable is not None:
                 raise UnsupportedGcode(f"line {lineno}: a FEATURE inside the SKIPPABLE block "
                                        f"opened at line {skippable}")
@@ -431,7 +474,7 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                                            "positive")
                 bead_height = height
                 if math.isnan(layers[z].height):          # the layer's, not a feature's
-                    layers[z] = Layer(z, height, layers[z].segments)
+                    layers[z] = Layer(z, height, layers[z].segments, layers[z].tower)
             elif tag.startswith("LINE_WIDTH:"):
                 width = _comment_value(tag, lineno)
             elif tag.startswith("FEATURE:"):
@@ -441,7 +484,15 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
         if not code:
             continue
         command = code.split()[0]
-        if ((feature == CUSTOM or skippable is not None) and command.startswith("G")
+        if (prime_tower and command == DWELL and feature == PRIME_TOWER
+                and change is not None and skippable is None):
+            dwell = _words(code, lineno)
+            if set(dwell) - {"S", "P"} or any(v < 0 for v in dwell.values()):
+                raise UnsupportedGcode(f"line {lineno}: {code!r} is not a dwell this check "
+                                       "reads (G4 with S or P at least 0)")
+            continue
+        if ((feature == CUSTOM or skippable is not None or change is not None)
+                and command.startswith("G")
                 and command not in G_COMMANDS):
             _check_firmware(command, code, lineno, plate)
             x = y = z_cmd = None               # where the firmware leaves it is not known
@@ -511,25 +562,30 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                 custom_lines.append(lineno)
             if moves and e > 0 and feature != CUSTOM:
                 model_lines.append(lineno)
+                tower = prime_tower and feature == PRIME_TOWER
                 _check_extrusion(where, command, words, (x, y, nx, ny), z, width, feature,
-                                 z_cmd, None if z is None else layers[z].height)
+                                 z_cmd, None if z is None else layers[z].height, tower)
                 if command == "G1" or command == "G0":
                     pts, length, sweep = [(nx, ny)], math.hypot(nx - x, ny - y), None
                 else:
                     pts, length, sweep = _arc(x, y, nx, ny, words, command == "G2", plate,
                                               where)
-                if flow is not None:
+                if flow is not None and not tower:
                     _check_amount(where, e, length, sweep, width, bead_height,
                                   feature in BRIDGE_FEATURES, flow)
+                into = layers[z].tower if tower else layers[z].segments
                 px, py = x, y
                 for qx, qy in pts:
                     if (qx, qy) != (px, py):
-                        layers[z].segments.append(Segment(px, py, qx, qy, width, feature))
+                        into.append(Segment(px, py, qx, qy, width, feature, lineno))
                     px, py = qx, qy
             x, y = nx, ny
     if skippable is not None:
         raise UnsupportedGcode(f"line {skippable}: SKIPPABLE_START without a SKIPPABLE_END "
                                "by the end of the file")
+    if change is not None:
+        raise UnsupportedGcode(f"line {change}: {TOOLCHANGE_START} without a "
+                               f"{TOOLCHANGE_END} by the end of the file")
     if not layers:
         raise UnsupportedGcode("no Z_HEIGHT layer: this is not OrcaSlicer G-code with layer "
                                "comments")
@@ -627,7 +683,9 @@ def _check_bound(where, x, y, plate: Plate) -> None:
 
 
 def _check_extrusion(where, command, words, ends, z, width, feature, z_cmd,
-                     layer_height) -> None:
+                     layer_height, tower: bool = False) -> None:
+    """Refuse a model extrusion (or, with tower, a prime-tower one) this module cannot
+    read; tower only lifts the model-feature test."""
     if z is None:
         raise UnsupportedGcode(f"{where}: an extrusion before any Z_HEIGHT")
     if math.isnan(layer_height):
@@ -635,7 +693,7 @@ def _check_extrusion(where, command, words, ends, z, width, feature, z_cmd,
                                "LAYER_HEIGHT")
     if feature is None:
         raise UnsupportedGcode(f"{where}: an extrusion before any FEATURE")
-    if feature not in MODEL_FEATURES:
+    if feature not in MODEL_FEATURES and not tower:
         raise UnsupportedGcode(f"{where}: an extrusion in feature {feature!r}, which is not "
                                "one of the model features this check knows")
     if width is None or not width > 0:
@@ -978,13 +1036,26 @@ def analyse(text: str, stl: bytes | trimesh.Trimesh, plate: Plate, allowance_fir
         raise UnsupportedGcode("the model has no section at the first layer")
     printed = [footprint(layers[z].segments) for z in zs]
     centre = (float(bounds[0, 0] + bounds[1, 0]) / 2, float(bounds[0, 1] + bounds[1, 1]) / 2)
+    return analyse_sections(zs, sections, printed, layers[zs[-1]].height, centre,
+                            float(bounds[1, 2]), plate, allowance_first_mm, allowance_mm)
+
+
+def analyse_sections(zs: list[float], sections: list, printed: list, last_height: float,
+                     centre: tuple[float, float], model_top: float, plate: Plate,
+                     allowance_first_mm: float, allowance_mm: float,
+                     angles: tuple[int, ...] = QUARTER_TURNS) -> Analysis:
+    """analyse's measurement, from what it has read: per layer (zs increasing), the model's
+    section in model mm and the footprint in bed mm; the model's bounding-box centre (model
+    mm), which goes to the plate centre; its top; and the last layer's height. analyse
+    gives every quarter turn (angles); tdmg.color_gcode also measures one tool's footprint
+    against its body at the one turn found for the whole model (angles of one item)."""
     n = len(zs)
 
     def edge_mean(edges):
         return 0.0 if edges is None else float(edges[2].mean())
 
     firsts = []
-    for angle in QUARTER_TURNS:
+    for angle in angles:
         alignment = Alignment(angle, centre, plate.centre)
         edges = edge_gaps(sections[0], printed[0], alignment)
         firsts.append((edge_mean(edges), angle, alignment, edges))
@@ -1006,8 +1077,7 @@ def analyse(text: str, stl: bytes | trimesh.Trimesh, plate: Plate, allowance_fir
         turn = Turn(alignment, done, total / n, len(done) == n)
         (complete if turn.complete else dropped).append(turn)
     complete.sort(key=lambda t: (t.score, t.alignment.angle))
-    return Analysis(complete + dropped, n, zs[-1], layers[zs[-1]].height,
-                    float(bounds[1, 2]))
+    return Analysis(complete + dropped, n, zs[-1], last_height, model_top)
 
 
 # --- F3 checks for tdmg slice ----------------------------------------------------------
@@ -1068,13 +1138,8 @@ def f3_checks(gcode: bytes | None, stl: bytes, setup: Setup,
     failed), when there is no G-code, when the G-code is unsupported, or when the analysis
     raises any other error (an "analysis error", never a PASS).
     """
-    tolerance_mm, first_mm = setup.tolerance_mm, setup.tolerance_mm + setup.elephant_foot_mm
-    threshold = {"first_layer_mm": first_mm, "other_layers_mm": tolerance_mm}
-    record = {"measured": False, "reason": None,
-              "allowance_mm": {"first_layer": first_mm, "other_layers": tolerance_mm,
-                               "elefant_foot_compensation": setup.elephant_foot_mm},
-              "edge_sample_mm": EDGE_SAMPLE_MM, "layer_count": None, "alignment": None,
-              "layers": []}
+    threshold, record = _f3_base(setup)
+    tolerance_mm, first_mm = threshold["other_layers_mm"], threshold["first_layer_mm"]
     reason = not_measured or (None if gcode else "no G-code was written")
     if reason is None:
         try:
@@ -1089,6 +1154,28 @@ def f3_checks(gcode: bytes | None, stl: bytes, setup: Setup,
     if reason is not None:
         record["reason"] = reason
         return _unknown_all(reason, threshold), record
+    return judge_f3(analysis, setup)
+
+
+def _f3_base(setup: Setup) -> tuple[dict, dict]:
+    """The F3 threshold and an empty "printed" record, from the setup."""
+    tolerance_mm, first_mm = setup.tolerance_mm, setup.tolerance_mm + setup.elephant_foot_mm
+    threshold = {"first_layer_mm": first_mm, "other_layers_mm": tolerance_mm}
+    record = {"measured": False, "reason": None,
+              "allowance_mm": {"first_layer": first_mm, "other_layers": tolerance_mm,
+                               "elefant_foot_compensation": setup.elephant_foot_mm},
+              "edge_sample_mm": EDGE_SAMPLE_MM, "layer_count": None, "alignment": None,
+              "layers": []}
+    return threshold, record
+
+
+def judge_f3(analysis: Analysis, setup: Setup,
+             truncation: bool = True) -> tuple[list[CheckResult], dict]:
+    """f3_checks' three checks and record from a completed analysis (the rules are in
+    f3_checks). truncation=False leaves out the layer-count and model-top test of
+    F3.edge_coverage (_truncation), for a body that ends below the model's top
+    (tdmg.color_gcode's per-tool checks)."""
+    threshold, record = _f3_base(setup)
     complete = [t for t in analysis.turns if t.complete]
     best = complete[0]
     tied = [t for t in complete if t.score - best.score <= 2 * SCORE_BOUND_MM]
@@ -1114,7 +1201,7 @@ def f3_checks(gcode: bytes | None, stl: bytes, setup: Setup,
                   f"({2 * SCORE_BOUND_MM:.3f} mm) but give different verdicts: {detail}")
         record["reason"] = reason
         return _unknown_all(reason, threshold), record
-    short = _truncation(analysis, setup.allowed_layers, threshold)
+    short = _truncation(analysis, setup.allowed_layers, threshold) if truncation else None
     if short is not None:
         checks[1] = short
     return checks, record

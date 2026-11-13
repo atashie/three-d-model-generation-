@@ -300,3 +300,13 @@ The G-code's config has `flush_multiplier = 0.3` and the matrix. How OrcaSlicer 
 - `raw/rules-colours.json`, `raw/rules-plain.json`: the amended rules per run.
 - `raw/profiles-colours.json`: the pinned filament profile's SHA-256 and each derived profile's SHA-256 and differing keys.
 - No G-code is kept.
+
+## Addendum, 2026-11-13: Task 5 cross-check (`crosscheck_task5.py`)
+
+The production reader and checks (`src/tdmg/color_gcode.py`) were run on the eight colours G-codes of this record (kept in the Task 2 scratch folder, not in the repo), with the owner plans' bodies read as the gate reads them and face down from `tdmg.orca_input.turn_over`. Output: `raw/crosscheck-task5.txt` and `raw/crosscheck-task5.json`.
+
+- **Gated checks:** `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used` PASS on all 8.
+- **Numbers against this record:** start load, change count, rule (c) count, exact minimum (from the start load), statistics `filament_changes`, per-layer orders, flush and prime-tower totals, total time, and per-tool model, prime-tower and flush volumes are equal to `raw/analysis-colours.json` and `raw/rules-colours.json` in all 8 (at the record's 3-decimal rounding).
+- **Placement margin:** the largest distance of a tool's bead outside its own body is 0.0253 mm (Roadie keep, T1), against the 0.2 mm allowance.
+- **F3 (information only until Task 7):** the silhouette's `F3.printed_connectivity` FAILs on all 8, always on the three multicolor layers: the union of every tool's beads splits into 4 to 64 parts. Neighbouring bodies' beads meet edge to edge at their shared outline, and the bead model leaves gaps between them of 0 to about 0.03 mm (Roadie drop face up, layer 13: 11 parts, the nearest two 0.025 and 0.026 mm from the largest). The silhouette's `F3.edge_coverage` FAILs on Roadie keep and Oddie keep face down (1.179 and 0.637 mm on layer 1) and is UNKNOWN on Roadie drop face down (0.251 against 0.275 mm). Per-tool F3 results are in the JSON.
+- **Prime tower E:** written E over the model's bead formula has median 1.0204 (min 1.0185, max 1.0219) over 8,533 tower moves, about 1 / `filament_flow_ratio` (0.98). The reader does not check tower amounts.

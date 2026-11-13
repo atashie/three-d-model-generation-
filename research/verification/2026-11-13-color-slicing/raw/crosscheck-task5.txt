@@ -1,0 +1,40 @@
+roadie-tol30-60-drop-v3-f64-up: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS | changes 9 rule_c 9 min 9 start T0 flush 951.28 tower 1054.692 time 1873 | differs from the record: nothing | 20 s
+    T0: layers 1-15, largest outside its body 0.0132 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 13-15, largest outside its body 0.0133 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity FAIL, edge_coverage PASS, edge_overprint PASS
+    T2: layers 13-15, largest outside its body 0.0119 mm (allowance 0.2, layer 14); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+    T3: layers 13-15, largest outside its body 0.0000 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+roadie-tol30-60-drop-v3-f64-down: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=UNKNOWN edge_overprint=PASS | changes 10 rule_c 10 min 9 start T2 flush 1051.28 tower 592.449 time 1897 | differs from the record: nothing | 18 s
+    T0: layers 1-15, largest outside its body 0.0141 mm (allowance 0.2, layer 4); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 1-3, largest outside its body 0.0129 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage PASS, edge_overprint PASS
+    T2: layers 1-3, largest outside its body 0.0136 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+    T3: layers 1-3, largest outside its body 0.0000 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+roadie-tol30-60-keep-v4-f64-up: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS | changes 9 rule_c 9 min 9 start T0 flush 951.28 tower 1054.692 time 2002 | differs from the record: nothing | 33 s
+    T0: layers 1-15, largest outside its body 0.0132 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 13-15, largest outside its body 0.0253 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T2: layers 13-15, largest outside its body 0.0009 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T3: layers 13-15, largest outside its body 0.0006 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+roadie-tol30-60-keep-v4-f64-down: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=FAIL edge_overprint=PASS | changes 9 rule_c 9 min 9 start T3 flush 923.84 tower 548.161 time 1922 | differs from the record: nothing | 30 s
+    T0: layers 1-15, largest outside its body 0.0141 mm (allowance 0.2, layer 4); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 1-3, largest outside its body 0.0253 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T2: layers 1-3, largest outside its body 0.0009 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T3: layers 1-3, largest outside its body 0.0006 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+oddie-60-merge-blues-v3-f64-up: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS | changes 9 rule_c 9 min 9 start T0 flush 900.0 tower 1054.692 time 1910 | differs from the record: nothing | 20 s
+    T0: layers 1-15, largest outside its body 0.0130 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 13-15, largest outside its body 0.0130 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+    T2: layers 13-15, largest outside its body 0.0193 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+    T3: layers 13-15, largest outside its body 0.0001 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity FAIL, edge_coverage PASS, edge_overprint PASS
+oddie-60-merge-blues-v3-f64-down: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS | changes 9 rule_c 9 min 9 start T0 flush 900.0 tower 548.161 time 1868 | differs from the record: nothing | 22 s
+    T0: layers 1-15, largest outside its body 0.0125 mm (allowance 0.2, layer 15); per-tool F3 printed_connectivity PASS, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 1-3, largest outside its body 0.0122 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage PASS, edge_overprint PASS
+    T2: layers 1-3, largest outside its body 0.0193 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage FAIL, edge_overprint PASS
+    T3: layers 1-3, largest outside its body 0.0001 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+oddie-60-keep-merge-blues-greens-v4-f64-up: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS | changes 9 rule_c 9 min 9 start T0 flush 600.0 tower 1054.692 time 2124 | differs from the record: nothing | 29 s
+    T0: layers 1-15, largest outside its body 0.0130 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 13-15, largest outside its body 0.0006 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+    T2: layers 13-15, largest outside its body 0.0187 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T3: layers 13-15, largest outside its body 0.0000 mm (allowance 0.2, layer 13); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+oddie-60-keep-merge-blues-greens-v4-f64-down: color_changes=PASS tool_placement=PASS filaments_used=PASS printed_connectivity=FAIL edge_coverage=FAIL edge_overprint=PASS | changes 9 rule_c 9 min 9 start T1 flush 800.0 tower 548.161 time 2096 | differs from the record: nothing | 31 s
+    T0: layers 1-15, largest outside its body 0.0125 mm (allowance 0.2, layer 15); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T1: layers 1-3, largest outside its body 0.0006 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
+    T2: layers 1-3, largest outside its body 0.0187 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity FAIL, edge_coverage FAIL, edge_overprint PASS
+    T3: layers 1-3, largest outside its body 0.0000 mm (allowance 0.2, layer 2); per-tool F3 printed_connectivity PASS, edge_coverage PASS, edge_overprint PASS
