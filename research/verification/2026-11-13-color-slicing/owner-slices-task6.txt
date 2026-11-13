@@ -1,0 +1,85 @@
+Task 6: tdmg slice on the owner's four colored plans (OrcaSlicer 2.5.0 and PrusaSlicer 2.9.7, pinned)
+
+== roadie-tol30-60-drop-v3-f64 (62 s) -> artifacts/slice-runs/color-roadie-tol30-60-drop-v3-f64
+   colorslice_id a79b80fe0d3d18accff4cd51e5114d0a6d96f8e8bbf2a33e0a9521ce422ef70d
+   filaments: 1=base #f60606, 2=color 1 #f5f5f5, 3=color 2 #f0f10a, 4=color 3 #451812
+   F6.portability (model.3mf): UNKNOWN; parts 10 / 10, facets 90940 / 90940, layers 15, volume 2277.716309 mm3 (PrusaSlicer minus palette sum -0.025 mm3, not judged)
+   face up: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 FAIL/PASS/PASS; T2 PASS/PASS/PASS; T3 PASS/PASS/PASS
+     changes 9, flush 951.28 mm3, prime tower 1054.692 mm3, time 1873 s; G-code face-up/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.printed_connectivity.T0 FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T1 FAIL, F6.portability UNKNOWN
+   face down: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=UNKNOWN edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 FAIL/PASS/PASS; T2 PASS/PASS/PASS; T3 PASS/PASS/PASS
+     changes 10, flush 1051.28 mm3, prime tower 592.449 mm3, time 1897 s; G-code face-down/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage UNKNOWN, F3.printed_connectivity.T0 FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T1 FAIL, F6.portability UNKNOWN
+   glue-base: NOT CERTIFIED | layers 15 | F3 PASS/FAIL/PASS | F6.portability PASS
+     certification: NOT CERTIFIED: F3.edge_coverage FAIL, F2.target_width missing, F4.body_count missing
+   glue-color-1-f5f5f5: NOT CERTIFIED | layers 3 | F3 PASS/PASS/PASS | F6.portability PASS
+     certification: NOT CERTIFIED: F2.target_width missing, F4.body_count missing
+   glue-color-2-f0f10a: NOT CERTIFIED | layers 3 | F3 FAIL/FAIL/FAIL | F6.portability PASS
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage FAIL, F3.edge_overprint FAIL, F2.target_width missing, F4.body_count missing
+
+== roadie-tol30-60-keep-v4-f64 (75 s) -> artifacts/slice-runs/color-roadie-tol30-60-keep-v4-f64
+   colorslice_id 0dabd050545796197adb608157edfeeaee19a3ea2a532141698eacb470261872
+   filaments: 1=base #f60606, 2=color 1 #451812, 3=color 2 #f5f5f5, 4=color 3 #f0f10a
+   F6.portability (model.3mf): UNKNOWN; parts 13 / 13, facets 214544 / 214544, layers 15, volume 2277.990967 mm3 (PrusaSlicer minus palette sum +0.250 mm3, not judged)
+   face up: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 FAIL/FAIL/PASS; T2 FAIL/FAIL/PASS; T3 PASS/PASS/PASS
+     changes 9, flush 951.28 mm3, prime tower 1054.692 mm3, time 2002 s; G-code face-up/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.printed_connectivity.T0 FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T1 FAIL, F3.edge_coverage.T1 FAIL, F3.printed_connectivity.T2 FAIL, F3.edge_coverage.T2 FAIL, F6.portability UNKNOWN
+   face down: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=FAIL edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 FAIL/FAIL/PASS; T2 FAIL/FAIL/PASS; T3 PASS/PASS/PASS
+     changes 9, flush 923.84 mm3, prime tower 548.161 mm3, time 1922 s; G-code face-down/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage FAIL, F3.printed_connectivity.T0 FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T1 FAIL, F3.edge_coverage.T1 FAIL, F3.printed_connectivity.T2 FAIL, F3.edge_coverage.T2 FAIL, F6.portability UNKNOWN
+   glue: not built (the plan keeps the outline (outlines: keep with an outline family, so an outline...)
+
+== oddie-60-merge-blues-v3-f64 (62 s) -> artifacts/slice-runs/color-oddie-60-merge-blues-v3-f64
+   colorslice_id fcf42d336634f6754f4cd54bc5e306d9125120ab844e1a2618c6cb31a564b023
+   filaments: 1=base #25561b, 2=color 1 #547e9d, 3=color 2 #48a835, 4=color 3 #dd4f47
+   F6.portability (model.3mf): UNKNOWN; parts 8 / 8, facets 101984 / 101984, layers 15, volume 5033.411621 mm3 (PrusaSlicer minus palette sum -0.237 mm3, not judged)
+   face up: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS; per tool (conn/cov/over) T0 PASS/FAIL/PASS; T1 PASS/PASS/PASS; T2 PASS/PASS/PASS; T3 FAIL/PASS/PASS
+     changes 9, flush 900.0 mm3, prime tower 1054.692 mm3, time 1910 s; G-code face-up/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T3 FAIL, F6.portability UNKNOWN
+   face down: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS; per tool (conn/cov/over) T0 PASS/FAIL/PASS; T1 FAIL/PASS/PASS; T2 PASS/FAIL/PASS; T3 PASS/PASS/PASS
+     changes 9, flush 900.0 mm3, prime tower 548.161 mm3, time 1868 s; G-code face-down/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T1 FAIL, F3.edge_coverage.T2 FAIL, F6.portability UNKNOWN
+   glue-base: NOT CERTIFIED | layers 15 | F3 PASS/FAIL/PASS | F6.portability PASS
+     certification: NOT CERTIFIED: F3.edge_coverage FAIL, F2.target_width missing, F4.body_count missing
+   glue-color-1-547e9d: NOT CERTIFIED | layers 3 | F3 PASS/PASS/PASS | F6.portability PASS
+     certification: NOT CERTIFIED: F2.target_width missing, F4.body_count missing
+   glue-color-2-48a835: NOT CERTIFIED | layers 3 | F3 FAIL/FAIL/FAIL | F6.portability PASS
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage FAIL, F3.edge_overprint FAIL, F2.target_width missing, F4.body_count missing
+   glue-color-3-dd4f47: NOT CERTIFIED | layers 3 | F3 PASS/UNKNOWN/FAIL | F6.portability PASS
+     certification: NOT CERTIFIED: F3.edge_coverage UNKNOWN, F3.edge_overprint FAIL, F2.target_width missing, F4.body_count missing
+
+== oddie-60-keep-merge-blues-greens-v4-f64 (98 s) -> artifacts/slice-runs/color-oddie-60-keep-merge-blues-greens-v4-f64
+   colorslice_id 3bb623d89a3db1c8c253713beabfcec5ac5249c33770b35c67b59283e6c6728d
+   filaments: 1=base #25561b, 2=color 1 #547e9d, 3=color 2 #0d100d, 4=color 3 #dd4f47
+   F6.portability (model.3mf): UNKNOWN; parts 14 / 14, facets 302586 / 302586, layers 15, volume 5032.416504 mm3 (PrusaSlicer minus palette sum -1.232 mm3, not judged)
+   face up: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=PASS edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 PASS/PASS/PASS; T2 FAIL/FAIL/PASS; T3 PASS/PASS/PASS
+     changes 9, flush 600.0 mm3, prime tower 1054.692 mm3, time 2124 s; G-code face-up/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.printed_connectivity.T0 FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T2 FAIL, F3.edge_coverage.T2 FAIL, F6.portability UNKNOWN
+   face down: NOT CERTIFIED
+     color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
+     F3 silhouette printed_connectivity=FAIL edge_coverage=FAIL edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 PASS/PASS/PASS; T2 FAIL/FAIL/PASS; T3 PASS/PASS/PASS
+     changes 9, flush 800.0 mm3, prime tower 548.161 mm3, time 2096 s; G-code face-down/plate_1.gcode.failed
+     against Task 5: equal
+     certification: NOT CERTIFIED: F3.printed_connectivity FAIL, F3.edge_coverage FAIL, F3.printed_connectivity.T0 FAIL, F3.edge_coverage.T0 FAIL, F3.printed_connectivity.T2 FAIL, F3.edge_coverage.T2 FAIL, F6.portability UNKNOWN
+   glue: not built (the plan keeps the outline (outlines: keep with an outline family, so an outline...)
