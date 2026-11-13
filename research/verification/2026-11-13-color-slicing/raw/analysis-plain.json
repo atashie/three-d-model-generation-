@@ -20,7 +20,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": false,
+  "info_start_loads_filament_1": false,
   "start_tools": [
    [
     1,
@@ -30,7 +30,14 @@
   "t1000_lines": 2,
   "real_changes": 10,
   "minimum_changes": 9,
-  "decision4_formula_on_actual_order": 11,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 234.301,
+   "2": 163.181,
+   "3": 150.679,
+   "4": 44.288
+  },
+  "decision4_formula_on_actual_order": 10,
   "statistics_filament_changes": 10,
   "changes_all_in_m620_pair": true,
   "changes_all_in_cp_toolchange": true,
@@ -561,7 +568,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": true,
+  "info_start_loads_filament_1": true,
   "start_tools": [
    [
     0,
@@ -571,6 +578,24 @@
   "t1000_lines": 2,
   "real_changes": 9,
   "minimum_changes": 9,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 232.566,
+   "2": 90.39,
+   "3": 77.88,
+   "4": 65.633,
+   "5": 53.646,
+   "6": 41.932,
+   "7": 30.473,
+   "8": 30.473,
+   "9": 30.473,
+   "10": 30.473,
+   "11": 30.473,
+   "12": 30.473,
+   "13": 103.268,
+   "14": 103.265,
+   "15": 103.272
+  },
   "decision4_formula_on_actual_order": 9,
   "statistics_filament_changes": 9,
   "changes_all_in_m620_pair": true,
@@ -1093,7 +1118,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": true,
+  "info_start_loads_filament_1": true,
   "start_tools": [
    [
     0,
@@ -1103,6 +1128,13 @@
   "t1000_lines": 2,
   "real_changes": 10,
   "minimum_changes": 9,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 234.301,
+   "2": 163.181,
+   "3": 150.679,
+   "4": 44.288
+  },
   "decision4_formula_on_actual_order": 10,
   "statistics_filament_changes": 10,
   "changes_all_in_m620_pair": true,
@@ -1636,7 +1668,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": true,
+  "info_start_loads_filament_1": true,
   "start_tools": [
    [
     0,
@@ -1646,6 +1678,24 @@
   "t1000_lines": 2,
   "real_changes": 9,
   "minimum_changes": 9,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 232.566,
+   "2": 90.39,
+   "3": 77.88,
+   "4": 65.633,
+   "5": 53.646,
+   "6": 41.932,
+   "7": 30.473,
+   "8": 30.473,
+   "9": 30.473,
+   "10": 30.473,
+   "11": 30.473,
+   "12": 30.473,
+   "13": 103.268,
+   "14": 103.265,
+   "15": 103.272
+  },
   "decision4_formula_on_actual_order": 9,
   "statistics_filament_changes": 9,
   "changes_all_in_m620_pair": true,
@@ -2171,7 +2221,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": false,
+  "info_start_loads_filament_1": false,
   "start_tools": [
    [
     2,
@@ -2181,7 +2231,14 @@
   "t1000_lines": 2,
   "real_changes": 10,
   "minimum_changes": 9,
-  "decision4_formula_on_actual_order": 11,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 234.301,
+   "2": 163.181,
+   "3": 150.679,
+   "4": 44.288
+  },
+  "decision4_formula_on_actual_order": 10,
   "statistics_filament_changes": 10,
   "changes_all_in_m620_pair": true,
   "changes_all_in_cp_toolchange": true,
@@ -2711,7 +2768,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": true,
+  "info_start_loads_filament_1": true,
   "start_tools": [
    [
     0,
@@ -2721,6 +2778,24 @@
   "t1000_lines": 2,
   "real_changes": 9,
   "minimum_changes": 9,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 232.566,
+   "2": 90.39,
+   "3": 77.88,
+   "4": 65.633,
+   "5": 53.646,
+   "6": 41.932,
+   "7": 30.473,
+   "8": 30.473,
+   "9": 30.473,
+   "10": 30.473,
+   "11": 30.473,
+   "12": 30.473,
+   "13": 103.268,
+   "14": 103.265,
+   "15": 103.272
+  },
   "decision4_formula_on_actual_order": 9,
   "statistics_filament_changes": 9,
   "changes_all_in_m620_pair": true,
@@ -3242,7 +3317,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": false,
+  "info_start_loads_filament_1": false,
   "start_tools": [
    [
     3,
@@ -3252,7 +3327,14 @@
   "t1000_lines": 2,
   "real_changes": 10,
   "minimum_changes": 9,
-  "decision4_formula_on_actual_order": 11,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 234.301,
+   "2": 163.181,
+   "3": 150.679,
+   "4": 44.288
+  },
+  "decision4_formula_on_actual_order": 10,
   "statistics_filament_changes": 10,
   "changes_all_in_m620_pair": true,
   "changes_all_in_cp_toolchange": true,
@@ -3783,7 +3865,7 @@
    2.8,
    3.0
   ],
-  "start_loads_filament_1": true,
+  "info_start_loads_filament_1": true,
   "start_tools": [
    [
     0,
@@ -3793,6 +3875,24 @@
   "t1000_lines": 2,
   "real_changes": 9,
   "minimum_changes": 9,
+  "info_minimum_changes_from_base": 9,
+  "prime_tower_mm3_by_layer": {
+   "1": 232.566,
+   "2": 90.39,
+   "3": 77.88,
+   "4": 65.633,
+   "5": 53.646,
+   "6": 41.932,
+   "7": 30.473,
+   "8": 30.473,
+   "9": 30.473,
+   "10": 30.473,
+   "11": 30.473,
+   "12": 30.473,
+   "13": 103.268,
+   "14": 103.265,
+   "15": 103.272
+  },
   "decision4_formula_on_actual_order": 9,
   "statistics_filament_changes": 9,
   "changes_all_in_m620_pair": true,

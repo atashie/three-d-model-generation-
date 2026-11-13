@@ -11,6 +11,8 @@ Usage (from the repo root, Windows):
     uv run python research/verification/2026-11-13-color-slicing/measure_slicing.py build OUT
     uv run python <this file> orca OUT [VARIANT [STEM_REGEX]]
     uv run python <this file> analyse OUT [VARIANT]
+    uv run python <this file> rules OUT [VARIANT]
+    uv run python <this file> profiles OUT
 
 VARIANT is plain (default), arrange0 or colours (see VARIANTS).
 
@@ -323,7 +325,7 @@ def walk(text: str, plate: printed.Plate) -> dict:
                 tc["flush_length_L"] = ww["L"]
         elif re.fullmatch(r"T\d+", cmd):
             n = int(cmd[1:])
-            if n == 1000:             # A1 start code; not a filament (it is never < 255 use)
+            if n == 1000:             # written by the A1 start code; not a filament, not a change
                 t1000.append({"line": i, "block": block})
                 continue
             tools.append({"line": i, "block": block, "T": n, "prev": tool,
@@ -562,7 +564,8 @@ def analyse_one(gcode: Path, stats_path: Path, bodies, plate, diameter: float) -
     start_t = [t for t in facts["tools"] if t["block"] == "start"]
     layer_t = [t for t in facts["tools"] if t["block"].startswith("layer")]
     end_t = [t for t in facts["tools"] if t["block"] == "end"]
-    # Order of tools per layer: the tool loaded at the layer's start, then each T in it.
+    # Order of tools per layer: the tools in the order their extrusions appear, consecutive
+    # repeats merged; orders_model from model-feature extrusions only, orders_all from all.
     orders_all, orders_model = [], []
     for lay in layers:
         n = lay["n"]
@@ -637,7 +640,9 @@ def analyse_one(gcode: Path, stats_path: Path, bodies, plate, diameter: float) -
         "layer_tools": layer_t,
         "m62x": facts["m62x"],
         "loaded_by_start": loaded,
-        "start_loads_filament_1": bool(start_t) and len(start_t) == 1 and loaded == 0
+        # Information only: the plan's first Decision 2 (start loads filament 1), since
+        # amended (check_rules has the amended test).
+        "info_start_loads_filament_1": bool(start_t) and len(start_t) == 1 and loaded == 0
         and start_t[0]["in_m620_for"] == 0,
         "real_changes": len([t for t in layer_t if t["T"] < 255]),
         "changes_all_in_m620_pair": all(t["in_m620_for"] == t["T"] for t in layer_t),
@@ -648,8 +653,14 @@ def analyse_one(gcode: Path, stats_path: Path, bodies, plate, diameter: float) -
         "sets_match": [sorted(a) == b for a, b in zip(sets, printed_sets, strict=True)],
         "orders_model": orders_model,
         "orders_all_features": orders_all,
-        "minimum_changes": min_changes(sets, 0),
-        "decision4_formula_on_actual_order": decision4_count(sets, orders_model, 0),
+        # From the start-loaded tool (the previous tool for layer 1).
+        "minimum_changes": min_changes(sets, loaded),
+        "decision4_formula_on_actual_order": decision4_count(sets, orders_model, loaded),
+        "info_minimum_changes_from_base": min_changes(sets, 0),
+        "prime_tower_mm3_by_layer": {str(lay["n"]): sum(
+            e for (_t, f, lk), e in facts["xy_e"].items()
+            if f == "Prime tower" and lk == lay["n"]) * area for lay in layers
+            if any(f == "Prime tower" and lk == lay["n"] for (_t, f, lk) in facts["xy_e"])},
         "toolchange_blocks": [{k: (round(v, 5) if isinstance(v, float) else v)
                                for k, v in c.items()} for c in changes],
         "flush_mm3_total": sum(c["flush_e"] for c in changes) * area,
@@ -715,11 +726,14 @@ def analyse(out: Path, variant: str = "plain") -> None:
             "filaments_loaded": rec["filaments"],
             "layers": len(a["layers"]),
             "layer_z": [lay["z"] for lay in a["layers"]],
-            "start_loads_filament_1": a["start_loads_filament_1"],
+            "info_start_loads_filament_1": a["info_start_loads_filament_1"],
             "start_tools": [(t["T"], t["in_m620_for"]) for t in a["start_tools"]],
             "t1000_lines": len(a["t1000"]),
             "real_changes": a["real_changes"],
             "minimum_changes": a["minimum_changes"],
+            "info_minimum_changes_from_base": a["info_minimum_changes_from_base"],
+            "prime_tower_mm3_by_layer": {k: round(v, 3) for k, v in
+                                         a["prime_tower_mm3_by_layer"].items()},
             "decision4_formula_on_actual_order": a["decision4_formula_on_actual_order"],
             "statistics_filament_changes": (a["statistics"] or {}).get("filament_changes"),
             "changes_all_in_m620_pair": a["changes_all_in_m620_pair"],
@@ -763,7 +777,7 @@ def analyse(out: Path, variant: str = "plain") -> None:
             "markers": a["markers"],
         }
         print(stem, json.dumps({k: summary[stem][k] for k in (
-            "exit", "layers", "start_loads_filament_1", "real_changes", "minimum_changes",
+            "exit", "layers", "info_start_loads_filament_1", "real_changes", "minimum_changes",
             "decision4_formula_on_actual_order", "statistics_filament_changes",
             "sets_match_all", "orders_by_layer", "flush_mm3", "prime_tower_mm3", "time_s")}))
         for t, d in summary[stem]["placement"]["by_tool"].items():
@@ -828,7 +842,7 @@ def check_rules(out: Path, variant: str) -> None:
             "d4c_formula": formula, "real_changes": a["real_changes"],
             "d4c_holds": formula == a["real_changes"],
             "d4d_exact_minimum_from_loaded": min_changes(sets, loaded),
-            "d4d_exact_minimum_from_base": a["minimum_changes"],
+            "d4d_exact_minimum_from_base": min_changes(sets, 0),
             "d4d_exact_minimum_free_start": min(min_changes(sets, t) for t in sets[0]),
             "statistics_filament_changes": (a["statistics"] or {}).get("filament_changes")}
         r = res[stem]

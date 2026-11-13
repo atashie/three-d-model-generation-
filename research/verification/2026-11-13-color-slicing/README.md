@@ -12,10 +12,10 @@ Task 2 of `docs/plans/2026-11-13-color-slicing.md` (plan Decisions 2, 3 and 4).
 And how do the G-code's numbers compare with OrcaSlicer's statistics?
 
 **Short answer:**
-- **Slicing and placement:** all 16 slices exit 0 (4 plans × 2 faces × 2 filament variants). Each tool extrudes only inside its own body, on its body's layers. Every body is printed by its own tool, and the model is centred on the plate.
+- **Slicing and placement:** all 16 slices exit 0 (4 plans × 2 faces × 2 filament variants). Each tool's extrusion centrelines lie inside its own body, on its body's layers; the beads' edges reach past the body's outline by at most half a line width (see Placement). Every body is printed by its own tool, and the model is centred on the plate.
 - **The start load:** the start code loads one filament: the first tool OrcaSlicer prints on layer 1 (`initial_no_support_extruder`). Face up, that is always the base (T0). Face down, OrcaSlicer chooses it: T1, T0, T2 or T3, depending on the plan. This was the plan's stop point; the controller amended Decision 2 (below).
 - **Tool order:** on every layer each tool prints in one run. Each layer starts with the previous layer's last tool when that tool is on the layer. So the change count always equals Σ(colors − 1) plus the layer boundaries where the tool differs.
-- **Changes against the minimum:** face up, the count equals the exact minimum, 9, in all runs. Face down it is 10 in some runs (minimum 9). OrcaSlicer orders each layer without looking at the next one, so the last color layer can end away from the base.
+- **Changes against the minimum:** face up, the count equals the exact minimum, 9, in all runs. Face down it is 10 in some runs (minimum 9): the last color layer ends away from the base. The orders seen are consistent with OrcaSlicer ordering each layer without looking at the next one; its source was not read.
 - **Order and flush follow the filament colors.** The CLI computes the flush matrix from `filament_colour`, which the 3MF does not set. So the runs whose filaments carry the plan's colors ("colours") are the primary measurement. The runs with the pinned profile four times ("plain") are the comparison.
 
 **What kind of evidence:** CLI behaviour of the pinned OrcaSlicer 2.5.0 on Windows, measured on the owner's PC on 2026-11-13. Nothing was printed. No GUI was run. Bambu Studio was not run.
@@ -57,7 +57,7 @@ The first run stopped at the plan's stop point: the face-down start code did not
   - Results in all 4 plans:
     - every rotated coordinate, computed in float64, is exactly a float32 value (0 inexact in x and in z);
     - float32 arithmetic gives the same values;
-    - every body's signed volume is unchanged and positive.
+    - every body's signed volume is positive and unchanged to float rounding (largest difference 2.4e-12 mm³).
   - The turned inlays span z 0 to 0.5999999046 (= 3 − float32(2.4)), not float32(0.6). They still hold the mid-heights of layers 1–3.
 - **Filament variants:**
   - **colours (primary):** four derived filament profiles per plan. Each is the pinned `filament.json` with `filament_colour` set to `[palette hex]` of palette index 0..3.
@@ -137,7 +137,11 @@ All 16 runs:
 - Every tool prints model features only on its body's layers: inlays on 13–15 face up and 1–3 face down; the base on 1–15.
 - 0 centreline samples lie outside the tool's own body section. 0 lie inside another body's section.
 - No layer has a body without its tool, and no tool prints on a layer without its body.
-- The model's centre is within 0.01 mm of the plate centre.
+- The centre of the base tool's centreline extent is within 0.01 mm of the plate centre (this is also the shift used above).
+- Bead area outside the tool's own body, summed over layers (the beads' edges past the body's outline; every centreline is inside, so by at most half a line width):
+  - base: 6.5 to 14.2 mm² per run, the largest Roadie drop face down (14.15 mm²; Roadie keep face up 9.81 mm²);
+  - inlays: 0.00 to 2.74 mm², the largest Roadie keep face up, T1 (#451812, the kept outline band; 2.44 mm² face down).
+  The same values in both variants (the model paths do not depend on the colors).
 - The covered fraction of each body's sections is information only:
   - base: 0.61 to 0.74 (sparse infill inside);
   - inlays: 0.52 to 0.99.
@@ -197,8 +201,8 @@ Filament per tool, from the G-code: model / prime tower / flush blocks, in mm³.
 | Oddie keep, down | 2884.8 / 345.8 / 300.0 | 299.9 / 61.8 / 100.0 | 112.9 / 77.0 / 0.0 | 16.4 / 107.9 / 100.0 | 2884.8, 352.2, 112.9, 16.4 |
 
 **Face up against face down (colours):**
-- **Prime tower:** face down uses less, 548–592 mm³ against 1055 mm³. Why was not examined layer by layer.
-- **Flush:** about the same (600–1051 mm³).
+- **Prime tower:** face down uses less, 548–592 mm³ against 1055 mm³. The tower is printed only up to the last layer with a change: face up on all 15 layers (24 `WIPE_TOWER_START`, 12 `CP EMPTY GRID` layers), face down only on layers 1–3 (12 `WIPE_TOWER_START`, no `CP EMPTY GRID`, 548.2 mm³), or 1–4 when the extra change falls on layer 4 (14 `WIPE_TOWER_START`, 592.4 mm³). The difference, 44.3 mm³, is exactly the layer-4 tower (per-layer tower volumes in `raw/analysis-*.json`).
+- **Flush:** mostly the same; it differs by plan. Roadie drop 951 up against 1051 down; Roadie keep 951 against 924; Oddie merge blues 900 against 900; Oddie keep 600 against 800 mm³.
 - **Time:** within ±80 s of face up.
 - **Changes:** equal (9), except Roadie drop face down (10).
 
@@ -215,7 +219,7 @@ Filament per tool, from the G-code: model / prime tower / flush blocks, in mm³.
 | 4(d), information: real changes = the exact minimum | 7 / 8 (Roadie drop down: 10 against 9) | 4 / 8 (every face down: 10 against 9) |
 | Statistics `filament_changes` = G-code real changes | 8 / 8 | 8 / 8 |
 
-**Where the extra change comes from (face down):** the last color layer (L3) ends on an inlay tool, and L4 is base only, so one more change to T0 follows. OrcaSlicer orders each layer by its own flush matrix, starting from the previous layer's last tool, and does not look at the next layer. Face up, the color layers are the last layers, so the problem cannot arise.
+**Where the extra change comes from (face down):** the last color layer (L3) ends on an inlay tool, and L4 is base only, so one more change to T0 follows. This is consistent with OrcaSlicer ordering each layer by its flush matrix, starting from the previous layer's last tool, without looking at the next layer: an inference from the orders seen, not from its source. Face up, the color layers are the last layers, so the problem cannot arise.
 
 **What the amended rules need from a reader:**
 - **Change:** a `T<n>` with n < 255 between the first `; CHANGE_LAYER` and the end block.
@@ -232,14 +236,14 @@ Filament per tool, from the G-code: model / prime tower / flush blocks, in mm³.
 | Tool change | `; CP TOOLCHANGE START`, `; toolchange #k`, `; WIPE_TOWER_START`, the A1 change template (`M620 S<n>A`, `M620.11`, `M620.1`, `M620.10 A0`, `T<n>`, `M620.10 A1 … L<flush_length>`, `M628`/`M629`, flush, `M621 S<n>A`), `; CP_TOOLCHANGE_WIPE`, `; WIPE_TOWER_END`, `; CP TOOLCHANGE END` | every change |
 | Flush | `; FLUSH_START` … `; FLUSH_END`, E-only moves. Their sum equals the `L` word of `M620.10 A1` in all 149 changes, to within 2e-4 mm (the moves' written rounding). There is no block when L = 0 | every change with L > 0 |
 | Other E inside a change | 26.8 mm (no flush block) or 28.8 mm (with one), E-only: `G1 E18` after the firmware cut retraction (`M620.11 S1 … E-18`), `G1 E6` "Compensate for filament spillage", and unretracts. This is gross E, not net waste: the 18 mm refills a firmware retraction | every change |
-| Prime tower | XY extrusion under `; FEATURE: Prime tower` (`WIPE_TOWER_START/END`, `CP EMPTY GRID START/END` on layers without a change), extruded within x 11.8–50.7, y 214.2–252.2 (`wipe_tower_x` 15, `wipe_tower_y` 217.415, width 35, brim 3) | every layer |
+| Prime tower | XY extrusion under `; FEATURE: Prime tower` (`WIPE_TOWER_START/END`, `CP EMPTY GRID START/END` on layers without a change), extruded within x 11.8–50.7, y 214.2–252.2 (`wipe_tower_x` 15, `wipe_tower_y` 217.415, width 35, brim 3) | face up every layer (24 `WIPE_TOWER_START`); face down only layers 1–3 or 1–4, up to the last change (12 or 14 `WIPE_TOWER_START`, no `CP EMPTY GRID`) |
 | Time | `; model printing time: …; total estimated time: …` in the header | 16 / 16 |
 | Filament used | `; filament used [mm] / [cm3] / [g] = a, b, c, d` at the end | 16 / 16 |
 
 **Flush lengths seen:**
 - 41.5752 mm (100.0 mm³);
 - 52.2351 mm (125.6 mm³) and 51.4867 mm (123.8 mm³), colours runs only;
-- 0 (no flush block). In the plain runs this was every white-to-white change (flush matrix entry 32).
+- 0 (no flush block). In the plain runs this was every white-to-white change (flush matrix entry 32). In the colours runs it occurred in 4 changes, all in Oddie keep into T2 (#0D100D): 0 → 2 three times face up (matrix entry 32) and 1 → 2 once face down (entry 38). Every change with an entry of 44 or more had a flush block. Why small entries give no flush was not explained (the source was not read).
 
 The G-code's config has `flush_multiplier = 0.3` and the matrix. How OrcaSlicer turns a matrix entry into L was not read from its source. The flush is OrcaSlicer's; it is measured here, not tuned (plan, out of scope).
 
@@ -255,13 +259,14 @@ The G-code's config has `flush_multiplier = 0.3` and the matrix. How OrcaSlicer 
 - **Arcs:** model moves include G2/G3 arcs (arc fitting is on).
 - **The tool change:** it writes `G3 Z… I… J0 P1` (a helical lift with a P word) and `G4 S0`, under `; FEATURE: Prime tower`.
 - **Prime tower extrusion:** it is not a model feature. `tdmg.printed.parse_gcode` refuses an extrusion in a feature outside `MODEL_FEATURES`, so it would refuse this G-code as it stands. This record used its own walker, with `tdmg.printed._arc` for the arcs.
-- **Placement:** the model's box centre lands on the plate centre (within 0.01 mm), as R1's F3 assumes. The prime tower sits apart, within x 11.8–50.7, y 214.2–252.2.
+- **Placement:** the model's box centre lands on the plate centre (within 0.01 mm, measured as the centre of the base's centreline extent), as R1's F3 assumes. The prime tower sits apart, within x 11.8–50.7, y 214.2–252.2.
+- **Prime tower layers:** face up the tower is on every layer; face down it stops after the last layer with a change (layer 3 or 4). A reader must not expect it on every layer.
 
 ## Surprises
 
 - **The face-down start filament is not the base** in 3 of 4 plans: T1, T2 and T3, in both variants. The A1 start template loads `T[initial_no_support_extruder]`, which is the first tool of layer 1.
-- **The filament colors set the flush matrix and the order.** The CLI derives `flush_volumes_matrix` from `filament_colour`. The 3MF's colors do not reach it (step 3 found the same), so a run with the profile's default colors measures neither the plan's order nor its flush. With the plan's colors, flush is 2 to 3 times the plain runs' (600–1051 mm³ against 300–500 mm³).
-- **OrcaSlicer does not look ahead:** face down it can leave the last color layer away from the base, which costs one more change than the exact minimum.
+- **The filament colors set the flush matrix and the order.** The CLI derives `flush_volumes_matrix` from `filament_colour`. The 3MF's colors do not reach it (step 3 found the same), so a run with the profile's default colors measures neither the plan's order nor its flush. With the plan's colors, flush is 1.60 to 3.17 times the plain runs' per run (600–1051 mm³ against 300–500 mm³). In the two runs compared, the colours G-code's CONFIG block differs from the plain one only in `extruder_colour`, `filament_colour` and `flush_volumes_matrix` (Roadie drop face up and Oddie keep face down, 725 keys each).
+- **No look-ahead, as far as the orders show:** face down OrcaSlicer can leave the last color layer away from the base, which costs one more change than the exact minimum. This is inferred from the orders seen; the source was not read.
 - **The turned inlay top** is 0.5999999 mm, not float32(0.6), because 3 − float32(2.4) is exact in float32.
 - **Statistics `model` volume** includes the start code's purge for the start-loaded filament.
 
@@ -290,7 +295,8 @@ The G-code's config has `flush_multiplier = 0.3` and the matrix. How OrcaSlicer 
   - flush and tower totals, and time;
   - per tool, the extrusion by feature and the extents;
   - the statistics;
-  - the placement summary.
+  - the placement summary;
+  - the exact minimum and the rule (c) count, both from the start-loaded tool, the per-layer prime-tower volumes, and, as labelled information, `info_start_loads_filament_1` (the plan's first Decision 2) and `info_minimum_changes_from_base`.
 - `raw/rules-colours.json`, `raw/rules-plain.json`: the amended rules per run.
 - `raw/profiles-colours.json`: the pinned filament profile's SHA-256 and each derived profile's SHA-256 and differing keys.
 - No G-code is kept.
