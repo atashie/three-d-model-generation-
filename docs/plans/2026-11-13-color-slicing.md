@@ -267,6 +267,23 @@ the last task.
      - the CLI output.
    - **Owner plans:** re-run all four.
 7. **Owner review.**
+   - **Done 2026-11-13.** Material: `research/verification/2026-11-13-color-slicing/
+     owner-review.txt` and the images in `artifacts/color-review/` (git-ignored). The
+     owner chose from two questions (AskUserQuestion, answers verbatim):
+     - default face: "Face up (Recommended)";
+     - F3 gating: "Outer edge only (Recommended)". As offered: the whole-model edge
+       coverage and each color's overprint are gated, and per-color coverage and all
+       connectivity become warnings in the record. Face up, all four plans become
+       PRINTABLE, but the keep plans print with their thin interior outline lines
+       missing, reported as a warning.
+   - **What follows in code:**
+     - `tdmg slice` slices face up by default (`--face down` or `--face both` on
+       request);
+     - the required F3 set is the silhouette's `F3.edge_coverage` and
+       `F3.edge_overprint`, plus each tool's `F3.edge_overprint`;
+     - the silhouette's and each tool's `F3.printed_connectivity` and each tool's
+       `F3.edge_coverage` are warnings: recorded, and printed by the CLI when they do
+       not pass.
    - **Shown:** face up against face down (changes, waste, time, the per-color F3
      numbers) and the G-code preview images.
    - **The owner decides:**
