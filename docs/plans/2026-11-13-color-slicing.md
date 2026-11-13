@@ -160,6 +160,19 @@ the last task.
      bands narrower than a bead (Roadie keep: 14.3 mm² under 0.4 mm) show up here.
      Whether a per-color F3 FAIL blocks PRINTABLE is an owner decision in Task 7, made
      from the measured numbers. Until then, the per-color F3 checks are information.
+     - **Amended in Task 5 (controller, 2026-11-13, after review):** until the owner's
+       Task 7 decision, every F3 result (the silhouette's three and each tool's three)
+       is required for PRINTABLE, not information. Without them, a G-code that prints
+       half an inlay passes the three F6 checks. Measured on the Task 2 G-codes:
+       - the silhouette's `F3.printed_connectivity` FAILs on every multicolor layer,
+         because neighbouring tools' beads meet edge to edge (gaps up to about 0.03 mm
+         in the bead model);
+       - its `F3.edge_coverage` FAILs face down on Roadie keep and Oddie keep.
+
+       So no owner plan is PRINTABLE until Task 7. The owner then decides from the
+       numbers which, if any, become information.
+     - **Also from the Task 5 review:** prime-tower plastic must not reach into the
+       silhouette (`F6.tool_placement`).
 5. **Glue plates:** each `glue-*.stl` is sliced as an R1 part, with R1's checks unchanged.
    Its record is beside the AMS record in the same `slice.json`.
 6. **PrusaSlicer:** `F6.portability` runs on the portable `model.3mf`: `--info` reads it
