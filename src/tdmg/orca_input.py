@@ -19,8 +19,52 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+from lxml import etree
 
-from tdmg.threemf import Shell, ThreeMFError, check_shells
+from tdmg.threemf import (
+    NS_CORE,
+    NS_M,
+    NS_XML,
+    PART_NAMES,
+    UNIT,
+    Shell,
+    ThreeMFError,
+    check_shells,
+    color_3mf,
+    f32_text,
+    package,
+)
+
+ORCA_INPUT_NAME = "orca-input.3mf"
+SETTINGS_PART = "Metadata/model_settings.config"
+ORCA_PART_NAMES = (*PART_NAMES, SETTINGS_PART)   # the zip entries, in order
+ASSEMBLY_NAME = "assembly"      # the components object's name, as in the sliced prototype
+PART_SUBTYPE = "normal_part"
+ENCODING = ("B_msc: one m:colorgroup per body (one m:color each); one mesh object per body "
+            "(base first, then inlays by palette index), each with its colorgroup as its "
+            "object-level property; one components object 'assembly' with one component "
+            "per mesh object, no transforms; one build item on it; "
+            "Metadata/model_settings.config giving each part extruder = palette index + 1")
+
+
+def colorgroup_id(position: int) -> int:
+    """Resource id of the colorgroup of the body at this position (0 = the base)."""
+    return position + 1
+
+
+def mesh_object_id(position: int, n: int) -> int:
+    """Resource id of the mesh object of the body at this position, of n bodies."""
+    return n + 1 + position
+
+
+def assembly_id(n: int) -> int:
+    """Resource id of the components object, of n bodies."""
+    return 2 * n + 1
+
+
+def extruder(shell: Shell) -> int:
+    """The OrcaSlicer filament (1-based) a body is printed with: palette index + 1."""
+    return shell.index + 1
 
 
 def _exact_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -81,3 +125,105 @@ def turn_over(shells: Sequence[Shell]) -> list[Shell]:
                                f"float32 number")
         out.append(Shell(s.name, s.role, s.index, s.hex, t32, f.copy()))
     return out
+
+
+# --- orca-input.3mf (Decision 2) --------------------------------------------------------
+
+
+def check_orca_shells(shells: Sequence[Shell]) -> list[tuple[np.ndarray, np.ndarray]]:
+    """tdmg.threemf.check_shells, plus: the palette indices are exactly 0 to n - 1 in
+    shell order (so the base is index 0). Only then is each part's extruder, palette
+    index + 1, both a filament of the n passed to the slicer and, for the base, filament
+    1 (plan Decision 2). A plan whose base is another palette index is refused, not
+    renumbered: which filament each color goes on is then a decision for the caller."""
+    arrays = check_shells(shells)
+    indices = [s.index for s in shells]
+    if indices != list(range(len(shells))):
+        raise ThreeMFError(f"orca-input needs palette indices 0 to n - 1 in shell order "
+                           f"(the base 0), got {indices}")
+    return arrays
+
+
+def orca_model_xml(shells: Sequence[Shell]) -> bytes:
+    """3D/3dmodel.model of encoding B_msc (ENCODING), as the step 3 prototype
+    research/verification/2026-11-12-color-3mf/measure_import.py model_xml(bodies, "B")
+    wrote it for the files Task 2 sliced (tests compare the bytes). Resource ids:
+    colorgroups 1..n, mesh objects n+1..2n, the assembly 2n+1. Each mesh object is named
+    after its shell and carries its colorgroup as object-level property (pid, pindex 0);
+    its triangles carry no property. The colorgroups do not set OrcaSlicer's filament
+    colors (Task 2: the CLI takes them from filament_colour); they are kept because the
+    sliced prototype had them.
+
+    Written as tdmg.threemf.model_xml writes its mesh: an lxml skeleton with empty
+    <vertices/> and <triangles/> per mesh object, the vertex and triangle elements as
+    text in lxml's serialized form (f32_text coordinates), no metadata, no UUIDs.
+    """
+    arrays = check_orca_shells(shells)
+    n = len(shells)
+    q = f"{{{NS_CORE}}}"
+    model = etree.Element(f"{q}model", nsmap={None: NS_CORE, "m": NS_M})
+    model.set("unit", UNIT)
+    model.set(f"{{{NS_XML}}}lang", "en-US")
+    res = etree.SubElement(model, f"{q}resources")
+    for i, s in enumerate(shells):
+        g = etree.SubElement(res, f"{{{NS_M}}}colorgroup", {"id": str(colorgroup_id(i))})
+        etree.SubElement(g, f"{{{NS_M}}}color", {"color": color_3mf(s.hex)})
+    for i, s in enumerate(shells):
+        obj = etree.SubElement(res, f"{q}object", {
+            "id": str(mesh_object_id(i, n)), "type": "model", "name": s.name,
+            "pid": str(colorgroup_id(i)), "pindex": "0"})
+        mesh = etree.SubElement(obj, f"{q}mesh")
+        etree.SubElement(mesh, f"{q}vertices")
+        etree.SubElement(mesh, f"{q}triangles")
+    asm = etree.SubElement(res, f"{q}object", {"id": str(assembly_id(n)), "type": "model",
+                                                "name": ASSEMBLY_NAME})
+    comps = etree.SubElement(asm, f"{q}components")
+    for i in range(n):
+        etree.SubElement(comps, f"{q}component", {"objectid": str(mesh_object_id(i, n))})
+    build = etree.SubElement(model, f"{q}build")
+    etree.SubElement(build, f"{q}item", {"objectid": str(assembly_id(n))})
+    skeleton = etree.tostring(model, xml_declaration=True, encoding="UTF-8")
+    empty = b"<vertices/><triangles/>"
+    pieces = skeleton.split(empty)
+    if len(pieces) != n + 1:      # lxml serialized the skeleton in another form
+        raise ThreeMFError("unexpected XML skeleton")
+    out = [pieces[0]]
+    for (v, f), rest in zip(arrays, pieces[1:], strict=True):
+        vertices = "".join(f'<vertex x="{x}" y="{y}" z="{z}"/>' for x, y, z in f32_text(v))
+        triangles = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>'
+                            for a, b, c in f.tolist())
+        out += [b"<vertices>", vertices.encode("ascii"), b"</vertices><triangles>",
+                triangles.encode("ascii"), b"</triangles>", rest]
+    return b"".join(out)
+
+
+def model_settings(shells: Sequence[Shell]) -> bytes:
+    """Metadata/model_settings.config (Bambu/Orca project metadata, not 3MF core or
+    Materials), as the step 3 prototype's bambu_model_settings wrote it: one <object>
+    for the assembly (name, extruder 1), and one <part> per mesh object, by its resource
+    id, subtype normal_part, with its name and extruder = palette index + 1."""
+    check_orca_shells(shells)
+    n = len(shells)
+    cfg = etree.Element("config")
+    obj = etree.SubElement(cfg, "object", {"id": str(assembly_id(n))})
+    etree.SubElement(obj, "metadata", {"key": "name", "value": ASSEMBLY_NAME})
+    etree.SubElement(obj, "metadata", {"key": "extruder", "value": "1"})
+    for i, s in enumerate(shells):
+        p = etree.SubElement(obj, "part", {"id": str(mesh_object_id(i, n)),
+                                           "subtype": PART_SUBTYPE})
+        etree.SubElement(p, "metadata", {"key": "name", "value": s.name})
+        etree.SubElement(p, "metadata", {"key": "extruder", "value": str(extruder(s))})
+    return etree.tostring(cfg, xml_declaration=True, encoding="UTF-8")
+
+
+def write_orca_input(shells: Sequence[Shell]) -> bytes:
+    """The orca-input.3mf bytes for these shells (face up, or turn_over's face down).
+
+    The package is tdmg.threemf.package's (same content types and relationships parts,
+    fixed order, dates, modes and deflate), with Metadata/model_settings.config as a
+    fourth part. As in the sliced prototype, [Content_Types].xml has no entry for the
+    .config extension: OPC wants a content type for every part, but lib3mf (strict) reads
+    the file with no warning and OrcaSlicer 2.5.0 reads the extruders from it (Task 2).
+    Refused (ThreeMFError): what check_orca_shells refuses.
+    """
+    return package(orca_model_xml(shells), ((SETTINGS_PART, model_settings(shells)),))

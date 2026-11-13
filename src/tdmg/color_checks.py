@@ -14,6 +14,9 @@ slicing) and the verdict are added by make_colored_flat in Task 6.
 The multicolor 3MF (docs/plans/2026-11-12-color-3mf.md, Decision 4): export_3mf_check
 (F2.export_3mf_matches_bodies) reads model.3mf back with lib3mf and compares it with the
 gated AMS meshes; make_colored_flat adds it to the AMS assembly checks.
+The OrcaSlicer-only slicing input (docs/plans/2026-11-13-color-slicing.md, Decision 2):
+orca_input_check (F2.orca_input_matches_bodies) reads orca-input.3mf back the same way,
+part by part, with each part's extruder. No required set holds it yet (Task 6 wires it).
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ import lib3mf
 import numpy as np
 import shapely
 import trimesh
+from lxml import etree
 
 from tdmg.checks import CheckResult, merge_exact, topology_checks
 from tdmg.color_geometry import (
@@ -43,6 +47,16 @@ from tdmg.color_geometry import (
 )
 from tdmg.color_glue import Glue
 from tdmg.flat import build_volume_check, encode_stl, export_match, triangle_check
+from tdmg.orca_input import (
+    ASSEMBLY_NAME,
+    ORCA_PART_NAMES,
+    SETTINGS_PART,
+    assembly_id,
+    check_orca_shells,
+    mesh_object_id,
+    model_settings,
+)
+from tdmg.orca_input import extruder as orca_extruder
 from tdmg.profiles import PrinterProfile
 from tdmg.threemf import (
     CONTENT_TYPES,
@@ -592,6 +606,233 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
         ok = False
     measured["shells"] = rows
     return CheckResult("F2.export_3mf_matches_bodies", "PASS" if ok else "FAIL", measured,
+                       expected, None, note)
+
+
+# --- the OrcaSlicer-only slicing input (docs/plans/2026-11-13-color-slicing.md, D2) ----
+
+
+def _identity(has_transform: bool, transform) -> tuple[bool, list]:
+    fields = [list(row) for row in transform.Fields]
+    return (not has_transform and fields == IDENTITY), fields
+
+
+def _read_orca_input(data: bytes) -> dict:
+    """The facts orca_input_check compares, read by lib3mf (strict mode) from the bytes.
+    Objects are named by their resource id in the file (GetModelResourceID); lib3mf's
+    unique ids are only used to look them up."""
+    wrapper = lib3mf.get_wrapper()
+    model = wrapper.CreateModel()
+    reader = model.QueryReader("3mf")
+    reader.SetStrictModeActive(True)
+    reader.ReadFromBuffer(data)
+    facts = {"reader_warnings": [reader.GetWarning(i)[1]
+                                 for i in range(reader.GetWarningCount())],
+             "unit": lib3mf.ModelUnit(model.GetUnit()).name}
+    groups = {}
+    cg = model.GetColorGroups()
+    while cg.MoveNext():
+        g = cg.GetCurrentColorGroup()
+        groups[g.GetUniqueResourceID()] = {pid: g.GetColor(pid) for pid in g.GetAllPropertyIDs()}
+    facts["color_groups"] = len(groups)
+    file_id, meshes, assemblies, n_objects = {}, {}, [], 0
+    it = model.GetObjects()
+    while it.MoveNext():
+        o = it.GetCurrentObject()
+        n_objects += 1
+        file_id[o.GetUniqueResourceID()] = o.GetModelResourceID()
+    it = model.GetObjects()
+    while it.MoveNext():
+        o = it.GetCurrentObject()
+        mid = o.GetModelResourceID()
+        if o.IsMeshObject():
+            mo = model.GetMeshObjectByID(o.GetUniqueResourceID())
+            rid, pid, has = mo.GetObjectLevelProperty()
+            group = groups.get(rid) if has else None
+            c = group.get(pid) if group is not None else None
+            meshes[mid] = {
+                "name": mo.GetName(), "type": lib3mf.ObjectType(mo.GetType()).name,
+                "manifold_and_oriented": bool(mo.IsManifoldAndOriented()),
+                "color": None if c is None else
+                f"#{c.Red:02X}{c.Green:02X}{c.Blue:02X}{c.Alpha:02X}",
+                "_v": np.array([p.Coordinates[:] for p in mo.GetVertices()],
+                               dtype=np.float32).reshape(-1, 3),
+                "_f": np.array([t.Indices[:] for t in mo.GetTriangleIndices()],
+                               dtype=np.int64).reshape(-1, 3)}
+        elif o.IsComponentsObject():
+            co = model.GetComponentsObjectByID(o.GetUniqueResourceID())
+            comps = []
+            for i in range(co.GetComponentCount()):
+                comp = co.GetComponent(i)
+                identity, fields = _identity(comp.HasTransform(), comp.GetTransform())
+                comps.append({"object_id": file_id.get(comp.GetObjectResourceID()),
+                              "transform_identity": identity, "transform": fields})
+            assemblies.append({"id": mid, "name": co.GetName(),
+                               "type": lib3mf.ObjectType(co.GetType()).name,
+                               "components": comps})
+    facts.update(objects=n_objects, mesh_objects=len(meshes),
+                 components_objects=len(assemblies), _meshes=meshes,
+                 _assemblies=assemblies)
+    items = []
+    bi = model.GetBuildItems()
+    while bi.MoveNext():
+        item = bi.GetCurrent()
+        identity, fields = _identity(item.HasObjectTransform(), item.GetObjectTransform())
+        items.append({"object_id": file_id.get(item.GetObjectResourceID()),
+                      "identity": identity, "fields": fields})
+    facts["build_items"] = len(items)
+    if len(items) == 1:
+        facts["item_object_id"] = items[0]["object_id"]
+        facts["item_transform"] = items[0]["fields"]
+        facts["item_identity"] = items[0]["identity"]
+    return facts
+
+
+def _settings_extruders(settings: bytes) -> dict:
+    """{part id: extruder} from model_settings.config bytes (an int when the value is
+    decimal digits, else the text), with the object's id. Parsed without entities, DTDs
+    or network."""
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
+    root = etree.fromstring(settings, parser)
+    out = {"object_ids": [o.get("id") for o in root.findall("object")], "parts": {}}
+    for p in root.iter("part"):
+        values = [m.get("value") for m in p.findall("metadata")
+                  if m.get("key") == "extruder"]
+        v = values[0] if len(values) == 1 else values
+        out["parts"][p.get("id")] = int(v) if isinstance(v, str) and v.isdigit() else v
+    return out
+
+
+def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
+    """F2.orca_input_matches_bodies: orca-input.3mf carries the gated AMS bodies unchanged,
+    each on its own extruder (docs/plans/2026-11-13-color-slicing.md, Decision 2).
+
+    export_3mf_check adapted to encoding B_msc (tdmg.orca_input). shells: the bodies as
+    sliced (face up, or tdmg.orca_input.turn_over's face down), palette indices 0..n-1.
+    data is read back by lib3mf 2.x in strict mode (from the bytes), and its zip with
+    zipfile. PASS iff:
+    - the zip's raw entry names (orig_filename) are exactly tdmg.orca_input.ORCA_PART_NAMES,
+      in order; the content types and relationships parts are tdmg.threemf's bytes; and
+      Metadata/model_settings.config is exactly the bytes tdmg.orca_input.model_settings
+      writes for these shells;
+    - no reader warnings; unit millimeter; n + 1 objects: n meshes of type model and one
+      components object of type model, named tdmg.orca_input.ASSEMBLY_NAME, with its
+      resource id; n colorgroups; one build item, on the components object, with no
+      transform (HasObjectTransform false and the matrix exactly the identity);
+    - the components object has exactly n components; component i has no transform
+      (HasTransform false and the matrix exactly the identity) and refers to mesh object
+      mesh_object_id(i, n), which is named after shell i, carries shell i's palette color
+      as its object-level property, and whose vertices equal shell i's exactly (float32
+      arrays, same order) and triangles equal its faces exactly; each mesh is closed and
+      consistently oriented by index (_bad_directed_edges 0) and lib3mf's
+      IsManifoldAndOriented holds;
+    - the extruder model_settings.config gives that part (by its resource id) is shell i's
+      palette index + 1 (this follows from the byte equality; it is measured on its own
+      so that a FAIL says which part is on which filament).
+    The extruders reach the slicer only through OrcaSlicer's reading of the config part;
+    that it does so was measured in Task 2 (research/verification/2026-11-13-color-
+    slicing/README.md), not here. Errors: shells tdmg.orca_input.check_orca_shells
+    refuses raise ThreeMFError (a caller error); anything wrong with data, including
+    bytes zipfile or lib3mf cannot read, is a FAIL with what was measured.
+    """
+    arrays = check_orca_shells(shells)
+    n = len(shells)
+    expected = {"unit": UNIT, "objects": n + 1, "mesh_objects": n, "components_objects": 1,
+                "color_groups": n, "build_items": 1, "components": n,
+                "assembly": {"id": assembly_id(n), "name": ASSEMBLY_NAME, "type": "Model"},
+                "package_parts": list(ORCA_PART_NAMES), "package_files_equal": True,
+                "settings_equal": True,
+                "parts": [{"name": s.name, "object_id": mesh_object_id(i, n),
+                           "extruder": orca_extruder(s), "color": color_3mf(s.hex)}
+                          for i, s in enumerate(shells)]}
+    note = ("read back by lib3mf (strict mode) from the bytes; per part in component "
+            "order: vertices exactly as float32, triangles exactly, closed and oriented by "
+            "index, identity transform, object color; model_settings.config byte-equal to "
+            "the writer's, and each part's extruder (palette index + 1) read from it. A "
+            "slicer input, not a deliverable")
+    parts = None
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            parts = [i.orig_filename for i in z.infolist()]
+            names = z.namelist()
+            same_files = parts == list(ORCA_PART_NAMES) and (
+                z.read(PART_NAMES[0]) == CONTENT_TYPES and z.read(PART_NAMES[1]) == RELS)
+            settings = z.read(SETTINGS_PART) if SETTINGS_PART in names else None
+        facts = _read_orca_input(data)
+    except Exception as exc:   # noqa: BLE001 - any failure to read the bytes is a FAIL
+        failed = {"read_error": f"{type(exc).__name__}: {exc}"}
+        if parts is not None:
+            failed["package_parts"] = parts
+        return CheckResult("F2.orca_input_matches_bodies", "FAIL", failed, expected, None,
+                           note)
+    meshes, assemblies = facts.pop("_meshes"), facts.pop("_assemblies")
+    measured = {k: facts.get(k) for k in (
+        "reader_warnings", "unit", "objects", "mesh_objects", "components_objects",
+        "color_groups", "build_items", "item_transform")}
+    measured["package_parts"] = parts
+    measured["package_files_equal"] = same_files
+    measured["settings_equal"] = settings == model_settings(shells)
+    extruders = {}
+    if settings is None:
+        measured["settings_error"] = f"no {SETTINGS_PART} part"
+    else:
+        try:
+            got = _settings_extruders(settings)
+            extruders = got["parts"]
+            measured["settings_object_ids"] = got["object_ids"]
+        except Exception as exc:   # noqa: BLE001 - unreadable settings are a FAIL
+            measured["settings_error"] = f"{type(exc).__name__}: {exc}"
+    asm = assemblies[0] if len(assemblies) == 1 else None
+    comps = asm["components"] if asm is not None else []
+    if asm is not None:
+        measured["assembly"] = {k: asm[k] for k in ("id", "name", "type")}
+    measured["components"] = len(comps)
+    measured["item_ok"] = (asm is not None and facts["build_items"] == 1
+                           and facts.get("item_object_id") == asm["id"]
+                           and facts.get("item_identity") is True)
+    ok = (same_files and measured["settings_equal"] and "settings_error" not in measured
+          and not facts["reader_warnings"] and facts["unit"].lower() == UNIT
+          and facts["objects"] == n + 1 and facts["mesh_objects"] == n
+          and facts["components_objects"] == 1 and facts["color_groups"] == n
+          and measured["item_ok"] and len(comps) == n
+          and measured.get("assembly") == expected["assembly"])
+    rows = []
+    for i, (s, (sv, sf)) in enumerate(zip(shells, arrays, strict=True)):
+        if i >= len(comps):
+            rows.append({"name": s.name, "missing": True, "pass": False})
+            ok = False
+            continue
+        comp = comps[i]
+        mesh = meshes.get(comp["object_id"])
+        row = {"name": None if mesh is None else mesh["name"],
+               "object_id": comp["object_id"],
+               "transform_identity": comp["transform_identity"]}
+        if not comp["transform_identity"]:
+            row["transform"] = comp["transform"]
+        if mesh is None:
+            row.update({"mesh": False, "pass": False})
+            rows.append(row)
+            ok = False
+            continue
+        got_v, got_f = mesh["_v"], mesh["_f"]
+        same_v = got_v.shape == sv.shape and bool(np.array_equal(got_v, sv))
+        same_f = got_f.shape == sf.shape and bool(np.array_equal(got_f, sf))
+        bad = _bad_directed_edges(got_f) if len(got_f) else None
+        ext = extruders.get(str(comp["object_id"]))
+        want = expected["parts"][i]
+        row.update(type=mesh["type"], vertices_equal=same_v, triangles_equal=same_f,
+                   bad_directed_edges=bad,
+                   manifold_and_oriented=mesh["manifold_and_oriented"],
+                   color=mesh["color"], extruder=ext)
+        row["pass"] = (row["name"] == want["name"] and row["object_id"] == want["object_id"]
+                       and row["transform_identity"] and mesh["type"] == "Model"
+                       and same_v and same_f and bad == 0
+                       and mesh["manifold_and_oriented"] and row["color"] == want["color"]
+                       and ext == want["extruder"])
+        ok = ok and row["pass"]
+        rows.append(row)
+    measured["parts"] = rows
+    return CheckResult("F2.orca_input_matches_bodies", "PASS" if ok else "FAIL", measured,
                        expected, None, note)
 
 

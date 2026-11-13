@@ -233,11 +233,16 @@ def model_xml(shells: Sequence[Shell]) -> bytes:
                      b"</triangles>", tail])
 
 
-def package(model: bytes) -> bytes:
-    """The 3MF zip of one model part, with fixed entry order, dates, modes and method."""
+def package(model: bytes, extra: Sequence[tuple[str, bytes]] = ()) -> bytes:
+    """The 3MF zip of one model part, with fixed entry order, dates, modes and method.
+
+    extra: (name, bytes) parts written after PART_NAMES, in the order given, with the
+    same metadata (tdmg.orca_input adds Metadata/model_settings.config). model.3mf has
+    none."""
+    parts = [*zip(PART_NAMES, (CONTENT_TYPES, RELS, model), strict=True), *extra]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        for name, data in zip(PART_NAMES, (CONTENT_TYPES, RELS, model), strict=True):
+        for name, data in parts:
             info = zipfile.ZipInfo(name, ZIP_DATE)
             info.compress_type = ZIP_COMPRESSION
             info.create_system = ZIP_UNIX
