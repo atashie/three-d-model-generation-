@@ -92,6 +92,11 @@ the last task.
    - **Encoding:** B_msc (Task 1 evidence), built from the same gated meshes as
      `model.3mf`, with each part's `extruder` set to its palette index + 1.
    - **The base is filament 1**, so the start G-code loads the base color.
+     - **Amended in Task 4 (controller, 2026-11-13):** a plan's base can be any palette
+       index, so the extruder is the body's position in shell order + 1 (the base
+       first, so it is always filament 1; then the inlays by palette index), not
+       "palette index + 1". The record and the message give the filament for each
+       color.
      - **Amended after Task 2 (controller, 2026-11-13):** that holds face up only. The
        A1 start code loads OrcaSlicer's first tool on layer 1
        (`initial_no_support_extruder`). Face down, every color is on layer 1, and
