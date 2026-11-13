@@ -65,6 +65,10 @@ fix.
    - **Fixed** (`0c720f7`): each warning keeps its status (FAIL or UNKNOWN). FAIL
      describes what was measured and points to the owner-review record for where colors
      meet; UNKNOWN gives the check's reason.
+   - **2026-11-13 (after review of `0c720f7`):** the connectivity FAIL text is now built
+     from what each check measured (parts and holes printed against the model, the
+     mismatched layers), not a fixed "split into more parts"; the owner-plan pointer is
+     kept as a qualified note. Two glue plate rows for one color are refused.
 5. **Low: STATUS was out of date.**
    - **Verdict: holds.**
    - **Fixed:** in the same commit as this record.
