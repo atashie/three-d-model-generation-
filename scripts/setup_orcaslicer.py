@@ -35,6 +35,7 @@ Exit codes: 0 installed (or verified), 2 refused; the message says why.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -82,12 +83,10 @@ def _json_bytes(obj) -> bytes:
 
 
 # Keys of a template preset that OrcaSlicer reads as attributes, not as settings
-# (ConfigBase::load_from_json); none is layered into the includer.
-TEMPLATE_ATTRIBUTES = ("type", "name", "instantiation")
-# Attributes a template may not have: OrcaSlicer would follow its inherits or include, and
-# the others are not expected in a template. This flattener refuses rather than guess.
-TEMPLATE_REFUSED = ("inherits", "include", "from", "setting_id", "filament_id", "description",
-                    "version", "url", "renamed_from", "is_custom_defined")
+# (ConfigBase::load_from_json); none is layered into the includer. A template must have
+# exactly these and one setting, as each pinned A1 template has: anything else (its own
+# inherits or include, which OrcaSlicer would follow, or more settings) is refused.
+TEMPLATE_ATTRIBUTES = frozenset({"type", "name", "instantiation"})
 
 
 def _include_names(cfg: dict, where: str) -> list[str]:
@@ -146,14 +145,26 @@ def flatten(pin: SlicerPin) -> dict[str, bytes]:
                              f"{kind}_list")
         sub = listed[name]
         cfg = get(sub)
-        bad = sorted(k for k in cfg if k in TEMPLATE_REFUSED)
-        if bad:
-            raise SetupError(f"included template {sub} has {bad}, which this flattener does "
-                             "not resolve")
-        if cfg.get("name") != name:
-            raise SetupError(f"included template {sub} is named {cfg.get('name')!r}, "
+        settings = sorted(set(cfg) - TEMPLATE_ATTRIBUTES)
+        if not TEMPLATE_ATTRIBUTES <= set(cfg) or len(settings) != 1:
+            raise SetupError(f"included template {sub} has keys {sorted(cfg)}, not exactly "
+                             f"{sorted(TEMPLATE_ATTRIBUTES)} and one setting")
+        if cfg["name"] != name:
+            raise SetupError(f"included template {sub} is named {cfg['name']!r}, "
                              f"not {name!r}")
-        return {k: v for k, v in cfg.items() if k not in TEMPLATE_ATTRIBUTES}
+        key = settings[0]
+        # OrcaSlicer layers an include's diff against the option's default, so a value
+        # equal to the default would leave the parent's value; a plain merge would not.
+        if key not in prof.include_defaults_sha256:
+            raise SetupError(f"included template {sub} sets {key!r}, which has no pinned "
+                             "default (include_defaults_sha256)")
+        value = cfg[key]
+        if not isinstance(value, str):
+            raise SetupError(f"included template {sub}: {key!r} is not a string")
+        if hashlib.sha256(value.encode("utf-8")).hexdigest() == prof.include_defaults_sha256[key]:
+            raise SetupError(f"included template {sub}: {key!r} equals OrcaSlicer's default, "
+                             "which OrcaSlicer would not layer over the parent")
+        return {key: value}
 
     out = {}
     for kind in ("machine", "process", "filament"):
@@ -187,19 +198,25 @@ def flatten(pin: SlicerPin) -> dict[str, bytes]:
     return out
 
 
-def write_profiles(dest: Path, pin: SlicerPin, files: dict[str, bytes]) -> None:
-    folder = dest / pin.profiles.folder
-    _require_empty(folder)
+@contextlib.contextmanager
+def _staged(dest: Path, files: dict[str, bytes]):
+    """A new folder in dest holding files; removed afterwards unless it was moved away."""
     tmp = Path(tempfile.mkdtemp(dir=dest, prefix=".profiles-"))
     try:
         for name, data in files.items():
             (tmp / name).write_bytes(data)
+        yield tmp
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def write_profiles(dest: Path, pin: SlicerPin, files: dict[str, bytes]) -> None:
+    folder = dest / pin.profiles.folder
+    _require_empty(folder)
+    with _staged(dest, files) as tmp:
         if folder.exists():
             folder.rmdir()
         os.replace(tmp, folder)
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
 
 
 PREVIOUS_SUFFIX = ".previous"
@@ -209,23 +226,24 @@ def replace_profiles(dest: Path) -> dict:
     """Re-flatten the profiles of an installed, verified app; keep the old folder."""
     check_platform()
     pin = load_pin()
+    folder = dest / pin.profiles.folder
+    kept = folder.with_name(folder.name + PREVIOUS_SUFFIX)
+    if kept.exists():                   # before any check or fetch: nothing would be kept
+        raise SetupError(f"{kept} exists; move or delete it first")
     verify_app(dest, pin)               # the exe and libraries,
     verify_tree(dest, pin)              # and every file of the app tree
     profiles = flatten(pin)
-    folder = dest / pin.profiles.folder
-    kept = folder.with_name(folder.name + PREVIOUS_SUFFIX)
-    if kept.exists():
-        raise SetupError(f"{kept} exists; move or delete it first")
-    tmp = Path(tempfile.mkdtemp(dir=dest, prefix=".profiles-"))
-    try:
-        for name, data in profiles.items():
-            (tmp / name).write_bytes(data)
-        if folder.exists():
-            os.replace(folder, kept)
-        os.replace(tmp, folder)
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
+    with _staged(dest, profiles) as tmp:
+        moved = False
+        try:
+            if folder.exists():
+                os.replace(folder, kept)
+                moved = True
+            os.replace(tmp, folder)
+        except OSError as err:
+            if moved and not folder.exists():
+                os.replace(kept, folder)    # put the old profiles back
+            raise SetupError(f"could not put the new profiles in place: {err}") from err
     return verify_install(dest, pin, full_tree=True)
 
 

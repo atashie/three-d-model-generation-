@@ -82,6 +82,17 @@ profiles:
   # source-manifest.json as flatten_with_include.py wrote it (CRLF, like the 2026-11-10
   # record's; that record's README addendum, item 5).
   manifest_sha256: cfcbb8d7e125ccbdb0d99db35b6c3a4f0fd37d48e641ab932171ac5fec391b29
+  # SHA-256 (of the UTF-8 text) of OrcaSlicer's default for each setting an included
+  # template sets: PrintConfig.cpp at tag v2.5.0, quoted with their lines in
+  # research/verification/2026-11-13-a1-profile-include/source-excerpts.txt. OrcaSlicer
+  # layers an include's diff against the default, so a template value equal to it would
+  # not override the parent; the flattener refuses one instead of merging it.
+  include_defaults_sha256:
+    machine_start_gcode: a0f4e4a808f09edbe1b6623706b3221e7fc68082385854458e6e7dd92dfa9f2a
+    machine_end_gcode: 45ae4f8664a87969fb4f7052aaa287b4eaecb1db9964024f7e683a1e86bfe996
+    time_lapse_gcode: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    change_filament_gcode: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    layer_change_gcode: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
   # SHA-256 of each upstream file in the chains and includes (source-manifest.json), by
   # path under BBL/.
   upstream_sha256:

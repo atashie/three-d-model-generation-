@@ -120,6 +120,10 @@ class Profiles(_Model):
     flat: dict[Literal["machine", "process", "filament"], FlatProfile]
     manifest_sha256: Sha256
     upstream_sha256: dict[str, Sha256] = Field(min_length=1)
+    include_defaults_sha256: dict[str, Sha256] = Field(
+        default_factory=dict,
+        description="SHA-256 of OrcaSlicer's default for each setting an included template "
+                    "sets; a template value equal to it is refused")
 
     @model_validator(mode="after")
     def _all_kinds(self) -> Profiles:
