@@ -152,7 +152,12 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   and any open_edges line FAILs. After the Codex review (2026-11-11), still before the
 #   push: PrusaSlicer's G-code must be complete and extrude on every layer at its height,
 #   and the volume bound covers admesh's zeroed normals.
-SLICE_ALGORITHM_VERSION = "slice-4"
+# slice-5 (2026-11-13): the pinned A1 machine profile now holds the A1's own start, end,
+#   time-lapse and filament-change G-code. The flattener resolves the preset's include key
+#   as OrcaSlicer v2.5.0 does (research/verification/2026-11-13-a1-profile-include/);
+#   before, the flat profile had the generic G-code of the parent chain. The checks are
+#   unchanged; the G-code and the profile hash differ, so the label changes.
+SLICE_ALGORITHM_VERSION = "slice-5"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
 FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run with a FAILed check

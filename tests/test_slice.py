@@ -147,7 +147,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
     flat = json.loads((flat_dir / "flat.json").read_bytes())
     assert set(record) == RECORD_KEYS
     assert (record["schema"], record["algorithm"]) == (RECORD_SCHEMA, SLICE_ALGORITHM_VERSION)
-    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-4"
+    assert record["schema"] == "tdmg.slice/1" and record["algorithm"] == "slice-5"
     assert record["links"] == {"flat_id": flat["flat_id"],
                                "flat_record_sha256": _sha((flat_dir / "flat.json").read_bytes()),
                                "model_stl_sha256": flat["outputs"]["model.stl"],
@@ -212,7 +212,7 @@ def test_record_contents(flat_dir, fake, tmp_path):
 def test_slice_id_is_the_hash_of_its_identity(flat_dir, fake, tmp_path):
     record = make_slice(flat_dir, tmp_path / "slice", fake())
     pin = fake.pin
-    identity = {"algorithm": "slice-4", "flat_id": record["links"]["flat_id"],
+    identity = {"algorithm": "slice-5", "flat_id": record["links"]["flat_id"],
                 "model_stl_sha256": record["links"]["model_stl_sha256"],
                 "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
@@ -1142,7 +1142,7 @@ def test_portability_is_part_of_slice_id(flat_dir, fake, prusa, tmp_path):
     root = fake()
     record = make_slice(flat_dir, tmp_path / "a", root, prusaslicer_dir=prusa())
     pin = fake.pin
-    identity = {"algorithm": "slice-4", "flat_id": record["links"]["flat_id"],
+    identity = {"algorithm": "slice-5", "flat_id": record["links"]["flat_id"],
                 "model_stl_sha256": record["links"]["model_stl_sha256"],
                 "slicer": {"version": "2.5.0", "exe_sha256": pin.exe.sha256,
                            "libraries": {"app/OrcaSlicer.dll": pin.libraries[0].sha256},
