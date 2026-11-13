@@ -12,7 +12,6 @@ import json
 import math
 import os
 import re
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -195,11 +194,10 @@ def test_a_correct_two_layer_print_passes():
     assert [lay["bodies"] for lay in record["layers"]] == [[0], [0, 1, 2]]
     assert checks[TOOL_PLACEMENT].measured["tools"]["1"]["layers"] == [2]
     assert checks[TOOL_PLACEMENT].measured["tools"]["0"]["layers"] == [1, 2]
-    # The square silhouette ties all four quarter turns; the tools tell them apart (the
-    # inlays swap places when turned), and only the slicer's own turn passes.
-    turns = {t["angle_deg"]: t["placement"] for t in record["tool_turns"]}
-    assert turns == {0: "PASS", 90: "FAIL", 180: "FAIL", 270: "FAIL"}
+    # The placement is fixed: centred on the plate, not turned (Task 2's measurement).
     assert checks[TOOL_PLACEMENT].measured["angle_deg"] == 0
+    assert record["silhouette"]["alignment"]["angle_deg"] == 0
+    assert [t["angle_deg"] for t in record["silhouette"]["alignment"]["scores"]] == [0]
     # Every F3 here is required until Task 7, the silhouette's and each tool's.
     required = required_check_ids(3)
     assert required == frozenset((*GATED_CHECK_IDS, *F3_SLICE_CHECK_IDS, *(
@@ -484,66 +482,32 @@ def test_the_prime_tower_gets_the_tools_allowance(y, want):
     assert checks[TOOL_PLACEMENT].status == want, checks[TOOL_PLACEMENT].note
 
 
-def test_when_every_close_turn_fails_tool_placement_fails():
-    # A T2 inside the first change's flush: T2 then prints inlay 1. Every turn the
-    # silhouette cannot tell apart FAILs, so the check FAILs (not UNKNOWN).
+def test_a_tool_change_inside_a_flush_fails_tool_placement():
+    # A T2 inside the first change's flush: T2 then prints inlay 1.
     raw = change(1, 0.4).replace("; FLUSH_START\n", "; FLUSH_START\nT2\n", 1)
-    checks, record = run(text_of([SQUARE], [RING, raw, A, 2, B]))
+    checks, _ = run(text_of([SQUARE], [RING, raw, A, 2, B]))
     assert checks[TOOL_PLACEMENT].status == "FAIL", checks[TOOL_PLACEMENT].note
-    assert {t["placement"] for t in record["tool_turns"]} == {"FAIL"}
 
 
-def _tool_turns_patched(monkeypatch, placement, tool_f3=None):
-    """Make the real _at_turn give these placement statuses per angle, every per-tool F3
-    PASS except the given ones (by index), and equal scores, so every tied turn is
-    close."""
-    real = color_gcode._at_turn
-
-    def fake(angle, *args):
-        pl, f3, records, _ = real(angle, *args)
-        f3 = [replace(c, status=(tool_f3 or {}).get(angle, {}).get(j, "PASS"))
-              for j, c in enumerate(f3)]
-        return replace(pl, status=placement[angle]), f3, records, 0.0
-    monkeypatch.setattr(color_gcode, "_at_turn", fake)
+def _turned(region, angle):
+    return shapely.affinity.rotate(region, angle, origin=(10, 10))
 
 
-def test_close_turns_that_disagree_leave_tool_placement_unknown(monkeypatch):
-    _tool_turns_patched(monkeypatch, {0: "PASS", 90: "FAIL", 180: "PASS", 270: "PASS"},
-                        {90: {4: "FAIL"}})
-    checks, _ = run(text_of(**GOOD))
-    c = checks[TOOL_PLACEMENT]
-    assert c.status == "UNKNOWN" and "the placement is ambiguous" in c.note
-    assert "turn 90 deg: FAIL" in c.note and "turn 0 deg: PASS" in c.note
-    assert [t["angle_deg"] for t in c.measured["turns"]] == [0, 90, 180, 270]
-    # Each per-tool F3 check is judged on its own disagreement: index 4 (tool 1's
-    # coverage) differs, the others agree and keep the best turn's PASS.
-    assert checks[per_tool_id(F3_SLICE_CHECK_IDS[1], 1)].status == "UNKNOWN"
-    assert checks[per_tool_id(F3_SLICE_CHECK_IDS[0], 1)].status == "PASS"
-    assert status(checks, F3_SLICE_CHECK_IDS) == ["PASS"] * 3
-    assert checks[COLOR_CHANGES].status == "PASS"
-
-
-def test_close_turns_that_all_fail_fail(monkeypatch):
-    _tool_turns_patched(monkeypatch, dict.fromkeys((0, 90, 180, 270), "FAIL"))
-    checks, _ = run(text_of(**GOOD))
+def test_swapped_inlay_colours_fail_tool_placement():
+    # T1 prints inlay 2's place and T2 inlay 1's: the same G-code as a correct print turned
+    # 180 degrees (the square silhouette and the inlays are symmetric under that turn).
+    checks, _ = run(text_of([SQUARE], [RING, 1, B, 2, A]))
     assert checks[TOOL_PLACEMENT].status == "FAIL"
+    assert "T1 prints" in checks[TOOL_PLACEMENT].note
+    assert status(checks)[0::2] == ["PASS", "PASS"]
 
 
-def test_an_ambiguous_silhouette_leaves_the_tools_unknown(monkeypatch):
-    real = color_gcode.judge_f3
-
-    def fake(analysis, setup, truncation=True):
-        checks, record = real(analysis, setup, truncation)
-        if truncation:                                  # the silhouette's call
-            record["reason"] = "placement ambiguous: (test)"
-        return checks, record
-    monkeypatch.setattr(color_gcode, "judge_f3", fake)
-    checks, _ = run(text_of(**GOOD))
-    assert checks[TOOL_PLACEMENT].status == "UNKNOWN"
-    assert "the silhouette's placement is not known" in checks[TOOL_PLACEMENT].note
-    assert all(checks[per_tool_id(c, t)].status == "UNKNOWN"
-               for t in range(3) for c in F3_SLICE_CHECK_IDS)
-    assert checks[COLOR_CHANGES].status == "PASS" and checks[FILAMENTS_USED].status == "PASS"
+@pytest.mark.parametrize("angle", [90, 180, 270])
+def test_a_correct_print_turned_by_a_quarter_turn_fails(angle):
+    checks, _ = run(text_of([_turned(SQUARE, angle)],
+                            [_turned(RING, angle), 1, _turned(A, angle), 2,
+                             _turned(B, angle)]))
+    assert checks[TOOL_PLACEMENT].status == "FAIL", checks[TOOL_PLACEMENT].note
 
 
 def test_a_geometry_error_is_unknown_and_keeps_the_other_checks(monkeypatch):
@@ -656,4 +620,14 @@ def test_the_real_slicer_passes_all_three_checks(face, tmp_path):
     m = by[COLOR_CHANGES].measured
     assert m["changes"] == m["info_statistics_filament_changes"]
     assert by[COLOR_WASTE].measured["prime_tower_mm3"] > 0
+    assert by[TOOL_PLACEMENT].measured["prime_tower_into_model_mm"] is None
+    # The expected verdict until the owner's Task 7 review: NOT CERTIFIED, and only by the
+    # required F3 checks (the silhouette's connectivity FAILs on every multicolor layer:
+    # neighbouring bodies' beads meet edge to edge; research record, Task 5 addendum).
+    required = required_check_ids(len(shells))
+    assert verdict(checks, set(required)) == "NOT CERTIFIED"
+    not_passing = [i for i in sorted(required) if by[i].status != "PASS"]
+    assert not_passing and all(i.startswith("F3.") for i in not_passing), not_passing
+    assert by["F3.printed_connectivity"].status == "FAIL", (kind, by[
+        "F3.printed_connectivity"].note)
     json.dumps([c.as_dict() for c in checks], allow_nan=False)

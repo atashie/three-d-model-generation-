@@ -53,20 +53,17 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   body's section, with R1's bead model (tdmg.printed.footprint) and allowance (rule
   acceptance.dimension.tolerance, plus elefant_foot_compensation on the first layer), as
   F3.edge_overprint judges it (FAIL over the allowance, UNKNOWN within the sampling bound
-  OVERPRINT_BOUND_MM of it), at the placement F3 finds for the whole model (when the
-  silhouette ties several quarter turns, the tools choose among them by R1's rule on their
-  own scores; _geometry); every body is printed by its own tool on each of its layers; no
-  other tool prints model features; and the prime tower's beads reach into the
-  silhouette by no more than the same allowance (_tower_depth). When the placement is
-  ambiguous it is UNKNOWN: the silhouette's own turns disagree (judge_f3), or the turns
-  the tools cannot tell apart give it different statuses (_agreed; when all of them FAIL,
-  it FAILs).
+  OVERPRINT_BOUND_MM of it), at the fixed placement PLACEMENT_ANGLE (the model's
+  bounding-box centre on the plate centre, not turned; Task 2's measured placement), so a
+  print turned by 90, 180 or 270 degrees FAILs; every body is printed by its own tool on
+  each of its layers; no other tool prints model features; and the prime tower's beads
+  reach into the silhouette by no more than the same allowance (_tower_depth).
 - F6.filaments_used (gated): the filaments loaded and the tools printing model features
   are exactly the plan's, one per body; the header's "; filament:" list is 1..n; the
   config's filament_colour is the plan's colors in filament order.
 - F3 (R1's three G-code checks, tdmg.printed.judge_f3): on the silhouette (every tool's
   model extrusion against the union of the bodies' sections; R1's ids), and per tool
-  against its own body at the chosen turn (ids "<F3 id>.T<n>"). All of them are REQUIRED
+  against its own body (ids "<F3 id>.T<n>"), all at the fixed placement. All of them are REQUIRED
   for PRINTABLE until the owner's Task 7 review (controller decision, 2026-11-13; the
   owner then decides which, if any, become information): without them a G-code that
   prints half an inlay, only a dot of it, or half the base's first layer passes the F6
@@ -104,7 +101,6 @@ from tdmg.printed import (
     CUSTOM,
     F3_SLICE_CHECK_IDS,
     OVERPRINT_BOUND_MM,
-    SCORE_BOUND_MM,
     TOLERANCE_RULE,
     Alignment,
     Flow,
@@ -142,6 +138,14 @@ NOT_A_FILAMENT = 1000      # T1000: written twice by the A1 start code
 # M600 (filament change) and M601 (pause): the pinned slicer writes neither for this
 # profile (none in the 16 Task 2 G-codes); after either the printer may hold another color.
 REFUSED_M_COMMANDS = frozenset({"M600", "M601"})
+# The multicolor placement is fixed: the model's bounding-box centre on the plate centre
+# (the centring R1 uses), turned by 0 degrees, with no quarter-turn search. Task 2 measured
+# the B_msc input sliced in place on all 16 runs: the centre of the base tool's centreline
+# extent within 0.01 mm of the plate centre, each tool's centrelines inside its own body
+# with no rotation (research/verification/2026-11-13-color-slicing/README.md, "Placement").
+# A search would let a print turned 180 degrees pass where its inlays swap colors, which is
+# a colour error (controller decision, 2026-11-13).
+PLACEMENT_ANGLE = 0
 TOOL = re.compile(r"T(0|[1-9][0-9]*)")
 M620_OPEN = re.compile(r"S(0|[1-9][0-9]*)A")
 TIME = re.compile(r"(?:(\d+)d\s*)?(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?")
@@ -591,8 +595,7 @@ def color_slice_checks(gcode: bytes | None, shells: Sequence[Shell], setup: Setu
     G-code, when it is not UTF-8, when read_multicolor refuses it, or on any other error
     while reading it. The geometry checks (F6.tool_placement and F3) are UNKNOWN on their
     own when the geometry cannot be measured (the model has no section at the first layer,
-    or any error) or, for F6.tool_placement and the per-tool F3, when the silhouette's
-    placement is ambiguous (judge_f3).
+    or any error).
     """
     shells = list(shells)
     fmap = filament_map(shells)            # check_shells refuses a malformed plan
@@ -640,7 +643,6 @@ def color_slice_checks(gcode: bytes | None, shells: Sequence[Shell], setup: Setu
     checks[1] = placement
     record["silhouette"] = geometry.get("silhouette")
     record["tools"] = geometry.get("tools", {})
-    record["tool_turns"] = geometry.get("tool_turns")
     record["geometry_reason"] = geometry.get("reason")
     return checks + f3 + tool_f3 + _information(mc, statistics, area), record
 
@@ -795,64 +797,26 @@ def _geometry(mc: Multicolor, shells: list[Shell], sets: list[list[int]],
                   for by in mc.model]
     last_h = mc.layers[-1].height
     analysis = analyse_sections(zs, silhouette, everything, last_h, centre, top, setup.plate,
-                                first_mm, tol_mm)
+                                first_mm, tol_mm, angles=(PLACEMENT_ANGLE,))
     f3, sil_record = judge_f3(analysis, setup)
     f3 = [CheckResult(c.id, c.status, c.measured, c.threshold, c.rule,
                       f"{c.note} {F3_REQUIRED_NOTE}") for c in f3]
-    record = {"silhouette": sil_record, "tools": {}}
     stray = sorted({t for by in mc.model for t in by if t is None or not 0 <= t < n},
                    key=lambda t: (t is None, t))
-    if sil_record["reason"] is not None:
-        why = f"the silhouette's placement is not known: {sil_record['reason']}"
-        unknown = _all_unknown(why, n, setup)
-        return unknown[1], f3, unknown[6:6 + 3 * n], record
-    # The silhouette chooses among the quarter turns as R1 does; a silhouette that looks the
-    # same turned (a square) leaves several turns tied (judge_f3's tied_angles_deg), which
-    # its F3 cannot tell apart but the tools' placement can. So each tied turn is measured
-    # per tool, and the turns are told apart by R1's rule on the tools' scores (each the
-    # mean over tools of their turn's score, so the same sampling bound holds): the lowest
-    # stands unless another within 2 * SCORE_BOUND_MM gives a different status for
-    # F6.tool_placement or a per-tool F3 check; then those are UNKNOWN (ambiguous).
-    tied = sil_record["alignment"]["tied_angles_deg"]
-    turns = {a: _at_turn(a, mc, sections, silhouette, sets, zs, last_h, centre, top, setup,
-                         threshold, stray) for a in tied}
-    best = min(tied, key=lambda a: (turns[a][3], a))
-    close = [a for a in tied if turns[a][3] - turns[best][3] <= 2 * SCORE_BOUND_MM]
-    record["tool_turns"] = [{"angle_deg": a, "score": turns[a][3], "close": a in close,
-                             "placement": turns[a][0].status} for a in tied]
-    record["tools"] = turns[best][2]
-    placement = _agreed(turns[best][0], [turns[a][0] for a in close], close)
-    tool_f3 = [_agreed(c, [turns[a][1][j] for a in close], close)
-               for j, c in enumerate(turns[best][1])]
-    return placement, f3, tool_f3, record
+    placement, tool_f3, tool_records = _placed(mc, sections, silhouette, sets, zs, last_h,
+                                               centre, top, setup, threshold, stray)
+    return placement, f3, tool_f3, {"silhouette": sil_record, "tools": tool_records}
 
 
-def _agreed(best: CheckResult, at_close: list[CheckResult], close: list[int]) -> CheckResult:
-    """best's result when every close turn (within 2 * SCORE_BOUND_MM of the best tools'
-    score) gives the same status, so a FAIL at every close turn is a FAIL; else UNKNOWN,
-    naming each turn's status."""
-    if len({c.status for c in at_close}) == 1:
-        return best
-    detail = "; ".join(f"turn {a} deg: {c.status}" for a, c in zip(close, at_close,
-                                                                    strict=True))
-    tail = f" {F3_REQUIRED_NOTE}" if best.id.startswith("F3.") else ""
-    return CheckResult(best.id, "UNKNOWN", {"turns": [
-        {"angle_deg": a, "status": c.status, "measured": c.measured}
-        for a, c in zip(close, at_close, strict=True)]}, best.threshold, best.rule,
-        "not measured: the placement is ambiguous. These quarter turns tie for the "
-        "silhouette and their tools' scores lie within the scores' sampling bound "
-        f"({2 * SCORE_BOUND_MM:.3f} mm), but this check's status differs between them: "
-        f"{detail}." + tail)
-
-
-def _at_turn(angle, mc, sections, silhouette, sets, zs, last_h, centre, top, setup,
-             threshold, stray):
-    """F6.tool_placement, the per-tool F3 checks and records, and the tools' mean score, at
-    one quarter turn. The prime tower is not a body: its beads may not reach into the
+def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, threshold,
+            stray):
+    """F6.tool_placement and the per-tool F3 checks and records, at the fixed placement
+    (PLACEMENT_ANGLE). The prime tower is not a body: its beads may not reach into the
     silhouette by more than a tool may print outside its body (_tower_depth)."""
     n = len(sections[0])
+    angle = PLACEMENT_ANGLE
     first_mm, tol_mm = threshold["first_layer_mm"], threshold["other_layers_mm"]
-    tool_f3, problems, near, per_tool, records, scores = [], [], [], {}, {}, []
+    tool_f3, problems, near, per_tool, records = [], [], [], {}, {}
     for t in range(n):
         printed = [footprint(by.get(t, [])) for by in mc.model]
         body = [row[t] for row in sections]
@@ -862,7 +826,6 @@ def _at_turn(angle, mc, sections, silhouette, sets, zs, last_h, centre, top, set
         tool_f3 += [CheckResult(per_tool_id(c.id, t), c.status, c.measured, c.threshold,
                                 c.rule, f"{c.note} {F3_REQUIRED_NOTE}") for c in checks]
         records[str(t)] = rec
-        scores.append(an.turns[0].score)
         worst = None
         for k, m in enumerate(an.turns[0].layers):
             on, prints = t in sets[k], bool(mc.model[k].get(t))
@@ -911,7 +874,8 @@ def _at_turn(angle, mc, sections, silhouette, sets, zs, last_h, centre, top, set
                                                  default=None),
                 "within_sampling_bound": near, "problems": problems}
     how = ("Each tool's model extrusion, as beads of their stated widths, against its own "
-           "body's section at each layer's mid-height, placed as F3 places the whole model: "
+           "body's section at each layer's mid-height, the model placed as Task 2 measured "
+           "(its bounding-box centre on the plate centre, not turned): "
            "the largest distance of its plastic outside the body to the body, against the "
            "tolerance (plus elefant_foot_compensation on the first layer). ")
     if problems:
@@ -923,7 +887,7 @@ def _at_turn(angle, mc, sections, silhouette, sets, zs, last_h, centre, top, set
     else:
         status, note = "PASS", how + "Every tool prints only its own body, on its layers."
     placement = CheckResult(TOOL_PLACEMENT, status, measured, threshold, TOLERANCE_RULE, note)
-    return placement, tool_f3, records, sum(scores) / len(scores)
+    return placement, tool_f3, records
 
 
 def _tower_depth(segments: list[Segment], silhouette_bed) -> float | None:
