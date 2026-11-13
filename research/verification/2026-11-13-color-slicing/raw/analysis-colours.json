@@ -1,0 +1,4282 @@
+{
+ "oddie-60-keep-merge-blues-greens-v4-f64-down": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": false,
+  "start_tools": [
+   [
+    1,
+    1
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 10,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "1": [
+    1,
+    0,
+    3,
+    2
+   ],
+   "2": [
+    2,
+    0,
+    1,
+    3
+   ],
+   "3": [
+    3,
+    1,
+    2,
+    0
+   ]
+  },
+  "expected_sets_by_layer": {
+   "1": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "2": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "3": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    1,
+    0,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    0,
+    3,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    3,
+    2,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    2,
+    0,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    1,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    3,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    2,
+    "layer 3",
+    0.0,
+    0.0,
+    0,
+    26.8,
+    12.8559
+   ],
+   [
+    2,
+    0,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 800.0,
+  "toolchange_other_e_only_mm3": 618.638,
+  "prime_tower_mm3": 548.161,
+  "time_s": {
+   "model_printing_time": 1721,
+   "total_estimated_time": 2096
+  },
+  "header": {
+   "model_printing_time": "28m 41s",
+   "total_estimated_time": "34m 56s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "1424.06, 255.27, 158.77, 121.94",
+   "filament used [cm3]": "3.43, 0.61, 0.38, 0.29",
+   "filament used [g]": "4.32, 0.77, 0.48, 0.37",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#25561B;#547E9D;#0D100D;#DD4F47",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,86,32,106,44,0,38,79,77,114,0,131,53,63,43,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 2884.85,
+    "prime_tower_mm3": 332.415,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 1706.309,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 138.202,
+     "Inner wall": 142.19,
+     "Outer wall": 152.696,
+     "Gap infill": 1.894,
+     "Bottom surface": 32.966,
+     "Internal solid infill": 436.23,
+     "Sparse infill": 137.613,
+     "Internal Bridge": 166.52,
+     "Top surface": 129.271
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 157.6
+    },
+    "model_xy_extent": [
+     98.222,
+     95.275,
+     157.781,
+     160.722
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.202,
+     50.723,
+     252.217
+    ]
+   },
+   "1": {
+    "model_mm3": 299.861,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 464.672,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Inner wall": 20.479,
+     "Outer wall": 19.897,
+     "Gap infill": 0.043,
+     "Bottom surface": 27.001,
+     "Prime tower": 25.712,
+     "Internal solid infill": 57.249
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 36.8,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     113.984,
+     95.8,
+     142.221,
+     127.074
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     237.207
+    ]
+   },
+   "2": {
+    "model_mm3": 112.947,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 100.0,
+    "toolchange_other_mm3": 133.734,
+    "total_e_mm": 248.125,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Outer wall": 46.904,
+     "Gap infill": 0.054
+    },
+    "e_only_mm": {
+     "toolchange_other": 55.6,
+     "flush": 41.575,
+     "layers_other": 72.0
+    },
+    "model_xy_extent": [
+     98.222,
+     95.275,
+     157.781,
+     160.722
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.957,
+     45.008,
+     246.457
+    ]
+   },
+   "3": {
+    "model_mm3": 16.356,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 189.943,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Outer wall": 3.276,
+     "Inner wall": 1.539,
+     "Bottom surface": 0.608,
+     "Gap infill": 0.015,
+     "Internal solid infill": 1.362
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 10.4
+    },
+    "model_xy_extent": [
+     122.63,
+     109.771,
+     134.644,
+     120.304
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.957,
+     45.008,
+     246.207
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 2096.698,
+   "prepare_time_s": 375.28,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 4714.471,
+   "weight_g": 5.9402,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 3425.265,
+     "model": 2884.85,
+     "prime_tower": 332.415,
+     "flush": 208.0
+    },
+    {
+     "id": 2,
+     "volume": 614.001,
+     "model": 352.157,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    },
+    {
+     "id": 3,
+     "volume": 381.898,
+     "model": 112.947,
+     "prime_tower": 76.951,
+     "flush": 192.0
+    },
+    {
+     "id": 4,
+     "volume": 293.307,
+     "model": 16.356,
+     "prime_tower": 76.951,
+     "flush": 200.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 394.967,
+    "Outer wall": 535.83,
+    "Sparse infill": 330.999,
+    "Internal solid infill": 1190.23,
+    "Top surface": 310.933,
+    "Bottom surface": 145.7,
+    "Internal Bridge": 400.528,
+    "Gap infill": 4.826,
+    "Prime tower": 548.161,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    128.0015,
+    127.9985
+   ],
+   "fitted_minus_plate_centre_mm": [
+    0.0014999999999929514,
+    -0.0014999999999929514
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 669885,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 6.535962041098968,
+     "own_area_mm2": 22791.502946573077,
+     "own_covered_mm2": 14063.355198435866,
+     "own_covered_fraction": 0.6170437830011745
+    },
+    "1": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 78102,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.024422368541572877,
+     "own_area_mm2": 1570.8882311891648,
+     "own_covered_mm2": 1477.0833254115619,
+     "own_covered_fraction": 0.9402854360258384
+    },
+    "2": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 54761,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 1.18774073161919,
+     "own_area_mm2": 708.9389700496165,
+     "own_covered_mm2": 370.44793988200206,
+     "own_covered_fraction": 0.5225385477907577
+    },
+    "3": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 6717,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.01604524000339621,
+     "own_area_mm2": 96.91348181082867,
+     "own_covered_mm2": 82.79792294348815,
+     "own_covered_fraction": 0.8543488624741237
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "WIPE_START": 346,
+   "WIPE_END": 346,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "CP TOOLCHANGE START": 9,
+   "WIPE_TOWER_START": 12,
+   "filament end gcode": 10,
+   "FLUSH_START": 8,
+   "FLUSH_END": 8,
+   "WIPE_TOWER_END": 12,
+   "CP TOOLCHANGE END": 9,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "oddie-60-keep-merge-blues-greens-v4-f64-up": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": true,
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 9,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "13": [
+    0,
+    2,
+    1,
+    3
+   ],
+   "14": [
+    3,
+    0,
+    2,
+    1
+   ],
+   "15": [
+    1,
+    3,
+    0,
+    2
+   ]
+  },
+  "expected_sets_by_layer": {
+   "13": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "14": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "15": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    0,
+    2,
+    "layer 13",
+    0.0,
+    0.0,
+    0,
+    26.8,
+    12.8559
+   ],
+   [
+    2,
+    1,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    3,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    0,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    2,
+    "layer 14",
+    0.0,
+    0.0,
+    0,
+    26.8,
+    12.8559
+   ],
+   [
+    2,
+    1,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    3,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    0,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    2,
+    "layer 15",
+    0.0,
+    0.0,
+    0,
+    26.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 600.0,
+  "toolchange_other_e_only_mm3": 609.017,
+  "prime_tower_mm3": 1054.692,
+  "time_s": {
+   "model_printing_time": 1745,
+   "total_estimated_time": 2124
+  },
+  "header": {
+   "model_printing_time": "29m 5s",
+   "total_estimated_time": "35m 24s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "1577.89, 234.14, 181.28, 115.93",
+   "filament used [cm3]": "3.80, 0.56, 0.44, 0.28",
+   "filament used [g]": "4.78, 0.71, 0.55, 0.35",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#25561B;#547E9D;#0D100D;#DD4F47",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,86,32,106,44,0,38,79,77,114,0,131,53,63,43,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 2888.732,
+    "prime_tower_mm3": 838.238,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 1974.186,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Prime tower": 348.499,
+     "Inner wall": 135.857,
+     "Outer wall": 151.115,
+     "Gap infill": 1.353,
+     "Bottom surface": 116.084,
+     "Internal solid infill": 436.063,
+     "Sparse infill": 137.627,
+     "Internal Bridge": 166.525,
+     "Top surface": 56.371
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 147.2,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     98.219,
+     95.274,
+     157.778,
+     160.722
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.212,
+     50.723,
+     252.227
+    ]
+   },
+   "1": {
+    "model_mm3": 301.32,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 328.536,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Inner wall": 13.141,
+     "Outer wall": 18.616,
+     "Internal solid infill": 56.715,
+     "Gap infill": 0.048,
+     "Top surface": 36.755
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 36.8
+    },
+    "model_xy_extent": [
+     113.779,
+     95.8,
+     142.016,
+     127.074
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.967,
+     45.008,
+     246.217
+    ]
+   },
+   "2": {
+    "model_mm3": 159.256,
+    "prime_tower_mm3": 92.766,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 193.385,
+    "total_e_mm": 261.179,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 38.568,
+     "Outer wall": 66.095,
+     "Gap infill": 0.116
+    },
+    "e_only_mm": {
+     "toolchange_other": 80.4,
+     "layers_other": 76.0
+    },
+    "model_xy_extent": [
+     98.219,
+     95.274,
+     157.778,
+     160.722
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "3": {
+    "model_mm3": 17.009,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 185.534,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Outer wall": 3.112,
+     "Inner wall": 1.011,
+     "Gap infill": 0.165,
+     "Internal solid infill": 1.395,
+     "Top surface": 1.388
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 12.0
+    },
+    "model_xy_extent": [
+     121.356,
+     109.771,
+     133.37,
+     120.304
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 2124.428,
+   "prepare_time_s": 378.463,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 5073.305,
+   "weight_g": 6.3924,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 3795.266,
+     "model": 2941.028,
+     "prime_tower": 838.238,
+     "flush": 16.0
+    },
+    {
+     "id": 2,
+     "volume": 563.164,
+     "model": 301.32,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    },
+    {
+     "id": 3,
+     "volume": 436.022,
+     "model": 159.256,
+     "prime_tower": 92.766,
+     "flush": 184.0
+    },
+    {
+     "id": 4,
+     "volume": 278.853,
+     "model": 17.009,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 360.813,
+    "Outer wall": 574.712,
+    "Sparse infill": 331.031,
+    "Internal solid infill": 1188.626,
+    "Top surface": 227.333,
+    "Bottom surface": 279.215,
+    "Internal Bridge": 400.541,
+    "Gap infill": 4.046,
+    "Prime tower": 1054.692,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    127.99849999999999,
+    127.9979763649394
+   ],
+   "fitted_minus_plate_centre_mm": [
+    -0.0015000000000071623,
+    -0.002023635060595552
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 662899,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 6.700091670591263,
+     "own_area_mm2": 22791.50294658239,
+     "own_covered_mm2": 14107.50156972887,
+     "own_covered_fraction": 0.618980749220152
+    },
+    "1": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 74098,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.027982487384914573,
+     "own_area_mm2": 1570.8882311891643,
+     "own_covered_mm2": 1498.8055249436084,
+     "own_covered_fraction": 0.9541134086980909
+    },
+    "2": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 78908,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 1.9574752764804928,
+     "own_area_mm2": 708.9389700496127,
+     "own_covered_mm2": 512.4492879117819,
+     "own_covered_fraction": 0.722839778261759
+    },
+    "3": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 6870,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.022058252291808085,
+     "own_area_mm2": 96.91348181082842,
+     "own_covered_mm2": 86.73908162881756,
+     "own_covered_fraction": 0.8950156367111965
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "WIPE_TOWER_START": 24,
+   "CP EMPTY GRID START": 12,
+   "CP EMPTY GRID END": 12,
+   "WIPE_TOWER_END": 24,
+   "WIPE_START": 339,
+   "WIPE_END": 339,
+   "CP TOOLCHANGE START": 9,
+   "filament end gcode": 10,
+   "CP TOOLCHANGE END": 9,
+   "FLUSH_START": 6,
+   "FLUSH_END": 6,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "oddie-60-merge-blues-v3-f64-down": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": true,
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 9,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "1": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "2": [
+    3,
+    1,
+    0,
+    2
+   ],
+   "3": [
+    2,
+    3,
+    1,
+    0
+   ]
+  },
+  "expected_sets_by_layer": {
+   "1": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "2": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "3": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    0,
+    1,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    1,
+    2,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    2,
+    3,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    3,
+    1,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    0,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    2,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    3,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    0,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 900.0,
+  "toolchange_other_e_only_mm3": 623.449,
+  "prime_tower_mm3": 548.161,
+  "time_s": {
+   "model_printing_time": 1493,
+   "total_estimated_time": 1868
+  },
+  "header": {
+   "model_printing_time": "24m 53s",
+   "total_estimated_time": "31m 8s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "1370.94, 311.84, 217.78, 122.78",
+   "filament used [cm3]": "3.30, 0.75, 0.52, 0.30",
+   "filament used [g]": "4.15, 0.95, 0.66, 0.37",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#25561B;#547E9D;#48A835;#DD4F47",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,86,85,106,44,0,64,79,33,53,0,70,53,63,79,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 2758.805,
+    "prime_tower_mm3": 286.386,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 1637.936,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Inner wall": 115.179,
+     "Outer wall": 119.777,
+     "Bottom surface": 36.449,
+     "Gap infill": 0.884,
+     "Prime tower": 119.065,
+     "Internal solid infill": 441.285,
+     "Sparse infill": 137.613,
+     "Internal Bridge": 166.52,
+     "Top surface": 129.271
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 94.4,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     98.222,
+     95.275,
+     157.781,
+     160.722
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.202,
+     50.723,
+     252.217
+    ]
+   },
+   "1": {
+    "model_mm3": 342.192,
+    "prime_tower_mm3": 107.873,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 422.241,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 44.848,
+     "Inner wall": 16.572,
+     "Outer wall": 15.134,
+     "Gap infill": 0.03,
+     "Bottom surface": 35.743,
+     "Internal solid infill": 74.788
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 24.0
+    },
+    "model_xy_extent": [
+     113.46,
+     95.275,
+     142.757,
+     127.149
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     237.207
+    ]
+   },
+   "2": {
+    "model_mm3": 246.863,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 297.776,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Inner wall": 17.453,
+     "Outer wall": 18.999,
+     "Bottom surface": 21.059,
+     "Gap infill": 0.215,
+     "Internal solid infill": 44.907
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 22.4
+    },
+    "model_xy_extent": [
+     98.222,
+     124.775,
+     157.782,
+     160.715
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.957,
+     45.008,
+     246.207
+    ]
+   },
+   "3": {
+    "model_mm3": 18.365,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 189.978,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Outer wall": 3.441,
+     "Inner wall": 1.701,
+     "Bottom surface": 0.79,
+     "Gap infill": 0.016,
+     "Internal solid infill": 1.688
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 9.6
+    },
+    "model_xy_extent": [
+     122.63,
+     109.565,
+     134.644,
+     120.304
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     246.457
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 1868.827,
+   "prepare_time_s": 375.338,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 4866.682,
+   "weight_g": 6.132,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 3297.487,
+     "model": 2811.101,
+     "prime_tower": 286.386,
+     "flush": 200.0
+    },
+    {
+     "id": 2,
+     "volume": 750.065,
+     "model": 342.192,
+     "prime_tower": 107.873,
+     "flush": 300.0
+    },
+    {
+     "id": 3,
+     "volume": 523.814,
+     "model": 246.863,
+     "prime_tower": 76.951,
+     "flush": 200.0
+    },
+    {
+     "id": 4,
+     "volume": 295.316,
+     "model": 18.365,
+     "prime_tower": 76.951,
+     "flush": 200.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 362.971,
+    "Outer wall": 378.474,
+    "Sparse infill": 330.999,
+    "Internal solid infill": 1353.374,
+    "Top surface": 310.933,
+    "Bottom surface": 226.193,
+    "Internal Bridge": 400.528,
+    "Gap infill": 2.754,
+    "Prime tower": 548.161,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    128.0015,
+    127.9985
+   ],
+   "fitted_minus_plate_centre_mm": [
+    0.0014999999999929514,
+    -0.0014999999999929514
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 587312,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 6.733603914474688,
+     "own_area_mm2": 22012.247583474506,
+     "own_covered_mm2": 13479.133875758509,
+     "own_covered_fraction": 0.612347004759198
+    },
+    "1": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 72630,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.3301174648184897,
+     "own_area_mm2": 1757.152660774064,
+     "own_covered_mm2": 1718.2771576477658,
+     "own_covered_fraction": 0.9778758533654254
+    },
+    "2": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 67483,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.5528574294955463,
+     "own_area_mm2": 1290.496140093661,
+     "own_covered_mm2": 1234.5140979599012,
+     "own_covered_fraction": 0.9566197523615244
+    },
+    "3": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 7187,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.016777413284001317,
+     "own_area_mm2": 108.34724392538192,
+     "own_covered_mm2": 93.18139346681814,
+     "own_covered_fraction": 0.8600255077184205
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "WIPE_START": 187,
+   "WIPE_END": 187,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "WIPE_TOWER_START": 12,
+   "WIPE_TOWER_END": 12,
+   "CP TOOLCHANGE START": 9,
+   "filament end gcode": 10,
+   "FLUSH_START": 9,
+   "FLUSH_END": 9,
+   "CP TOOLCHANGE END": 9,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "oddie-60-merge-blues-v3-f64-up": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": true,
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 9,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "13": [
+    0,
+    2,
+    1,
+    3
+   ],
+   "14": [
+    3,
+    1,
+    0,
+    2
+   ],
+   "15": [
+    2,
+    3,
+    1,
+    0
+   ]
+  },
+  "expected_sets_by_layer": {
+   "13": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "14": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "15": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    0,
+    2,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    1,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    3,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    0,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    2,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    3,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    0,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 900.0,
+  "toolchange_other_e_only_mm3": 623.449,
+  "prime_tower_mm3": 1054.692,
+  "time_s": {
+   "model_printing_time": 1531,
+   "total_estimated_time": 1910
+  },
+  "header": {
+   "model_printing_time": "25m 31s",
+   "total_estimated_time": "31m 50s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "1599.38, 306.00, 212.80, 116.72",
+   "filament used [cm3]": "3.85, 0.74, 0.51, 0.28",
+   "filament used [g]": "4.85, 0.93, 0.64, 0.35",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#25561B;#547E9D;#48A835;#DD4F47",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,86,85,106,44,0,64,79,33,53,0,70,53,63,79,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 2756.434,
+    "prime_tower_mm3": 838.238,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 1864.783,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Prime tower": 348.499,
+     "Inner wall": 118.078,
+     "Outer wall": 120.332,
+     "Gap infill": 0.89,
+     "Bottom surface": 116.084,
+     "Internal solid infill": 440.824,
+     "Sparse infill": 137.627,
+     "Internal Bridge": 166.525,
+     "Top surface": 45.633
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 92.8,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     98.219,
+     95.274,
+     157.778,
+     160.722
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.212,
+     50.723,
+     252.227
+    ]
+   },
+   "1": {
+    "model_mm3": 343.257,
+    "prime_tower_mm3": 92.766,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 414.803,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 38.568,
+     "Inner wall": 10.579,
+     "Outer wall": 14.146,
+     "Gap infill": 0.026,
+     "Internal solid infill": 74.456,
+     "Top surface": 43.502
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 22.4
+    },
+    "model_xy_extent": [
+     113.254,
+     95.275,
+     142.542,
+     127.149
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     237.217
+    ]
+   },
+   "2": {
+    "model_mm3": 249.993,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 297.597,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Inner wall": 11.335,
+     "Outer wall": 17.807,
+     "Internal solid infill": 44.947,
+     "Gap infill": 0.243,
+     "Top surface": 29.603
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 27.2
+    },
+    "model_xy_extent": [
+     98.218,
+     124.775,
+     157.778,
+     160.723
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "3": {
+    "model_mm3": 18.902,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 186.321,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Outer wall": 3.267,
+     "Inner wall": 1.114,
+     "Gap infill": 0.171,
+     "Internal solid infill": 1.652,
+     "Top surface": 1.655
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 12.0
+    },
+    "model_xy_extent": [
+     121.356,
+     109.565,
+     133.37,
+     120.304
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 1910.304,
+   "prepare_time_s": 378.463,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 5375.574,
+   "weight_g": 6.7732,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 3846.968,
+     "model": 2808.73,
+     "prime_tower": 838.238,
+     "flush": 200.0
+    },
+    {
+     "id": 2,
+     "volume": 736.024,
+     "model": 343.257,
+     "prime_tower": 92.766,
+     "flush": 300.0
+    },
+    {
+     "id": 3,
+     "volume": 511.837,
+     "model": 249.993,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    },
+    {
+     "id": 4,
+     "volume": 280.746,
+     "model": 18.902,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 339.4,
+    "Outer wall": 374.147,
+    "Sparse infill": 331.031,
+    "Internal solid infill": 1351.478,
+    "Top surface": 289.578,
+    "Bottom surface": 279.215,
+    "Internal Bridge": 400.541,
+    "Gap infill": 3.198,
+    "Prime tower": 1054.692,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    127.99849999999999,
+    127.9979763649394
+   ],
+   "fitted_minus_plate_centre_mm": [
+    -0.0015000000000071623,
+    -0.002023635060595552
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 588455,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 7.0369638970533614,
+     "own_area_mm2": 22012.24758348381,
+     "own_covered_mm2": 13475.329092838721,
+     "own_covered_fraction": 0.6121741563069418
+    },
+    "1": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 70767,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.447072332456268,
+     "own_area_mm2": 1757.1526607740625,
+     "own_covered_mm2": 1731.433533613957,
+     "own_covered_fraction": 0.9853631800274111
+    },
+    "2": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 64067,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.8652554441029854,
+     "own_area_mm2": 1290.4961400936572,
+     "own_covered_mm2": 1255.0343616399746,
+     "own_covered_fraction": 0.9725208178839582
+    },
+    "3": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 7483,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.023316421693099595,
+     "own_area_mm2": 108.34724392538175,
+     "own_covered_mm2": 96.38935977099415,
+     "own_covered_fraction": 0.8896337025183313
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "WIPE_TOWER_START": 24,
+   "CP EMPTY GRID START": 12,
+   "CP EMPTY GRID END": 12,
+   "WIPE_TOWER_END": 24,
+   "WIPE_START": 192,
+   "WIPE_END": 192,
+   "CP TOOLCHANGE START": 9,
+   "filament end gcode": 10,
+   "FLUSH_START": 9,
+   "FLUSH_END": 9,
+   "CP TOOLCHANGE END": 9,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "roadie-tol30-60-drop-v3-f64-down": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": false,
+  "start_tools": [
+   [
+    2,
+    2
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 10,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 11,
+  "statistics_filament_changes": 10,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "1": [
+    2,
+    0,
+    3,
+    1
+   ],
+   "2": [
+    1,
+    2,
+    3,
+    0
+   ],
+   "3": [
+    0,
+    3,
+    1,
+    2
+   ]
+  },
+  "expected_sets_by_layer": {
+   "1": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "2": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "3": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    2,
+    0,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    0,
+    3,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    3,
+    1,
+    "layer 1",
+    52.235,
+    52.2351,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    1,
+    2,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    3,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    0,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    3,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 3",
+    52.235,
+    52.2351,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    2,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    0,
+    "layer 4",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 1051.28,
+  "toolchange_other_e_only_mm3": 692.721,
+  "prime_tower_mm3": 592.449,
+  "time_s": {
+   "model_printing_time": 1522,
+   "total_estimated_time": 1897
+  },
+  "header": {
+   "model_printing_time": "25m 22s",
+   "total_estimated_time": "31m 37s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "867.59, 183.24, 191.56, 170.28",
+   "filament used [cm3]": "2.09, 0.44, 0.46, 0.41",
+   "filament used [g]": "2.63, 0.56, 0.58, 0.52",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#F60606;#F5F5F5;#F0F10A;#451812",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,182,166,51,88,0,78,43,86,102,0,59,99,167,180,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 1533.018,
+    "prime_tower_mm3": 345.781,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 1220.24,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 143.759,
+     "Inner wall": 132.569,
+     "Outer wall": 160.995,
+     "Gap infill": 16.065,
+     "Bottom surface": 12.013,
+     "Internal solid infill": 153.536,
+     "Sparse infill": 54.685,
+     "Internal Bridge": 55.553,
+     "Top surface": 51.939
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 228.0
+    },
+    "model_xy_extent": [
+     98.22,
+     103.508,
+     157.763,
+     152.482
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.202,
+     50.723,
+     252.217
+    ]
+   },
+   "1": {
+    "model_mm3": 112.518,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 251.28,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 278.442,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Outer wall": 17.804,
+     "Inner wall": 12.089,
+     "Gap infill": 0.548,
+     "Bottom surface": 4.905,
+     "Internal solid infill": 11.434
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 104.47,
+     "layers_other": 37.6
+    },
+    "model_xy_extent": [
+     98.227,
+     103.508,
+     144.153,
+     147.346
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.957,
+     45.008,
+     246.457
+    ]
+   },
+   "2": {
+    "model_mm3": 54.615,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 335.511,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Inner wall": 6.429,
+     "Outer wall": 6.579,
+     "Gap infill": 0.156,
+     "Bottom surface": 2.747,
+     "Prime tower": 25.712,
+     "Internal solid infill": 6.795
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 9.6,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     107.406,
+     135.267,
+     124.968,
+     147.055
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     246.207
+    ]
+   },
+   "3": {
+    "model_mm3": 1.709,
+    "prime_tower_mm3": 107.873,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 259.084,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 44.848,
+     "Outer wall": 0.711
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 2.4
+    },
+    "model_xy_extent": [
+     121.129,
+     144.415,
+     122.977,
+     146.515
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     237.457
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 1897.498,
+   "prepare_time_s": 375.355,
+   "layer_count": 15,
+   "filament_changes": 10,
+   "volume_mm3": 3397.887,
+   "weight_g": 4.2813,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 2086.8,
+     "model": 1533.018,
+     "prime_tower": 345.781,
+     "flush": 208.0
+    },
+    {
+     "id": 2,
+     "volume": 440.749,
+     "model": 112.518,
+     "prime_tower": 76.951,
+     "flush": 251.28
+    },
+    {
+     "id": 3,
+     "volume": 460.755,
+     "model": 106.911,
+     "prime_tower": 61.844,
+     "flush": 292.0
+    },
+    {
+     "id": 4,
+     "volume": 409.582,
+     "model": 1.709,
+     "prime_tower": 107.873,
+     "flush": 300.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 363.407,
+    "Outer wall": 447.595,
+    "Sparse infill": 131.534,
+    "Internal solid infill": 413.142,
+    "Top surface": 124.928,
+    "Bottom surface": 47.3,
+    "Internal Bridge": 133.621,
+    "Gap infill": 40.334,
+    "Prime tower": 592.449,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    127.9914892700423,
+    127.99479099825086
+   ],
+   "fitted_minus_plate_centre_mm": [
+    -0.008510729957706076,
+    -0.0052090017491366325
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 528509,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 14.151687761421472,
+     "own_area_mm2": 10452.623576777365,
+     "own_covered_mm2": 7694.157763446867,
+     "own_covered_fraction": 0.7360982347571577
+    },
+    "1": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 45577,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.44491931550273656,
+     "own_area_mm2": 634.541958083661,
+     "own_covered_mm2": 559.5172356138063,
+     "own_covered_fraction": 0.8817655451872213
+    },
+    "2": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 20654,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.21685296114490482,
+     "own_area_mm2": 288.9969024082748,
+     "own_covered_mm2": 271.66293051474554,
+     "own_covered_fraction": 0.9400202156179479
+    },
+    "3": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 1057,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.0,
+     "own_area_mm2": 12.541913634879162,
+     "own_covered_mm2": 7.87664516737549,
+     "own_covered_fraction": 0.6280257859112087
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 11,
+   "CHANGE_LAYER": 15,
+   "WIPE_START": 348,
+   "WIPE_END": 348,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "CP TOOLCHANGE START": 10,
+   "WIPE_TOWER_START": 14,
+   "filament end gcode": 11,
+   "FLUSH_START": 10,
+   "FLUSH_END": 10,
+   "WIPE_TOWER_END": 14,
+   "CP TOOLCHANGE END": 10,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "roadie-tol30-60-drop-v3-f64-up": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": true,
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 9,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "13": [
+    0,
+    3,
+    1,
+    2
+   ],
+   "14": [
+    2,
+    0,
+    3,
+    1
+   ],
+   "15": [
+    1,
+    2,
+    0,
+    3
+   ]
+  },
+  "expected_sets_by_layer": {
+   "13": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "14": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "15": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    0,
+    3,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 13",
+    52.235,
+    52.2351,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    2,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    0,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    3,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 14",
+    52.235,
+    52.2351,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    2,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    0,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    3,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 951.28,
+  "toolchange_other_e_only_mm3": 623.449,
+  "prime_tower_mm3": 1054.692,
+  "time_s": {
+   "model_printing_time": 1495,
+   "total_estimated_time": 1873
+  },
+  "header": {
+   "model_printing_time": "24m 55s",
+   "total_estimated_time": "31m 13s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "1131.90, 178.86, 132.14, 125.73",
+   "filament used [cm3]": "2.72, 0.43, 0.32, 0.30",
+   "filament used [g]": "3.43, 0.54, 0.40, 0.38",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#F60606;#F5F5F5;#F0F10A;#451812",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,182,166,51,88,0,78,43,86,102,0,59,99,167,180,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 1539.994,
+    "prime_tower_mm3": 838.238,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 1487.046,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Prime tower": 348.499,
+     "Inner wall": 135.107,
+     "Outer wall": 161.012,
+     "Gap infill": 16.187,
+     "Bottom surface": 36.644,
+     "Internal solid infill": 154.207,
+     "Sparse infill": 56.209,
+     "Internal Bridge": 55.544,
+     "Top surface": 25.345
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 220.8,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     98.237,
+     103.514,
+     157.77,
+     152.492
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.212,
+     50.723,
+     252.227
+    ]
+   },
+   "1": {
+    "model_mm3": 117.08,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 251.28,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 280.458,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Inner wall": 8.184,
+     "Outer wall": 16.829,
+     "Gap infill": 0.246,
+     "Internal solid infill": 11.763,
+     "Top surface": 11.654
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 104.47,
+     "layers_other": 44.0
+    },
+    "model_xy_extent": [
+     111.849,
+     103.514,
+     157.77,
+     147.346
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.967,
+     45.008,
+     246.217
+    ]
+   },
+   "2": {
+    "model_mm3": 56.0,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 203.344,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Inner wall": 4.184,
+     "Outer wall": 6.177,
+     "Gap infill": 0.282,
+     "Internal solid infill": 6.646,
+     "Top surface": 5.993
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 13.6
+    },
+    "model_xy_extent": [
+     131.032,
+     135.267,
+     148.593,
+     147.056
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "3": {
+    "model_mm3": 1.642,
+    "prime_tower_mm3": 92.766,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 252.776,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 38.568,
+     "Outer wall": 0.683
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 2.4
+    },
+    "model_xy_extent": [
+     133.023,
+     144.415,
+     134.871,
+     146.515
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 1873.833,
+   "prepare_time_s": 378.463,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 3772.984,
+   "weight_g": 4.754,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 2722.527,
+     "model": 1592.289,
+     "prime_tower": 838.238,
+     "flush": 292.0
+    },
+    {
+     "id": 2,
+     "volume": 430.204,
+     "model": 117.08,
+     "prime_tower": 61.844,
+     "flush": 251.28
+    },
+    {
+     "id": 3,
+     "volume": 317.844,
+     "model": 56.0,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    },
+    {
+     "id": 4,
+     "volume": 302.408,
+     "model": 1.642,
+     "prime_tower": 92.766,
+     "flush": 208.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 354.721,
+    "Outer wall": 444.255,
+    "Sparse infill": 135.199,
+    "Internal solid infill": 415.19,
+    "Top surface": 103.407,
+    "Bottom surface": 88.14,
+    "Internal Bridge": 133.599,
+    "Gap infill": 40.204,
+    "Prime tower": 1054.692,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    128.00345911553183,
+    128.0031376800099
+   ],
+   "fitted_minus_plate_centre_mm": [
+    0.0034591155318253186,
+    0.0031376800098996682
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 529604,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 11.42993650047174,
+     "own_area_mm2": 10452.623576778398,
+     "own_covered_mm2": 7717.319489549518,
+     "own_covered_fraction": 0.7383141115589731
+    },
+    "1": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 43999,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.5238891608765338,
+     "own_area_mm2": 634.5419580836603,
+     "own_covered_mm2": 582.4486299264299,
+     "own_covered_fraction": 0.9179040448096543
+    },
+    "2": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 19602,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.26467544840569923,
+     "own_area_mm2": 288.99690240827476,
+     "own_covered_mm2": 277.8837747417077,
+     "own_covered_fraction": 0.9615458588865178
+    },
+    "3": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 1098,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.0,
+     "own_area_mm2": 12.541913634879165,
+     "own_covered_mm2": 7.623433238405514,
+     "own_covered_fraction": 0.6078365280083482
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "WIPE_TOWER_START": 24,
+   "CP EMPTY GRID START": 12,
+   "CP EMPTY GRID END": 12,
+   "WIPE_TOWER_END": 24,
+   "WIPE_START": 350,
+   "WIPE_END": 350,
+   "CP TOOLCHANGE START": 9,
+   "filament end gcode": 10,
+   "FLUSH_START": 9,
+   "FLUSH_END": 9,
+   "CP TOOLCHANGE END": 9,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "roadie-tol30-60-keep-v4-f64-down": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": false,
+  "start_tools": [
+   [
+    3,
+    3
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 10,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "1": [
+    3,
+    2,
+    0,
+    1
+   ],
+   "2": [
+    1,
+    0,
+    3,
+    2
+   ],
+   "3": [
+    2,
+    3,
+    1,
+    0
+   ]
+  },
+  "expected_sets_by_layer": {
+   "1": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "2": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "3": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    3,
+    2,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    2,
+    0,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    0,
+    1,
+    "layer 1",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    19.1366
+   ],
+   [
+    1,
+    0,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    3,
+    "layer 2",
+    51.4867,
+    51.4867,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    2,
+    "layer 2",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    3,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    1,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    0,
+    "layer 3",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 923.84,
+  "toolchange_other_e_only_mm3": 623.449,
+  "prime_tower_mm3": 548.161,
+  "time_s": {
+   "model_printing_time": 1547,
+   "total_estimated_time": 1922
+  },
+  "header": {
+   "model_printing_time": "25m 47s",
+   "total_estimated_time": "32m 2s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "826.38, 169.62, 147.45, 193.45",
+   "filament used [cm3]": "1.99, 0.41, 0.35, 0.47",
+   "filament used [g]": "2.50, 0.51, 0.45, 0.59",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#F60606;#451812;#F5F5F5;#F0F10A",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,51,182,166,99,0,167,180,88,43,0,78,86,59,102,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 1447.261,
+    "prime_tower_mm3": 332.415,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 1151.829,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 138.202,
+     "Inner wall": 122.615,
+     "Outer wall": 156.351,
+     "Gap infill": 13.348,
+     "Bottom surface": 6.725,
+     "Internal solid infill": 140.485,
+     "Sparse infill": 54.685,
+     "Internal Bridge": 55.553,
+     "Top surface": 51.939
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 200.8
+    },
+    "model_xy_extent": [
+     98.22,
+     103.508,
+     157.763,
+     152.482
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.202,
+     50.723,
+     252.217
+    ]
+   },
+   "1": {
+    "model_mm3": 131.025,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 332.017,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Outer wall": 53.123,
+     "Inner wall": 0.539,
+     "Gap infill": 0.812
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 104.8
+    },
+    "model_xy_extent": [
+     98.22,
+     103.508,
+     157.763,
+     152.482
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.957,
+     45.008,
+     246.457
+    ]
+   },
+   "2": {
+    "model_mm3": 77.699,
+    "prime_tower_mm3": 76.951,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 240.246,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Prime tower": 31.992,
+     "Outer wall": 15.898,
+     "Inner wall": 7.007,
+     "Gap infill": 0.374,
+     "Bottom surface": 2.806,
+     "Internal solid infill": 6.219
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 35.2
+    },
+    "model_xy_extent": [
+     98.751,
+     104.22,
+     143.591,
+     147.17
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     246.207
+    ]
+   },
+   "3": {
+    "model_mm3": 35.321,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 223.84,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 338.2,
+    "model_layers": [
+     1,
+     2,
+     3
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Inner wall": 4.993,
+     "Outer wall": 6.789,
+     "Bottom surface": 0.75,
+     "Gap infill": 0.041,
+     "Prime tower": 25.712,
+     "Internal solid infill": 2.112
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 10.4,
+     "toolchange_other": 57.6,
+     "flush": 93.062
+    },
+    "model_xy_extent": [
+     108.504,
+     135.695,
+     124.842,
+     146.515
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.957,
+     45.008,
+     237.207
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 1922.878,
+   "prepare_time_s": 375.351,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 3215.604,
+   "weight_g": 4.0517,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 1987.676,
+     "model": 1447.261,
+     "prime_tower": 332.415,
+     "flush": 208.0
+    },
+    {
+     "id": 2,
+     "volume": 407.976,
+     "model": 131.025,
+     "prime_tower": 76.951,
+     "flush": 200.0
+    },
+    {
+     "id": 3,
+     "volume": 354.65,
+     "model": 77.699,
+     "prime_tower": 76.951,
+     "flush": 200.0
+    },
+    {
+     "id": 4,
+     "volume": 465.301,
+     "model": 87.617,
+     "prime_tower": 61.844,
+     "flush": 315.84
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 325.084,
+    "Outer wall": 558.411,
+    "Sparse infill": 131.534,
+    "Internal solid infill": 357.945,
+    "Top surface": 124.928,
+    "Bottom surface": 24.729,
+    "Internal Bridge": 133.621,
+    "Gap infill": 35.056,
+    "Prime tower": 548.161,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    127.9914892700423,
+    127.99479099825086
+   ],
+   "fitted_minus_plate_centre_mm": [
+    -0.008510729957706076,
+    -0.0052090017491366325
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 501191,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 12.772035706399379,
+     "own_area_mm2": 10002.184480357919,
+     "own_covered_mm2": 7210.837271577897,
+     "own_covered_fraction": 0.7209262422362224
+    },
+    "1": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 69411,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 2.4448505925897885,
+     "own_area_mm2": 733.9382248581612,
+     "own_covered_mm2": 474.4324420447138,
+     "own_covered_fraction": 0.6464201290733989
+    },
+    "2": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 34194,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.07483955995438903,
+     "own_area_mm2": 451.0098284651903,
+     "own_covered_mm2": 370.76506584654277,
+     "own_covered_fraction": 0.8220775744694421
+    },
+    "3": {
+     "layers": [
+      1,
+      2,
+      3
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 16598,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.04928602669523735,
+     "own_area_mm2": 201.5718171383351,
+     "own_covered_mm2": 167.46708787824625,
+     "own_covered_fraction": 0.8308060633462296
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "WIPE_START": 439,
+   "WIPE_END": 439,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "CP TOOLCHANGE START": 9,
+   "WIPE_TOWER_START": 12,
+   "filament end gcode": 10,
+   "FLUSH_START": 9,
+   "FLUSH_END": 9,
+   "WIPE_TOWER_END": 12,
+   "CP TOOLCHANGE END": 9,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ },
+ "roadie-tol30-60-keep-v4-f64-up": {
+  "exit": 0,
+  "filaments_loaded": 4,
+  "layers": 15,
+  "layer_z": [
+   0.2,
+   0.4,
+   0.6,
+   0.8,
+   1.0,
+   1.2,
+   1.4,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4,
+   2.6,
+   2.8,
+   3.0
+  ],
+  "start_loads_filament_1": true,
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "real_changes": 9,
+  "minimum_changes": 9,
+  "decision4_formula_on_actual_order": 9,
+  "statistics_filament_changes": 9,
+  "changes_all_in_m620_pair": true,
+  "changes_all_in_cp_toolchange": true,
+  "end_unload": [
+   255
+  ],
+  "sets_match_all": true,
+  "orders_by_layer": {
+   "13": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "14": [
+    3,
+    0,
+    1,
+    2
+   ],
+   "15": [
+    2,
+    3,
+    0,
+    1
+   ]
+  },
+  "expected_sets_by_layer": {
+   "13": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "14": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "15": [
+    0,
+    1,
+    2,
+    3
+   ]
+  },
+  "toolchanges": [
+   [
+    0,
+    1,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    2,
+    "layer 13",
+    52.235,
+    52.2351,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    3,
+    "layer 13",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    0,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    1,
+    "layer 14",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    1,
+    2,
+    "layer 14",
+    52.235,
+    52.2351,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    2,
+    3,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    3,
+    0,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ],
+   [
+    0,
+    1,
+    "layer 15",
+    41.5752,
+    41.5752,
+    1,
+    28.8,
+    12.8559
+   ]
+  ],
+  "flush_mm3": 951.28,
+  "toolchange_other_e_only_mm3": 623.449,
+  "prime_tower_mm3": 1054.692,
+  "time_s": {
+   "model_printing_time": 1623,
+   "total_estimated_time": 2002
+  },
+  "header": {
+   "model_printing_time": "27m 3s",
+   "total_estimated_time": "33m 22s",
+   "total layer number": "15",
+   "max_z_height": "3.00",
+   "filament": "1,2,3,4",
+   "filament used [mm]": "1093.87, 196.27, 163.19, 124.36",
+   "filament used [cm3]": "2.63, 0.47, 0.39, 0.30",
+   "filament used [g]": "3.32, 0.59, 0.49, 0.38",
+   "enable_arc_fitting": "enabled",
+   "enable_prime_tower": "1",
+   "filament_colour": "#F60606;#451812;#F5F5F5;#F0F10A",
+   "filament_prime_volume": "30,30,30,30",
+   "flush_into_infill": "0",
+   "flush_into_objects": "0",
+   "flush_multiplier": "0.3",
+   "flush_volumes_matrix": "0,51,182,166,99,0,167,180,88,43,0,78,86,59,102,0",
+   "prime_tower_width": "35",
+   "prime_volume": "45",
+   "wipe_tower_x": "15.000",
+   "wipe_tower_y": "217.415"
+  },
+  "per_tool": {
+   "0": {
+    "model_mm3": 1448.522,
+    "prime_tower_mm3": 838.238,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 1436.217,
+    "model_layers": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Custom": 21.742,
+     "Prime tower": 348.499,
+     "Inner wall": 128.551,
+     "Outer wall": 156.848,
+     "Gap infill": 13.39,
+     "Bottom surface": 36.644,
+     "Internal solid infill": 140.871,
+     "Sparse infill": 56.209,
+     "Internal Bridge": 55.544,
+     "Top surface": 14.168
+    },
+    "e_only_mm": {
+     "start": 115.0,
+     "layers_other": 208.0,
+     "toolchange_other": 57.6,
+     "flush": 83.15
+    },
+    "model_xy_extent": [
+     98.237,
+     103.514,
+     157.77,
+     152.492
+    ],
+    "prime_tower_xy_extent": [
+     11.793,
+     214.212,
+     50.723,
+     252.227
+    ]
+   },
+   "1": {
+    "model_mm3": 171.315,
+    "prime_tower_mm3": 92.766,
+    "flush_mm3": 300.0,
+    "toolchange_other_mm3": 207.816,
+    "total_e_mm": 404.118,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 38.568,
+     "Outer wall": 69.28,
+     "Inner wall": 0.387,
+     "Gap infill": 1.198,
+     "Top surface": 0.359
+    },
+    "e_only_mm": {
+     "toolchange_other": 86.4,
+     "flush": 124.726,
+     "layers_other": 83.2
+    },
+    "model_xy_extent": [
+     98.237,
+     103.514,
+     157.77,
+     152.492
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "2": {
+    "model_mm3": 79.385,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 251.28,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 258.386,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Outer wall": 14.96,
+     "Inner wall": 4.817,
+     "Gap infill": 0.164,
+     "Internal solid infill": 6.059,
+     "Top surface": 7.006
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 104.47,
+     "layers_other": 37.6
+    },
+    "model_xy_extent": [
+     112.409,
+     104.22,
+     157.249,
+     147.17
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     228.967,
+     45.008,
+     246.217
+    ]
+   },
+   "3": {
+    "model_mm3": 37.269,
+    "prime_tower_mm3": 61.844,
+    "flush_mm3": 200.0,
+    "toolchange_other_mm3": 138.544,
+    "total_e_mm": 194.757,
+    "model_layers": [
+     13,
+     14,
+     15
+    ],
+    "features_e_mm": {
+     "Prime tower": 25.712,
+     "Inner wall": 3.404,
+     "Outer wall": 6.353,
+     "Gap infill": 0.125,
+     "Internal solid infill": 2.168,
+     "Top surface": 3.445
+    },
+    "e_only_mm": {
+     "toolchange_other": 57.6,
+     "flush": 83.15,
+     "layers_other": 12.8
+    },
+    "model_xy_extent": [
+     131.158,
+     135.695,
+     147.496,
+     146.515
+    ],
+    "prime_tower_xy_extent": [
+     17.508,
+     219.967,
+     45.008,
+     246.217
+    ]
+   },
+   "None": {
+    "model_mm3": 0.0,
+    "prime_tower_mm3": 0.0,
+    "flush_mm3": 0.0,
+    "toolchange_other_mm3": 0.0,
+    "total_e_mm": 10.0,
+    "model_layers": [],
+    "features_e_mm": {},
+    "e_only_mm": {
+     "start": 10.0
+    },
+    "model_xy_extent": [],
+    "prime_tower_xy_extent": []
+   }
+  },
+  "statistics": {
+   "time_s": 2002.397,
+   "prepare_time_s": 378.463,
+   "layer_count": 15,
+   "filament_changes": 9,
+   "volume_mm3": 3794.76,
+   "weight_g": 4.7814,
+   "filaments": [
+    {
+     "id": 1,
+     "volume": 2631.056,
+     "model": 1500.818,
+     "prime_tower": 838.238,
+     "flush": 292.0
+    },
+    {
+     "id": 2,
+     "volume": 472.082,
+     "model": 171.315,
+     "prime_tower": 92.766,
+     "flush": 208.0
+    },
+    {
+     "id": 3,
+     "volume": 392.51,
+     "model": 79.385,
+     "prime_tower": 61.844,
+     "flush": 251.28
+    },
+    {
+     "id": 4,
+     "volume": 299.113,
+     "model": 37.269,
+     "prime_tower": 61.844,
+     "flush": 200.0
+    }
+   ],
+   "features_volume": {
+    "Inner wall": 329.907,
+    "Outer wall": 595.164,
+    "Sparse infill": 135.199,
+    "Internal solid infill": 358.622,
+    "Top surface": 60.078,
+    "Bottom surface": 88.14,
+    "Internal Bridge": 133.599,
+    "Gap infill": 35.783,
+    "Prime tower": 1054.692,
+    "Custom": 52.296
+   }
+  },
+  "placement": {
+   "fitted_bed_centre": [
+    128.00345911553183,
+    128.0031376800099
+   ],
+   "fitted_minus_plate_centre_mm": [
+    0.0034591155318253186,
+    0.0031376800098996682
+   ],
+   "by_tool": {
+    "0": {
+     "layers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 504544,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 9.808774808341205,
+     "own_area_mm2": 10002.184480359163,
+     "own_covered_mm2": 7223.493132796092,
+     "own_covered_fraction": 0.7221915519535296
+    },
+    "1": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 93285,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 2.7404087156310615,
+     "own_area_mm2": 733.9382248581561,
+     "own_covered_mm2": 597.6173869775726,
+     "own_covered_fraction": 0.8142611554168208
+    },
+    "2": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 33393,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.030238858798175297,
+     "own_area_mm2": 451.00982846519037,
+     "own_covered_mm2": 383.4010178523505,
+     "own_covered_fraction": 0.8500945958474649
+    },
+    "3": {
+     "layers": [
+      13,
+      14,
+      15
+     ],
+     "max_centreline_outside_own_mm": 0.0,
+     "samples_outside_own": 0,
+     "samples": 15552,
+     "samples_inside_other_bodies": 0,
+     "bead_outside_own_mm2": 0.016266336055048732,
+     "own_area_mm2": 201.57181713833415,
+     "own_covered_mm2": 178.65437799736017,
+     "own_covered_fraction": 0.8863063325700623
+    }
+   },
+   "bodies_without_their_tool": {},
+   "tools_without_their_body": {}
+  },
+  "markers": {
+   "EXECUTABLE_BLOCK_START": 1,
+   "filament start gcode": 10,
+   "CHANGE_LAYER": 15,
+   "SKIPPABLE_START": 15,
+   "SKIPPABLE_END": 15,
+   "WIPE_TOWER_START": 24,
+   "CP EMPTY GRID START": 12,
+   "CP EMPTY GRID END": 12,
+   "WIPE_TOWER_END": 24,
+   "WIPE_START": 426,
+   "WIPE_END": 426,
+   "CP TOOLCHANGE START": 9,
+   "filament end gcode": 10,
+   "FLUSH_START": 9,
+   "FLUSH_END": 9,
+   "CP TOOLCHANGE END": 9,
+   "EXECUTABLE_BLOCK_END": 1
+  }
+ }
+}

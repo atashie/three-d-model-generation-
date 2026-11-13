@@ -1,0 +1,450 @@
+{
+ "slicer_verified": {
+  "exe_sha256": "e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f",
+  "libraries": {
+   "app/OrcaSlicer.dll": "4c6a3772c21851623dfa88860f530a9971288bc8ca6e0d0b6b914c145cb987af"
+  },
+  "profiles": {
+   "machine": {
+    "name": "Bambu Lab A1 0.4 nozzle",
+    "file": "machine.json",
+    "sha256": "bc1aadae552a0ee02e90b7ae17a1ec9d30726ab31cf783ea6ed1a19600df63ac"
+   },
+   "process": {
+    "name": "0.20mm Standard @BBL A1",
+    "file": "process.json",
+    "sha256": "b4af99bd1e6c8256430ae7c21604aa755e63a9e33ac8871d58a60ddde2e8988c"
+   },
+   "filament": {
+    "name": "Bambu PLA Basic @BBL A1",
+    "file": "filament.json",
+    "sha256": "0254183f025d9f34351caa8371018bae540203344020ec69fc9bd5be0d741104"
+   }
+  },
+  "app_tree": {
+   "files": 4054,
+   "sha256": "b5cf3ff821f71bb6dbfb07b2fb1e806ee15e58e5af76d605d59182f0a2c33402"
+  }
+ },
+ "variant": "colours",
+ "extra_args": [],
+ "coloured_filaments": true,
+ "runs": {
+  "oddie-60-keep-merge-blues-greens-v4-f64-down": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\oddie-60-keep-merge-blues-greens-v4-f64-down.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-0.json;<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-1.json;<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-2.json;<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\oddie-60-keep-merge-blues-greens-v4-f64-down\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\oddie-60-keep-merge-blues-greens-v4-f64-down\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 3350774,
+   "gcode_sha256": "b863bb193731463af671214abf00393b1ef29676964c8e716906ad639aa6747a",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.013 secs."
+   ]
+  },
+  "oddie-60-keep-merge-blues-greens-v4-f64-up": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\oddie-60-keep-merge-blues-greens-v4-f64-up.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-0.json;<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-1.json;<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-2.json;<out>\\filaments\\oddie-60-keep-merge-blues-greens-v4-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\oddie-60-keep-merge-blues-greens-v4-f64-up\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\oddie-60-keep-merge-blues-greens-v4-f64-up\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 3251565,
+   "gcode_sha256": "b9a388e3bdf59a11ded5031db5ab074e9fd8fde8e7596ca1cdda67a1cb8484aa",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.013 secs."
+   ]
+  },
+  "oddie-60-merge-blues-v3-f64-down": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\oddie-60-merge-blues-v3-f64-down.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-0.json;<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-1.json;<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-2.json;<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\oddie-60-merge-blues-v3-f64-down\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\oddie-60-merge-blues-v3-f64-down\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 1426278,
+   "gcode_sha256": "6dfb967005b116e6add84808d43907f5507d185d8df9999dae365b4253b3e44c",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.007 secs."
+   ]
+  },
+  "oddie-60-merge-blues-v3-f64-up": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\oddie-60-merge-blues-v3-f64-up.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-0.json;<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-1.json;<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-2.json;<out>\\filaments\\oddie-60-merge-blues-v3-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\oddie-60-merge-blues-v3-f64-up\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\oddie-60-merge-blues-v3-f64-up\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 1337114,
+   "gcode_sha256": "ae62e334708d79728600706aa3d84b227a19a14b885905e2dd231cee3ed4a0a8",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.006 secs."
+   ]
+  },
+  "roadie-tol30-60-drop-v3-f64-down": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\roadie-tol30-60-drop-v3-f64-down.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-0.json;<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-1.json;<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-2.json;<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\roadie-tol30-60-drop-v3-f64-down\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\roadie-tol30-60-drop-v3-f64-down\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 1796436,
+   "gcode_sha256": "d9494229bc7c50abc8d3a8254350c5ff02f3d9ed5656519e687f1248de7f4bf2",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.008 secs."
+   ]
+  },
+  "roadie-tol30-60-drop-v3-f64-up": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\roadie-tol30-60-drop-v3-f64-up.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-0.json;<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-1.json;<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-2.json;<out>\\filaments\\roadie-tol30-60-drop-v3-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\roadie-tol30-60-drop-v3-f64-up\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\roadie-tol30-60-drop-v3-f64-up\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 1757912,
+   "gcode_sha256": "ef405f20c9b508146905ec0547228b0c29fc519588aa409e7d3a109f4e1de522",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.008 secs."
+   ]
+  },
+  "roadie-tol30-60-keep-v4-f64-down": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\roadie-tol30-60-keep-v4-f64-down.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-0.json;<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-1.json;<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-2.json;<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\roadie-tol30-60-keep-v4-f64-down\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\roadie-tol30-60-keep-v4-f64-down\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 2861190,
+   "gcode_sha256": "81c1a0b4bbe86c30982f26bbb092e6510b9c3f6dd76086d89248e4a440d5f054",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.011 secs."
+   ]
+  },
+  "roadie-tol30-60-keep-v4-f64-up": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\roadie-tol30-60-keep-v4-f64-up.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-0.json;<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-1.json;<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-2.json;<out>\\filaments\\roadie-tol30-60-keep-v4-f64\\filament-3.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\colours\\roadie-tol30-60-keep-v4-f64-up\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\colours\\roadie-tol30-60-keep-v4-f64-up\\slicer.log"
+   ],
+   "filaments": 4,
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 2979696,
+   "gcode_sha256": "dbba80318e5712869ecdeb0a65d3cc913152356f8df61555faf68bd0d85abe31",
+   "log_extract": [
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 4",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 3.4281",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "gcode path conflicts check takes 0.011 secs."
+   ]
+  }
+ }
+}

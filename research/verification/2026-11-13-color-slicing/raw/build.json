@@ -1,0 +1,1238 @@
+{
+ "roadie-tol30-60-drop-v3-f64": {
+  "turn_over": {
+   "x0": 0.0293731689453125,
+   "x1": 60.0,
+   "T": 3.0,
+   "bodies": [
+    {
+     "name": "ams-base #f60606",
+     "coords": 96282,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 2090.5247451128275,
+     "volume_turned_mm3": 2090.5247451128257,
+     "z_range_turned": [
+      0.0,
+      3.0
+     ]
+    },
+    {
+     "name": "ams-color-1-f5f5f5 #f5f5f5",
+     "coords": 29364,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 126.90837144518616,
+     "volume_turned_mm3": 126.90837144518666,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-2-f0f10a #f0f10a",
+     "coords": 9198,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 57.79937129469112,
+     "volume_turned_mm3": 57.79937129469056,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-3-451812 #451812",
+     "coords": 1626,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 2.5083823282793256,
+     "volume_turned_mm3": 2.508382328279288,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    }
+   ]
+  },
+  "up": {
+   "file": "roadie-tol30-60-drop-v3-f64-up.3mf",
+   "bytes": 940040,
+   "sha256": "9050d36e85077be6279abf2481401965f51bec9cbe88ea01a22c220ede0c3f18",
+   "bodies": [
+    {
+     "name": "ams-base #f60606",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      0.0
+     ],
+     "max": [
+      60.0,
+      49.40464782714844,
+      3.0
+     ],
+     "volume_mm3": 2090.5247451128275
+    },
+    {
+     "name": "ams-color-1-f5f5f5 #f5f5f5",
+     "min": [
+      13.652149200439453,
+      0.00043487548828125,
+      2.4000000953674316
+     ],
+     "max": [
+      60.0,
+      44.28402328491211,
+      3.0
+     ],
+     "volume_mm3": 126.90837144518616
+    },
+    {
+     "name": "ams-color-2-f0f10a #f0f10a",
+     "min": [
+      32.8360481262207,
+      31.658565521240234,
+      2.4000000953674316
+     ],
+     "max": [
+      50.82370376586914,
+      43.97024154663086,
+      3.0
+     ],
+     "volume_mm3": 57.79937129469112
+    },
+    {
+     "name": "ams-color-3-451812 #451812",
+     "min": [
+      34.80168914794922,
+      40.856754302978516,
+      2.4000000953674316
+     ],
+     "max": [
+      37.195735931396484,
+      43.55320739746094,
+      3.0
+     ],
+     "volume_mm3": 2.5083823282793256
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #f60606\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-f5f5f5 #f5f5f5\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-f0f10a #f0f10a\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-451812 #451812\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #f60606",
+      "vertices": 32094,
+      "triangles": 64184,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-f5f5f5 #f5f5f5",
+      "vertices": 9788,
+      "triangles": 19548,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-f0f10a #f0f10a",
+      "vertices": 3066,
+      "triangles": 6128,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-451812 #451812",
+      "vertices": 542,
+      "triangles": 1080,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  "down": {
+   "file": "roadie-tol30-60-drop-v3-f64-down.3mf",
+   "bytes": 946038,
+   "sha256": "5dfb88828eba28d9b0994bc91af031f48945d74196c605d3a46a8acaff921dab",
+   "bodies": [
+    {
+     "name": "ams-base #f60606",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      0.0
+     ],
+     "max": [
+      60.0,
+      49.40464782714844,
+      3.0
+     ],
+     "volume_mm3": 2090.5247451128257
+    },
+    {
+     "name": "ams-color-1-f5f5f5 #f5f5f5",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      0.0
+     ],
+     "max": [
+      46.37722396850586,
+      44.28402328491211,
+      0.5999999046325684
+     ],
+     "volume_mm3": 126.90837144518666
+    },
+    {
+     "name": "ams-color-2-f0f10a #f0f10a",
+     "min": [
+      9.205669403076172,
+      31.658565521240234,
+      0.0
+     ],
+     "max": [
+      27.19332504272461,
+      43.97024154663086,
+      0.5999999046325684
+     ],
+     "volume_mm3": 57.79937129469056
+    },
+    {
+     "name": "ams-color-3-451812 #451812",
+     "min": [
+      22.833637237548828,
+      40.856754302978516,
+      0.0
+     ],
+     "max": [
+      25.227684020996094,
+      43.55320739746094,
+      0.5999999046325684
+     ],
+     "volume_mm3": 2.508382328279288
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #f60606\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-f5f5f5 #f5f5f5\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-f0f10a #f0f10a\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-451812 #451812\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #f60606",
+      "vertices": 32094,
+      "triangles": 64184,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-f5f5f5 #f5f5f5",
+      "vertices": 9788,
+      "triangles": 19548,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-f0f10a #f0f10a",
+      "vertices": 3066,
+      "triangles": 6128,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-451812 #451812",
+      "vertices": 542,
+      "triangles": 1080,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  }
+ },
+ "roadie-tol30-60-keep-v4-f64": {
+  "turn_over": {
+   "x0": 0.0293731689453125,
+   "x1": 60.0,
+   "T": 3.0,
+   "bodies": [
+    {
+     "name": "ams-base #f60606",
+     "coords": 156498,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 2000.43694014801,
+     "volume_turned_mm3": 2000.4369401480096,
+     "z_range_turned": [
+      0.0,
+      3.0
+     ]
+    },
+    {
+     "name": "ams-color-1-451812 #451812",
+     "coords": 129546,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 146.78762164036524,
+     "volume_turned_mm3": 146.7876216403629,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-2-f5f5f5 #f5f5f5",
+     "coords": 25782,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 90.20195135582124,
+     "volume_turned_mm3": 90.2019513558216,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-3-f0f10a #f0f10a",
+     "coords": 9996,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 40.31435701987062,
+     "volume_turned_mm3": 40.314357019872006,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    }
+   ]
+  },
+  "up": {
+   "file": "roadie-tol30-60-keep-v4-f64-up.3mf",
+   "bytes": 2147002,
+   "sha256": "1886f077b5b27c84ff96c4c83d96ad6a727f20c91d78af4f656b1befbd7769b2",
+   "bodies": [
+    {
+     "name": "ams-base #f60606",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      0.0
+     ],
+     "max": [
+      60.0,
+      49.40464782714844,
+      3.0
+     ],
+     "volume_mm3": 2000.43694014801
+    },
+    {
+     "name": "ams-color-1-451812 #451812",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      2.4000000953674316
+     ],
+     "max": [
+      60.0,
+      49.40464782714844,
+      3.0
+     ],
+     "volume_mm3": 146.78762164036524
+    },
+    {
+     "name": "ams-color-2-f5f5f5 #f5f5f5",
+     "min": [
+      14.212867736816406,
+      0.7123336791992188,
+      2.4000000953674316
+     ],
+     "max": [
+      59.472991943359375,
+      44.10762023925781,
+      3.0
+     ],
+     "volume_mm3": 90.20195135582124
+    },
+    {
+     "name": "ams-color-3-f0f10a #f0f10a",
+     "min": [
+      32.88644790649414,
+      32.162574768066406,
+      2.4000000953674316
+     ],
+     "max": [
+      49.84639358520508,
+      43.42720413208008,
+      3.0
+     ],
+     "volume_mm3": 40.31435701987062
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #f60606\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-451812 #451812\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-f5f5f5 #f5f5f5\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-f0f10a #f0f10a\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #f60606",
+      "vertices": 52166,
+      "triangles": 104328,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-451812 #451812",
+      "vertices": 43182,
+      "triangles": 86400,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-f5f5f5 #f5f5f5",
+      "vertices": 8594,
+      "triangles": 17156,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-f0f10a #f0f10a",
+      "vertices": 3332,
+      "triangles": 6660,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  "down": {
+   "file": "roadie-tol30-60-keep-v4-f64-down.3mf",
+   "bytes": 2156579,
+   "sha256": "598c28808d61edd5aa3dddb81dedaa8957b5affd520b7a76bb6151eea98bbdd1",
+   "bodies": [
+    {
+     "name": "ams-base #f60606",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      0.0
+     ],
+     "max": [
+      60.0,
+      49.40464782714844,
+      3.0
+     ],
+     "volume_mm3": 2000.4369401480096
+    },
+    {
+     "name": "ams-color-1-451812 #451812",
+     "min": [
+      0.0293731689453125,
+      0.00043487548828125,
+      0.0
+     ],
+     "max": [
+      60.0,
+      49.40464782714844,
+      0.5999999046325684
+     ],
+     "volume_mm3": 146.7876216403629
+    },
+    {
+     "name": "ams-color-2-f5f5f5 #f5f5f5",
+     "min": [
+      0.5563812255859375,
+      0.7123336791992188,
+      0.0
+     ],
+     "max": [
+      45.816505432128906,
+      44.10762023925781,
+      0.5999999046325684
+     ],
+     "volume_mm3": 90.2019513558216
+    },
+    {
+     "name": "ams-color-3-f0f10a #f0f10a",
+     "min": [
+      10.182979583740234,
+      32.162574768066406,
+      0.0
+     ],
+     "max": [
+      27.142925262451172,
+      43.42720413208008,
+      0.5999999046325684
+     ],
+     "volume_mm3": 40.314357019872006
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #f60606\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-451812 #451812\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-f5f5f5 #f5f5f5\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-f0f10a #f0f10a\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #f60606",
+      "vertices": 52166,
+      "triangles": 104328,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-451812 #451812",
+      "vertices": 43182,
+      "triangles": 86400,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-f5f5f5 #f5f5f5",
+      "vertices": 8594,
+      "triangles": 17156,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-f0f10a #f0f10a",
+      "vertices": 3332,
+      "triangles": 6660,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  }
+ },
+ "oddie-60-merge-blues-v3-f64": {
+  "turn_over": {
+   "x0": 0.00440216064453125,
+   "x1": 59.99114990234375,
+   "T": 3.0,
+   "bodies": [
+    {
+     "name": "ams-base #25561b",
+     "coords": 87648,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 4402.449617023826,
+     "volume_turned_mm3": 4402.449617023826,
+     "z_range_turned": [
+      0.0,
+      3.0
+     ]
+    },
+    {
+     "name": "ams-color-1-547e9d #547e9d",
+     "coords": 25734,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 351.43047629643456,
+     "volume_turned_mm3": 351.4304762964351,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-2-48a835 #48a835",
+     "coords": 32772,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 258.09918699496524,
+     "volume_turned_mm3": 258.09918699496467,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-3-dd4f47 #dd4f47",
+     "coords": 6852,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 21.66944534081055,
+     "volume_turned_mm3": 21.669445340810068,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    }
+   ]
+  },
+  "up": {
+   "file": "oddie-60-merge-blues-v3-f64-up.3mf",
+   "bytes": 1041952,
+   "sha256": "ff3e97d33b4f6fb35b398e78470dd1f3d7ba30bef2d0577e876d866ce0944fc6",
+   "bodies": [
+    {
+     "name": "ams-base #25561b",
+     "min": [
+      0.00440216064453125,
+      0.0,
+      0.0
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      3.0
+     ],
+     "volume_mm3": 4402.449617023826
+    },
+    {
+     "name": "ams-color-1-547e9d #547e9d",
+     "min": [
+      15.041969299316406,
+      0.0,
+      2.4000000953674316
+     ],
+     "max": [
+      44.748252868652344,
+      32.35101318359375,
+      3.0
+     ],
+     "volume_mm3": 351.43047629643456
+    },
+    {
+     "name": "ams-color-2-48a835 #48a835",
+     "min": [
+      0.00440216064453125,
+      29.397735595703125,
+      2.4000000953674316
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      3.0
+     ],
+     "volume_mm3": 258.09918699496524
+    },
+    {
+     "name": "ams-color-3-dd4f47 #dd4f47",
+     "min": [
+      23.143798828125,
+      14.271942138671875,
+      2.4000000953674316
+     ],
+     "max": [
+      35.6153564453125,
+      25.46820831298828,
+      3.0
+     ],
+     "volume_mm3": 21.66944534081055
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #25561b\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-547e9d #547e9d\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-48a835 #48a835\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-dd4f47 #dd4f47\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #25561b",
+      "vertices": 29216,
+      "triangles": 58428,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-547e9d #547e9d",
+      "vertices": 8578,
+      "triangles": 17164,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-48a835 #48a835",
+      "vertices": 10924,
+      "triangles": 21836,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-dd4f47 #dd4f47",
+      "vertices": 2284,
+      "triangles": 4556,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  "down": {
+   "file": "oddie-60-merge-blues-v3-f64-down.3mf",
+   "bytes": 1045943,
+   "sha256": "6b74d00cc5d0d3bdb1cf5b992601332ca333d35cf67d4c77833ca6771dc855e7",
+   "bodies": [
+    {
+     "name": "ams-base #25561b",
+     "min": [
+      0.00440216064453125,
+      0.0,
+      0.0
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      3.0
+     ],
+     "volume_mm3": 4402.449617023826
+    },
+    {
+     "name": "ams-color-1-547e9d #547e9d",
+     "min": [
+      15.247299194335938,
+      0.0,
+      0.0
+     ],
+     "max": [
+      44.953582763671875,
+      32.35101318359375,
+      0.5999999046325684
+     ],
+     "volume_mm3": 351.4304762964351
+    },
+    {
+     "name": "ams-color-2-48a835 #48a835",
+     "min": [
+      0.00440216064453125,
+      29.397735595703125,
+      0.0
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      0.5999999046325684
+     ],
+     "volume_mm3": 258.09918699496467
+    },
+    {
+     "name": "ams-color-3-dd4f47 #dd4f47",
+     "min": [
+      24.38019561767578,
+      14.271942138671875,
+      0.0
+     ],
+     "max": [
+      36.85175323486328,
+      25.46820831298828,
+      0.5999999046325684
+     ],
+     "volume_mm3": 21.669445340810068
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #25561b\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-547e9d #547e9d\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-48a835 #48a835\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-dd4f47 #dd4f47\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #25561b",
+      "vertices": 29216,
+      "triangles": 58428,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-547e9d #547e9d",
+      "vertices": 8578,
+      "triangles": 17164,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-48a835 #48a835",
+      "vertices": 10924,
+      "triangles": 21836,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-dd4f47 #dd4f47",
+      "vertices": 2284,
+      "triangles": 4556,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  }
+ },
+ "oddie-60-keep-merge-blues-greens-v4-f64": {
+  "turn_over": {
+   "x0": 0.00440216064453125,
+   "x1": 59.99114990234375,
+   "T": 3.0,
+   "bodies": [
+    {
+     "name": "ams-base #25561b",
+     "coords": 233199,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 4558.300664871681,
+     "volume_turned_mm3": 4558.30066487168,
+     "z_range_turned": [
+      0.0,
+      3.0
+     ]
+    },
+    {
+     "name": "ams-color-1-547e9d #547e9d",
+     "coords": 37728,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 314.17759630064086,
+     "volume_turned_mm3": 314.17759630064126,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-2-0d100d #0d100d",
+     "coords": 176538,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 141.78777147336027,
+     "volume_turned_mm3": 141.7877714733611,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    },
+    {
+     "name": "ams-color-3-dd4f47 #dd4f47",
+     "coords": 6444,
+     "inexact_float32_x": 0,
+     "inexact_float32_z": 0,
+     "max_cast_error_mm": 0.0,
+     "float32_arith_differs": 0,
+     "volume_mm3": 19.382693281369136,
+     "volume_turned_mm3": 19.38269328136872,
+     "z_range_turned": [
+      0.0,
+      0.5999999046325684
+     ]
+    }
+   ]
+  },
+  "up": {
+   "file": "oddie-60-keep-merge-blues-greens-v4-f64-up.3mf",
+   "bytes": 2977234,
+   "sha256": "3e02b843321fa07437238e01341204e56adeae7a08293fd87a756a58e13e35f3",
+   "bodies": [
+    {
+     "name": "ams-base #25561b",
+     "min": [
+      0.00440216064453125,
+      0.0,
+      0.0
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      3.0
+     ],
+     "volume_mm3": 4558.300664871681
+    },
+    {
+     "name": "ams-color-1-547e9d #547e9d",
+     "min": [
+      15.567092895507812,
+      0.5250930786132812,
+      2.4000000953674316
+     ],
+     "max": [
+      44.223541259765625,
+      32.29474639892578,
+      3.0
+     ],
+     "volume_mm3": 314.17759630064086
+    },
+    {
+     "name": "ams-color-2-0d100d #0d100d",
+     "min": [
+      0.00440216064453125,
+      0.0,
+      2.4000000953674316
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      3.0
+     ],
+     "volume_mm3": 141.78777147336027
+    },
+    {
+     "name": "ams-color-3-dd4f47 #dd4f47",
+     "min": [
+      23.143798828125,
+      14.478233337402344,
+      2.4000000953674316
+     ],
+     "max": [
+      35.6153564453125,
+      25.46820831298828,
+      3.0
+     ],
+     "volume_mm3": 19.382693281369136
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #25561b\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-547e9d #547e9d\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-0d100d #0d100d\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-dd4f47 #dd4f47\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #25561b",
+      "vertices": 77733,
+      "triangles": 155462,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-547e9d #547e9d",
+      "vertices": 12576,
+      "triangles": 25156,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-0d100d #0d100d",
+      "vertices": 58846,
+      "triangles": 117684,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-dd4f47 #dd4f47",
+      "vertices": 2148,
+      "triangles": 4284,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  "down": {
+   "file": "oddie-60-keep-merge-blues-greens-v4-f64-down.3mf",
+   "bytes": 2985612,
+   "sha256": "0adf6a3afef93b9d26c2b6ec4a4eb08b01b273cb875b99b565b3a71263ccd45e",
+   "bodies": [
+    {
+     "name": "ams-base #25561b",
+     "min": [
+      0.00440216064453125,
+      0.0,
+      0.0
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      3.0
+     ],
+     "volume_mm3": 4558.30066487168
+    },
+    {
+     "name": "ams-color-1-547e9d #547e9d",
+     "min": [
+      15.772010803222656,
+      0.5250930786132812,
+      0.0
+     ],
+     "max": [
+      44.42845916748047,
+      32.29474639892578,
+      0.5999999046325684
+     ],
+     "volume_mm3": 314.17759630064126
+    },
+    {
+     "name": "ams-color-2-0d100d #0d100d",
+     "min": [
+      0.00440216064453125,
+      0.0,
+      0.0
+     ],
+     "max": [
+      59.99114990234375,
+      65.87096405029297,
+      0.5999999046325684
+     ],
+     "volume_mm3": 141.7877714733611
+    },
+    {
+     "name": "ams-color-3-dd4f47 #dd4f47",
+     "min": [
+      24.38019561767578,
+      14.478233337402344,
+      0.0
+     ],
+     "max": [
+      36.85175323486328,
+      25.46820831298828,
+      0.5999999046325684
+     ],
+     "volume_mm3": 19.38269328136872
+    }
+   ],
+   "model_settings": "<?xml version='1.0' encoding='UTF-8'?>\n<config><object id=\"9\"><metadata key=\"name\" value=\"assembly\"/><metadata key=\"extruder\" value=\"1\"/><part id=\"5\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-base #25561b\"/><metadata key=\"extruder\" value=\"1\"/></part><part id=\"6\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-1-547e9d #547e9d\"/><metadata key=\"extruder\" value=\"2\"/></part><part id=\"7\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-2-0d100d #0d100d\"/><metadata key=\"extruder\" value=\"3\"/></part><part id=\"8\" subtype=\"normal_part\"><metadata key=\"name\" value=\"ams-color-3-dd4f47 #dd4f47\"/><metadata key=\"extruder\" value=\"4\"/></part></object></config>",
+   "lib3mf": {
+    "unit": "1 (MilliMeter)",
+    "mesh_objects": [
+     {
+      "name": "ams-base #25561b",
+      "vertices": 77733,
+      "triangles": 155462,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 1,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-1-547e9d #547e9d",
+      "vertices": 12576,
+      "triangles": 25156,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 2,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-2-0d100d #0d100d",
+      "vertices": 58846,
+      "triangles": 117684,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 3,
+       "lib3mf_property_id": 1
+      }
+     },
+     {
+      "name": "ams-color-3-dd4f47 #dd4f47",
+      "vertices": 2148,
+      "triangles": 4284,
+      "manifold_oriented": true,
+      "object_property": {
+       "has": true,
+       "resource_id": 4,
+       "lib3mf_property_id": 1
+      }
+     }
+    ],
+    "components_objects": 1,
+    "build_items": 1,
+    "warnings": [],
+    "vertices_exact": [
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  }
+ }
+}
