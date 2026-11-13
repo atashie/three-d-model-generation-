@@ -15,6 +15,7 @@ import platform
 import re
 import shutil
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -920,6 +921,16 @@ def test_roadie_slices_with_the_real_slicer(tmp_path, monkeypatch):
     assert record["printed"]["measured"] is True and len(record["printed"]["layers"]) == 15
     assert record["gcode"]["quarantined"] is False
     assert record["slicer"]["app_tree_verified"] is True
+    # The start G-code is the A1 template's, from the pinned flat profile (plan
+    # 2026-11-13-color-slicing, Task 1): its first line, and the AMS load (M620 S...).
+    machine = json.loads((Path(os.environ["TDMG_ORCASLICER_DIR"]) / PIN.profiles.folder
+                          / PIN.profiles.flat["machine"].file).read_text(encoding="utf-8"))
+    template = machine["machine_start_gcode"].splitlines()
+    assert any(line.startswith("M620 S") for line in template)
+    lines = (out / "plate_1.gcode").read_text(encoding="utf-8").splitlines()
+    start = lines[:next(i for i, line in enumerate(lines) if line == "; CHANGE_LAYER")]
+    assert template[0] in start
+    assert any(line.startswith("M620 S") for line in start)
 
 
 # --- F6.portability with the fake PrusaSlicer ---------------------------------------------

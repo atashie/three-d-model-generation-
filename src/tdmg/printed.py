@@ -104,9 +104,10 @@ CUSTOM_G_COMMAND = re.compile(r"G(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
 # template "Bambu Lab A1 0.4 nozzle template time_lapse_gcode.json" (sha256 febd4212...,
 # profiles/slicers/orcaslicer-2.5.0.yaml), written at each layer change with no FEATURE line.
 # Inside them the owner's G-code has G392, G39.3 and G39 (research/verification/
-# 2026-11-13-a1-profile-include/scan-gcommands.txt) and no extrusion. Since this code runs
-# between model layers, a block may not extrude at all (only E <= 0), must not hold a
-# FEATURE line, and the two lines must pair; the FEATURE in force is unchanged by it.
+# 2026-11-13-a1-profile-include/scan-gcommands.txt) and no E move at all. Since this code
+# runs between model layers, a block may not extrude: a G0 to G3 with an E word is refused
+# unless the extrusion mode is relative (M83) and E <= 0 (a retraction). A block must not
+# hold a FEATURE line, and the two lines must pair; the FEATURE in force is unchanged by it.
 SKIPPABLE_START = "SKIPPABLE_START"
 SKIPPABLE_END = "SKIPPABLE_END"
 CUSTOM_REFUSED_G = frozenset({"G10", "G18", "G19", "G20", "G53", "G54", "G55", "G56", "G57",
@@ -365,12 +366,21 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     plate.within_bound. Moves in Custom (relative or R-form arcs, G0 with E) are followed
     for the position only; none is analysed. The A1 time-lapse code, between the comment
     lines "; SKIPPABLE_START" and "; SKIPPABLE_END" (SKIPPABLE_START), is read as Custom is
-    for G-commands, but must pair, must not hold a FEATURE line or any move with positive
-    E, and leaves the FEATURE in force unchanged; its moves set the position only. M- and
-    T-commands are ignored except M82 and M83, which set the extrusion mode: the others
-    in this G-code (M17, M73, M104, M106, M109, M140, M190, M201, M203, M204, M205, M220,
-    M221, M400, M620-M625, M970, M971, M974, M981, M991, M1002 and T255) set temperatures,
-    speeds, fans, progress and the A1's own functions, not where plastic goes. An
+    for G-commands, but must pair, must not hold a FEATURE line, refuses a move with an E
+    word unless E <= 0 in relative mode (M83), and leaves the FEATURE in force unchanged;
+    its moves set the position only. The firmware's conditional blocks (M622 ... M623, in
+    Custom and SKIPPABLE blocks) are read as if every line runs: their moves set the
+    position only, so whichever branch the printer takes, a model extrusion still needs an
+    absolute X, Y and Z after them. M- and
+    T-commands are ignored except M82 and M83, which set the extrusion mode, and the
+    refused ones below. The others in this G-code set temperatures, speeds, fans,
+    progress, sounds, lights, calibrations and the A1's own functions, not where model
+    plastic goes. With the generic profile (slice-4): M17, M73, M73.2, M104, M106, M109,
+    M140, M190, M201, M201.2, M203, M204, M205, M220, M221, M400, M620-M625, M622.1,
+    M970, M971, M974, M981, M991, M1002 and T255. With the A1 template G-code (slice-5;
+    research/verification/2026-11-13-a1-profile-include/scan-mt-commands.txt) also M18,
+    M211, M412, M500, M620.1, M620.3, M630, M900, M960, M970.2, M970.3, M975, M982.2, M983,
+    M984, M1004, M1006, M1007, M9833.2, T0 and T1000. An
     extrusion in "Custom" after the first model extrusion is refused: in all the pinned
     slicer's G-code for this profile (the owner's runs, the controls and the hair cases)
     Custom extrudes only before the model, in the purge line; the end code does not
@@ -483,6 +493,9 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
             moves = (nx, ny) != (x, y) or (command in ("G2", "G3") and "E" in words)
             e = words.get("E", 0.0)
             if skippable is not None:
+                if "E" in words and relative_e is not True:
+                    raise UnsupportedGcode(f"{where}: an E word inside a SKIPPABLE block in "
+                                           "absolute or unknown extrusion mode")
                 if e > 0:
                     raise UnsupportedGcode(f"{where}: an extrusion inside a SKIPPABLE block "
                                            "(the A1 time-lapse code, between model layers)")

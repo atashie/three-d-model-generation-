@@ -890,3 +890,20 @@ def test_a_skippable_block_open_at_the_end_is_refused():
     # Left open before a layer, the next model extrusion is inside it, and is refused.
     with pytest.raises(UnsupportedGcode, match="extrusion inside a SKIPPABLE block"):
         parse(_two_layers(SKIP.replace("; SKIPPABLE_END\n", "")))
+
+
+@pytest.mark.parametrize("move", ["G1 E-.8 F1800", "G1 E0", "G1 X10 Y10 E-.1"])
+def test_any_e_word_in_a_skippable_block_in_absolute_mode_is_refused(move):
+    # With M82 (or no M83) an E word is a position, so even E <= 0 may push plastic.
+    block = SKIP.replace("; SKIPPABLE_END\n", f"M82\n{move}\nM83\n; SKIPPABLE_END\n")
+    with pytest.raises(UnsupportedGcode, match="absolute or unknown extrusion mode"):
+        parse(_two_layers(block))
+
+
+def test_an_e_word_in_a_skippable_block_before_any_m83_is_refused():
+    start = START.replace("M83 ; use relative distances for extrusion\n", "")
+    # The template block sets M83 itself later on, so the E move goes before that.
+    text = (start + SKIP.replace("G92 E0\nG1 Z1.2\n", "G92 E0\nG1 E-.8\nG1 Z1.2\n", 1)
+            + "M83\n" + layer(0.2, GOOD))
+    with pytest.raises(UnsupportedGcode, match="absolute or unknown extrusion mode"):
+        parse(text)

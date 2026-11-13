@@ -19,6 +19,9 @@ src/libslic3r/PresetBundle.cpp:7829: // Layer each included preset's own keys ov
 src/libslic3r/PresetBundle.cpp:7830: // this preset's own keys go on top.
 src/libslic3r/PresetBundle.cpp:7831: for (const std::string& name : entry.includes) {
 src/libslic3r/PresetBundle.cpp:7832: auto it = install.include_maps.find(name);
+src/libslic3r/PresetBundle.cpp:7833: if (it == install.include_maps.end()) {
+src/libslic3r/PresetBundle.cpp:7834: out.errors.push_back(std::string(__FUNCTION__) + ": can not find include " + name + " for " + preset_name);
+src/libslic3r/PresetBundle.cpp:7835: continue;
 src/libslic3r/PresetBundle.cpp:7837: out.config.apply(it->second);
 src/libslic3r/PresetBundle.cpp:7839: out.config.apply(entry.config_src);
 src/libslic3r/PresetBundle.cpp:7840: // Record what a base states, its diff against the default, for the presets
@@ -26,6 +29,10 @@ src/libslic3r/PresetBundle.cpp:7841: // that include it. It is taken before exte
 src/libslic3r/PresetBundle.cpp:7844: if (entry.instantiation == "false" && install.included.count(preset_name) != 0) {
 src/libslic3r/PresetBundle.cpp:7846: out.included->apply_only(out.config, out.config.diff(presets_collection.default_preset_for(out.config).config));
 src/libslic3r/PresetBundle.cpp:7967: install.include_maps.emplace(preset_name, std::move(*resolved.included));
+src/libslic3r/PresetBundle.cpp:8074: // A run of entries resolves together and commits in listing order, and ends
+src/libslic3r/PresetBundle.cpp:8075: // before an entry that inherits or includes one already in it. So no entry
+src/libslic3r/PresetBundle.cpp:8076: // resolves against a registration from its own run, and the result matches
+src/libslic3r/PresetBundle.cpp:8107: VendorInstall install { path, vendor_name, vendor_profile, base_bundle, flags, presets, is_from_lib, &substitutions };
 src/libslic3r/PresetBundle.cpp:8434: entry.config_src.load_from_json(subfile, substitution_context, false, key_values, reason);
 src/libslic3r/PresetBundle.cpp:8441: // A file that states no instantiation and is named as G-code, or has no
 src/libslic3r/PresetBundle.cpp:8442: // name, is a template that is only there to be included. A nameless one

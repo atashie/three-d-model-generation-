@@ -30,8 +30,10 @@ Task 1 of `docs/plans/2026-11-13-color-slicing.md` (plan Decision 1).
 
 All files were fetched on 2026-11-13 from
 `https://raw.githubusercontent.com/OrcaSlicer/OrcaSlicer/v2.5.0/<path>`. Their hashes and
-every quoted line, with its line number, are in `source-excerpts.txt`. A script checked
-each quote against the fetched file (26 quotes, 0 mismatches). OrcaSlicer is AGPL-3.0:
+every quoted line, with its line number, are in `source-excerpts.txt`. `check_quotes.py`
+checks each quote and file hash against the fetched files (`check-quotes.txt`: 6 file
+hashes and 33 quotes, 0 problems; a first, inline check on 2026-11-13 covered 26 quotes,
+before the lines 7833-7835, 8074-8076 and 8107 were added). OrcaSlicer is AGPL-3.0:
 only short quoted lines are kept here, as evidence. No code was copied into the repo.
 
 1. **The key name.** `Preset.hpp:76`: `#define BBL_JSON_KEY_INCLUDES "include"`.
@@ -61,10 +63,10 @@ only short quoted lines are kept here, as evidence. No code was copied into the 
    - A key whose value equals the option's default is **not** in the diff, so it would
      not override the parent's value.
    - The diff is stored in `install.include_maps` of the same collection (`VendorInstall`
-     per list in `install_vendor`). So an include is looked up among the same kind's
+     per list in `install_vendor`, line 8107). So an include is looked up among the same kind's
      presets only (here `machine_list`).
 5. **The order of loading** (`PresetBundle::install_vendor_entries`, line 8036). A preset
-   resolves only after every preset it inherits from or includes. Lines 8073-8076: "A run
+   resolves only after every preset it inherits from or includes. Lines 8074-8076: "A run
    of entries resolves together and commits in listing order, and ends before an entry
    that inherits or includes one already in it."
 6. **The defaults of the five options** (`PrintConfig.cpp`).
@@ -159,7 +161,8 @@ only short quoted lines are kept here, as evidence. No code was copied into the 
    - The CLI output is in `cli-roadie-tol30.txt` and `cli-oddie.txt`.
    - `compare_slices.py` (`compare-slices.txt`) compares them with the 2026-11-11 runs
      (`*-60x3-f64`).
-5. **`pytest -m slicer`** with both pinned slicers: 2 passed and 1 failed. The failure is
+5. **`pytest -m slicer`** with both pinned slicers (superseded: after the reader changes
+   in the addenda, all 3 pass): 2 passed and 1 failed. The failure is
    `test_roadie_slices_with_the_real_slicer`, which expects the three F3 checks to PASS;
    they are UNKNOWN.
 
@@ -324,7 +327,8 @@ give. It is not a decision.
 - **The result:** both slices are NOT CERTIFIED with F3 UNKNOWN. Roadie stops at line
   5719 and Oddie at line 3486, on `G39`, outside Custom.
 - **The G-code** differs from slice5's only in the header timestamp.
-- **`pytest -m slicer`:** `test_roadie_slices_with_the_real_slicer` still fails, for
+- **`pytest -m slicer`** (superseded by Addendum 2: all 3 pass):
+  `test_roadie_slices_with_the_real_slicer` still fails, for
   this reason.
 
 ### The message
@@ -399,3 +403,24 @@ identical to the 2026-11-11 (`slice-4`) ones.
   the label `slice-5`, which was kept (unpushed), not the reader's code.
 - **Still true:** PRINTABLE has the caveats in `PRINTABLE_MEANING`. Nothing from `tdmg`
   has been printed, and `tdmg slice` still says to slice `model.stl` in Bambu Studio.
+
+### Status at the end of Task 1
+
+- **Superseded runs:** `slice-5` was never pushed, so the label covers the profile fix
+  and both reader changes. The local `*-60x3-slice5` and `*-60x3-slice5b` runs have the
+  same slice_ids as `*-60x3-slice5c` but are NOT CERTIFIED, because the reader then
+  refused the A1 G-code. They are superseded by `*-60x3-slice5c`, and only those count.
+- **Final tests on the PC (2026-11-13):**
+  - `pytest -m slicer`, with both pinned slicers: 3 passed. The Roadie test now also
+    requires the start G-code to be the template's: the first line of the pinned flat
+    profile's `machine_start_gcode`, and an `M620 S` load, before the first layer. With
+    the old flat profile (kept as `profiles-flat.previous/`), its `machine_start_gcode`
+    has no `M620 S` line, so that test would fail.
+  - `uv run pytest -q`: 2212 passed and 3 skipped (the skips are the real-slicer tests,
+    which pass on their own, above). `uv run ruff check .` and
+    `uv run python scripts/gen_docs.py --check` pass.
+- **SKIPPABLE blocks and extrusion mode:** a G0 to G3 with an E word inside a block is
+  refused unless the mode is relative (M83) and E <= 0. In absolute or unknown mode, any
+  E word is refused.
+- **M- and T-commands in the new G-code:** `scan_mt_commands.py` → `scan-mt-commands.txt`
+  (both `slice5c` G-codes). The `parse_gcode` docstring lists them.

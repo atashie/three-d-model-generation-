@@ -155,8 +155,13 @@ RECORD_SCHEMA = "tdmg.slice/1"
 # slice-5 (2026-11-13): the pinned A1 machine profile now holds the A1's own start, end,
 #   time-lapse and filament-change G-code. The flattener resolves the preset's include key
 #   as OrcaSlicer v2.5.0 does (research/verification/2026-11-13-a1-profile-include/);
-#   before, the flat profile had the generic G-code of the parent chain. The checks are
-#   unchanged; the G-code and the profile hash differ, so the label changes.
+#   before, the flat profile had the generic G-code of the parent chain. The G-code
+#   reader (tdmg.printed) changed with it, so the F3 checks can read the A1 G-code:
+#   firmware G-commands are accepted in FEATURE "Custom" and in the template's
+#   "; SKIPPABLE_START" ... "; SKIPPABLE_END" time-lapse blocks (which may not extrude),
+#   making the position unknown, and a stricter set stays refused. slice-5 was never
+#   pushed, so the label covers both changes; the local runs made before the reader
+#   change (same slice_id, NOT CERTIFIED) are superseded.
 SLICE_ALGORITHM_VERSION = "slice-5"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
