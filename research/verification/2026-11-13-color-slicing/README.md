@@ -329,4 +329,4 @@ The controller's review of `354e9c1` changed three things the addendum above des
 | Oddie keep, up | FAIL 3 / PASS 0.221 | FAIL 2 / FAIL 0.227 | PASS / PASS 0.122 | FAIL 3 / FAIL 4.716 | PASS / PASS 0.111 |
 | Oddie keep, down | FAIL 3 / FAIL 0.637 | FAIL 3 / FAIL 0.444 | PASS / PASS 0.122 | FAIL 3 / FAIL 10.333 | PASS / PASS 0.110 |
 
-The large per-tool coverage gaps (4.7 to 10.3 mm) are on the kept outline bands narrower than a bead (Roadie keep T1, Oddie keep T2), which the slicer leaves unprinted; plan Decision 4 expected these to show here.
+The large per-tool coverage gaps (4.7 to 10.3 mm) are on Roadie keep T1 (#451812, the kept outline band, as Placement above says) and Oddie keep T2. That they are bands narrower than a bead that the slicer leaves unprinted, as plan Decision 4 expected, is an inference for Oddie keep: where the gaps lie was not inspected.
