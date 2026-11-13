@@ -13,10 +13,11 @@ The same color plan serves two routes:
 - **Glue:** the base has shallow pockets. Each color is printed separately and glued
   into its pocket.
 
-**Status (2026-11-12):** steps 1 and 2 exist. `tdmg colors` turns a selection into a
+**Status (2026-11-13):** steps 1 to 3 exist. `tdmg colors` turns a selection into a
 reviewed color plan (step 1). `tdmg flat --colors` turns a ready plan into gated STL
-bodies for both routes (step 2). There is no 3MF yet (step 3), the bodies are not sliced
-(step 4), and nothing in this page is printed.
+bodies for both routes (step 2), and writes the AMS bodies as one multicolor
+`model.3mf` (step 3). The bodies are not sliced by `tdmg` (step 4), and nothing in this
+page is printed.
 
 ## When to use / when not to
 
@@ -99,6 +100,16 @@ glue version, with 7 and 5 pieces (smallest 6.12 and 23.98 mm²). On Roadie's, c
 (4.18 mm²) has no glue piece: it was folded, and the record warns about it. The two
 `outlines: keep` plans got the AMS version only. The owner reviewed `top.png` and
 `parts.png`: "teh colors match"; the folds and piece sizes were accepted.
+
+**The 3MF (step 3):** the encoding was chosen by real imports, not by reading slicer
+source. Separate objects per color were dropped to the bed by the OrcaSlicer and
+PrusaSlicer CLIs, and PrusaSlicer crashed on them. One object with one shell per color
+stays in place in both, and the owner's Bambu Studio shows its colors. The owner opened
+the Roadie drop plan's `model.3mf` in Bambu Studio: the parts were in place, each color
+could be given a filament, and it sliced ("1) yes. 2) yes. 3) yes"). The pinned
+OrcaSlicer and PrusaSlicer CLIs slice all four plans' `model.3mf` in place (exit 0), but
+OrcaSlicer prints everything with one filament: the CLI does not assign filaments from
+the file's colors. Assign the filaments in the slicer, using `palette.json`.
 
 ## Parameters
 
@@ -183,18 +194,26 @@ Each needs a test print. None is done.
   [the color palette record](../../../research/verification/2026-11-11-color-palette/README.md).
 - The design and the owner's decisions:
   [R2 color design](../../plans/2026-11-11-color-design.md),
-  [the step 1 plan](../../plans/2026-11-11-color-palette.md) and
-  [the step 2 plan](../../plans/2026-11-12-color-geometry.md).
+  [the step 1 plan](../../plans/2026-11-11-color-palette.md),
+  [the step 2 plan](../../plans/2026-11-12-color-geometry.md) and
+  [the step 3 plan](../../plans/2026-11-12-color-3mf.md).
 - The step 2 measurements, the owner-plan runs and the owner's review:
   [the color geometry record](../../../research/verification/2026-11-12-color-geometry/README.md)
   (`colored-runs.txt`, `bodies.txt`, `glue.txt`).
+- The 3MF encoding tests, the re-import of the four plans and the owner's Bambu Studio
+  checks: [the color 3MF record](../../../research/verification/2026-11-12-color-3mf/README.md).
 - The AMS lite's 4 slots: `profiles/printers/bambu-a1.yaml`.
 
 ## Open gaps
 
-- Nothing is printed. The colored bodies are STL only (3MF is step 3) and are not sliced
-  (step 4), so whether thin parts print, the color changes and face up against face down
-  are not known.
+- Nothing is printed, and `tdmg` does not slice the colored bodies (step 4), so whether
+  thin parts print, the color changes and face up against face down are not known.
+- The OrcaSlicer CLI slices `model.3mf` on one filament; per-color filaments need the
+  slicer GUI (Bambu Studio was checked by the owner) or, for step 4, an Orca-specific
+  extra file or another route.
+- In `model.3mf` the shells touch along their shared walls. Each shell is closed on its
+  own; the 3MF core spec treats touching shells only as a self-intersection warning
+  (`format.3mf.self_intersection_is_warning`).
 - The three step 2 rules are untested hypotheses.
 - In the glue version, pocket strips that no piece covers beyond the clearance are left
   for the glue to fill: 1.59 and 2.12 mm² on the two owner plans built with glue

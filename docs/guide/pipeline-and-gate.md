@@ -252,12 +252,14 @@ the files are written and no check FAILed; 1 means they are written and a check 
 `colored.json`; do not use such a folder.
 
 **What to open:** `top.png`, and compare it with the plan's `regions.png`: the colors
-should match. For the glue version, open `parts.png`: each glue piece has a number, and
+should match. Then open `model.3mf` in your slicer (Bambu Studio was checked) and give
+each color a filament; `palette.json` lists which part is which color. The OrcaSlicer
+CLI does not assign them from the file. For the glue version, open `parts.png`: each glue piece has a number, and
 the legend lists the pieces per color, the folds and the leftovers. Check that the pieces
 are a size you can handle.
 
 **Not yet:** the folder has no `DIR/flat.json`, so `tdmg slice` refuses it until step 4
-of the color design. There is no 3MF yet (step 3). Nothing has been printed, and the
+of the color design. Nothing has been printed, and the
 three new rules are untested hypotheses. The runs on the owner's four plans are recorded
 in `research/verification/2026-11-12-color-geometry/colored-runs.txt` (Windows PC only):
 no check FAILed on any of them.
