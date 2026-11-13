@@ -187,8 +187,13 @@ PRINTABLE_MEANING = (
     f"portability, {PORTABILITY_MEANING}. {SHARED_READER_NOTE}. It is not a guarantee: the "
     "acceptance tolerance (acceptance.dimension.tolerance) is still a hypothesis, no "
     "calibration print has been measured, and strength is not judged.")
-PRINT_THIS = (f"print {GCODE_NAME} on the A1 (or slice model.stl in Bambu Studio); "
-              f"{PRUSA_GCODE_NAME} is not for printing")
+# Until the pinned A1 machine profile carries the A1's own start, end and filament-change
+# G-code (docs/plans/2026-11-13-color-slicing.md, Decision 1), plate_1.gcode is not to be
+# printed: the flattened profile missed the A1 template presets named by "include".
+PRINT_THIS = ("slice model.stl in Bambu Studio to print; "
+              f"{GCODE_NAME} is for checking only (its start and end G-code are not the "
+              f"A1's yet: the pinned A1 profile is incomplete); {PRUSA_GCODE_NAME} is not "
+              "for printing")
 REVIEW = ("Open plate_1.gcode in a G-code preview (for example OrcaSlicer's or Bambu "
           "Studio's) and check the layers and the first layer. Time and weight are the "
           "slicer's estimates for the A1 0.20 mm Standard and PLA Basic profiles, not "

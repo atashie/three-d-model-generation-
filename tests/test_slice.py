@@ -40,6 +40,7 @@ from tdmg.selection import SelectionSpec, select_subject, write_selection
 from tdmg.slicer import OUTPUT_TAIL_CHARS, Slicer, SlicerError, load_pin, platform_key
 from tdmg.slicing import (
     DO_NOT_PRINT,
+    PRINT_THIS,
     PRINTABLE_MEANING,
     RECORD_SCHEMA,
     SLICE_ALGORITHM_VERSION,
@@ -1241,8 +1242,14 @@ def test_cli_printable(square_flat, fake, prusa, tmp_path):
     assert portability.startswith("portability: PrusaSlicer 2.9.7 PASS - 1 part, ")
     assert "15 layers" in portability
     assert PRUSA_GCODE_NOTE in r.stdout
-    assert ("print plate_1.gcode on the A1 (or slice model.stl in Bambu Studio); "
-            "prusaslicer.portability-only.gcode.txt is not for printing") in lines
+    assert PRINT_THIS in lines
+    # Until the pinned A1 profile carries the A1's own G-code (docs/plans/
+    # 2026-11-13-color-slicing.md, Decision 1), the message must not say to print it.
+    assert PRINT_THIS.startswith("slice model.stl in Bambu Studio to print")
+    assert "plate_1.gcode is for checking only" in PRINT_THIS
+    assert "start and end G-code are not the A1's" in PRINT_THIS
+    assert "prusaslicer.portability-only.gcode.txt is not for printing" in PRINT_THIS
+    assert not any(line.startswith("print plate_1.gcode") for line in lines)
     assert (f"wrote {out / PRUSA_FILE} (portability evidence only; not for printing)"
             in lines)
     assert f"wrote {out / 'plate_1.gcode'}" in lines
