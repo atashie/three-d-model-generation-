@@ -219,3 +219,33 @@ Options for the owner to choose from (none is chosen here):
 - `raw/prusa.json`: `--info` per object, and per slice the exit code, the output tails and the G-code facts.
 - `raw/*-summary.txt`: the console summaries the script printed.
 - No G-code is kept.
+
+## The owner's check in Bambu Studio (2026-11-12)
+
+The owner opened `roadie-A.3mf`, `roadie-D.3mf` and `roadie-B_msc.3mf` (copied to
+`artifacts/3mf-import-test/`, git-ignored) in their Bambu Studio. Their answer, verbatim:
+
+> It opened; roadie-a and roadie-d had all colors in place but roadie-b_msc was
+> compresssed to one color; I can simply match from what I have physically available so
+> this is not an issue; a warning "the 3mf is not from bambu lab, load geometry data and
+> color data only
+
+**Decision (controller, following the owner's answer): encoding D.** That is one mesh
+object with one closed shell per body, a color on each triangle from one `m:colorgroup`,
+and `palette.json` as the guarantee.
+
+| Where | Result for D |
+|---|---|
+| Bambu Studio, the owner's slicer (by the owner) | Opens in place with all colors |
+| PrusaSlicer 2.9.7 CLI | Slices in place |
+| OrcaSlicer 2.5.0 CLI | In place, but on one filament |
+
+**Why not A:** it also works in Bambu Studio, but PrusaSlicer crashes on it, and
+OrcaSlicer's CLI drops its inlays to the bed.
+
+**Filament assignment** is done by the owner in the slicer, matching the palette to the
+filaments they have, as they said.
+
+**Open for step 4:** OrcaSlicer CLI slicing of D puts everything on one filament.
+Measuring color changes in OrcaSlicer will need either an Orca-specific extra file
+(PLAN point 7) or another route.
