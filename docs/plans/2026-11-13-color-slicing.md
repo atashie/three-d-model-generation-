@@ -25,7 +25,7 @@ It also slices each glue plate as an R1 part. It prints nothing; that is step 5.
 `tdmg.slicing`, `tdmg.threemf` and `tdmg.color_checks`, plus lib3mf as the reader. No new
 dependency.
 
-**Status:** written 2026-11-13, awaiting the owner's approval.
+**Status:** written 2026-11-13; the owner approved it on 2026-11-13 ("approved; please proceed").
 
 **Format:** the repo's plan style: decisions with evidence, then tasks with tests. Every
 task is test-first and gets subagent spec and quality reviews; the Codex review comes in
