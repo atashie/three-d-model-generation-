@@ -470,6 +470,23 @@ def test_flatten_refuses_a_template_value_equal_to_orcaslicers_default(monkeypat
         setup.flatten(_include_pin(raw, expected, defaults={**DEFAULTS, "g": "t1"}))
 
 
+@pytest.mark.parametrize(("key", "value", "message"), [
+    ("instantiation", "true", "instantiation"), ("instantiation", False, "instantiation"),
+    ("type", "process", "type"), ("type", "filament", "type")])
+def test_flatten_refuses_a_template_that_is_not_an_uninstantiated_preset_of_the_kind(
+        monkeypatch, key, value, message):
+    # OrcaSlicer registers an include only for a preset with instantiation "false"
+    # (PresetBundle.cpp:7844, source-excerpts.txt), and looks it up among its own kind.
+    raw, index, expected = _upstream_with_include()
+    cfg = json.loads(raw["machine/T1.json"])
+    cfg[key] = value
+    raw["machine/T1.json"] = json.dumps(cfg).encode()
+    pin = _include_pin(raw, expected)
+    monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))
+    with pytest.raises(setup.SetupError, match=f"template machine/T1.json.*{message}"):
+        setup.flatten(pin)
+
+
 def test_flatten_refuses_a_template_setting_without_a_pinned_default(monkeypatch):
     raw, index, expected = _upstream_with_include()
     monkeypatch.setattr(setup, "fetch", _fake_fetch(raw, index, []))

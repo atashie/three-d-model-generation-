@@ -149,6 +149,15 @@ def flatten(pin: SlicerPin) -> dict[str, bytes]:
         if not TEMPLATE_ATTRIBUTES <= set(cfg) or len(settings) != 1:
             raise SetupError(f"included template {sub} has keys {sorted(cfg)}, not exactly "
                              f"{sorted(TEMPLATE_ATTRIBUTES)} and one setting")
+        # OrcaSlicer registers a preset's diff for includers only when its instantiation is
+        # "false" (PresetBundle.cpp:7844 at v2.5.0, quoted in research/verification/
+        # 2026-11-13-a1-profile-include/source-excerpts.txt), and only among its own kind.
+        if cfg["instantiation"] != "false":
+            raise SetupError(f"included template {sub} has instantiation "
+                             f"{cfg['instantiation']!r}, not 'false'")
+        if cfg["type"] != kind:
+            raise SetupError(f"included template {sub} has type {cfg['type']!r}, "
+                             f"not {kind!r}")
         if cfg["name"] != name:
             raise SetupError(f"included template {sub} is named {cfg['name']!r}, "
                              f"not {name!r}")
