@@ -11,6 +11,9 @@ each color's pieces) the same per-body checks, each plate (the base; each color)
 F2.fits_build_volume and F5.triangles, and the assembly F4.glue_partition and
 F4.glue_fit. Not here: F3.thin_regions per body (information), F6 (UNKNOWN until
 slicing) and the verdict are added by make_colored_flat in Task 6.
+The multicolor 3MF (docs/plans/2026-11-12-color-3mf.md, Decision 4): export_3mf_check
+(F2.export_3mf_matches_bodies) reads model.3mf back with lib3mf and compares it with the
+gated AMS meshes; make_colored_flat adds it to the AMS assembly checks.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from __future__ import annotations
 import io
 from itertools import pairwise
 
+import lib3mf
 import numpy as np
 import shapely
 import trimesh
@@ -39,6 +43,7 @@ from tdmg.color_geometry import (
 from tdmg.color_glue import Glue
 from tdmg.flat import build_volume_check, encode_stl, export_match, triangle_check
 from tdmg.profiles import PrinterProfile
+from tdmg.threemf import OBJECT_NAME, UNIT, Shell, check_shells, color_3mf, shell_ranges
 
 
 class ColorCheckError(ValueError):
@@ -382,6 +387,172 @@ def ams_checks(bodies: list[Body], cells: Cells, thickness_mm, *, colors, palett
                 build_volume_check(plate, printer), triangle_check(plate, rules)]
     meshes = {body.name: mesh for body, mesh in zip(bodies, gated, strict=True)}
     return {"bodies": per_body, "assembly": assembly, "stl": stl, "meshes": meshes}
+
+
+# --- the multicolor 3MF (docs/plans/2026-11-12-color-3mf.md, Decision 4) ----------------
+
+
+def _bad_directed_edges(faces: np.ndarray) -> int:
+    """Directed edges that do not occur exactly once with their reverse exactly once.
+
+    0 means closed (every edge in exactly two triangles) and consistently oriented, by
+    vertex index: tdmg.checks' F1.consistent_orientation test, vectorised. Each face
+    with a repeated index also counts as bad, so the result does not rely on F1's
+    no_degenerate_faces: (a, a, b) alone would pass the pairing ((a, a) is its own
+    reverse).
+    """
+    faces = np.asarray(faces, dtype=np.int64)
+    a, b, c = faces[:, 0], faces[:, 1], faces[:, 2]
+    repeated = int(np.count_nonzero((a == b) | (b == c) | (c == a)))
+    n = int(faces.max()) + 1
+    directed = faces[:, [0, 1, 1, 2, 2, 0]].reshape(-1, 2)
+    keys, counts = np.unique(directed[:, 0] * n + directed[:, 1], return_counts=True)
+    reverse = (keys % n) * n + keys // n
+    pos = np.minimum(np.searchsorted(keys, reverse), len(keys) - 1)
+    ok = (counts == 1) & (keys[pos] == reverse) & (counts[pos] == 1)
+    return int(np.count_nonzero(~ok)) + repeated
+
+
+def _read_3mf(data: bytes) -> dict:
+    """The facts export_3mf_check compares, read by lib3mf (strict mode) from the bytes."""
+    wrapper = lib3mf.get_wrapper()
+    model = wrapper.CreateModel()
+    reader = model.QueryReader("3mf")
+    reader.SetStrictModeActive(True)
+    reader.ReadFromBuffer(data)
+    facts = {"reader_warnings": [reader.GetWarning(i)[1]
+                                 for i in range(reader.GetWarningCount())],
+             "unit": lib3mf.ModelUnit(model.GetUnit()).name}
+    objects, meshes = [], []
+    it = model.GetObjects()
+    while it.MoveNext():
+        o = it.GetCurrentObject()
+        objects.append(o)
+        if o.IsMeshObject():
+            meshes.append(model.GetMeshObjectByID(o.GetResourceID()))
+    facts["objects"] = len(objects)
+    facts["mesh_objects"] = len(meshes)
+    items = []
+    bi = model.GetBuildItems()
+    while bi.MoveNext():
+        item = bi.GetCurrent()
+        items.append({"object_id": item.GetObjectResourceID(),
+                      "transform": item.HasObjectTransform()})
+    facts["build_items"] = len(items)
+    groups = {}
+    cg = model.GetColorGroups()
+    while cg.MoveNext():
+        g = cg.GetCurrentColorGroup()
+        groups[g.GetUniqueResourceID()] = {
+            pid: g.GetColor(pid) for pid in g.GetAllPropertyIDs()}
+    facts["color_groups"] = len(groups)
+    if len(meshes) == 1:
+        mo = meshes[0]
+        facts["object_name"] = mo.GetName()
+        facts["object_type"] = lib3mf.ObjectType(mo.GetType()).name
+        facts["item_ok"] = (len(items) == 1 and items[0]["object_id"] == mo.GetResourceID()
+                            and not items[0]["transform"])
+        facts["manifold_and_oriented"] = bool(mo.IsManifoldAndOriented())
+        facts["_v"] = np.array([p.Coordinates[:] for p in mo.GetVertices()],
+                               dtype=np.float32).reshape(-1, 3)
+        facts["_f"] = np.array([t.Indices[:] for t in mo.GetTriangleIndices()],
+                               dtype=np.int64).reshape(-1, 3)
+        colors = []
+        for p in mo.GetAllTriangleProperties():
+            ids = set(p.PropertyIDs[:])
+            group = groups.get(p.ResourceID)
+            if group is None or len(ids) != 1 or next(iter(ids)) not in group:
+                colors.append(None)
+            else:
+                c = group[next(iter(ids))]
+                colors.append(f"#{c.Red:02X}{c.Green:02X}{c.Blue:02X}{c.Alpha:02X}")
+        facts["_colors"] = colors
+    return facts
+
+
+def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
+    """F2.export_3mf_matches_bodies: the 3MF carries the gated AMS bodies unchanged.
+
+    shells: the tdmg.threemf.Shell of each AMS body, built from its gated mesh (its STL
+    bytes parsed back and merged exactly), base first, then inlays by index. data is
+    read back by lib3mf 2.x in strict mode, an independent reader (from the bytes; no
+    file). PASS iff:
+    - no reader warnings; unit millimeter; exactly one object, a mesh of type model named
+      tdmg.threemf.OBJECT_NAME; exactly one build item, on that object, with no
+      transform; one color group;
+    - the object's vertices and triangles split into the shells in order
+      (tdmg.threemf.shell_ranges): shell i's vertices equal its gated mesh's vertices
+      exactly, compared as float32 arrays in the same order (both sides are float32
+      numbers, so exact equality is the test, no tolerance), and its triangles, minus
+      its vertex offset, equal the gated mesh's faces exactly; so every triangle uses
+      only its own shell's vertices;
+    - each shell is closed and consistently oriented by index (every directed edge once,
+      its reverse once, and no face repeats an index: bad_directed_edges 0), and
+      lib3mf's IsManifoldAndOriented holds for the whole object;
+    - every triangle's color (its pid's color group, p1 = p2 = p3) is its shell's
+      palette color, tdmg.threemf.color_3mf(hex).
+    F1 and the occupancy check gate the bodies themselves; this only proves the 3MF
+    carries them. Errors: shells that tdmg.threemf.check_shells refuses raise
+    ThreeMFError (a caller error), and a missing lib3mf native library raises when this
+    module is imported (an environment error); anything wrong with data itself, including
+    bytes lib3mf cannot read, is a FAIL with what was measured. The shells touch along
+    shared walls, which the 3MF core covers only as a self-intersection warning (rule
+    format.3mf.self_intersection_is_warning).
+    """
+    arrays = check_shells(shells)
+    ranges = shell_ranges(shells)
+    expected = {"unit": UNIT, "objects": 1, "build_items": 1, "color_groups": 1,
+                "object_name": OBJECT_NAME, "object_type": "Model",
+                "shells": [{"name": s.name, "color": color_3mf(s.hex), **r}
+                           for s, r in zip(shells, ranges, strict=True)],
+                "vertices": ranges[-1]["vertices"][1],
+                "triangles": ranges[-1]["triangles"][1]}
+    note = ("read back by lib3mf (strict mode) from the bytes; vertices compared exactly "
+            "as float32, triangles exactly, per shell in order; closed and oriented per "
+            "shell by index; colors per triangle. The shells touch along shared walls: a "
+            "self-intersection warning in the 3MF core (rule "
+            "format.3mf.self_intersection_is_warning)")
+    try:
+        facts = _read_3mf(data)
+    except (lib3mf.ELib3MFException, ValueError) as exc:   # not a readable 3MF
+        return CheckResult("F2.export_3mf_matches_bodies", "FAIL",
+                           {"read_error": str(exc)}, expected, None, note)
+    v, f, colors = facts.pop("_v", None), facts.pop("_f", None), facts.pop("_colors", None)
+    measured = {k: facts.get(k) for k in (
+        "reader_warnings", "unit", "objects", "mesh_objects", "build_items", "item_ok",
+        "color_groups", "object_name", "object_type", "manifold_and_oriented")}
+    ok = (not facts["reader_warnings"] and facts["unit"].lower() == UNIT
+          and facts["objects"] == 1 and facts["mesh_objects"] == 1
+          and facts.get("item_ok") is True and facts["build_items"] == 1
+          and facts["color_groups"] == 1 and facts.get("object_name") == OBJECT_NAME
+          and facts.get("object_type") == "Model"
+          and facts.get("manifold_and_oriented") is True)
+    rows = []
+    if v is not None:
+        measured["vertices"], measured["triangles"] = len(v), len(f)
+        ok = ok and len(v) == expected["vertices"] and len(f) == expected["triangles"]
+        for s, (sv, sf), r in zip(shells, arrays, ranges, strict=True):
+            v0, v1 = r["vertices"]
+            t0, t1 = r["triangles"]
+            got_v, got_f = v[v0:v1], f[t0:t1] - v0
+            same_v = got_v.shape == sv.shape and bool(np.array_equal(got_v, sv))
+            same_f = got_f.shape == sf.shape and bool(np.array_equal(got_f, sf))
+            own = bool(len(got_f)) and bool(((got_f >= 0) & (got_f < v1 - v0)).all())
+            bad = _bad_directed_edges(got_f) if own else None
+            want = color_3mf(s.hex)
+            got_c = colors[t0:t1]
+            wrong = sum(1 for c in got_c if c != want) + (t1 - t0 - len(got_c))
+            row = {"name": s.name, "vertices_equal": same_v, "triangles_equal": same_f,
+                   "own_vertices_only": own, "bad_directed_edges": bad,
+                   "color": want, "wrong_color_triangles": wrong}
+            row["pass"] = same_v and same_f and own and bad == 0 and wrong == 0
+            ok = ok and row["pass"]
+            rows.append(row)
+    else:
+        ok = False
+    measured["shells"] = rows
+    return CheckResult("F2.export_3mf_matches_bodies", "PASS" if ok else "FAIL", measured,
+                       expected, None, note)
 
 
 # --- glue route (Decision 9, F4.glue_fit) -----------------------------------------------

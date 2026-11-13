@@ -22,6 +22,10 @@ make_colored_flat chains the pure steps and writes their outputs in make_flat's 
 5. Outputs (Decision 10): the gated STL bytes, top.png, parts.png and colored.json, the
    record last (tdmg.records.write_outputs). A refused input writes nothing; a FAIL still
    writes the files for review.
+6. The multicolor 3MF (docs/plans/2026-11-12-color-3mf.md, Decisions 1 to 5): model.3mf,
+   tdmg.threemf's encoding D built from exactly the gated AMS meshes, gated by
+   F2.export_3mf_matches_bodies (an AMS assembly check), and palette.json, which says what
+   each shell is.
 
 This module is separate from tdmg.flat because the color modules import tdmg.flat.
 """
@@ -31,6 +35,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import zlib
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 import numpy as np
@@ -40,7 +46,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from tdmg import __version__
 from tdmg.checks import F1_CHECK_IDS, CheckResult, verdict
-from tdmg.color_checks import ColorCheckError, ams_checks, glue_checks
+from tdmg.color_checks import ColorCheckError, ams_checks, export_3mf_check, glue_checks
 from tdmg.color_config import ColorConfigError, palette_cap
 from tdmg.color_geometry import ColorGeometryError, ams_bodies, color_cells, color_regions
 from tdmg.color_glue import glue_geometry
@@ -82,13 +88,28 @@ from tdmg.records import (
 from tdmg.rules import load_rules
 from tdmg.selection import SelectionError
 from tdmg.smoothing import SmoothingError, smooth_labels
+from tdmg.threemf import ENCODING as THREEMF_ENCODING
+from tdmg.threemf import OBJECT_NAME as THREEMF_OBJECT
+from tdmg.threemf import Shell, ThreeMFError, palette_manifest, write_multishell_3mf
 
 RECORD_SCHEMA = "tdmg.colorflat/1"
 RECORD_NAME = "colored.json"
 # colorflat-2 (2026-11-12, Codex review 3): glue pieces are eroded until they clear their
 # region by the clearance, and pocket walls are grown to clear the pieces, so glue outputs
 # differ from colorflat-1 (never pushed with results; the owner-plan runs were re-made).
-ALGORITHM = "colorflat-2"
+# colorflat-3 (2026-11-12, R2 step 3): the AMS output adds model.3mf and palette.json, the
+# record a model_3mf section, and the AMS assembly F2.export_3mf_matches_bodies (a new
+# required check). The STL, PNG and glue bytes are those of colorflat-2.
+ALGORITHM = "colorflat-3"
+MODEL_3MF = "model.3mf"
+PALETTE_NAME = "palette.json"
+MODEL_3MF_NOTE = (
+    "Encoding D of docs/plans/2026-11-12-color-3mf.md (Decision 1): every AMS body is its "
+    "own closed shell of one object, with its own vertices, so the 3MF manifold rule holds "
+    "per shell by vertex index. The shells touch along their shared walls, which the 3MF "
+    "core covers only as a self-intersection warning (rule "
+    "format.3mf.self_intersection_is_warning). The colors are standard Materials colors; "
+    "palette.json is the guarantee of what each shell is. No slicer project settings.")
 SKIN_RULE = "color.skin.depth_mm"
 CLEARANCE_RULE = "color.glue.clearance_mm"
 MIN_SIDE_RULE = "color.glue.min_piece_side_mm"
@@ -96,9 +117,9 @@ ROUTES = ("ams", "glue")
 # Every check this command produces. F3.thin_regions and F6.slicer are always UNKNOWN
 # here, so the verdict is always NOT CERTIFIED (Decision 9); step 4 slices.
 COLORED_REQUIRED_CHECKS = F1_CHECK_IDS | {
-    "F2.export_matches_geometry", "F2.fits_build_volume", "F3.thin_regions",
-    "F4.color_partition", "F4.filaments", "F4.glue_partition", "F4.glue_fit",
-    "F5.triangles", "F6.slicer"}
+    "F2.export_matches_geometry", "F2.export_3mf_matches_bodies", "F2.fits_build_volume",
+    "F3.thin_regions", "F4.color_partition", "F4.filaments", "F4.glue_partition",
+    "F4.glue_fit", "F5.triangles", "F6.slicer"}
 # The checks only the glue route produces. Without a glue route (a drawn outline band)
 # they are not required; every other check still is, from the AMS route alone.
 GLUE_ONLY_CHECKS = frozenset({"F4.glue_partition", "F4.glue_fit"})
@@ -123,12 +144,15 @@ REVIEW_TOP = ("Open top.png and compare it with the plan's regions.png: the colo
               "match. ")
 REVIEW_PARTS = ("Open parts.png: check the folds and leftovers and that the pieces are a "
                 "size you can handle. ")
+REVIEW_3MF = ("model.3mf holds the AMS bodies as one object with one shell per color, in "
+              "place; open it in your slicer and give each color a filament (palette.json "
+              "lists the colors; the file names colors, not AMS slots). ")
 REVIEW_END = ("The verdict stays NOT CERTIFIED: F3.thin_regions and F6.slicer are UNKNOWN "
               "until the bodies are sliced (step 4 of the color design); tdmg slice does "
               "not read this folder yet.")
-REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_END
+REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_3MF + REVIEW_END
 REVIEW_NO_GLUE = REVIEW_TOP + "The glue version was not built: " + GLUE_NOT_BUILT + ". " \
-    + REVIEW_END
+    + REVIEW_3MF + REVIEW_END
 
 
 class ColoredFlatError(FlatError):
@@ -370,17 +394,26 @@ def _dicts(checks: list[CheckResult]) -> list[dict]:
 
 
 def colored_environment() -> dict:
-    """tdmg flat's environment plus scipy (smooth_labels' distance transform)."""
-    return {**flat_environment(), "scipy": scipy.__version__}
+    """tdmg flat's environment plus scipy (smooth_labels' distance transform), lxml (the
+    3MF's XML), lib3mf (the 3MF's reader in the gate) and zlib_python: the zlib that
+    Python's zlib module links (zlib.ZLIB_RUNTIME_VERSION), which zipfile deflates
+    model.3mf with. It can differ from "zlib", the one Pillow links for the PNGs (on the
+    PC, 2026-11-12: 1.3.1 against 1.3.1.zlib-ng). model.3mf's bytes also depend on
+    CPython's zipfile, recorded as python."""
+    return {**flat_environment(), "scipy": scipy.__version__,
+            "lxml": package_version("lxml"), "lib3mf": package_version("lib3mf"),
+            "zlib_python": zlib.ZLIB_RUNTIME_VERSION}
 
 
 def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width_mm=None,
                       printer=None, smooth_px=None) -> dict:
-    """Make the AMS and glue bodies, top.png, parts.png and colored.json from a verified
-    color plan and its selection. Returns the record as written (JSON types). For a plan
-    that drew a kept outline band, the glue route is not built (no glue-*.stl, no
-    parts.png). The test is the verified plan's outline.keep_width: verify_colors pins it
-    to be set exactly under outlines: keep with a non-empty outline family, and null
+    """Make the AMS and glue bodies, model.3mf and palette.json (the AMS bodies as one
+    multicolor 3MF, built from exactly the gated meshes), top.png, parts.png and
+    colored.json from a verified color plan and its selection. Returns the record as
+    written (JSON types). For a plan that drew a kept outline band, the glue route is
+    not built (no glue-*.stl, no parts.png). The test is the verified plan's
+    outline.keep_width: verify_colors pins it to be set exactly under outlines: keep
+    with a non-empty outline family, and null
     otherwise (so a keep plan with no family builds glue as usual). Then the
     record's glue section is {"built": false, "reason", "report": null} ({"built": true,
     "reason": null, "report": glue_geometry's report} otherwise), a warning says why, and
@@ -502,7 +535,20 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
             if route == "ams":
                 row["top_area_mm2"] = float(sum(c.area for c in cells.of(body.index)))
             body_rows.append(row)
-    assembly = {"ams": ams_result["assembly"] + [slicer_check()],
+    # model.3mf: the gated AMS meshes (ams_checks' "meshes", the written STL bytes parsed
+    # back and merged exactly), base first, then inlays by index (ams_checks' order).
+    ams_rows = [b for b in body_rows if b["route"] == "ams"]
+    shells = [Shell(row["name"], row["role"], body.index, row["hex"],
+                    ams_result["meshes"][body.name].vertices,
+                    ams_result["meshes"][body.name].faces)
+              for body, row in zip(ams, ams_rows, strict=True)]
+    try:
+        model_3mf = write_multishell_3mf(shells)
+    except ThreeMFError as e:
+        raise ColoredFlatError(f"model.3mf cannot be written: {e}") from None
+    files[MODEL_3MF] = model_3mf
+    assembly = {"ams": ams_result["assembly"] + [export_3mf_check(model_3mf, shells),
+                                                 slicer_check()],
                 "glue": glue_result["assembly"] + [slicer_check()] if build_glue else []}
     required = COLORED_REQUIRED_CHECKS if build_glue else \
         COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS
@@ -510,7 +556,6 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     all_checks += [c for route in ROUTES for c in assembly[route]]
 
     shape = mask.shape
-    ams_rows = [b for b in body_rows if b["route"] == "ams"]
     files["top.png"] = png_bytes(top_image(cells, plan.palette, transform, shape,
                                            ams_rows, skin))
     inlays = sorted(set(cells.labels) - {base})
@@ -545,14 +590,22 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                                   selection_id=selection["selection_id"],
                                   mask_pixels_sha256=selection["mask_pixels_sha256"],
                                   params=params)
+    flat_id = colorflat_id(identity)
+    files[PALETTE_NAME] = palette_manifest(
+        shells, model_3mf, colorflat_id=flat_id,
+        top_area_mm2=[r["top_area_mm2"] for r in ams_rows],
+        volume_mm3=[r["volume_mm3"] for r in ams_rows])
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__, "algorithm": ALGORITHM,
-        "colorflat_id": colorflat_id(identity), "identity": identity,
+        "colorflat_id": flat_id, "identity": identity,
         "palette": [{"index": p["index"], "hex": p["hex"], "rgb": p["rgb"],
                      "base": p["index"] == base} for p in plan.palette],
         "base_index": base, "transform": transform, "cleaning": cleaning,
         "regions": regions.report, "cells": cells.report, "glue": glue_section,
         "bodies": body_rows,
+        "model_3mf": {"file": MODEL_3MF, "palette": PALETTE_NAME,
+                      "encoding": THREEMF_ENCODING, "object_name": THREEMF_OBJECT,
+                      "shells": [s.name for s in shells], "note": MODEL_3MF_NOTE},
         "assembly": {route: _dicts(assembly[route]) for route in ROUTES},
         "warnings": warnings,
         "required_checks": sorted(required),

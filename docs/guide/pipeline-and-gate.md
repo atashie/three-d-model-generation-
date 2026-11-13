@@ -229,16 +229,21 @@ it. It checks the plan with `verify_colors` first. It refuses, and writes nothin
   are the band. For a glue print, make the plan with `outlines: drop`.
 
 **Outputs:** `ams-base.stl` and `ams-color-<i>-<rrggbb>.stl` (one per inlay color),
-`glue-base.stl` and `glue-color-<i>-<rrggbb>.stl` (one per color with pieces), `top.png`,
-`parts.png` and the record `colored.json`, with `colorflat_id`. The names give the palette
-index and color, never AMS slots. Without a glue version there are no `glue-*.stl` and no
-`parts.png`.
+`model.3mf` (the same AMS bodies as one multicolor 3MF: one object with one closed shell
+per color, each triangle colored; written from exactly the gated meshes), `palette.json`
+(what each shell of `model.3mf` is: body, palette index, color, triangle range, area and
+volume, and the 3MF's SHA-256), `glue-base.stl` and `glue-color-<i>-<rrggbb>.stl` (one per
+color with pieces), `top.png`, `parts.png` and the record `colored.json`, with
+`colorflat_id`. The names give the palette index and color, never AMS slots. Without a
+glue version there are no `glue-*.stl` and no `parts.png`.
 
 **Checks:** every body gets F1 and `F2.export_matches_geometry` on its written bytes. The
 AMS bodies also get `F4.color_partition`, `F4.filaments`, `F2.fits_build_volume` and
-`F5.triangles` (as one plate); the glue version gets `F4.glue_partition`, `F4.glue_fit`,
-and `F2.fits_build_volume` and `F5.triangles` per plate. `F3.thin_regions` is
-information only (UNKNOWN) and `F6.slicer` is UNKNOWN, so the verdict is always NOT
+`F5.triangles` (as one plate), and `F2.export_3mf_matches_bodies` (lib3mf reads
+`model.3mf` back: one object in millimetres, each shell exactly its body's gated mesh,
+closed and oriented, in its color); the glue version gets `F4.glue_partition`,
+`F4.glue_fit`, and `F2.fits_build_volume` and `F5.triangles` per plate. `F3.thin_regions`
+is information only (UNKNOWN) and `F6.slicer` is UNKNOWN, so the verdict is always NOT
 CERTIFIED.
 
 **Exit codes:** as for `tdmg flat`, with `DIR/colored.json` for `DIR/flat.json`. 0 means

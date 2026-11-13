@@ -231,7 +231,9 @@ def flat(
     Exit 0 does not mean the part is certified; read verdict in flat.json.
 
     With --colors COLORS_DIR, write the AMS bodies (ams-base.stl,
-    ams-color-<i>-<rrggbb>.stl), the glue bodies (glue-base.stl,
+    ams-color-<i>-<rrggbb>.stl), model.3mf (the AMS bodies as one
+    multicolor 3MF, one shell per color) and palette.json (what each
+    shell is), the glue bodies (glue-base.stl,
     glue-color-<i>-<rrggbb>.stl), top.png, parts.png and colored.json.
     The exit codes are the same, with colored.json for flat.json. A plan
     that keeps a drawn outline band (outlines: keep with an outline
@@ -311,8 +313,9 @@ def _colored_flat(selection: Path, colors_dir: Path, out: Path, **kw) -> None:
     for name in rec["outputs"]:
         typer.echo(f"wrote {out / name}")
     typer.echo(f"wrote {out / COLORED_RECORD}")
-    typer.echo("open top.png and parts.png" if "parts.png" in rec["outputs"]
-               else "open top.png")
+    pngs = "top.png and parts.png" if "parts.png" in rec["outputs"] else "top.png"
+    typer.echo(f"open {pngs}; then open {rec['model_3mf']['file']} in your slicer and "
+               f"give each color a filament ({rec['model_3mf']['palette']})")
     if any(c["status"] == "FAIL" for _, c in checks):
         raise typer.Exit(1)
 

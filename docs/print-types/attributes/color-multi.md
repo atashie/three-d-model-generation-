@@ -82,6 +82,8 @@ body is meshed directly from the shared grid cells, without 3-D booleans: a mani
 union first tried here failed F1 after STL storage on 3 of the 4 owner plans.
 
 Outputs: `ams-base.stl` and `ams-color-<i>-<rrggbb>.stl` (one per inlay color);
+`model.3mf` (the AMS bodies as one 3MF object with one closed shell per color, colored per
+triangle with the 3MF Materials extension) and `palette.json` (what each shell is);
 `glue-base.stl` and `glue-color-<i>-<rrggbb>.stl` (all pieces of one color, one plate);
 `top.png` (the AMS top skin, to compare with the plan's `regions.png`); `parts.png` (the
 glue layout with each piece numbered, the folds and the leftovers); and the record
@@ -153,7 +155,8 @@ source.
     union equals the silhouette, and the volumes sum to its area × T, all within derived
     rounding bounds); `F4.filaments` (the non-empty bodies are at most `colors` and the
     printer's slots); `F2.fits_build_volume` on all bodies together and `F5.triangles` on
-    their sum, as one plate.
+    their sum, as one plate; `F2.export_3mf_matches_bodies` (lib3mf reads `model.3mf`
+    back, and each shell must be its body's gated mesh exactly, in its color).
   - **Glue:** `F4.glue_partition` (the base's cells cover the silhouette, the pockets do
     not overlap and lie inside it, and the base's volume is right); `F4.glue_fit` (each
     piece, grown by the clearance less a derived rounding margin, lies inside its pocket;

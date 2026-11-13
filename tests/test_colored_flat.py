@@ -7,11 +7,13 @@ import io
 import json
 import re
 import shutil
+import zipfile
 
 import numpy as np
 import pytest
 import shapely
 import trimesh
+from lxml import etree
 from PIL import Image
 from selection_fixtures import roadie_like
 from typer.testing import CliRunner
@@ -240,7 +242,8 @@ def test_files_and_their_hashes(made):
     expected_glue = ["glue-base.stl"] + [f"glue-color-{i}-{palette[i]}.stl" for i in glued]
     # The record is key-sorted JSON, so outputs come back sorted by name.
     assert list(rec["outputs"]) == sorted(expected_ams + expected_glue
-                                          + ["top.png", "parts.png"])
+                                          + ["top.png", "parts.png", "model.3mf",
+                                             "palette.json"])
     assert len(expected_ams) >= 3 and len(expected_glue) >= 2    # the fixture has inlays
     assert [b["file"] for b in rec["bodies"]] == expected_ams + expected_glue
 
@@ -261,7 +264,7 @@ def test_written_stl_bytes_are_exactly_the_gated_ones(made):
 
 def test_record_identity_and_params(made):
     rec = made[0]
-    assert rec["schema"] == "tdmg.colorflat/1" and rec["algorithm"] == "colorflat-2"
+    assert rec["schema"] == "tdmg.colorflat/1" and rec["algorithm"] == "colorflat-3"
     ident = rec["identity"]
     assert set(ident) == {"algorithm", "colors_id", "selection_id", "mask_pixels_sha256",
                           "params"}
@@ -441,7 +444,8 @@ def test_cli_writes_and_reports(plan, made, tmp_path):
     assert rec["colorflat_id"] == made[0]["colorflat_id"]
     for name in [*rec["outputs"], RECORD_NAME]:
         assert f"wrote {out / name}" in lines
-    assert lines[-1] == "open top.png and parts.png"
+    assert lines[-1] == ("open top.png and parts.png; then open model.3mf in your slicer "
+                         "and give each color a filament (palette.json)")
     assert all(line.startswith("warning: ") for line in r.stderr.splitlines())
 
 
@@ -474,7 +478,7 @@ def test_cli_exits_1_when_a_check_fails_but_still_writes(plan, tmp_path, monkeyp
 
 def test_cli_flat_help_mentions_colors_and_keeps_lines_short():
     text = _plain(runner.invoke(app, ["flat", "--help"], prog_name="tdmg").output)
-    assert "--colors" in text and "colored.json" in text
+    assert "--colors" in text and "colored.json" in text and "model.3mf" in text
     # Rich keeps the line breaks of every paragraph after the first, so those lines must
     # be under 76 characters (as tests/test_cli.py checks for the exit codes).
     from tdmg.cli import flat
@@ -647,7 +651,9 @@ def test_cli_outlines_keep_says_why_and_opens_top_png_only(plan, keep, tmp_path)
     lines = r.stdout.splitlines()
     assert any(line.startswith("glue: not built - the plan keeps the outline (outlines: "
                                "keep with an outline family") for line in lines)
-    assert lines[-1] == "open top.png"
+    assert lines[-1] == ("open top.png; then open model.3mf in your slicer and give each "
+                         "color a filament (palette.json)")
+    assert (out / "model.3mf").exists() and (out / "palette.json").exists()
     assert not (out / "parts.png").exists()
     assert "warning: glue version not built:" in r.stderr
 
@@ -667,3 +673,78 @@ def test_keep_with_no_outline_family_still_builds_the_glue_route(plan, keep, tmp
     # The keep fixture's plan did draw a band: that is what skipped its glue route.
     keep_plan = json.loads((keep[2] / "colors" / "colors.json").read_bytes())
     assert keep_plan["outline"]["family"] and keep_plan["outline"]["keep_width"] is not None
+
+
+# --- model.3mf and palette.json (docs/plans/2026-11-12-color-3mf.md, Task 4) -----------
+
+
+def test_model_3mf_is_built_from_exactly_the_gated_meshes(made):
+    rec, out, captured = made[:3]
+    meshes = captured["ams_checks"]["meshes"]
+    ams = [b for b in rec["bodies"] if b["route"] == "ams"]
+    names = ["base" if b["role"] == "base" else f"color-{b['index']}" for b in ams]
+    with zipfile.ZipFile(out / "model.3mf") as z:
+        root = etree.fromstring(z.read("3D/3dmodel.model"))
+    q = "{http://schemas.microsoft.com/3dmanufacturing/core/2015/02}"
+    v = np.array([[np.float32(e.get(k)) for k in "xyz"] for e in root.iter(f"{q}vertex")])
+    f = np.array([[int(e.get(k)) for k in ("v1", "v2", "v3")]
+                  for e in root.iter(f"{q}triangle")])
+    want_v = np.vstack([np.asarray(meshes[n].vertices, np.float32) for n in names])
+    offsets = np.cumsum([0] + [len(meshes[n].vertices) for n in names[:-1]])
+    want_f = np.vstack([np.asarray(meshes[n].faces) + o
+                        for n, o in zip(names, offsets, strict=True)])
+    assert np.array_equal(v, want_v) and np.array_equal(f, want_f)
+    assert rec["model_3mf"]["shells"] == [b["name"] for b in ams]
+    assert rec["model_3mf"]["file"] == "model.3mf"
+    assert "format.3mf.self_intersection_is_warning" in rec["model_3mf"]["note"]
+
+
+def test_the_3mf_check_is_an_ams_assembly_check_and_required(made, keep):
+    for rec in (made[0], keep[0]):
+        ids = [c["id"] for c in rec["assembly"]["ams"]]
+        assert ids == ["F4.color_partition", "F4.filaments", "F2.fits_build_volume",
+                       "F5.triangles", "F2.export_3mf_matches_bodies", "F6.slicer"]
+        check = rec["assembly"]["ams"][4]
+        assert check["status"] == "PASS", check["measured"]
+        assert [s["name"] for s in check["measured"]["shells"]] == rec["model_3mf"]["shells"]
+        assert "F2.export_3mf_matches_bodies" in rec["required_checks"]
+        assert not any(c["id"] == "F2.export_3mf_matches_bodies"
+                       for c in rec["assembly"]["glue"])
+
+
+def test_palette_json_matches_the_record_and_the_3mf(made):
+    rec, out = made[:2]
+    palette = json.loads((out / "palette.json").read_bytes())
+    model = (out / "model.3mf").read_bytes()
+    assert palette["model_3mf_sha256"] == hashlib.sha256(model).hexdigest()
+    assert palette["colorflat_id"] == rec["colorflat_id"]
+    ams = [b for b in rec["bodies"] if b["route"] == "ams"]
+    assert [s["body"] for s in palette["shells"]] == [b["name"] for b in ams]
+    t0 = 0
+    for s, b in zip(palette["shells"], ams, strict=True):
+        assert (s["role"], s["index"], s["hex"]) == (b["role"], b["index"], b["hex"])
+        assert s["top_area_mm2"] == b["top_area_mm2"] and s["volume_mm3"] == b["volume_mm3"]
+        assert s["triangles"] == [t0, t0 + b["triangles"]]
+        t0 += b["triangles"]
+    assert "slot" not in json.dumps(palette["shells"])
+
+
+def test_a_3mf_that_drops_a_shell_fails_the_run_and_still_writes(plan, tmp_path,
+                                                                 monkeypatch):
+    sel, colors, _ = plan
+    real = cf.write_multishell_3mf
+    monkeypatch.setattr(cf, "write_multishell_3mf", lambda shells: real(shells[:-1]))
+    out = tmp_path / "out"
+    r = _cli(sel, colors, out)
+    assert r.exit_code == 1, r.output
+    assert "  ams: F2.export_3mf_matches_bodies FAIL" in r.stdout
+    rec = json.loads((out / RECORD_NAME).read_bytes())
+    assert rec["verdict"] == "NOT CERTIFIED" and (out / "model.3mf").exists()
+
+
+def test_environment_records_the_zlib_that_deflates_model_3mf(made):
+    """zipfile deflates with Python's zlib, which can differ from Pillow's ("zlib")."""
+    import zlib
+    env = made[0]["environment"]
+    assert env["zlib_python"] == zlib.ZLIB_RUNTIME_VERSION
+    assert {"zlib", "python", "lxml", "lib3mf"} <= set(env)
