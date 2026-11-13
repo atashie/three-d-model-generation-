@@ -24,6 +24,7 @@ from tdmg.orca_input import (
     ASSEMBLY_NAME,
     ORCA_PART_NAMES,
     SETTINGS_PART,
+    filament_map,
     model_settings,
     orca_model_xml,
     turn_over,
@@ -288,8 +289,55 @@ def test_the_model_is_one_components_object_of_one_mesh_per_body():
     assert "UUID" not in text.upper() and "metadata" not in text
 
 
-def test_each_part_gets_its_palette_index_plus_one_as_extruder():
-    shells = gated_shells("checker")
+def base_two_shells():
+    """The checker bodies relabelled as a plan whose base is palette index 2: the base,
+    then inlays of palette indices 0, 1 and 3 (the writer and the check read only the
+    labels and the meshes)."""
+    s = gated_shells("checker")
+    hexes = {0: "#f5f5f5", 1: "#f0f10a", 2: "#f60606", 3: "#451812"}
+    return [Shell(sh.name, sh.role, idx, hexes[idx], sh.vertices, sh.faces)
+            for sh, idx in zip(s, (2, 0, 1, 3), strict=True)]
+
+
+def test_each_part_gets_its_shell_position_plus_one_as_extruder():
+    for shells in (gated_shells("checker"), base_two_shells()):
+        settings_of(shells)
+
+
+def test_filament_map_names_each_filament_body_index_and_hex():
+    shells = base_two_shells()
+    assert filament_map(shells) == [
+        {"filament": i + 1, "body": s.name, "role": s.role, "index": s.index,
+         "hex": s.hex} for i, s in enumerate(shells)]
+    assert [r["index"] for r in filament_map(shells)] == [2, 0, 1, 3]
+    assert filament_map(shells)[0] == {"filament": 1, "body": shells[0].name,
+                                       "role": "base", "index": 2, "hex": "#f60606"}
+
+
+def test_a_base_of_palette_index_2_is_filament_1_and_passes():
+    shells = base_two_shells()
+    for face in (shells, turn_over(shells)):
+        c = orca_input_check(write_orca_input(face), face)
+        assert c.status == "PASS", c.measured
+        assert [r["extruder"] for r in c.measured["parts"]] == [1, 2, 3, 4]
+        assert [p["extruder"] for p in c.threshold["parts"]] == [1, 2, 3, 4]
+
+
+def test_a_swapped_extruder_fails():
+    shells = base_two_shells()
+    parts = parts_of(write_orca_input(shells))
+    s = parts[SETTINGS_PART]
+    a, b = b'key="extruder" value="2"', b'key="extruder" value="3"'
+    assert s.count(a) == 1 and s.count(b) == 1
+    swapped = s.replace(a, b"@@").replace(b, a).replace(b"@@", b)
+    c = orca_input_check(repack_orca(parts[MODEL_PART], swapped), shells)
+    assert c.status == "FAIL"
+    rows = c.measured["parts"]
+    assert [r["extruder"] for r in rows] == [1, 3, 2, 4]
+    assert [r["pass"] for r in rows] == [True, False, False, True]
+
+
+def settings_of(shells):
     cfg = etree.fromstring(model_settings(shells))
     n = len(shells)
     (obj,) = cfg.findall("object")
@@ -300,21 +348,19 @@ def test_each_part_gets_its_palette_index_plus_one_as_extruder():
     assert [(p.get("id"), p.get("subtype")) for p in parts] == [
         (str(n + 1 + i), "normal_part") for i in range(n)]
     got = [{m.get("key"): m.get("value") for m in p.findall("metadata")} for p in parts]
-    assert got == [{"name": s.name, "extruder": str(s.index + 1)} for s in shells]
+    assert got == [{"name": s.name, "extruder": str(i + 1)} for i, s in enumerate(shells)]
     assert got[0]["extruder"] == "1"
 
 
-def test_the_writer_refuses_palette_indices_other_than_0_to_n_minus_1():
+def test_the_writer_takes_any_palette_indices_check_shells_takes():
     a, b = two_cubes()
     gap = [a, Shell(b.name, b.role, 2, b.hex, b.vertices, b.faces)]
-    with pytest.raises(ThreeMFError, match="0 to n - 1"):
-        write_orca_input(gap)
-    base1 = [Shell(a.name, a.role, 1, a.hex, a.vertices, a.faces),
-             Shell(b.name, b.role, 2, b.hex, b.vertices, b.faces)]
-    with pytest.raises(ThreeMFError, match="0 to n - 1"):
-        write_orca_input(base1)
+    c = orca_input_check(write_orca_input(gap), gap)
+    assert c.status == "PASS" and [r["extruder"] for r in c.measured["parts"]] == [1, 2]
     with pytest.raises(ThreeMFError, match="base first"):
         write_orca_input([b, a])
+    with pytest.raises(ThreeMFError, match="ascending"):
+        write_orca_input([a, b, Shell("c", "inlay", 1, "#000000", b.vertices, b.faces)])
 
 
 @pytest.mark.parametrize("case", CASES)
@@ -334,11 +380,11 @@ def test_the_gated_and_turned_bodies_pass(case, face):
     assert m["package_parts"] == list(ORCA_PART_NAMES) and m["package_files_equal"]
     assert m["settings_equal"] is True and m["components"] == n
     assert [r["name"] for r in m["parts"]] == [s.name for s in shells]
-    assert [r["extruder"] for r in m["parts"]] == [s.index + 1 for s in shells]
+    assert [r["extruder"] for r in m["parts"]] == list(range(1, n + 1))
     assert all(r["pass"] and r["transform_identity"] and r["manifold_and_oriented"]
                and r["bad_directed_edges"] == 0 for r in m["parts"])
     assert c.threshold["parts"] == [
-        {"name": s.name, "object_id": n + 1 + i, "extruder": s.index + 1,
+        {"name": s.name, "object_id": n + 1 + i, "extruder": i + 1,
          "color": color_3mf(s.hex)} for i, s in enumerate(shells)]
     json.dumps(c.as_dict(), allow_nan=False)
 

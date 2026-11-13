@@ -52,7 +52,6 @@ from tdmg.orca_input import (
     ORCA_PART_NAMES,
     SETTINGS_PART,
     assembly_id,
-    check_orca_shells,
     mesh_object_id,
     model_settings,
 )
@@ -708,9 +707,9 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
     each on its own extruder (docs/plans/2026-11-13-color-slicing.md, Decision 2).
 
     export_3mf_check adapted to encoding B_msc (tdmg.orca_input). shells: the bodies as
-    sliced (face up, or tdmg.orca_input.turn_over's face down), palette indices 0..n-1.
-    data is read back by lib3mf 2.x in strict mode (from the bytes), and its zip with
-    zipfile. PASS iff:
+    sliced (face up, or tdmg.orca_input.turn_over's face down), base first. data is
+    read back by lib3mf 2.x in strict mode (from the bytes), and its zip with zipfile.
+    PASS iff:
     - the zip's raw entry names (orig_filename) are exactly tdmg.orca_input.ORCA_PART_NAMES,
       in order; the content types and relationships parts are tdmg.threemf's bytes; and
       Metadata/model_settings.config is exactly the bytes tdmg.orca_input.model_settings
@@ -726,16 +725,18 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
       arrays, same order) and triangles equal its faces exactly; each mesh is closed and
       consistently oriented by index (_bad_directed_edges 0) and lib3mf's
       IsManifoldAndOriented holds;
-    - the extruder model_settings.config gives that part (by its resource id) is shell i's
-      palette index + 1 (this follows from the byte equality; it is measured on its own
-      so that a FAIL says which part is on which filament).
+    - the extruder model_settings.config gives that part (by its resource id) is
+      tdmg.orca_input.extruder(i) = i + 1, the writer's and tdmg.orca_input.filament_map's
+      rule (the base is filament 1 whatever its palette index). This follows from the
+      byte equality; it is measured on its own so that a FAIL says which part is on
+      which filament.
     The extruders reach the slicer only through OrcaSlicer's reading of the config part;
     that it does so was measured in Task 2 (research/verification/2026-11-13-color-
-    slicing/README.md), not here. Errors: shells tdmg.orca_input.check_orca_shells
-    refuses raise ThreeMFError (a caller error); anything wrong with data, including
-    bytes zipfile or lib3mf cannot read, is a FAIL with what was measured.
+    slicing/README.md), not here. Errors: shells tdmg.threemf.check_shells refuses raise
+    ThreeMFError (a caller error); anything wrong with data, including bytes zipfile
+    or lib3mf cannot read, is a FAIL with what was measured.
     """
-    arrays = check_orca_shells(shells)
+    arrays = check_shells(shells)
     n = len(shells)
     expected = {"unit": UNIT, "objects": n + 1, "mesh_objects": n, "components_objects": 1,
                 "color_groups": n, "build_items": 1, "components": n,
@@ -743,12 +744,12 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
                 "package_parts": list(ORCA_PART_NAMES), "package_files_equal": True,
                 "settings_equal": True,
                 "parts": [{"name": s.name, "object_id": mesh_object_id(i, n),
-                           "extruder": orca_extruder(s), "color": color_3mf(s.hex)}
+                           "extruder": orca_extruder(i), "color": color_3mf(s.hex)}
                           for i, s in enumerate(shells)]}
     note = ("read back by lib3mf (strict mode) from the bytes; per part in component "
             "order: vertices exactly as float32, triangles exactly, closed and oriented by "
             "index, identity transform, object color; model_settings.config byte-equal to "
-            "the writer's, and each part's extruder (palette index + 1) read from it. A "
+            "the writer's, and each part's extruder (its shell position + 1) read from it. A "
             "slicer input, not a deliverable")
     parts = None
     try:

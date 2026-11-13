@@ -11,7 +11,15 @@ This module holds what builds that input, apart from tdmg.threemf, whose guarant
 about the portable deliverable:
 - turn_over: the face-down bodies (Decision 3);
 - write_orca_input: orca-input.3mf, encoding B_msc (Decision 2).
-Its read-back gate check is tdmg.color_checks.orca_input_check.
+Its read-back gate check is tdmg.color_checks.orca_input_check. filament_map says which
+filament prints which color: the body at position i in shell order (the base first, then
+the inlays by palette index) is filament i + 1, for any base palette index.
+
+Deliberate copy of what was sliced: [Content_Types].xml (tdmg.threemf's bytes) has no
+entry for the .config extension of Metadata/model_settings.config. OPC wants a content
+type for every part, so this departs from the standard, but it is exactly the package
+the step 3 prototype wrote and Task 2 sliced (lib3mf strict reads it without a warning;
+OrcaSlicer 2.5.0 applies its extruders). Adding the entry would be an unsliced change.
 """
 
 from __future__ import annotations
@@ -44,7 +52,8 @@ ENCODING = ("B_msc: one m:colorgroup per body (one m:color each); one mesh objec
             "(base first, then inlays by palette index), each with its colorgroup as its "
             "object-level property; one components object 'assembly' with one component "
             "per mesh object, no transforms; one build item on it; "
-            "Metadata/model_settings.config giving each part extruder = palette index + 1")
+            "Metadata/model_settings.config giving each part extruder = its position in "
+            "shell order + 1 (the base 1)")
 
 
 def colorgroup_id(position: int) -> int:
@@ -62,9 +71,22 @@ def assembly_id(n: int) -> int:
     return 2 * n + 1
 
 
-def extruder(shell: Shell) -> int:
-    """The OrcaSlicer filament (1-based) a body is printed with: palette index + 1."""
-    return shell.index + 1
+def extruder(position: int) -> int:
+    """The OrcaSlicer filament (1-based) the body at this position in shell order is
+    printed with: position + 1, so the base (always first) is filament 1 and the inlays
+    follow by palette index, whatever the base's palette index (controller decision,
+    2026-11-13, after Task 4; the plan's "palette index + 1" holds when the base is
+    palette index 0 and the indices are 0..n-1, as in all four owner plans)."""
+    return position + 1
+
+
+def filament_map(shells: Sequence[Shell]) -> list[dict]:
+    """Which filament prints which color, for the record and the message (Task 6): per
+    shell in order, {"filament": extruder(position), "body", "role", "index" (palette
+    index), "hex"}. The same rule the writer and orca_input_check use."""
+    check_shells(shells)
+    return [{"filament": extruder(i), "body": s.name, "role": s.role, "index": s.index,
+             "hex": s.hex} for i, s in enumerate(shells)]
 
 
 def _exact_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -130,20 +152,6 @@ def turn_over(shells: Sequence[Shell]) -> list[Shell]:
 # --- orca-input.3mf (Decision 2) --------------------------------------------------------
 
 
-def check_orca_shells(shells: Sequence[Shell]) -> list[tuple[np.ndarray, np.ndarray]]:
-    """tdmg.threemf.check_shells, plus: the palette indices are exactly 0 to n - 1 in
-    shell order (so the base is index 0). Only then is each part's extruder, palette
-    index + 1, both a filament of the n passed to the slicer and, for the base, filament
-    1 (plan Decision 2). A plan whose base is another palette index is refused, not
-    renumbered: which filament each color goes on is then a decision for the caller."""
-    arrays = check_shells(shells)
-    indices = [s.index for s in shells]
-    if indices != list(range(len(shells))):
-        raise ThreeMFError(f"orca-input needs palette indices 0 to n - 1 in shell order "
-                           f"(the base 0), got {indices}")
-    return arrays
-
-
 def orca_model_xml(shells: Sequence[Shell]) -> bytes:
     """3D/3dmodel.model of encoding B_msc (ENCODING), as the step 3 prototype
     research/verification/2026-11-12-color-3mf/measure_import.py model_xml(bodies, "B")
@@ -158,7 +166,7 @@ def orca_model_xml(shells: Sequence[Shell]) -> bytes:
     <vertices/> and <triangles/> per mesh object, the vertex and triangle elements as
     text in lxml's serialized form (f32_text coordinates), no metadata, no UUIDs.
     """
-    arrays = check_orca_shells(shells)
+    arrays = check_shells(shells)
     n = len(shells)
     q = f"{{{NS_CORE}}}"
     model = etree.Element(f"{q}model", nsmap={None: NS_CORE, "m": NS_M})
@@ -201,8 +209,8 @@ def model_settings(shells: Sequence[Shell]) -> bytes:
     """Metadata/model_settings.config (Bambu/Orca project metadata, not 3MF core or
     Materials), as the step 3 prototype's bambu_model_settings wrote it: one <object>
     for the assembly (name, extruder 1), and one <part> per mesh object, by its resource
-    id, subtype normal_part, with its name and extruder = palette index + 1."""
-    check_orca_shells(shells)
+    id, subtype normal_part, with its name and extruder(position)."""
+    check_shells(shells)
     n = len(shells)
     cfg = etree.Element("config")
     obj = etree.SubElement(cfg, "object", {"id": str(assembly_id(n))})
@@ -212,7 +220,7 @@ def model_settings(shells: Sequence[Shell]) -> bytes:
         p = etree.SubElement(obj, "part", {"id": str(mesh_object_id(i, n)),
                                            "subtype": PART_SUBTYPE})
         etree.SubElement(p, "metadata", {"key": "name", "value": s.name})
-        etree.SubElement(p, "metadata", {"key": "extruder", "value": str(extruder(s))})
+        etree.SubElement(p, "metadata", {"key": "extruder", "value": str(extruder(i))})
     return etree.tostring(cfg, xml_declaration=True, encoding="UTF-8")
 
 
@@ -224,6 +232,6 @@ def write_orca_input(shells: Sequence[Shell]) -> bytes:
     fourth part. As in the sliced prototype, [Content_Types].xml has no entry for the
     .config extension: OPC wants a content type for every part, but lib3mf (strict) reads
     the file with no warning and OrcaSlicer 2.5.0 reads the extruders from it (Task 2).
-    Refused (ThreeMFError): what check_orca_shells refuses.
+    Refused (ThreeMFError): what tdmg.threemf.check_shells refuses.
     """
     return package(orca_model_xml(shells), ((SETTINGS_PART, model_settings(shells)),))
