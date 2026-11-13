@@ -202,8 +202,22 @@ passed. These commits are pushed; for CI see above.
      extrude; the head position is unknown after them. Label `slice-5`. R1 re-run:
      PRINTABLE, F3 identical, time 472 → 867 s (the A1 start code), weight −0.025 g (the
      slicer's total; the model's E is identical). Spec and quality reviews done.
-   - **Next:** Task 2, the slicing experiment (OrcaSlicer-only input, face up and face
-     down, the four owner plans).
+   - **CI for Task 1:** passed on macOS 15, Ubuntu and Windows for `d444d75` (run
+     43451978611, verified 2026-11-13).
+   - **Task 2 done** (`research/verification/2026-11-13-color-slicing/`): all 4 plans,
+     face up and face down, slice in place with each color on its own filament, each
+     tool's centrelines inside its own body. Changes 9 everywhere except Roadie drop face
+     down (10; true minimum 9). Prime tower 1,055 mm³ face up, 548–592 face down; flush
+     600–1,051 mm³; time 1,868–2,124 s. Plan Decisions 2 and 4 were amended from these
+     results (start load, counting rule, filament colours).
+   - **Tasks 3 and 4 done:** `tdmg.orca_input` (`turn_over`, the `orca-input.3mf` writer,
+     `filament_map`) and `F2.orca_input_matches_bodies`. Extruder = shell position + 1
+     (plan amendment). Both 3MF checks now also compare the model part's bytes with the
+     writer's (stored owner `colored.json` files lack the new `model_equal` field until
+     re-run; `colorflat-3` not bumped, as for Codex review 4). Reviewed and approved.
+   - **For Task 8 docs:** describe the byte comparison and the new check.
+   - **Next:** Task 5, the G-code readers and the `F6.color_changes`,
+     `F6.tool_placement` and `F6.filaments_used` checks.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
