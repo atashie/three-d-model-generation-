@@ -610,13 +610,15 @@ def test_a_flush_inside_the_model_fails_tool_placement():
     assert c.measured["flushes"][0]["at_bed_mm"] == [128.0, 128.0]
 
 
-def test_a_flush_just_beside_the_model_gets_the_tools_allowance():
-    # The model spans bed x 118 to 138; a flush at x 138.1 is 0.1 mm away (FAIL, within
-    # 0.2 mm), at x 138.5 0.5 mm away (PASS).
-    for x, want in ((138.1, "FAIL"), (138.5, "PASS")):
-        text = text_of(**GOOD).replace("G1 X267 F18000\n", f"G1 X{x} F18000\n")
-        checks, _ = run(text)
-        assert checks[TOOL_PLACEMENT].status == want, (x, checks[TOOL_PLACEMENT].note)
+@pytest.mark.parametrize("x", [138.3, 200, 256])
+def test_a_flush_anywhere_on_the_plate_fails(x):
+    # The model spans bed x 118 to 138. A 27.8 mm purge 0.3 mm beside it lands on it, so
+    # the rule is the measured one: the flush must be off the printable plate (x 0 to 256),
+    # the edge included.
+    text = text_of(**GOOD).replace("G1 X267 F18000\n", f"G1 X{x} F18000\n")
+    checks, _ = run(text)
+    c = checks[TOOL_PLACEMENT]
+    assert c.status == "FAIL" and "on the printable plate" in c.note, (x, c.note)
 
 
 def test_a_flush_from_an_unknown_position_leaves_tool_placement_unknown():
@@ -630,7 +632,8 @@ def test_the_real_flush_position_off_the_bed_passes():
     checks, _ = run(text_of(**GOOD))
     flushes = checks[TOOL_PLACEMENT].measured["flushes"]
     assert [f["at_bed_mm"] for f in flushes] == [[267.0, 128.0]] * 2
-    assert all(f["from_model_mm"] > 100 for f in flushes)
+    assert all(f["on_plate"] is False for f in flushes)
+    assert checks[TOOL_PLACEMENT].status == "PASS"
 
 
 # --- Real slicer ---------------------------------------------------------------------------

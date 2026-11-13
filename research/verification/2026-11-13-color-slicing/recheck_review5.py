@@ -10,7 +10,7 @@ that face's plate_1.gcode against the plan's bodies (as crosscheck_task5.py read
 and compares every color check's status, and the measured values of F6.color_changes,
 F6.tool_placement (apart from the new "flushes" and "unknown" entries) and the
 information checks, with the record. Prints one line per face and each flush's nozzle
-position and distance from the model. Research code: not part of the package.
+position and how many are on the printable plate. Research code: not part of the package.
 """
 
 from __future__ import annotations
@@ -70,9 +70,8 @@ def main() -> None:
                       f"differ: {differ or 'none'}; not in the record: {missing or 'none'}; "
                       f"tool_placement {mine[TOOL_PLACEMENT].status}")
                 print(f"    {len(flushes)} flushes at bed "
-                      f"{sorted({tuple(f['at_bed_mm']) for f in flushes})}, from the model "
-                      f"{min(f['from_model_mm'] for f in flushes):.1f} to "
-                      f"{max(f['from_model_mm'] for f in flushes):.1f} mm")
+                      f"{sorted({tuple(f['at_bed_mm']) for f in flushes})}, on the plate: "
+                      f"{sum(1 for f in flushes if f['on_plate'])}")
 
 
 if __name__ == "__main__":

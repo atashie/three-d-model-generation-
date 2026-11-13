@@ -64,9 +64,9 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   print turned by 90, 180 or 270 degrees FAILs; every body is printed by its own tool on
   each of its layers; no other tool prints model features; and the prime tower's beads
   reach into the silhouette by no more than the same allowance (_tower_depth); and the
-  nozzle during each FLUSH block (an E-only extrusion: no bead, no segment) is further from
-  the silhouette than that allowance (UNKNOWN when its position is unknown; Codex review 5,
-  finding 2). The owner's G-codes flush at bed (267, 128), off the plate.
+  nozzle during each FLUSH block (an E-only purge: no bead, no segment) is off the
+  printable plate, the edge included (UNKNOWN when its position is unknown; Codex review
+  5, finding 2). The owner's G-codes flush at bed (267, 128), off the plate.
 - F6.filaments_used (gated): the filaments loaded and the tools printing model features
   are exactly the plan's, one per body; the header's "; filament:" list is 1..n; the
   config's filament_colour is the plan's colors in filament order.
@@ -931,29 +931,28 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
                             f"{k + 1} (allowance {allowance:g} mm)")
         elif depth + OVERPRINT_BOUND_MM > allowance:
             near.append(f"prime tower layer {k + 1}: {depth:.3f} mm into the model")
-    # The flush (Codex review 5, finding 2): E-only, so it lays down no bead and no segment;
-    # the nozzle must be off the model, by more than a tool may print outside its body.
+    # The flush (Codex review 5, finding 2): E-only, so it lays down no bead and no
+    # segment, and a purge of tens of mm of filament spreads by an amount this module does
+    # not model. So the nozzle must be off the printable plate (setup.plate, the edge
+    # included), where the owner's G-codes flush (bed (267, 128) at every FLUSH_START:
+    # research/verification/2026-11-13-color-slicing/measure_conditionals.py).
+    plate = setup.plate
     flushes, unknown = [], []
     for k, lay in enumerate(mc.layers):
-        allowance = first_mm if k == 0 else tol_mm
-        bed = alignment.apply(silhouette[k])
         for line, fx, fy in lay.flushes:
-            row = {"line": line, "layer": k + 1, "at_bed_mm": None, "from_model_mm": None,
-                   "allowance_mm": allowance}
+            row = {"line": line, "layer": k + 1, "at_bed_mm": None, "on_plate": None}
             flushes.append(row)
             if fx is None or fy is None:
                 unknown.append(f"the flush at line {line} (layer {k + 1}) is at an unknown "
                                "position")
                 continue
             row["at_bed_mm"] = [fx, fy]
-            if bed.is_empty:
-                continue
-            d = float(shapely.distance(shapely.Point(fx, fy), bed))
-            row["from_model_mm"] = d
-            if d <= allowance:
+            row["on_plate"] = plate.x0 <= fx <= plate.x1 and plate.y0 <= fy <= plate.y1
+            if row["on_plate"]:
                 problems.append(f"the flush at line {line} (layer {k + 1}) is at bed "
-                                f"({fx:g}, {fy:g}), {d:.3f} mm from the model (allowance "
-                                f"{allowance:g} mm)")
+                                f"({fx:g}, {fy:g}), on the printable plate "
+                                f"({plate.x0:g} to {plate.x1:g}, {plate.y0:g} to "
+                                f"{plate.y1:g} mm)")
     if stray:
         problems.insert(0, f"tools {stray} print model features but print no body of the "
                            "plan")
@@ -967,8 +966,8 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
            "(its bounding-box centre on the plate centre, not turned): "
            "the largest distance of its plastic outside the body to the body, against the "
            "tolerance (plus elefant_foot_compensation on the first layer); the prime "
-           "tower's beads into the model and each flush's nozzle position against the same "
-           "allowance. ")
+           "tower's beads into the model against the same allowance; each flush's nozzle "
+           "off the printable plate. ")
     if problems:
         status = "FAIL"
         note = how + "; ".join(problems[:LISTED]) + (

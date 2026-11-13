@@ -1,12 +1,12 @@
 color2-roadie-tol30-60-drop-v3-f64 face up: 21 checks, statuses and values differ: none; not in the record: none; tool_placement PASS
-    9 flushes at bed [(267.0, 128.0)], from the model 109.5 to 109.5 mm
+    9 flushes at bed [(267.0, 128.0)], on the plate: 0
 color2-roadie-tol30-60-drop-v3-f64-both face down: 21 checks, statuses and values differ: none; not in the record: none; tool_placement PASS
-    10 flushes at bed [(267.0, 128.0)], from the model 109.1 to 109.1 mm
+    10 flushes at bed [(267.0, 128.0)], on the plate: 0
 color2-roadie-tol30-60-drop-v3-f64-both face up: 21 checks, statuses and values differ: none; not in the record: none; tool_placement PASS
-    9 flushes at bed [(267.0, 128.0)], from the model 109.5 to 109.5 mm
+    9 flushes at bed [(267.0, 128.0)], on the plate: 0
 color2-roadie-tol30-60-keep-v4-f64 face up: 21 checks, statuses and values differ: none; not in the record: none; tool_placement PASS
-    9 flushes at bed [(267.0, 128.0)], from the model 109.5 to 109.5 mm
+    9 flushes at bed [(267.0, 128.0)], on the plate: 0
 color2-oddie-60-merge-blues-v3-f64 face up: 21 checks, statuses and values differ: none; not in the record: none; tool_placement PASS
-    9 flushes at bed [(267.0, 128.0)], from the model 109.3 to 109.3 mm
+    9 flushes at bed [(267.0, 128.0)], on the plate: 0
 color2-oddie-60-keep-merge-blues-greens-v4-f64 face up: 21 checks, statuses and values differ: none; not in the record: none; tool_placement PASS
-    6 flushes at bed [(267.0, 128.0)], from the model 109.3 to 109.3 mm
+    6 flushes at bed [(267.0, 128.0)], on the plate: 0

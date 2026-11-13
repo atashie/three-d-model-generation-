@@ -53,6 +53,7 @@ fix.
    - **Fixed** (`07b445a`): each FLUSH_START's head position must be known and outside
      the silhouette by more than the tool allowance; otherwise `F6.tool_placement` FAILs
      (or is UNKNOWN when the position is unknown).
+   - **2026-11-13 (after review of `07b445a`):** a flush 0.3 mm beside the model passed, though a 27.8 mm purge there lands on it. The rule is now the measured one, with no new number: each FLUSH_START's head X/Y must be known and off the printable plate (the reader's plate bounds, the edge included); on the plate `F6.tool_placement` FAILs, unknown is UNKNOWN. The six owner Task 7 faces are unchanged (`recheck_review5.py`).
 3. **Medium: a missing glue plate was not noticed.**
    - **Verdict: holds.** With both glue-piece rows deleted and the glue report intact, the
      run went ahead and the route could be called printable.
