@@ -1,7 +1,7 @@
 # Project status
 
-**Last updated:** 2026-11-13 (R2 step 4, multicolor slicing: Tasks 1–7 done, Task 8 under
-way — Codex review 5 handled, push and CI next; plan `docs/plans/2026-11-13-color-slicing.md`).
+**Last updated:** 2026-11-13 (R2 step 4, multicolor slicing, done: plan
+`docs/plans/2026-11-13-color-slicing.md`, all 8 tasks, Codex review 5 handled, CI passed).
 Phase 1 (R1, flat single-color) is under way, with three commands, and R2 (flat
 multicolor) has two, plus `tdmg slice` on a colored folder:
 
@@ -249,7 +249,7 @@ passed. These commits are pushed; for CI see above.
      `artifacts/color-review/`). Implemented; all four plans PRINTABLE face up
      (`owner-slices-task7.txt`); Roadie drop face down NOT CERTIFIED (whole-model edge
      coverage UNKNOWN). A CLI bug (warnings set exit 1) was found in review and fixed.
-   - **Task 8:** docs done (`463ba81`). Codex review 5
+   - **Task 8 done:** docs (`463ba81`). Codex review 5
      (`research/reviews/2026-11-13-color-slicing/`): 2 High (firmware conditionals read
      as always run; flush position not checked), 1 Medium (a missing glue plate not
      noticed), 2 Low (warning wording; this STATUS). All held and were fixed (`07b445a`,
@@ -390,7 +390,25 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest (2026-11-13): R2 step 4, Tasks 1–7 done; Task 8 under way** (item 2b).
+- **Latest (2026-11-13): R2 step 4 done** (item 2b).
+  - **CI:** passed on macOS 15, Ubuntu and Windows for `39a87ba` (run 43510419488,
+    verified 2026-11-13). Full local suite: 2462 passed, 7 skipped (the real-slicer
+    tests, which passed in the implementers' runs with both slicers set).
+  - **Next, when the owner says to proceed:** R2 step 5, the first prints: a test strip
+    (pocket clearance, the 0.6 mm skin over a dark base), then a first AMS print from
+    `model.3mf` in Bambu Studio and a first glue print. Before any of it, the owner can
+    print a PRINTABLE face-up plan by opening `model.3mf` in Bambu Studio and assigning
+    the filaments `tdmg slice` lists.
+  - **Open:**
+    - nothing printed from a color plan;
+    - `tdmg`'s G-code not yet compared with Bambu Studio's own slice, so `plate_1.gcode`
+      stays "for checking only";
+    - the keep plans' thin interior outline lines are skipped by the slicer (a warning);
+    - PrusaSlicer's 3MF volume differs from the palette sum by −1.23 to +0.25 mm³, not
+      explained;
+    - no glue route is printable yet (F3 on the glue base and small plates);
+    - only 4-color plans measured.
+  - **Housekeeping:** the stray `C:\c\...` folder still needs deleting by the owner.
   - **Owner decisions:** plan approved ("approved; please proceed"); Task 7: face up
     default, F3 "Outer edge only".
   - **Controller decisions** (each recorded as a plan amendment): start load = layer 1's
