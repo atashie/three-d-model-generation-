@@ -555,6 +555,84 @@ def test_a_manual_filament_change_or_pause_is_unknown(command):
     assert _all_unknown(checks) and command in record["reason"]
 
 
+# --- Codex review 5: firmware conditionals and the flush position -----------------------
+
+# What the firmware may skip (M622 J<n> ... M623) cannot be known to print. The three cases
+# Codex review 5 (finding 1) ran: each passed every required check before the fix.
+
+
+def test_an_inlay_inside_a_conditional_block_is_unknown():
+    checks, record = run(text_of([SQUARE], [RING, 1, "M622 J1\n", A, "M623\n", 2, B]))
+    assert _all_unknown(checks), [(c.id, c.status) for c in checks.values()]
+    assert "conditional" in record["reason"]
+
+
+def test_a_tool_change_inside_a_conditional_block_is_unknown():
+    wrapped = "M622 J1\n" + change(1, 0.4) + "M623\n"
+    checks, record = run(text_of([SQUARE], [RING, wrapped, A, 2, B]))
+    assert _all_unknown(checks), [(c.id, c.status) for c in checks.values()]
+    assert "conditional" in record["reason"]
+
+
+def test_a_mode_set_only_inside_a_conditional_block_is_unknown_after_it():
+    # G91 and M82 before the block, G90 and M83 inside it: after M623 the printer is in
+    # either mode, so the next move cannot be read, even with X, Y and Z restored.
+    block = "G91\nM82\nM622 J1\nG90\nM83\nM623\n"
+    checks, record = run(text_of([SQUARE], [RING, block, 1, A, 2, B]))
+    assert _all_unknown(checks), [(c.id, c.status) for c in checks.values()]
+    assert "mode" in record["reason"]
+
+
+def test_a_mode_inside_a_conditional_that_equals_the_mode_before_is_read():
+    # As the A1 start code and time-lapse blocks write it (research record,
+    # measure_conditionals.py): G90 and M83 inside, the same as before the block.
+    block = "M622 J1\nG90\nM83\nG92 E0\nM623\nG1 X0 Y0 Z.4\n"
+    checks, _ = run(text_of([SQUARE], [RING, block, 1, A, 2, B]))
+    assert status(checks) == ["PASS"] * 3
+
+
+@pytest.mark.parametrize(("raw", "reason"), [
+    ("M622 J1\n", "without its M623"),
+    ("M623\n", "M623 without"),
+    ("M622 J1\nM620 S1A\nM621 S1A\nM623\n", "conditional"),
+])
+def test_unpaired_conditionals_and_loads_inside_them_are_unknown(raw, reason):
+    checks, record = run(text_of([SQUARE], [RING, 1, A, 2, B, raw]))
+    assert _all_unknown(checks) and reason in record["reason"], record["reason"]
+
+
+def test_a_flush_inside_the_model_fails_tool_placement():
+    # Codex review 5, finding 2: the flush moved to X128 Y128 Z0.4, inside the model.
+    text = text_of(**GOOD).replace("G1 X267 F18000\n", "G1 X128 Z0.4 F18000\n")
+    checks, _ = run(text)
+    c = checks[TOOL_PLACEMENT]
+    assert c.status == "FAIL" and "flush" in c.note, c.note
+    assert c.measured["flushes"][0]["at_bed_mm"] == [128.0, 128.0]
+
+
+def test_a_flush_just_beside_the_model_gets_the_tools_allowance():
+    # The model spans bed x 118 to 138; a flush at x 138.1 is 0.1 mm away (FAIL, within
+    # 0.2 mm), at x 138.5 0.5 mm away (PASS).
+    for x, want in ((138.1, "FAIL"), (138.5, "PASS")):
+        text = text_of(**GOOD).replace("G1 X267 F18000\n", f"G1 X{x} F18000\n")
+        checks, _ = run(text)
+        assert checks[TOOL_PLACEMENT].status == want, (x, checks[TOOL_PLACEMENT].note)
+
+
+def test_a_flush_from_an_unknown_position_leaves_tool_placement_unknown():
+    text = text_of(**GOOD).replace("; FLUSH_START\n", "M622 J1\nM623\n; FLUSH_START\n")
+    checks, _ = run(text)
+    c = checks[TOOL_PLACEMENT]
+    assert c.status == "UNKNOWN" and "unknown position" in c.note, c.note
+
+
+def test_the_real_flush_position_off_the_bed_passes():
+    checks, _ = run(text_of(**GOOD))
+    flushes = checks[TOOL_PLACEMENT].measured["flushes"]
+    assert [f["at_bed_mm"] for f in flushes] == [[267.0, 128.0]] * 2
+    assert all(f["from_model_mm"] > 100 for f in flushes)
+
+
 # --- Real slicer ---------------------------------------------------------------------------
 
 REPO = Path(__file__).resolve().parents[1]

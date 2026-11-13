@@ -124,6 +124,15 @@ SKIPPABLE_END = "SKIPPABLE_END"
 #   FIRMWARE_G_COMMANDS are accepted as in Custom (the position is then unknown), and the
 #   dwell G4 (written as G4 S0, twice per change) with S or P words at least 0, in FEATURE
 #   "Prime tower" only; G4 does not move the head.
+# - Firmware conditional blocks (M622 ... M623; Codex review 5, finding 1): the firmware
+#   may skip one, so (with prime_tower only) a model or tower extrusion inside one is
+#   refused, the blocks must pair, and after M623 a mode (G90/G91, M82/M83) the block
+#   changed is unknown, so a later move or extrusion that needs it is refused. A mode set
+#   inside to the value it had before stays known: the A1 start code and every time-lapse
+#   block do that (G90 and M83 inside, as before), and no other mode change, T command,
+#   M620/M621 or model extrusion occurs inside one in the owner's G-codes
+#   (research/verification/2026-11-13-color-slicing/measure_conditionals.py). The flush's
+#   head position is recorded at each "; FLUSH_START" (Layer.flushes).
 PRIME_TOWER = "Prime tower"
 DWELL = "G4"
 TOOLCHANGE_START = "CP TOOLCHANGE START"
@@ -283,6 +292,9 @@ class Layer:
     segments: list[Segment]     # the model's extrusions
     # The prime tower's extrusions (parse_gcode(prime_tower=True) only; else always empty).
     tower: list[Segment] = field(default_factory=list)
+    # Each "; FLUSH_START" on this layer: (line, x, y), the head's X and Y there (None if
+    # unknown) (parse_gcode(prime_tower=True) only; else always empty).
+    flushes: list[tuple[int, float | None, float | None]] = field(default_factory=list)
 
     @property
     def mid_z(self) -> float:
@@ -432,6 +444,7 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
     custom_lines: list[int] = []           # lines of Custom extrusions
     skippable = None                       # the line of an open SKIPPABLE_START
     change = None                          # the line of an open CP TOOLCHANGE START
+    conditionals = []                      # prime_tower: (line, relative_xy, relative_e)
     for lineno, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if line.startswith(";"):
@@ -447,6 +460,10 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
                                            "SKIPPABLE_START")
                 skippable = None
                 x = y = z_cmd = None           # whether the block ran is not known
+            elif prime_tower and tag == "FLUSH_START":
+                if z is None:
+                    raise UnsupportedGcode(f"line {lineno}: a FLUSH_START before any Z_HEIGHT")
+                layers[z].flushes.append((lineno, x, y))
             elif prime_tower and tag == TOOLCHANGE_START:
                 if change is not None:
                     raise UnsupportedGcode(f"line {lineno}: {TOOLCHANGE_START} inside the one "
@@ -474,7 +491,8 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
                                            "positive")
                 bead_height = height
                 if math.isnan(layers[z].height):          # the layer's, not a feature's
-                    layers[z] = Layer(z, height, layers[z].segments, layers[z].tower)
+                    layers[z] = Layer(z, height, layers[z].segments, layers[z].tower,
+                                      layers[z].flushes)
             elif tag.startswith("LINE_WIDTH:"):
                 width = _comment_value(tag, lineno)
             elif tag.startswith("FEATURE:"):
@@ -509,8 +527,17 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
         if command == "M221" and _words(code, lineno).get("S") != 100:
             raise UnsupportedGcode(f"line {lineno}: {code!r} sets the flow to other than "
                                    "100%")
-        if command == "M623":                  # the end of a firmware conditional block
+        if prime_tower and command == "M622":
+            conditionals.append((lineno, relative_xy, relative_e))
+        elif command == "M623":                # the end of a firmware conditional block
             x = y = z_cmd = None
+            if prime_tower:
+                if not conditionals:
+                    raise UnsupportedGcode(f"line {lineno}: M623 without its M622")
+                _, xy_before, e_before = conditionals.pop()
+                # The block ran or not: a mode it changed is now one of two.
+                relative_xy = relative_xy if relative_xy == xy_before else None
+                relative_e = relative_e if relative_e == e_before else None
         elif command == "M82":
             relative_e = False
         elif command == "M83":
@@ -529,6 +556,10 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
                                        "E, which OrcaSlicer does not write")
         elif command in ("G0", "G1", "G2", "G3"):
             words = _words(code, lineno)
+            if relative_xy is None:
+                raise UnsupportedGcode(f"line {lineno} ({code!r}): a move in unknown "
+                                       "positioning mode (G90 or G91), set only inside a "
+                                       "firmware conditional block (M622 ... M623)")
             if relative_xy:
                 nx = None if x is None else x + words.get("X", 0.0)
                 ny = None if y is None else y + words.get("Y", 0.0)
@@ -561,6 +592,10 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
             if moves and e > 0 and feature == CUSTOM:
                 custom_lines.append(lineno)
             if moves and e > 0 and feature != CUSTOM:
+                if conditionals:
+                    raise UnsupportedGcode(f"{where}: an extrusion inside the firmware "
+                                           f"conditional block (M622) at line "
+                                           f"{conditionals[-1][0]}: the printer may skip it")
                 model_lines.append(lineno)
                 tower = prime_tower and feature == PRIME_TOWER
                 _check_extrusion(where, command, words, (x, y, nx, ny), z, width, feature,
@@ -586,6 +621,9 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None, *,
     if change is not None:
         raise UnsupportedGcode(f"line {change}: {TOOLCHANGE_START} without a "
                                f"{TOOLCHANGE_END} by the end of the file")
+    if conditionals:
+        raise UnsupportedGcode(f"line {conditionals[-1][0]}: an M622 without its M623 by the "
+                               "end of the file")
     if not layers:
         raise UnsupportedGcode("no Z_HEIGHT layer: this is not OrcaSlicer G-code with layer "
                                "comments")

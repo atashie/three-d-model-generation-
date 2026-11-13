@@ -41,7 +41,7 @@ from tdmg.color_gcode import (  # noqa: E402
     GATED_CHECK_IDS,
     TOOL_PLACEMENT,
     color_slice_checks,
-    f3_required_ids,
+    f3_ids,
     per_tool_id,
     required_check_ids,
 )
@@ -155,7 +155,7 @@ def main(out: Path) -> None:
                            for t in range(len(shells)) for c in F3_SLICE_CHECK_IDS}
             placement = by[TOOL_PLACEMENT].measured
             required = required_check_ids(len(shells))
-            f3_values = {i: f3_value(by[i]) for i in f3_required_ids(len(shells))}
+            f3_values = {i: f3_value(by[i]) for i in f3_ids(len(shells))}
             certified = verdict(checks, set(required))
             rows.append((stem, statuses, mine, differ, seconds))
             full[stem] = {"statuses": statuses, "per_tool_f3": per_tool_f3,

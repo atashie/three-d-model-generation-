@@ -30,7 +30,13 @@ The reader (read_multicolor) has two passes over the same text, and refuses
   - M620 is read in the forms M620 M (the start code's remap), M620 S<n>A and M620 S255,
     and M621 in the forms M621 S<n>A and M621 S255; the pairs must match and not nest. A
     FLUSH block must lie inside a CP TOOLCHANGE block and hold no move but E-only G0/G1
-    (with E and F words only, E > 0, relative E). Anything else of these is refused.
+    (with E and F words only, E > 0, relative E). Anything else of these is refused;
+  - firmware conditional blocks (M622 ... M623; Codex review 5, finding 1): the firmware
+    may skip one, so a T command, an M620/M621, a FLUSH block, or (in the geometry pass)
+    a model or tower extrusion inside one is refused; the blocks must pair; and after
+    M623 a mode the block changed (G90/G91, M82/M83) is unknown. The owner's G-codes set
+    modes inside them only to their values before (measure_conditionals.py in the
+    research record).
   The two passes must agree: one Z_HEIGHT per CHANGE_LAYER, the same heights, and every
   segment in the block of its layer.
 Each segment's tool is the last T<n> (n < 255) before its line.
@@ -57,7 +63,10 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   bounding-box centre on the plate centre, not turned; Task 2's measured placement), so a
   print turned by 90, 180 or 270 degrees FAILs; every body is printed by its own tool on
   each of its layers; no other tool prints model features; and the prime tower's beads
-  reach into the silhouette by no more than the same allowance (_tower_depth).
+  reach into the silhouette by no more than the same allowance (_tower_depth); and the
+  nozzle during each FLUSH block (an E-only extrusion: no bead, no segment) is further from
+  the silhouette than that allowance (UNKNOWN when its position is unknown; Codex review 5,
+  finding 2). The owner's G-codes flush at bed (267, 128), off the plate.
 - F6.filaments_used (gated): the filaments loaded and the tools printing model features
   are exactly the plan's, one per body; the header's "; filament:" list is 1..n; the
   config's filament_colour is the plan's colors in filament order.
@@ -357,6 +366,7 @@ def _structure(text: str) -> dict:
     change: ToolChange | None = None
     flush = None                   # the line of an open FLUSH_START
     relative_e = None
+    conditionals: list[tuple[int, bool | None]] = []   # open M622 blocks: (line, relative_e)
     start_loads, changes, end_tools, t1000 = [], [], [], []
     toolchanges: list[ToolChange] = []
     e_of_line: dict[int, float] = {}
@@ -394,6 +404,10 @@ def _structure(text: str) -> dict:
                 toolchanges.append(change)
                 change = None
             elif tag == "FLUSH_START":
+                if conditionals:
+                    raise UnsupportedGcode(f"line {lineno}: a FLUSH block inside the firmware "
+                                           f"conditional block (M622) at line "
+                                           f"{conditionals[-1][0]}")
                 if change is None or flush is not None:
                     raise UnsupportedGcode(f"line {lineno}: a FLUSH_START outside a CP "
                                            "TOOLCHANGE block, or inside another FLUSH block")
@@ -413,7 +427,18 @@ def _structure(text: str) -> dict:
             raise UnsupportedGcode(f"line {lineno}: {command} (a manual filament change or a "
                                    "pause) is not read: the color printed after it is not "
                                    "known")
-        if command == "M82":
+        if conditionals and (command in ("M620", "M621") or TOOL.fullmatch(command)):
+            raise UnsupportedGcode(f"line {lineno}: {code!r} inside the firmware conditional "
+                                   f"block (M622) at line {conditionals[-1][0]}: the printer "
+                                   "may skip it, so the filament loaded after it is not known")
+        if command == "M622":
+            conditionals.append((lineno, relative_e))
+        elif command == "M623":
+            if not conditionals:
+                raise UnsupportedGcode(f"line {lineno}: M623 without its M622")
+            _, before = conditionals.pop()
+            relative_e = relative_e if relative_e == before else None
+        elif command == "M82":
             relative_e = False
         elif command == "M83":
             relative_e = True
@@ -469,6 +494,9 @@ def _structure(text: str) -> dict:
                     change.other_e_mm += e
     if m620 is not None:
         raise UnsupportedGcode(f"line {m620[1]}: an M620 without its M621 by the end")
+    if conditionals:
+        raise UnsupportedGcode(f"line {conditionals[-1][0]}: an M622 without its M623 by the "
+                               "end")
     if len(layer_z) != layer:
         raise UnsupportedGcode(f"layer block {layer} has no Z_HEIGHT")
     return {"layer_lines": layer_lines, "layer_z": layer_z, "end_line": end_line,
@@ -903,24 +931,52 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
                             f"{k + 1} (allowance {allowance:g} mm)")
         elif depth + OVERPRINT_BOUND_MM > allowance:
             near.append(f"prime tower layer {k + 1}: {depth:.3f} mm into the model")
+    # The flush (Codex review 5, finding 2): E-only, so it lays down no bead and no segment;
+    # the nozzle must be off the model, by more than a tool may print outside its body.
+    flushes, unknown = [], []
+    for k, lay in enumerate(mc.layers):
+        allowance = first_mm if k == 0 else tol_mm
+        bed = alignment.apply(silhouette[k])
+        for line, fx, fy in lay.flushes:
+            row = {"line": line, "layer": k + 1, "at_bed_mm": None, "from_model_mm": None,
+                   "allowance_mm": allowance}
+            flushes.append(row)
+            if fx is None or fy is None:
+                unknown.append(f"the flush at line {line} (layer {k + 1}) is at an unknown "
+                               "position")
+                continue
+            row["at_bed_mm"] = [fx, fy]
+            if bed.is_empty:
+                continue
+            d = float(shapely.distance(shapely.Point(fx, fy), bed))
+            row["from_model_mm"] = d
+            if d <= allowance:
+                problems.append(f"the flush at line {line} (layer {k + 1}) is at bed "
+                                f"({fx:g}, {fy:g}), {d:.3f} mm from the model (allowance "
+                                f"{allowance:g} mm)")
     if stray:
         problems.insert(0, f"tools {stray} print model features but print no body of the "
                            "plan")
     measured = {"angle_deg": angle, "tools": per_tool, "sampling_bound_mm": OVERPRINT_BOUND_MM,
                 "prime_tower_into_model_mm": max((d for d in tower_depth if d is not None),
                                                  default=None),
-                "within_sampling_bound": near, "problems": problems}
+                "flushes": flushes, "within_sampling_bound": near,
+                "unknown": unknown, "problems": problems}
     how = ("Each tool's model extrusion, as beads of their stated widths, against its own "
            "body's section at each layer's mid-height, the model placed as Task 2 measured "
            "(its bounding-box centre on the plate centre, not turned): "
            "the largest distance of its plastic outside the body to the body, against the "
-           "tolerance (plus elefant_foot_compensation on the first layer). ")
+           "tolerance (plus elefant_foot_compensation on the first layer); the prime "
+           "tower's beads into the model and each flush's nozzle position against the same "
+           "allowance. ")
     if problems:
         status = "FAIL"
         note = how + "; ".join(problems[:LISTED]) + (
             f"; and {len(problems) - LISTED} more" if len(problems) > LISTED else "")
-    elif near:
-        status, note = "UNKNOWN", how + "Within sampling uncertainty: " + "; ".join(near)
+    elif near or unknown:
+        status = "UNKNOWN"
+        note = how + "; ".join([*unknown, *(["Within sampling uncertainty: "
+                                             + "; ".join(near)] if near else [])])
     else:
         status, note = "PASS", how + "Every tool prints only its own body, on its layers."
     placement = CheckResult(TOOL_PLACEMENT, status, measured, threshold, TOLERANCE_RULE, note)

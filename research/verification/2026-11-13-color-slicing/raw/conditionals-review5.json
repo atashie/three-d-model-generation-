@@ -1,0 +1,402 @@
+[
+ {
+  "file": "artifacts//slice-runs//color2-oddie-60-keep-merge-blues-greens-v4-f64//face-up//plate_1.gcode",
+  "inside_conditionals": {
+   "start": {
+    "G90": 4,
+    "E-only extrusion": 1,
+    "G91": 2,
+    "M83": 1,
+    "extrusion with X/Y": 6
+   },
+   "skippable": {
+    "G92": 30,
+    "G90": 13,
+    "M83": 13
+   },
+   "toolchange": {
+    "G92": 9
+   }
+  },
+  "examples": {
+   "start / G90": [
+    "867: G90",
+    "1337: G90"
+   ],
+   "start / E-only extrusion": [
+    "966: G1 E10 F377.08"
+   ],
+   "start / G91": [
+    "1339: G91",
+    "1349: G91"
+   ],
+   "start / M83": [
+    "1342: M83"
+   ],
+   "start / extrusion with X/Y": [
+    "1343: G0 X128 E10  F904.991",
+    "1344: G0 X133 E.3742  F1508.32"
+   ],
+   "skippable / G92": [
+    "1414: G92 E0",
+    "1422: G92 E0"
+   ],
+   "skippable / G90": [
+    "3801: G90",
+    "4998: G90"
+   ],
+   "skippable / M83": [
+    "3802: M83",
+    "4999: M83"
+   ],
+   "toolchange / G92": [
+    "32152: G92 E0",
+    "40473: G92 E0"
+   ]
+  },
+  "flush_blocks": 6,
+  "flush_positions_xy": [
+   [
+    [
+     267.0,
+     128.0
+    ],
+    6
+   ]
+  ],
+  "flush_z": [
+   5.6,
+   5.8,
+   6.0
+  ],
+  "flush_inside_conditional": 0,
+  "flush_moves_with_xyz": 0
+ },
+ {
+  "file": "artifacts//slice-runs//color2-oddie-60-merge-blues-v3-f64//face-up//plate_1.gcode",
+  "inside_conditionals": {
+   "start": {
+    "G90": 4,
+    "E-only extrusion": 1,
+    "G91": 2,
+    "M83": 1,
+    "extrusion with X/Y": 6
+   },
+   "skippable": {
+    "G92": 30,
+    "G90": 13,
+    "M83": 13
+   },
+   "toolchange": {
+    "G92": 9
+   }
+  },
+  "examples": {
+   "start / G90": [
+    "867: G90",
+    "1337: G90"
+   ],
+   "start / E-only extrusion": [
+    "966: G1 E10 F377.08"
+   ],
+   "start / G91": [
+    "1339: G91",
+    "1349: G91"
+   ],
+   "start / M83": [
+    "1342: M83"
+   ],
+   "start / extrusion with X/Y": [
+    "1343: G0 X128 E10  F904.991",
+    "1344: G0 X133 E.3742  F1508.32"
+   ],
+   "skippable / G92": [
+    "1414: G92 E0",
+    "1422: G92 E0"
+   ],
+   "skippable / G90": [
+    "3781: G90",
+    "4977: G90"
+   ],
+   "skippable / M83": [
+    "3782: M83",
+    "4978: M83"
+   ],
+   "toolchange / G92": [
+    "16419: G92 E0",
+    "20273: G92 E0"
+   ]
+  },
+  "flush_blocks": 9,
+  "flush_positions_xy": [
+   [
+    [
+     267.0,
+     128.0
+    ],
+    9
+   ]
+  ],
+  "flush_z": [
+   5.6,
+   5.8,
+   6.0
+  ],
+  "flush_inside_conditional": 0,
+  "flush_moves_with_xyz": 0
+ },
+ {
+  "file": "artifacts//slice-runs//color2-roadie-tol30-60-drop-v3-f64//face-up//plate_1.gcode",
+  "inside_conditionals": {
+   "start": {
+    "G90": 4,
+    "E-only extrusion": 1,
+    "G91": 2,
+    "M83": 1,
+    "extrusion with X/Y": 6
+   },
+   "skippable": {
+    "G92": 30,
+    "G90": 13,
+    "M83": 13
+   },
+   "toolchange": {
+    "G92": 9
+   }
+  },
+  "examples": {
+   "start / G90": [
+    "867: G90",
+    "1337: G90"
+   ],
+   "start / E-only extrusion": [
+    "966: G1 E10 F377.08"
+   ],
+   "start / G91": [
+    "1339: G91",
+    "1350: G91"
+   ],
+   "start / M83": [
+    "1342: M83"
+   ],
+   "start / extrusion with X/Y": [
+    "1343: G0 X128 E10  F904.991",
+    "1344: G0 X133 E.3742  F1508.32"
+   ],
+   "skippable / G92": [
+    "1416: G92 E0",
+    "1424: G92 E0"
+   ],
+   "skippable / G90": [
+    "5645: G90",
+    "7907: G90"
+   ],
+   "skippable / M83": [
+    "5646: M83",
+    "7908: M83"
+   ],
+   "toolchange / G92": [
+    "28981: G92 E0",
+    "29437: G92 E0"
+   ]
+  },
+  "flush_blocks": 9,
+  "flush_positions_xy": [
+   [
+    [
+     267.0,
+     128.0
+    ],
+    9
+   ]
+  ],
+  "flush_z": [
+   5.6,
+   5.8,
+   6.0
+  ],
+  "flush_inside_conditional": 0,
+  "flush_moves_with_xyz": 0
+ },
+ {
+  "file": "artifacts//slice-runs//color2-roadie-tol30-60-keep-v4-f64//face-up//plate_1.gcode",
+  "inside_conditionals": {
+   "start": {
+    "G90": 4,
+    "E-only extrusion": 1,
+    "G91": 2,
+    "M83": 1,
+    "extrusion with X/Y": 6
+   },
+   "skippable": {
+    "G92": 30,
+    "G90": 13,
+    "M83": 13
+   },
+   "toolchange": {
+    "G92": 9
+   }
+  },
+  "examples": {
+   "start / G90": [
+    "867: G90",
+    "1338: G90"
+   ],
+   "start / E-only extrusion": [
+    "966: G1 E10 F377.08"
+   ],
+   "start / G91": [
+    "1340: G91",
+    "1350: G91"
+   ],
+   "start / M83": [
+    "1343: M83"
+   ],
+   "start / extrusion with X/Y": [
+    "1344: G0 X128 E10  F904.991",
+    "1345: G0 X133 E.3742  F1508.32"
+   ],
+   "skippable / G92": [
+    "1415: G92 E0",
+    "1423: G92 E0"
+   ],
+   "skippable / G90": [
+    "5657: G90",
+    "7921: G90"
+   ],
+   "skippable / M83": [
+    "5658: M83",
+    "7922: M83"
+   ],
+   "toolchange / G92": [
+    "33042: G92 E0",
+    "42459: G92 E0"
+   ]
+  },
+  "flush_blocks": 9,
+  "flush_positions_xy": [
+   [
+    [
+     267.0,
+     128.0
+    ],
+    9
+   ]
+  ],
+  "flush_z": [
+   5.6,
+   5.8,
+   6.0
+  ],
+  "flush_inside_conditional": 0,
+  "flush_moves_with_xyz": 0
+ },
+ {
+  "file": "artifacts//slice-runs//roadie-tol30-60x3-slice5c//plate_1.gcode",
+  "inside_conditionals": {
+   "start": {
+    "G90": 4,
+    "E-only extrusion": 1,
+    "G91": 2,
+    "M83": 1,
+    "extrusion with X/Y": 6
+   },
+   "skippable": {
+    "G92": 30,
+    "G90": 13,
+    "M83": 13
+   }
+  },
+  "examples": {
+   "start / G90": [
+    "846: G90",
+    "1319: G90"
+   ],
+   "start / E-only extrusion": [
+    "946: G1 E10 F377.08"
+   ],
+   "start / G91": [
+    "1321: G91",
+    "1332: G91"
+   ],
+   "start / M83": [
+    "1324: M83"
+   ],
+   "start / extrusion with X/Y": [
+    "1325: G0 X128 E10  F904.991",
+    "1326: G0 X133 E.3742  F1508.32"
+   ],
+   "skippable / G92": [
+    "2080: G92 E0",
+    "2088: G92 E0"
+   ],
+   "skippable / G90": [
+    "5713: G90",
+    "7799: G90"
+   ],
+   "skippable / M83": [
+    "5714: M83",
+    "7800: M83"
+   ]
+  },
+  "flush_blocks": 0,
+  "flush_positions_xy": [],
+  "flush_z": [],
+  "flush_inside_conditional": 0,
+  "flush_moves_with_xyz": 0
+ },
+ {
+  "file": "artifacts//slice-runs//oddie-60x3-slice5c//plate_1.gcode",
+  "inside_conditionals": {
+   "start": {
+    "G90": 4,
+    "E-only extrusion": 1,
+    "G91": 2,
+    "M83": 1,
+    "extrusion with X/Y": 6
+   },
+   "skippable": {
+    "G92": 30,
+    "G90": 13,
+    "M83": 13
+   }
+  },
+  "examples": {
+   "start / G90": [
+    "846: G90",
+    "1319: G90"
+   ],
+   "start / E-only extrusion": [
+    "946: G1 E10 F377.08"
+   ],
+   "start / G91": [
+    "1321: G91",
+    "1331: G91"
+   ],
+   "start / M83": [
+    "1324: M83"
+   ],
+   "start / extrusion with X/Y": [
+    "1325: G0 X128 E10  F904.991",
+    "1326: G0 X133 E.3742  F1508.32"
+   ],
+   "skippable / G92": [
+    "1692: G92 E0",
+    "1700: G92 E0"
+   ],
+   "skippable / G90": [
+    "3480: G90",
+    "4483: G90"
+   ],
+   "skippable / M83": [
+    "3481: M83",
+    "4484: M83"
+   ]
+  },
+  "flush_blocks": 0,
+  "flush_positions_xy": [],
+  "flush_z": [],
+  "flush_inside_conditional": 0,
+  "flush_moves_with_xyz": 0
+ }
+]
