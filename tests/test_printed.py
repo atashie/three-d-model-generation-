@@ -907,3 +907,59 @@ def test_an_e_word_in_a_skippable_block_before_any_m83_is_refused():
             + "M83\n" + layer(0.2, GOOD))
     with pytest.raises(UnsupportedGcode, match="absolute or unknown extrusion mode"):
         parse(text)
+
+
+# --- Conditional blocks, the firmware allowlist and E words (quality review) -------------
+
+COND_ONLY = ("; SKIPPABLE_START\n; SKIPTYPE: timelapse\nM622.1 S1\n"
+             "M1002 judge_flag timelapse_record_flag\nM622 J1\nG92 E0\nG1 X0 Y128.001 F18000\n"
+             "G1 X-48.2 F3000\nM400\nG92 E0\nG1 X0 F18000\nM623\n; SKIPPABLE_END\n")
+
+
+def test_the_position_after_a_conditional_only_skippable_block_is_unknown():
+    # As the real layer-2 block: only G1 moves, all inside M622 J1 ... M623. Whether the
+    # printer runs them is not known, so the position after the block is not either.
+    text = gcode([layer(0.2, GOOD),
+                  "; CHANGE_LAYER\n; Z_HEIGHT: 0.4\n; LAYER_HEIGHT: 0.2\nG1 Z.4\n" + COND_ONLY
+                  + "G1 X101 Y100 E.1\n"])
+    with pytest.raises(UnsupportedGcode, match="unknown position"):
+        parse(text)
+
+
+def test_the_position_after_m623_in_custom_is_unknown():
+    start = A1_START + "; FEATURE: Custom\nM622 J1\nG1 X100 Y100\nM623\n"
+    with pytest.raises(UnsupportedGcode, match="unknown position"):
+        parse(gcode([layer(0.2, "; FEATURE: Outer wall\n; LINE_WIDTH: 0.42\n"
+                                "G1 X101 Y100 E.1\n")], start=start))
+
+
+def test_the_position_after_skippable_end_is_unknown():
+    block = "; SKIPPABLE_START\nG1 X100 Y100\n; SKIPPABLE_END\n"
+    with pytest.raises(UnsupportedGcode, match="unknown position"):
+        parse(_two_layers(block, after="G1 Z.4\nG1 X101 Y100 E.1\n"))
+
+
+@pytest.mark.parametrize("command", ["G9999 Z5 P1", "G4 P100", "G29.3 S1", "G39.2"])
+def test_only_the_firmware_commands_seen_in_the_a1_template_are_accepted(command):
+    for text in (gcode([layer(0.2, GOOD)], start=A1_START.replace("G29.4\n",
+                                                                   f"G29.4\n{command}\n")),
+                 _two_layers(SKIP.replace("G39 S1\n", f"{command}\n"))):
+        with pytest.raises(UnsupportedGcode, match="not a firmware G-command"):
+            parse(text)
+
+
+@pytest.mark.parametrize("command", ["G380 E5", "G392 S0 E-1"])
+def test_a_firmware_command_with_an_e_word_is_refused(command):
+    with pytest.raises(UnsupportedGcode, match="E word"):
+        parse(gcode([layer(0.2, GOOD)], start=A1_START.replace("G29.4\n",
+                                                                f"G29.4\n{command}\n")))
+    with pytest.raises(UnsupportedGcode, match="E word"):
+        parse(_two_layers(SKIP.replace("G39 S1\n", f"{command}\n")))
+
+
+def test_a_relative_extrusion_from_an_unknown_position_is_refused_not_dropped():
+    # G91 left on by a block: X1 from an unknown position is nowhere known; it must not be
+    # silently skipped as a move to the same (unknown) place.
+    block = "; SKIPPABLE_START\nG91\nG1 Z1\nG1 Z-1\n; SKIPPABLE_END\n"
+    with pytest.raises(UnsupportedGcode, match="unknown position"):
+        parse(_two_layers(block, after="G1 Z.2\nG1 X1 Y0 E.1\n"))

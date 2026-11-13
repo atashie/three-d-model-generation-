@@ -86,19 +86,16 @@ G_COMMANDS = frozenset({"G0", "G1", "G2", "G3", "G17", "G21", "G28", "G29", "G90
 # checksums (*nn), lower case, leading zeros and words run together are not written by
 # OrcaSlicer, so they are refused rather than parsed.
 COMMAND = re.compile(r"(?:G|T)(?:0|[1-9][0-9]*)|M(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
-# In FEATURE "Custom" (the start and end code), a G-command may also have a ".n" subcode:
-# the A1 template G-code writes firmware commands such as G29.2, G39.3 and G39.4.
-CUSTOM_G_COMMAND = re.compile(r"G(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
-# Firmware G-commands seen in FEATURE "Custom" of the pinned A1 template G-code, on the
-# owner's Roadie and Oddie (research/verification/2026-11-13-a1-profile-include/): G392
-# (clog detection), G380 (move to a stop), G39.4, G29.2 (bed levelling on/off), G2814 and
-# G29.4. A firmware G-command in Custom is accepted, whichever it is, and makes the X, Y and
-# commanded Z unknown until the next absolute ones, as G28 does; its words must still be
-# finite plain numbers, and X and Y within plate.within_bound.
-# Except these, refused even in Custom, since they change how every later move is read:
-# arc planes (G18, G19), inches (G20), coordinate systems and offsets (G10, G53 to G59 and
-# their subcodes, G29.1, a Bambu Z offset) and any subcode of a command this parser follows
-# (G0.n to G3.n, G90.1 and G91.1 arc-centre modes, G92.n, ...), except G29's.
+# The firmware G-commands accepted, in FEATURE "Custom" (the start and end code) and in
+# SKIPPABLE blocks only: exactly those the pinned A1 template G-code writes, on the
+# owner's Roadie and Oddie (research/verification/2026-11-13-a1-profile-include/
+# scan-gcommands.txt): G392 (clog detection), G380 (move to a stop), G39, G39.3 and G39.4,
+# G29.2 and G29.4 (bed levelling) and G2814. Each makes the X, Y and commanded Z unknown
+# until the next absolute ones, as G28 does. Its words must be finite plain numbers, with
+# no E word, and its X and Y within plate.within_bound. Any other G-command outside
+# G_COMMANDS is refused, there as everywhere.
+FIRMWARE_G_COMMANDS = frozenset({"G392", "G380", "G39", "G39.3", "G39.4", "G29.2", "G29.4",
+                                 "G2814"})
 # The A1 time-lapse code is read as Custom is, between these two comment lines. They are
 # not OrcaSlicer's: they are lines 4 and 61 of the 63-line time_lapse_gcode in the pinned
 # template "Bambu Lab A1 0.4 nozzle template time_lapse_gcode.json" (sha256 febd4212...,
@@ -108,10 +105,10 @@ CUSTOM_G_COMMAND = re.compile(r"G(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
 # runs between model layers, a block may not extrude: a G0 to G3 with an E word is refused
 # unless the extrusion mode is relative (M83) and E <= 0 (a retraction). A block must not
 # hold a FEATURE line, and the two lines must pair; the FEATURE in force is unchanged by it.
+# The firmware runs its M622 ... M623 conditional blocks or not, so after every M623, and
+# after every SKIPPABLE_END, the X, Y and commanded Z are unknown.
 SKIPPABLE_START = "SKIPPABLE_START"
 SKIPPABLE_END = "SKIPPABLE_END"
-CUSTOM_REFUSED_G = frozenset({"G10", "G18", "G19", "G20", "G53", "G54", "G55", "G56", "G57",
-                              "G58", "G59"})
 # A word: an upper-case letter and a plain decimal number (no exponent, nan or inf).
 WORD = re.compile(r"([A-Z])(-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))")
 CONNECTIVITY = "F3.printed_connectivity"
@@ -358,11 +355,10 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
 
     Every line that is not a comment must start with a command matching COMMAND, and a
     G-command must be in G_COMMANDS; anything else is refused, never skipped. The one
-    exception is FEATURE "Custom", the start and end code: there a G-command outside
-    G_COMMANDS (with an optional ".n" subcode, CUSTOM_G_COMMAND) is a firmware command,
-    accepted unless it is in CUSTOM_REFUSED_G (or G29.1, or a subcode of a followed command
-    other than G29), and it makes X, Y and the commanded Z unknown until the next absolute
-    ones, as G28 does. Its words must be finite plain numbers and its X and Y within
+    exception is FEATURE "Custom", the start and end code: there one of
+    FIRMWARE_G_COMMANDS (the firmware G-commands the A1 template writes) is accepted, and
+    it makes X, Y and the commanded Z unknown until the next absolute ones, as G28 does.
+    Its words must be finite plain numbers, with no E word, and its X and Y within
     plate.within_bound. Moves in Custom (relative or R-form arcs, G0 with E) are followed
     for the position only; none is analysed. The A1 time-lapse code, between the comment
     lines "; SKIPPABLE_START" and "; SKIPPABLE_END" (SKIPPABLE_START), is read as Custom is
@@ -370,8 +366,9 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     word unless E <= 0 in relative mode (M83), and leaves the FEATURE in force unchanged;
     its moves set the position only. The firmware's conditional blocks (M622 ... M623, in
     Custom and SKIPPABLE blocks) are read as if every line runs: their moves set the
-    position only, so whichever branch the printer takes, a model extrusion still needs an
-    absolute X, Y and Z after them. M- and
+    position only, and after each M623 and each SKIPPABLE_END the X, Y and commanded Z are
+    unknown, so whichever branch the printer takes, a model extrusion needs an absolute X,
+    Y and Z after them. M- and
     T-commands are ignored except M82 and M83, which set the extrusion mode, and the
     refused ones below. The others in this G-code set temperatures, speeds, fans,
     progress, sounds, lights, calibrations and the A1's own functions, not where model
@@ -416,6 +413,7 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                     raise UnsupportedGcode(f"line {lineno}: SKIPPABLE_END without a "
                                            "SKIPPABLE_START")
                 skippable = None
+                x = y = z_cmd = None           # whether the block ran is not known
             elif tag.startswith("FEATURE:") and skippable is not None:
                 raise UnsupportedGcode(f"line {lineno}: a FEATURE inside the SKIPPABLE block "
                                        f"opened at line {skippable}")
@@ -460,7 +458,9 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
         if command == "M221" and _words(code, lineno).get("S") != 100:
             raise UnsupportedGcode(f"line {lineno}: {code!r} sets the flow to other than "
                                    "100%")
-        if command == "M82":
+        if command == "M623":                  # the end of a firmware conditional block
+            x = y = z_cmd = None
+        elif command == "M82":
             relative_e = False
         elif command == "M83":
             relative_e = True
@@ -490,8 +490,11 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                     z_cmd = None if z_cmd is None else z_cmd + words["Z"]
                 else:
                     z_cmd = words["Z"]
-            moves = (nx, ny) != (x, y) or (command in ("G2", "G3") and "E" in words)
             e = words.get("E", 0.0)
+            # A move with X or Y from or to an unknown position is a move, not a stay in the
+            # same (unknown) place: with E > 0 it is refused below, never dropped.
+            moves = ((nx, ny) != (x, y) or (command in ("G2", "G3") and "E" in words)
+                     or (("X" in words or "Y" in words) and None in (x, y, nx, ny)))
             if skippable is not None:
                 if "E" in words and relative_e is not True:
                     raise UnsupportedGcode(f"{where}: an E word inside a SKIPPABLE block in "
@@ -600,18 +603,17 @@ def _check_amount(where, e, length, sweep, width, height, bridge, flow: Flow) ->
 
 
 def _check_firmware(command: str, code: str, lineno: int, plate: Plate) -> None:
-    """Refuse a firmware G-command in Custom that this parser cannot follow as an unknown
-    position: a malformed one, a CUSTOM_REFUSED_G one, a subcode of a followed command
-    other than G29's, bad words, or an X or Y beyond plate.within_bound."""
-    if CUSTOM_G_COMMAND.fullmatch(command) is None:
-        raise UnsupportedGcode(f"line {lineno}: {command!r} in {code!r} is not a command "
-                               "as OrcaSlicer writes it")
-    base, _, sub = command.partition(".")
-    if (base in CUSTOM_REFUSED_G or command == "G29.1"
-            or (sub and base in G_COMMANDS and base != "G29")):
-        raise UnsupportedGcode(f"line {lineno}: {command} changes how later moves are read, "
-                               "which this check does not follow")
+    """Refuse a G-command in Custom or a SKIPPABLE block that is not one of
+    FIRMWARE_G_COMMANDS, or has bad words, an E word, or an X or Y beyond
+    plate.within_bound."""
+    if command not in FIRMWARE_G_COMMANDS:
+        raise UnsupportedGcode(f"line {lineno}: {command!r} in {code!r} is not a firmware "
+                               "G-command seen in the A1 template G-code, nor one this check "
+                               "reads")
     words = _words(code, lineno)
+    if "E" in words:
+        raise UnsupportedGcode(f"line {lineno}: {code!r} is a firmware command with an E word, "
+                               "which this check does not follow")
     cx, cy = plate.centre
     if not plate.within_bound(words.get("X", cx), words.get("Y", cy)):
         raise UnsupportedGcode(f"line {lineno} ({code!r}): an X or Y beyond the plate by "
