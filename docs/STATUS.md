@@ -216,8 +216,18 @@ passed. These commits are pushed; for CI see above.
      writer's (stored owner `colored.json` files lack the new `model_equal` field until
      re-run; `colorflat-3` not bumped, as for Codex review 4). Reviewed and approved.
    - **For Task 8 docs:** describe the byte comparison and the new check.
-   - **Next:** Task 5, the G-code readers and the `F6.color_changes`,
-     `F6.tool_placement` and `F6.filaments_used` checks.
+   - **CI for Tasks 2–4:** passed on all three OSes for `9742410` (run 43462365857).
+   - **Task 5 done** (`src/tdmg/color_gcode.py`): a strict multicolor G-code reader and
+     `F6.color_changes`, `F6.tool_placement` (also: the prime tower stays off the model)
+     and `F6.filaments_used`. All three PASS on the 8 Task 2 G-codes, with every number
+     equal to the Task 2 record. Controller decisions after review, in the plan:
+     - every F3 result (silhouette and per tool) is required until the owner's Task 7
+       decision, so all 8 are NOT CERTIFIED for now. Biggest gaps: Roadie keep's outline
+       color (up to 7.6 mm), Oddie keep's T2 (up to 10.3 mm); the silhouette's
+       connectivity FAILs on every color layer (neighbouring beads meet edge to edge);
+     - color slices are checked at the plate placement only (no quarter turns), so a
+       color swap on a symmetric model FAILs.
+   - **Next:** Task 6, wiring into `tdmg slice`.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
