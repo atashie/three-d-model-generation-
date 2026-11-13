@@ -1,7 +1,7 @@
-Run 2026-11-12 on the Windows PC (working tree after the Codex review 3 fixes, colorflat-2; runs re-made with that code): uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
+Run 2026-11-12 on the Windows PC at c937c19 (colorflat-3: model.3mf and palette.json added; runs re-made with that code): uv run python research/verification/2026-11-12-color-geometry/summarize_colored.py
 
 == roadie-tol30-60-drop-v3-f64
-  colorflat_id fa6eb82045cb47adfd2ea0b56b6d74e5de81ef4b9444950a415ad8b41308acf6; verdict NOT CERTIFIED
+  colorflat_id ec79a684fddc7733f2d7065d9db3155a2d8b5aeacd2d46d863637abcb5e4616f; verdict NOT CERTIFIED
   non-PASS checks (all bodies and routes): ['F3.thin_regions UNKNOWN', 'F6.slicer UNKNOWN']
   ams  ams-base base  #f60606   64184 triangles, footprint 759.25 mm^2
   ams  ams-color-1-f5f5f5 inlay #f5f5f5   19548 triangles, footprint 211.51 mm^2
@@ -10,20 +10,22 @@ Run 2026-11-12 on the Windows PC (working tree after the Codex review 3 fixes, c
   glue glue-base base  #f60606   61358 triangles, footprint 759.25 mm^2
   glue glue-color-1-f5f5f5 pieces #f5f5f5   40476 triangles, footprint 176.46 mm^2
   glue glue-color-2-f0f10a pieces #f0f10a   16956 triangles, footprint 83.37 mm^2
+  model.3mf: 884882 bytes; F2.export_3mf_matches_bodies PASS
   folds (label, into, region mm^2): [(1, 0, 3.85), (3, 1, 4.18)]
   glue pieces: 7, smallest 6.10 mm^2, largest 84.61 mm^2; leftover to base 2.65 mm^2
   warnings: ['color 3 #451812 has no glue piece: all of its regions are too small for a piece (rule color.glue.min_piece_side_mm) and were folded, so the glue model does not use it']
 == roadie-tol30-60-keep-v4-f64
-  colorflat_id 4221f9c8867f756035cee7d72c252e3d34603539b03ecaa47d2109c5b2c6ea6a; verdict NOT CERTIFIED
+  colorflat_id 14b77bfb5bc3bfff4441acf66bc6ce5dd3277f23913e3fb6ca77efa9aba38316; verdict NOT CERTIFIED
   non-PASS checks (all bodies and routes): ['F3.thin_regions UNKNOWN', 'F6.slicer UNKNOWN']
   ams  ams-base base  #f60606  104328 triangles, footprint 759.25 mm^2
   ams  ams-color-1-451812 inlay #451812   86400 triangles, footprint 244.65 mm^2
   ams  ams-color-2-f5f5f5 inlay #f5f5f5   17156 triangles, footprint 150.34 mm^2
   ams  ams-color-3-f0f10a inlay #f0f10a    6660 triangles, footprint 67.19 mm^2
+  model.3mf: 2191835 bytes; F2.export_3mf_matches_bodies PASS
   glue: not built - the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)
   warnings: ['glue version not built: the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)']
 == oddie-60-merge-blues-v3-f64
-  colorflat_id 008c21093266eb5f5e745bd071b64002fc20e03ccdca75d6e36bf15d78b29d1d; verdict NOT CERTIFIED
+  colorflat_id b0eadcfa57db2706670d1f2e933fc41bbb593edf41230f5745f639d1d5cd4358; verdict NOT CERTIFIED
   non-PASS checks (all bodies and routes): ['F3.thin_regions UNKNOWN', 'F6.slicer UNKNOWN']
   ams  ams-base base  #25561b   58428 triangles, footprint 1677.88 mm^2
   ams  ams-color-1-547e9d inlay #547e9d   17164 triangles, footprint 585.72 mm^2
@@ -33,15 +35,17 @@ Run 2026-11-12 on the Windows PC (working tree after the Codex review 3 fixes, c
   glue glue-color-1-547e9d pieces #547e9d   26184 triangles, footprint 568.13 mm^2
   glue glue-color-2-48a835 pieces #48a835   39132 triangles, footprint 391.72 mm^2
   glue glue-color-3-dd4f47 pieces #dd4f47    4144 triangles, footprint 23.96 mm^2
+  model.3mf: 1017762 bytes; F2.export_3mf_matches_bodies PASS
   folds (label, into, region mm^2): [(3, 1, 3.62), (3, 1, 4.44)]
   glue pieces: 5, smallest 23.96 mm^2, largest 568.13 mm^2; leftover to base 0.00 mm^2
   warnings: []
 == oddie-60-keep-merge-blues-greens-v4-f64
-  colorflat_id 9bc826502f22d432e2250c5949f4ce0229e32e834ccdea2cc8c77dca7547157f; verdict NOT CERTIFIED
+  colorflat_id 77c596ae756a68cabfe9300ec6b5c70798c11807f694f04e29325965565b0b6b; verdict NOT CERTIFIED
   non-PASS checks (all bodies and routes): ['F3.thin_regions UNKNOWN', 'F6.slicer UNKNOWN']
   ams  ams-base base  #25561b  155462 triangles, footprint 1677.88 mm^2
   ams  ams-color-1-547e9d inlay #547e9d   25156 triangles, footprint 523.63 mm^2
   ams  ams-color-2-0d100d inlay #0d100d  117684 triangles, footprint 236.31 mm^2
   ams  ams-color-3-dd4f47 inlay #dd4f47    4284 triangles, footprint 32.30 mm^2
+  model.3mf: 3091874 bytes; F2.export_3mf_matches_bodies PASS
   glue: not built - the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)
   warnings: ['glue version not built: the plan keeps the outline (outlines: keep with an outline family, so an outline band is drawn), and a kept outline is unrealistic to glue on (owner decision, Task 7 review); for a glue print, use a plan made with outlines: drop (tdmg colors --outlines drop)']

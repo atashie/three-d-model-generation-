@@ -34,6 +34,9 @@ def main():
         for b in rec["bodies"]:
             print(f"  {b['route']:4} {b['name']:8} {b['role']:5} {b['hex']} "
                   f"{b['triangles']:7d} triangles, footprint {b['footprint_area_mm2']:.2f} mm^2")
+        three = next(c for c in rec["assembly"]["ams"] if c["id"] == "F2.export_3mf_matches_bodies")
+        size = (ROOT / "artifacts" / "colored-runs" / plan / "model.3mf").stat().st_size
+        print(f"  model.3mf: {size} bytes; {three['id']} {three['status']}")
         if not rec["glue"]["built"]:
             print(f"  glue: not built - {rec['glue']['reason']}")
             print(f"  warnings: {rec['warnings']}")
