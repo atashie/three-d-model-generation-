@@ -757,10 +757,13 @@ def test_face_warnings_are_recorded_and_named():
               CheckResult("F3.printed_connectivity.T1", "PASS", None, None, None, "")]
     warnings = cs.face_warnings(checks, fmap)
     assert [w["text"] for w in warnings] == [
-        ("color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (for "
-         "example thin areas the slicer skips, or a part left unprinted)"),
-        ("printed colors meet edge to edge, so the connectivity check fails (a warning by "
-         "the owner's decision): the whole model, base #f60606 (filament 1)")]
+        ("color 1 #451812 (filament 2): edge coverage FAIL, edges up to 4.99 mm from its "
+         "printed lines (for example thin areas the slicer skips, or a part left "
+         "unprinted)"),
+        ("connectivity check FAIL for the whole model, base #f60606 (filament 1) (the "
+         "printed lines split into more parts than the model; on the owner's plans this is "
+         "where two colors' lines meet edge to edge, see "
+         "research/verification/2026-11-13-color-slicing/owner-review.txt)")]
     assert warnings[1]["ids"] == ["F3.printed_connectivity", "F3.printed_connectivity.T0"]
     # The silhouette's coverage is required, not a warning: it is not listed.
     assert all("F3.edge_coverage" not in w["ids"] for w in warnings)
@@ -793,9 +796,9 @@ def test_the_roadie_drop_plan_is_printable_face_up(tmp_path):
     assert up["certification"] == "PRINTABLE", up["certification"]
     assert up["summary"]["changes"] == 9
     texts = [w["text"] for w in up["warnings"]]
-    assert any(t.startswith("printed colors meet edge to edge, so the connectivity check "
-                            "fails") for t in texts)
-    assert any(t.startswith("base #f60606 (filament 1): edges up to 0.28 mm") for t in texts)
+    assert any(t.startswith("connectivity check FAIL for the whole model") for t in texts)
+    assert any(t.startswith("base #f60606 (filament 1): edge coverage ")
+               and "edges up to 0.28 mm" in t for t in texts)
 
 
 def test_a_failed_warning_neither_blocks_nor_sets_exit_1(colored, orca, tmp_path,
@@ -817,8 +820,8 @@ def test_a_failed_warning_neither_blocks_nor_sets_exit_1(colored, orca, tmp_path
     lines = r.stdout.splitlines()
     assert "face-up: PRINTABLE" in lines
     assert cs.COLOR_DO_NOT_PRINT not in lines
-    assert any(line.startswith("  warning: printed colors meet edge to edge, so the "
-                               "connectivity check fails") for line in lines)
+    assert any(line.startswith("  warning: connectivity check FAIL for the whole model")
+               for line in lines)
     rec = json.loads((out / "slice.json").read_bytes())
     assert rec["faces"]["up"]["gcode"]["quarantined"] is False
 
@@ -832,7 +835,73 @@ def test_the_warning_texts_do_not_name_an_unmeasured_cause():
               CheckResult("F3.printed_connectivity.T1", "FAIL", None, None, None, "")]
     texts = [w["text"] for w in cs.face_warnings(checks, fmap)]
     assert texts == [
-        ("color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (for "
-         "example thin areas the slicer skips, or a part left unprinted)"),
-        ("printed colors meet edge to edge, so the connectivity check fails (a warning by "
-         "the owner's decision): the whole model, color 1 #451812 (filament 2)")]
+        ("color 1 #451812 (filament 2): edge coverage FAIL, edges up to 4.99 mm from its "
+         "printed lines (for example thin areas the slicer skips, or a part left "
+         "unprinted)"),
+        ("connectivity check FAIL for the whole model, color 1 #451812 (filament 2) (the "
+         "printed lines split into more parts than the model; on the owner's plans this is "
+         "where two colors' lines meet edge to edge, see "
+         "research/verification/2026-11-13-color-slicing/owner-review.txt)")]
+
+
+# --- Codex review 5, findings 3 and 4 ---------------------------------------------------------
+
+def test_a_glue_record_missing_its_piece_plates_is_refused(folder, tmp_path, orca):
+    """Codex finding 3: both glue-piece rows deleted, the report intact."""
+    def drop_pieces(r):
+        r["bodies"] = [b for b in r["bodies"]
+                       if not (b["route"] == "glue" and b["role"] == "pieces")]
+    _edit(folder, drop_pieces)
+    _refused(folder, tmp_path, orca(), "glue report has pieces for colors .* with no glue "
+                                       "plate")
+
+
+def test_a_glue_plate_for_a_color_without_pieces_is_refused(folder, tmp_path, orca):
+    def no_pieces(r):
+        report = r["glue"]["report"]
+        index = next(b["index"] for b in r["bodies"]
+                     if b["route"] == "glue" and b["role"] == "pieces")
+        report["colors"] = [c for c in report["colors"] if c["index"] != index]
+        report["pieces"] = [p for p in report["pieces"] if p["index"] != index]
+    _edit(folder, no_pieces)
+    _refused(folder, tmp_path, orca(), "glue report has no pieces for")
+
+
+def _three_tool_warnings(text):
+    from test_color_gcode import bodies, run
+
+    from tdmg.orca_input import filament_map
+    checks, _ = run(text)
+    shells = bodies()
+    return cs.face_warnings(list(checks.values()), filament_map(shells)), shells
+
+
+def test_a_failed_connectivity_warning_keeps_its_status_and_names_no_cause():
+    """Codex finding 4: the 'dot inlay' case, a mostly missing inlay."""
+    import shapely
+    from test_color_gcode import RING, SQUARE, B, text_of
+    warnings, _ = _three_tool_warnings(
+        text_of([SQUARE], [RING, 1, shapely.box(4, 9, 5, 10), 2, B]))
+    conn = [w for w in warnings if w["ids"][0].startswith("F3.printed_connectivity")]
+    assert len(conn) == 1
+    text = conn[0]["text"]
+    assert text.startswith("connectivity check FAIL for the whole model")
+    assert "split into more parts than the model" in text
+    assert "edge to edge" in text and "on the owner's plans" in text
+    assert not text.startswith("printed colors meet edge to edge")
+    assert conn[0]["status"] == ["FAIL"]
+    cov = [w for w in warnings if w["ids"][0].startswith("F3.edge_coverage")]
+    assert cov and cov[0]["text"].startswith("color 1 ") and "edge coverage FAIL" in \
+        cov[0]["text"]
+
+
+def test_an_unknown_connectivity_warning_gives_the_reason():
+    """Codex finding 4: an unsupported G4 X1 leaves the checks UNKNOWN."""
+    from test_color_gcode import GOOD, text_of
+    text = text_of(**GOOD).replace("; CHANGE_LAYER", "G4 X1\n; CHANGE_LAYER", 1)
+    warnings, _ = _three_tool_warnings(text)
+    conn = [w for w in warnings if w["ids"][0].startswith("F3.printed_connectivity")]
+    assert len(conn) == 1 and conn[0]["status"] == ["UNKNOWN"]
+    assert conn[0]["text"].startswith("connectivity check UNKNOWN for the whole model")
+    assert "not measured" in conn[0]["text"]
+    assert "edge to edge" not in conn[0]["text"]

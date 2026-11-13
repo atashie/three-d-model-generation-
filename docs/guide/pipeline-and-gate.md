@@ -402,10 +402,12 @@ slicer's own report.
   - **Required:** the whole model's `F3.edge_coverage` and `F3.edge_overprint`, and each
     tool's `F3.edge_overprint`.
   - **Warnings** (recorded in the face's `warnings`, never blocking): each tool's
-    `F3.edge_coverage`, and every `F3.printed_connectivity`. Colors that meet edge to
-    edge always fail connectivity: in the bead model, the beads of two colors leave a
-    hairline gap (up to about 0.03 mm). A thin line the slicer skips, such as a kept
-    outline line, shows as a coverage warning.
+    `F3.edge_coverage`, and every `F3.printed_connectivity`. Each warning keeps its
+    status (FAIL or UNKNOWN). On the owner's plans, connectivity FAILs where two colors'
+    lines meet edge to edge: in the bead model their beads leave a hairline gap (up to
+    about 0.03 mm). It also FAILs when a color is left mostly unprinted, so the warning
+    states the measured mismatch, not a cause. A thin line the slicer skips, such as a
+    kept outline line, shows as a coverage warning.
   - **The trade-off:** a color left partly unprinted inside the model (half an inlay)
     only warns. Half of the base's first layer is still caught. The owner accepted this.
 - **`F6.portability`:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded
@@ -435,9 +437,12 @@ required check passes: the colored record's AMS checks, the checks above and
 CERTIFIED.
 
 **Message:** per face, the verdict, the changes, flush, prime tower and time, and each
-warning that does not pass. For example: "warning: color 1 #451812 (filament 2): edges up
-to 4.99 mm from its printed lines (for example thin areas the slicer skips, or a part left
-unprinted)". Then the filament for each color, and what to print:
+warning that does not pass. For example: "warning: color 1 #451812 (filament 2): edge
+coverage FAIL, edges up to 4.99 mm from its printed lines (for example thin areas the
+slicer skips, or a part left unprinted)", and one connectivity line per face: "warning:
+connectivity check FAIL for the whole model, … (the printed lines split into more parts
+than the model; …)", or "connectivity check UNKNOWN for …: <the check's reason>". Then the
+filament for each color, and what to print:
 - face up PRINTABLE: "to print face up: open model.3mf in Bambu Studio (it is face up)
   and give each color the filament listed; …";
 - only face down PRINTABLE: the message says to turn `model.3mf` over;

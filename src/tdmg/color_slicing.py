@@ -244,8 +244,9 @@ def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
             continue
         gap = (c.measured or {}).get("max_gap_mm") if isinstance(c.measured, dict) else None
         who = _who(f)
-        text = (f"{who}: edges up to {gap:.2f} mm from its printed lines (for example thin "
-                "areas the slicer skips, or a part left unprinted)" if gap is not None else
+        text = (f"{who}: edge coverage {c.status}, edges up to {gap:.2f} mm from its "
+                "printed lines (for example thin areas the slicer skips, or a part left "
+                "unprinted)" if gap is not None else
                 f"{who}: edge coverage {c.status} ({c.note.split(';')[0]})")
         out.append({"ids": [c.id], "status": c.status, "filament": f["filament"],
                     "index": f["index"], "hex": f["hex"], "max_gap_mm": gap,
@@ -254,13 +255,23 @@ def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
                                          for t in range(len(fmap))))
             if i in by and i in warn and by[i].status != "PASS"]
     if conn:
-        where = ["the whole model" if i == CONNECTIVITY else
-                 _who(fmap[int(i.rsplit(".T", 1)[1])]) for i in conn]
+        def where(ids):
+            return ", ".join("the whole model" if i == CONNECTIVITY else
+                             _who(fmap[int(i.rsplit(".T", 1)[1])]) for i in ids)
+        failed = [i for i in conn if by[i].status == "FAIL"]
+        unknown = [i for i in conn if by[i].status == "UNKNOWN"]
+        parts = []
+        if failed:
+            parts.append(f"connectivity check FAIL for {where(failed)} (the printed lines "
+                         "split into more parts than the model; on the owner's plans this "
+                         "is where two colors' lines meet edge to edge, see "
+                         "research/verification/2026-11-13-color-slicing/owner-review.txt)")
+        if unknown:
+            reason = by[unknown[0]].note.split(";")[0]
+            parts.append(f"connectivity check UNKNOWN for {where(unknown)}: {reason}")
         out.append({"ids": conn, "status": sorted({by[i].status for i in conn}),
                     "filament": None, "index": None, "hex": None, "max_gap_mm": None,
-                    "text": "printed colors meet edge to edge, so the connectivity check "
-                            "fails (a warning by the owner's decision): "
-                            + ", ".join(where)})
+                    "text": "; ".join(parts)})
     return out
 
 
@@ -696,6 +707,13 @@ def glue_piece_counts(record: dict) -> dict[str, int]:
     if dup or {k: v for k, v in per_color.items() if v} != listed:
         raise SlicerError(f"{COLORED_RECORD}: the glue report's pieces per color "
                           f"{per_color} disagree with its piece list {listed}")
+    plates = {row["index"] for row in record["bodies"]
+              if row["route"] == "glue" and row["role"] == "pieces"}
+    reported = {k for k, v in per_color.items() if v}
+    if reported - plates:
+        raise SlicerError(f"{COLORED_RECORD}: the glue report has pieces for colors "
+                          f"{sorted(reported - plates)} with no glue plate row (a glue "
+                          "print needs every plate)")
     out = {}
     for row in record["bodies"]:
         if row["route"] != "glue":
