@@ -313,6 +313,7 @@ and 7). The full guide follows in Task 8; in short:
   only face down is PRINTABLE, the message says to turn it over; when both are, it says
   that the owner's default is face up. Each warning that does not pass is printed, for
   example "warning: color 1 #451812 (filament 2): edges up to 4.99 mm from its printed
-  lines (thin areas the slicer skips)".
+  lines (for example thin areas the slicer skips, or a part left unprinted)". Warnings
+  never block a face or set exit code 1; only a required check that FAILs does.
 
 The owner's four plans: `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.

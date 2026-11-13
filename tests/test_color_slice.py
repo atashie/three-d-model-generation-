@@ -757,9 +757,10 @@ def test_face_warnings_are_recorded_and_named():
               CheckResult("F3.printed_connectivity.T1", "PASS", None, None, None, "")]
     warnings = cs.face_warnings(checks, fmap)
     assert [w["text"] for w in warnings] == [
-        ("color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (thin "
-        "areas the slicer skips)"),
-        "printed colors meet edge to edge (connectivity check, information)"]
+        ("color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (for "
+         "example thin areas the slicer skips, or a part left unprinted)"),
+        ("printed colors meet edge to edge, so the connectivity check fails (a warning by "
+         "the owner's decision): the whole model, base #f60606 (filament 1)")]
     assert warnings[1]["ids"] == ["F3.printed_connectivity", "F3.printed_connectivity.T0"]
     # The silhouette's coverage is required, not a warning: it is not listed.
     assert all("F3.edge_coverage" not in w["ids"] for w in warnings)
@@ -792,5 +793,46 @@ def test_the_roadie_drop_plan_is_printable_face_up(tmp_path):
     assert up["certification"] == "PRINTABLE", up["certification"]
     assert up["summary"]["changes"] == 9
     texts = [w["text"] for w in up["warnings"]]
-    assert "printed colors meet edge to edge (connectivity check, information)" in texts
+    assert any(t.startswith("printed colors meet edge to edge, so the connectivity check "
+                            "fails") for t in texts)
     assert any(t.startswith("base #f60606 (filament 1): edges up to 0.28 mm") for t in texts)
+
+
+def test_a_failed_warning_neither_blocks_nor_sets_exit_1(colored, orca, tmp_path,
+                                                         monkeypatch):
+    """A warning check that FAILs (here the silhouette's connectivity) is printed, but a
+    PRINTABLE face is not followed by "do not print" and the exit code stays 0."""
+    _all_pass(monkeypatch, ("up",))
+    passing = cs.color_slice_checks
+
+    def connectivity_fails(*a, **kw):
+        checks, record = passing(*a, **kw)
+        return [CheckResult(c.id, "FAIL", c.measured, c.threshold, c.rule, c.note)
+                if c.id == "F3.printed_connectivity" else c for c in checks], record
+    monkeypatch.setattr(cs, "color_slice_checks", connectivity_fails)
+    out = tmp_path / "s"
+    r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
+                            str(orca())])
+    assert r.exit_code == 0, r.output
+    lines = r.stdout.splitlines()
+    assert "face-up: PRINTABLE" in lines
+    assert cs.COLOR_DO_NOT_PRINT not in lines
+    assert any(line.startswith("  warning: printed colors meet edge to edge, so the "
+                               "connectivity check fails") for line in lines)
+    rec = json.loads((out / "slice.json").read_bytes())
+    assert rec["faces"]["up"]["gcode"]["quarantined"] is False
+
+
+def test_the_warning_texts_do_not_name_an_unmeasured_cause():
+    fmap = [{"filament": 1, "role": "base", "index": 0, "hex": "#f60606"},
+            {"filament": 2, "role": "inlay", "index": 1, "hex": "#451812"}]
+    checks = [CheckResult("F3.edge_coverage.T1", "FAIL", {"max_gap_mm": 4.994}, None, None,
+                          ""),
+              CheckResult("F3.printed_connectivity", "FAIL", None, None, None, ""),
+              CheckResult("F3.printed_connectivity.T1", "FAIL", None, None, None, "")]
+    texts = [w["text"] for w in cs.face_warnings(checks, fmap)]
+    assert texts == [
+        ("color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (for "
+         "example thin areas the slicer skips, or a part left unprinted)"),
+        ("printed colors meet edge to edge, so the connectivity check fails (a warning by "
+         "the owner's decision): the whole model, color 1 #451812 (filament 2)")]

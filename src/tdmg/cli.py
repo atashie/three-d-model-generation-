@@ -448,8 +448,9 @@ def slice_(
     F6.portability then reads model.3mf.
 
     Exit codes:
-      0  files written, and no check FAILed (UNKNOWN checks allowed)
-      1  files written, and at least one check FAILed
+      0  files written, and no required check FAILed (UNKNOWN checks
+         and warnings allowed)
+      1  files written, and a required check FAILed
       2  input or setup error (including a missing or unverified
          slicer): nothing is written; or an I/O failure while
          writing, which can leave a folder without slice.json:
@@ -472,9 +473,11 @@ def slice_(
         raise typer.Exit(2) from None
     if colored:
         _color_slice_output(rec, out)
-        checks = [c for f in rec["faces"].values() for c in f["checks"]]
-        checks += [c for p in rec["glue"]["plates"].values() for c in p["checks"]]
-        if any(c["status"] == "FAIL" for c in checks + [rec["portability"]["check"]]):
+        # Only a required check counts: a warning that FAILs is printed, never blocking.
+        parts = [*rec["faces"].values(), *rec["glue"]["plates"].values()]
+        failed = any(c["status"] == "FAIL" and c["id"] in p["required_checks"]
+                     for p in parts for c in p["checks"])
+        if failed or rec["portability"]["check"]["status"] == "FAIL":
             typer.echo(COLOR_DO_NOT_PRINT)
             raise typer.Exit(1)
         return

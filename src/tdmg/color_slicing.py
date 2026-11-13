@@ -242,10 +242,9 @@ def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
         if c is None or c.id not in warn or c.status == "PASS":
             continue
         gap = (c.measured or {}).get("max_gap_mm") if isinstance(c.measured, dict) else None
-        who = ("base" if f["role"] == "base" else f"color {f['index']}") + \
-            f" {f['hex']} (filament {f['filament']})"
-        text = (f"{who}: edges up to {gap:.2f} mm from its printed lines (thin areas the "
-                "slicer skips)" if gap is not None else
+        who = _who(f)
+        text = (f"{who}: edges up to {gap:.2f} mm from its printed lines (for example thin "
+                "areas the slicer skips, or a part left unprinted)" if gap is not None else
                 f"{who}: edge coverage {c.status} ({c.note.split(';')[0]})")
         out.append({"ids": [c.id], "status": c.status, "filament": f["filament"],
                     "index": f["index"], "hex": f["hex"], "max_gap_mm": gap,
@@ -254,11 +253,20 @@ def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
                                          for t in range(len(fmap))))
             if i in by and i in warn and by[i].status != "PASS"]
     if conn:
+        where = ["the whole model" if i == CONNECTIVITY else
+                 _who(fmap[int(i.rsplit(".T", 1)[1])]) for i in conn]
         out.append({"ids": conn, "status": sorted({by[i].status for i in conn}),
                     "filament": None, "index": None, "hex": None, "max_gap_mm": None,
-                    "text": "printed colors meet edge to edge (connectivity check, "
-                            "information)"})
+                    "text": "printed colors meet edge to edge, so the connectivity check "
+                            "fails (a warning by the owner's decision): "
+                            + ", ".join(where)})
     return out
+
+
+def _who(f: dict) -> str:
+    """"base #rrggbb (filament n)" or "color i #rrggbb (filament n)"."""
+    return (("base" if f["role"] == "base" else f"color {f['index']}")
+            + f" {f['hex']} (filament {f['filament']})")
 
 
 def print_message(printable_faces) -> str | None:

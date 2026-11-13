@@ -1,6 +1,6 @@
 Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up by default, and Roadie drop with both faces (OrcaSlicer 2.5.0 and PrusaSlicer 2.9.7, pinned)
 
-== roadie-tol30-60-drop-v3-f64, face up (41 s) -> artifacts/slice-runs/color2-roadie-tol30-60-drop-v3-f64
+== roadie-tol30-60-drop-v3-f64, face up (42 s) -> artifacts/slice-runs/color2-roadie-tol30-60-drop-v3-f64
    colorslice_id 9aca298f06fc2fe8239b554e63bdf6b7d5409d786875b2bfd25c3bf943ec0ab7
    filaments: 1=base #f60606, 2=color 1 #f5f5f5, 3=color 2 #f0f10a, 4=color 3 #451812
    F6.portability (model.3mf): PASS; parts 10 / 10, facets 90940 / 90940, layers 15, volume 2277.716309 mm3 (PrusaSlicer minus palette sum -0.025 mm3, information)
@@ -10,8 +10,8 @@ Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up 
      changes 9, flush 951.28 mm3, prime tower 1054.692 mm3, time 1873 s; G-code face-up/plate_1.gcode
      against Task 5: equal
      certification: PRINTABLE
-     warning: base #f60606 (filament 1): edges up to 0.28 mm from its printed lines (thin areas the slicer skips)
-     warning: printed colors meet edge to edge (connectivity check, information)
+     warning: base #f60606 (filament 1): edges up to 0.28 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: printed colors meet edge to edge, so the connectivity check fails (a warning by the owner's decision): the whole model, base #f60606 (filament 1), color 1 #f5f5f5 (filament 2)
    glue route: not printable; blocking ['glue-base', 'glue-color-2-f0f10a']
    glue-base: NOT CERTIFIED | layers 15 | F3 PASS/FAIL/PASS | F6.portability PASS
      certification: NOT CERTIFIED: F3.edge_coverage FAIL
@@ -30,10 +30,10 @@ Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up 
      changes 9, flush 951.28 mm3, prime tower 1054.692 mm3, time 2002 s; G-code face-up/plate_1.gcode
      against Task 5: equal
      certification: PRINTABLE
-     warning: base #f60606 (filament 1): edges up to 1.59 mm from its printed lines (thin areas the slicer skips)
-     warning: color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (thin areas the slicer skips)
-     warning: color 2 #f5f5f5 (filament 3): edges up to 0.23 mm from its printed lines (thin areas the slicer skips)
-     warning: printed colors meet edge to edge (connectivity check, information)
+     warning: base #f60606 (filament 1): edges up to 1.59 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: color 1 #451812 (filament 2): edges up to 4.99 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: color 2 #f5f5f5 (filament 3): edges up to 0.23 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: printed colors meet edge to edge, so the connectivity check fails (a warning by the owner's decision): the whole model, base #f60606 (filament 1), color 1 #451812 (filament 2), color 2 #f5f5f5 (filament 3)
    glue: not built (the plan keeps the outline (outlines: keep with an outline family, so an outline...)
 
 == oddie-60-merge-blues-v3-f64, face up (44 s) -> artifacts/slice-runs/color2-oddie-60-merge-blues-v3-f64
@@ -46,8 +46,8 @@ Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up 
      changes 9, flush 900.0 mm3, prime tower 1054.692 mm3, time 1910 s; G-code face-up/plate_1.gcode
      against Task 5: equal
      certification: PRINTABLE
-     warning: base #25561b (filament 1): edges up to 0.20 mm from its printed lines (thin areas the slicer skips)
-     warning: printed colors meet edge to edge (connectivity check, information)
+     warning: base #25561b (filament 1): edges up to 0.20 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: printed colors meet edge to edge, so the connectivity check fails (a warning by the owner's decision): the whole model, color 3 #dd4f47 (filament 4)
    glue route: not printable; blocking ['glue-base', 'glue-color-2-48a835', 'glue-color-3-dd4f47']
    glue-base: NOT CERTIFIED | layers 15 | F3 PASS/FAIL/PASS | F6.portability PASS
      certification: NOT CERTIFIED: F3.edge_coverage FAIL
@@ -58,7 +58,7 @@ Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up 
    glue-color-3-dd4f47: NOT CERTIFIED | layers 3 | F3 PASS/UNKNOWN/FAIL | F6.portability PASS
      certification: NOT CERTIFIED: F3.edge_coverage UNKNOWN, F3.edge_overprint FAIL
 
-== oddie-60-keep-merge-blues-greens-v4-f64, face up (63 s) -> artifacts/slice-runs/color2-oddie-60-keep-merge-blues-greens-v4-f64
+== oddie-60-keep-merge-blues-greens-v4-f64, face up (59 s) -> artifacts/slice-runs/color2-oddie-60-keep-merge-blues-greens-v4-f64
    colorslice_id 84ed31b5bb1fecaa231f53d3f25dff57db655855089bcc9eb56b40e9fe891c23
    filaments: 1=base #25561b, 2=color 1 #547e9d, 3=color 2 #0d100d, 4=color 3 #dd4f47
    F6.portability (model.3mf): PASS; parts 14 / 14, facets 302586 / 302586, layers 15, volume 5032.416504 mm3 (PrusaSlicer minus palette sum -1.232 mm3, information)
@@ -68,9 +68,9 @@ Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up 
      changes 9, flush 600.0 mm3, prime tower 1054.692 mm3, time 2124 s; G-code face-up/plate_1.gcode
      against Task 5: equal
      certification: PRINTABLE
-     warning: base #25561b (filament 1): edges up to 0.23 mm from its printed lines (thin areas the slicer skips)
-     warning: color 2 #0d100d (filament 3): edges up to 4.72 mm from its printed lines (thin areas the slicer skips)
-     warning: printed colors meet edge to edge (connectivity check, information)
+     warning: base #25561b (filament 1): edges up to 0.23 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: color 2 #0d100d (filament 3): edges up to 4.72 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: printed colors meet edge to edge, so the connectivity check fails (a warning by the owner's decision): the whole model, base #25561b (filament 1), color 2 #0d100d (filament 3)
    glue: not built (the plan keeps the outline (outlines: keep with an outline family, so an outline...)
 
 == roadie-tol30-60-drop-v3-f64, face both (58 s) -> artifacts/slice-runs/color2-roadie-tol30-60-drop-v3-f64-both
@@ -83,16 +83,16 @@ Task 7 decisions applied: tdmg slice on the owner's four colored plans, face up 
      changes 9, flush 951.28 mm3, prime tower 1054.692 mm3, time 1873 s; G-code face-up/plate_1.gcode
      against Task 5: equal
      certification: PRINTABLE
-     warning: base #f60606 (filament 1): edges up to 0.28 mm from its printed lines (thin areas the slicer skips)
-     warning: printed colors meet edge to edge (connectivity check, information)
+     warning: base #f60606 (filament 1): edges up to 0.28 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: printed colors meet edge to edge, so the connectivity check fails (a warning by the owner's decision): the whole model, base #f60606 (filament 1), color 1 #f5f5f5 (filament 2)
    face down: NOT CERTIFIED
      color_changes=PASS tool_placement=PASS filaments_used=PASS | F2.orca_input_matches_bodies=PASS | slicer_exit=PASS gcode_present=PASS layer_count=PASS single_object=PASS
      F3 silhouette printed_connectivity=FAIL edge_coverage=UNKNOWN edge_overprint=PASS; per tool (conn/cov/over) T0 FAIL/FAIL/PASS; T1 FAIL/PASS/PASS; T2 PASS/PASS/PASS; T3 PASS/PASS/PASS
      changes 10, flush 1051.28 mm3, prime tower 592.449 mm3, time 1897 s; G-code face-down/plate_1.gcode
      against Task 5: equal
      certification: NOT CERTIFIED: F3.edge_coverage UNKNOWN
-     warning: base #f60606 (filament 1): edges up to 0.36 mm from its printed lines (thin areas the slicer skips)
-     warning: printed colors meet edge to edge (connectivity check, information)
+     warning: base #f60606 (filament 1): edges up to 0.36 mm from its printed lines (for example thin areas the slicer skips, or a part left unprinted)
+     warning: printed colors meet edge to edge, so the connectivity check fails (a warning by the owner's decision): the whole model, base #f60606 (filament 1), color 1 #f5f5f5 (filament 2)
    glue route: not printable; blocking ['glue-base', 'glue-color-2-f0f10a']
    glue-base: NOT CERTIFIED | layers 15 | F3 PASS/FAIL/PASS | F6.portability PASS
      certification: NOT CERTIFIED: F3.edge_coverage FAIL

@@ -879,7 +879,8 @@ def test_cli_exit_2_for_a_tampered_model(flat_dir, fake, tmp_path):
 def test_cli_help_documents_the_exit_codes():
     narrow = CliRunner(env={"NO_COLOR": "1", "FORCE_COLOR": None, "COLUMNS": "80"})
     text = _plain(narrow.invoke(app, ["slice", "--help"]).output)
-    for phrase in ("0 files written, and no check FAILed", "1 files written, and at least one",
+    for phrase in ("0 files written, and no required check FAILed",
+                   "1 files written, and a required check FAILed",
                    "2 input or setup error", "Exit 0 does not mean the part is certified"):
         assert phrase in text
 
