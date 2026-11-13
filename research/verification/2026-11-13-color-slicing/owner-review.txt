@@ -1,0 +1,203 @@
+Task 7 review: the owner plans' color layers (tdmg slice records of Task 6, re-measured with the gate's functions; every per-layer value equals slice.json).
+Images: artifacts/color-review/<plan>/ (git-ignored). Script: owner_review_task7.py. Bed coordinates in mm, seen from above.
+Allowance: 0.275 mm on layer 1, 0.2 mm above (acceptance.dimension.tolerance plus elefant_foot_compensation on layer 1).
+
+== roadie-tol30-60-drop-v3-f64
+   filaments: 1=T0 #f60606 red (base), 2=T1 #f5f5f5 white (inlay), 3=T2 #f0f10a yellow (inlay), 4=T3 #451812 dark brown (inlay)
+   -- face up: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T0); flush 951.3 mm3; prime tower 1054.7 mm3; time 1873 s (31.2 min)
+      filament per tool (header g / mm): T0 3.43 g / 1131.9 mm; T1 0.54 g / 178.86 mm; T2 0.4 g / 132.14 mm; T3 0.38 g / 125.73 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 2.6: parts 11/1, holes 0/0); coverage PASS 0.231 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T0         connectivity FAIL 2 of 15 layers (first z 2.6: parts 8/7, holes 1/1); coverage FAIL 0.284 mm vs 0.2 at z 2.6 (3 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T1         connectivity FAIL 3 of 15 layers (first z 2.6: parts 8/7, holes 0/0); coverage PASS 0.158 mm vs 0.2 at z 3.0 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T2         connectivity PASS; coverage PASS 0.135 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.012 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.144 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.000 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 13: 0.284 mm at bed (146.92, 112.78); on the model's outer edge; the body there is narrower than one bead (bead 0.42 mm); part of the image: not identified
+          unprinted body area this layer 27.82 of 447.22 mm2; largest unprinted patches: 2.05 mm2, widest 0.56 mm, at (153.0, 113.5); 1.92 mm2, widest 0.17 mm, at (135.2, 124.0); 1.72 mm2, widest 0.57 mm, at (140.5, 127.7)
+        layer 13 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 27.8 of 447.2 mm2 (6%), beads 1114 mm long; T1 21.3 of 211.5 mm2 (10%), beads 496 mm long; T2 5.1 of 96.3 mm2 (5%), beads 245 mm long; T3 1.6 of 4.2 mm2 (39%), beads 7 mm long
+        layer 14 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 27.3 of 447.2 mm2 (6%), beads 1107 mm long; T1 21.5 of 211.5 mm2 (10%), beads 488 mm long; T2 4.5 of 96.3 mm2 (5%), beads 241 mm long; T3 1.6 of 4.2 mm2 (39%), beads 7 mm long
+        layer 15 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 10.3 of 447.2 mm2 (2%), beads 1208 mm long; T1 9.2 of 211.5 mm2 (4%), beads 554 mm long; T2 1.5 of 96.3 mm2 (2%), beads 259 mm long; T3 1.6 of 4.2 mm2 (39%), beads 7 mm long
+        silhouette layer 13: printed parts 11 for 1; 10 split(s) under 0.5 mm, widths 0.013-0.121 mm; largest outline gap 0.154 mm at bed (147.05, 112.71)
+        silhouette layer 14: printed parts 11 for 1; 10 split(s) under 0.5 mm, widths 0.013-0.121 mm; largest outline gap 0.154 mm at bed (147.05, 112.71)
+        silhouette layer 15: printed parts 10 for 1; 9 split(s) under 0.5 mm, widths 0.013-0.121 mm; largest outline gap 0.154 mm at bed (147.05, 112.71)
+   -- face down: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 10 (true minimum from the start load 9, start load T2); flush 1051.3 mm3; prime tower 592.4 mm3; time 1897 s (31.6 min)
+      filament per tool (header g / mm): T0 2.63 g / 867.59 mm; T1 0.56 g / 183.24 mm; T2 0.58 g / 191.56 mm; T3 0.52 g / 170.28 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 0.2: parts 12/1, holes 0/0); coverage UNKNOWN 0.251 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.014 mm vs 0.2
+        T0         connectivity FAIL 3 of 15 layers (first z 0.2: parts 8/7, holes 1/1); coverage FAIL 0.359 mm vs 0.275 at z 0.2 (3 layer(s) over); overprint PASS 0.014 mm vs 0.2
+        T1         connectivity FAIL 3 of 15 layers (first z 0.2: parts 8/7, holes 0/0); coverage PASS 0.230 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T2         connectivity PASS; coverage PASS 0.135 mm vs 0.2 at z 0.4 (0 layer(s) over); overprint PASS 0.014 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.144 mm vs 0.2 at z 0.4 (0 layer(s) over); overprint PASS 0.000 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 1: 0.359 mm at bed (109.08, 112.78); on the model's outer edge; the body there is narrower than one bead (bead 0.50 mm); part of the image: not identified
+          unprinted body area this layer 44.44 of 447.22 mm2; largest unprinted patches: 7.04 mm2, widest 0.26 mm, at (142.5, 126.6); 2.63 mm2, widest 0.61 mm, at (102.4, 115.2); 2.23 mm2, widest 0.20 mm, at (120.8, 124.1)
+        layer 1 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 44.4 of 447.2 mm2 (10%), beads 923 mm long; T1 29.5 of 211.5 mm2 (14%), beads 421 mm long; T2 8.3 of 96.3 mm2 (9%), beads 202 mm long; T3 1.4 of 4.2 mm2 (33%), beads 7 mm long
+        layer 2 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 27.6 of 447.2 mm2 (6%), beads 1098 mm long; T1 22.3 of 211.5 mm2 (11%), beads 494 mm long; T2 4.6 of 96.3 mm2 (5%), beads 240 mm long; T3 1.6 of 4.2 mm2 (39%), beads 7 mm long
+        layer 3 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 27.9 of 447.2 mm2 (6%), beads 1096 mm long; T1 23.0 of 211.5 mm2 (11%), beads 486 mm long; T2 4.4 of 96.3 mm2 (5%), beads 234 mm long; T3 1.6 of 4.2 mm2 (39%), beads 7 mm long
+        silhouette layer 1: printed parts 12 for 1; 12 split(s) under 0.5 mm, widths 0.004-0.149 mm; largest outline gap 0.251 mm at bed (116.90, 139.36)
+        silhouette layer 2: printed parts 13 for 1; 12 split(s) under 0.5 mm, widths 0.000-0.121 mm; largest outline gap 0.154 mm at bed (108.95, 112.71)
+        silhouette layer 3: printed parts 13 for 1; 12 split(s) under 0.5 mm, widths 0.000-0.121 mm; largest outline gap 0.154 mm at bed (108.95, 112.71)
+
+== roadie-tol30-60-keep-v4-f64
+   filaments: 1=T0 #f60606 red (base), 2=T1 #451812 dark brown (inlay), 3=T2 #f5f5f5 white (inlay), 4=T3 #f0f10a yellow (inlay)
+   T1 is the kept outline band (all outlines of the bird) (by eye from top.png)
+   -- face up: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T0); flush 951.3 mm3; prime tower 1054.7 mm3; time 2002 s (33.4 min)
+      filament per tool (header g / mm): T0 3.32 g / 1093.87 mm; T1 0.59 g / 196.27 mm; T2 0.49 g / 163.19 mm; T3 0.38 g / 124.36 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 2.6: parts 14/1, holes 0/0); coverage PASS 0.231 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T0         connectivity FAIL 3 of 15 layers (first z 2.6: parts 11/8, holes 1/1); coverage FAIL 1.588 mm vs 0.2 at z 2.8 (3 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T1         connectivity FAIL 3 of 15 layers (first z 2.6: parts 6/3, holes 3/12); coverage FAIL 4.994 mm vs 0.2 at z 2.6 (3 layer(s) over); overprint PASS 0.025 mm vs 0.2
+        T2         connectivity FAIL 2 of 15 layers (first z 2.6: parts 9/8, holes 0/0); coverage FAIL 0.234 mm vs 0.2 at z 2.8 (3 layer(s) over); overprint PASS 0.001 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.139 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.001 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 14: 1.588 mm at bed (140.55, 126.74); on the edge shared with T1; the body there is narrower than one bead (bead 0.42 mm); part of the image: not identified
+          unprinted body area this layer 43.39 of 297.07 mm2; largest unprinted patches: 2.99 mm2, widest 0.67 mm, at (152.9, 113.8); 2.52 mm2, widest 0.43 mm, at (139.2, 128.8); 2.40 mm2, widest 0.82 mm, at (153.1, 116.5)
+        T1 layer 13: 4.994 mm at bed (134.58, 121.55); on the edge shared with T2; the body there is at least one bead wide (bead 0.42 mm); part of the image: the kept outline band (all outlines of the bird)
+          unprinted body area this layer 45.86 of 244.65 mm2; largest unprinted patches: 7.25 mm2, widest 0.51 mm, at (114.5, 110.4); 7.00 mm2, widest 0.49 mm, at (140.0, 119.8); 3.66 mm2, widest 0.47 mm, at (136.2, 145.1)
+        T2 layer 14: 0.234 mm at bed (133.42, 147.10); on the edge shared with T1; the body there is narrower than one bead (bead 0.42 mm); part of the image: not identified
+          unprinted body area this layer 27.88 of 150.34 mm2; largest unprinted patches: 5.69 mm2, widest 0.81 mm, at (113.4, 110.4); 4.00 mm2, widest 0.90 mm, at (154.5, 113.6); 2.42 mm2, widest 0.35 mm, at (135.7, 122.5)
+        layer 13 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 43.3 of 297.1 mm2 (15%), beads 713 mm long; T1 45.9 of 244.6 mm2 (19%), beads 778 mm long; T2 28.1 of 150.3 mm2 (19%), beads 344 mm long; T3 9.8 of 67.2 mm2 (15%), beads 155 mm long
+        layer 14 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 43.4 of 297.1 mm2 (15%), beads 702 mm long; T1 45.9 of 244.6 mm2 (19%), beads 778 mm long; T2 27.9 of 150.3 mm2 (19%), beads 336 mm long; T3 9.8 of 67.2 mm2 (15%), beads 155 mm long
+        layer 15 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 22.3 of 297.1 mm2 (7%), beads 781 mm long; T1 44.2 of 244.6 mm2 (18%), beads 784 mm long; T2 11.6 of 150.3 mm2 (8%), beads 392 mm long; T3 3.4 of 67.2 mm2 (5%), beads 179 mm long
+        silhouette layer 13: printed parts 14 for 1; 17 split(s) under 0.5 mm, widths 0.000-0.355 mm; largest outline gap 0.043 mm at bed (146.64, 118.91)
+        silhouette layer 14: printed parts 14 for 1; 17 split(s) under 0.5 mm, widths 0.000-0.355 mm; largest outline gap 0.036 mm at bed (146.62, 118.93)
+        silhouette layer 15: printed parts 12 for 1; 13 split(s) under 0.5 mm, widths 0.000-0.355 mm; largest outline gap 0.040 mm at bed (146.63, 118.92)
+   -- face down: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T3); flush 923.8 mm3; prime tower 548.2 mm3; time 1922 s (32.0 min)
+      filament per tool (header g / mm): T0 2.5 g / 826.38 mm; T1 0.51 g / 169.62 mm; T2 0.45 g / 147.45 mm; T3 0.59 g / 193.45 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 0.2: parts 64/1, holes 0/0); coverage FAIL 1.179 mm vs 0.275 at z 0.2 (1 layer(s) over); overprint PASS 0.014 mm vs 0.2
+        T0         connectivity FAIL 3 of 15 layers (first z 0.2: parts 10/8, holes 1/1); coverage FAIL 2.204 mm vs 0.275 at z 0.2 (3 layer(s) over); overprint PASS 0.014 mm vs 0.2
+        T1         connectivity FAIL 3 of 15 layers (first z 0.2: parts 51/3, holes 0/12); coverage FAIL 7.591 mm vs 0.275 at z 0.2 (3 layer(s) over); overprint PASS 0.025 mm vs 0.2
+        T2         connectivity FAIL 3 of 15 layers (first z 0.2: parts 9/8, holes 0/0); coverage FAIL 0.247 mm vs 0.2 at z 0.4 (3 layer(s) over); overprint PASS 0.001 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.215 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.001 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 1: 2.204 mm at bed (115.45, 126.74); on the edge shared with T1; the body there is narrower than one bead (bead 0.50 mm); part of the image: not identified
+          unprinted body area this layer 45.70 of 297.07 mm2; largest unprinted patches: 4.66 mm2, widest 0.88 mm, at (104.5, 115.3); 3.90 mm2, widest 0.89 mm, at (140.4, 109.9); 3.78 mm2, widest 0.66 mm, at (120.3, 126.8)
+        T1 layer 1: 7.591 mm at bed (123.79, 126.99); on the edge shared with T0; the body there is at least one bead wide (bead 0.50 mm); part of the image: the kept outline band (all outlines of the bird)
+          unprinted body area this layer 166.51 of 244.65 mm2; largest unprinted patches: 140.80 mm2, widest 0.62 mm, at (115.3, 127.9); 8.07 mm2, widest 0.59 mm, at (153.1, 127.8); 6.22 mm2, widest 0.56 mm, at (153.6, 130.0)
+        T2 layer 1: 0.311 mm at bed (122.58, 147.10); on the edge shared with T1; the body there is narrower than one bead (bead 0.50 mm); part of the image: not identified
+          unprinted body area this layer 26.96 of 150.34 mm2; largest unprinted patches: 5.44 mm2, widest 0.74 mm, at (142.7, 109.8); 4.15 mm2, widest 0.96 mm, at (101.0, 113.6); 3.01 mm2, widest 0.43 mm, at (120.2, 122.5)
+        layer 1 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 45.7 of 297.1 mm2 (15%), beads 613 mm long; T1 166.5 of 244.6 mm2 (68%), beads 195 mm long; T2 27.0 of 150.3 mm2 (18%), beads 297 mm long; T3 13.4 of 67.2 mm2 (20%), beads 131 mm long
+        layer 2 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 43.0 of 297.1 mm2 (14%), beads 718 mm long; T1 46.0 of 244.6 mm2 (19%), beads 777 mm long; T2 26.7 of 150.3 mm2 (18%), beads 343 mm long; T3 10.4 of 67.2 mm2 (15%), beads 153 mm long
+        layer 3 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 44.6 of 297.1 mm2 (15%), beads 692 mm long; T1 46.0 of 244.6 mm2 (19%), beads 777 mm long; T2 26.5 of 150.3 mm2 (18%), beads 335 mm long; T3 10.4 of 67.2 mm2 (15%), beads 153 mm long
+        silhouette layer 1: printed parts 64 for 1; 88 split(s) under 0.5 mm, widths 0.001-0.464 mm; largest outline gap 1.179 mm at bed (115.19, 128.39)
+        silhouette layer 2: printed parts 15 for 1; 16 split(s) under 0.5 mm, widths 0.000-0.355 mm; largest outline gap 0.040 mm at bed (129.49, 113.21)
+        silhouette layer 3: printed parts 15 for 1; 16 split(s) under 0.5 mm, widths 0.000-0.355 mm; largest outline gap 0.043 mm at bed (129.49, 113.20)
+
+== oddie-60-merge-blues-v3-f64
+   filaments: 1=T0 #25561b dark green (base), 2=T1 #547e9d steel blue (inlay), 3=T2 #48a835 green (inlay), 4=T3 #dd4f47 coral red (inlay)
+   -- face up: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T0); flush 900.0 mm3; prime tower 1054.7 mm3; time 1910 s (31.8 min)
+      filament per tool (header g / mm): T0 4.85 g / 1599.38 mm; T1 0.93 g / 306.0 mm; T2 0.64 g / 212.8 mm; T3 0.35 g / 116.72 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 2.6: parts 5/1, holes 0/0); coverage PASS 0.152 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T0         connectivity PASS; coverage FAIL 0.201 mm vs 0.2 at z 2.6 (3 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T1         connectivity PASS; coverage PASS 0.122 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T2         connectivity PASS; coverage PASS 0.173 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.019 mm vs 0.2
+        T3         connectivity FAIL 2 of 15 layers (first z 2.6: parts 4/3, holes 0/0); coverage PASS 0.111 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.000 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 13: 0.201 mm at bed (105.54, 128.88); on the model's outer edge; the body there is narrower than one bead (bead 0.42 mm); part of the image: not identified
+          unprinted body area this layer 17.01 of 625.88 mm2; largest unprinted patches: 2.95 mm2, widest 0.49 mm, at (127.0, 136.9); 2.17 mm2, widest 0.18 mm, at (134.3, 126.0); 1.79 mm2, widest 0.12 mm, at (131.2, 138.4)
+        layer 13 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 17.0 of 625.9 mm2 (3%), beads 1620 mm long; T1 10.7 of 585.7 mm2 (2%), beads 1527 mm long; T2 14.7 of 430.2 mm2 (3%), beads 1096 mm long; T3 4.6 of 36.1 mm2 (13%), beads 82 mm long
+        layer 14 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 16.5 of 625.9 mm2 (3%), beads 1628 mm long; T1 11.9 of 585.7 mm2 (2%), beads 1521 mm long; T2 15.9 of 430.2 mm2 (4%), beads 1092 mm long; T3 4.6 of 36.1 mm2 (13%), beads 82 mm long
+        layer 15 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 5.3 of 625.9 mm2 (1%), beads 1674 mm long; T1 3.2 of 585.7 mm2 (1%), beads 1566 mm long; T2 4.7 of 430.2 mm2 (1%), beads 1146 mm long; T3 2.8 of 36.1 mm2 (8%), beads 91 mm long
+        silhouette layer 13: printed parts 5 for 1; 4 split(s) under 0.5 mm, widths 0.000-0.018 mm; largest outline gap 0.152 mm at bed (105.58, 128.82)
+        silhouette layer 14: printed parts 5 for 1; 4 split(s) under 0.5 mm, widths 0.000-0.018 mm; largest outline gap 0.152 mm at bed (105.58, 128.82)
+        silhouette layer 15: printed parts 4 for 1; 3 split(s) under 0.5 mm, widths 0.000-0.018 mm; largest outline gap 0.152 mm at bed (105.58, 128.82)
+   -- face down: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T0); flush 900.0 mm3; prime tower 548.2 mm3; time 1868 s (31.1 min)
+      filament per tool (header g / mm): T0 4.15 g / 1370.94 mm; T1 0.95 g / 311.84 mm; T2 0.66 g / 217.78 mm; T3 0.37 g / 122.78 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 0.2: parts 4/1, holes 0/0); coverage PASS 0.244 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T0         connectivity PASS; coverage FAIL 0.290 mm vs 0.275 at z 0.2 (3 layer(s) over); overprint PASS 0.012 mm vs 0.2
+        T1         connectivity FAIL 1 of 15 layers (first z 0.2: parts 2/1, holes 3/3); coverage PASS 0.122 mm vs 0.2 at z 0.4 (0 layer(s) over); overprint PASS 0.012 mm vs 0.2
+        T2         connectivity PASS; coverage FAIL 0.288 mm vs 0.275 at z 0.2 (1 layer(s) over); overprint PASS 0.019 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.110 mm vs 0.2 at z 0.4 (0 layer(s) over); overprint PASS 0.000 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 1: 0.290 mm at bed (150.46, 128.88); on the model's outer edge; the body there is narrower than one bead (bead 0.50 mm); part of the image: not identified
+          unprinted body area this layer 24.84 of 625.88 mm2; largest unprinted patches: 4.75 mm2, widest 0.22 mm, at (112.6, 137.3); 3.41 mm2, widest 0.57 mm, at (128.9, 136.7); 2.71 mm2, widest 0.12 mm, at (147.0, 143.5)
+        T2 layer 1: 0.288 mm at bed (122.51, 133.38); on the edge shared with T0; the body there is narrower than one bead (bead 0.50 mm); part of the image: not identified
+          unprinted body area this layer 23.54 of 430.17 mm2; largest unprinted patches: 3.48 mm2, widest 0.22 mm, at (113.2, 130.0); 2.98 mm2, widest 0.22 mm, at (141.3, 134.6); 2.41 mm2, widest 0.17 mm, at (125.5, 150.7)
+        layer 1 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 24.8 of 625.9 mm2 (4%), beads 1347 mm long; T1 17.6 of 585.7 mm2 (3%), beads 1266 mm long; T2 23.5 of 430.2 mm2 (5%), beads 912 mm long; T3 5.0 of 36.1 mm2 (14%), beads 71 mm long
+        layer 2 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 17.1 of 625.9 mm2 (3%), beads 1620 mm long; T1 10.8 of 585.7 mm2 (2%), beads 1528 mm long; T2 17.4 of 430.2 mm2 (4%), beads 1080 mm long; T3 5.1 of 36.1 mm2 (14%), beads 80 mm long
+        layer 3 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 17.0 of 625.9 mm2 (3%), beads 1613 mm long; T1 10.6 of 585.7 mm2 (2%), beads 1530 mm long; T2 15.0 of 430.2 mm2 (3%), beads 1101 mm long; T3 5.1 of 36.1 mm2 (14%), beads 80 mm long
+        silhouette layer 1: printed parts 4 for 1; 3 split(s) under 0.5 mm, widths 0.001-0.019 mm; largest outline gap 0.244 mm at bed (139.74, 152.60)
+        silhouette layer 2: printed parts 4 for 1; 3 split(s) under 0.5 mm, widths 0.000-0.018 mm; largest outline gap 0.152 mm at bed (150.42, 128.82)
+        silhouette layer 3: printed parts 4 for 1; 3 split(s) under 0.5 mm, widths 0.000-0.018 mm; largest outline gap 0.152 mm at bed (150.42, 128.82)
+
+== oddie-60-keep-merge-blues-greens-v4-f64
+   filaments: 1=T0 #25561b dark green (base), 2=T1 #547e9d steel blue (inlay), 3=T2 #0d100d near-black (inlay), 4=T3 #dd4f47 coral red (inlay)
+   T2 is the kept outline band and the leaf-vein lines (by eye from top.png)
+   -- face up: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T0); flush 600.0 mm3; prime tower 1054.7 mm3; time 2124 s (35.4 min)
+      filament per tool (header g / mm): T0 4.78 g / 1577.89 mm; T1 0.71 g / 234.14 mm; T2 0.55 g / 181.28 mm; T3 0.35 g / 115.93 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 2.6: parts 18/1, holes 0/0); coverage PASS 0.221 mm vs 0.275 at z 0.2 (0 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T0         connectivity FAIL 2 of 15 layers (first z 2.6: parts 5/4, holes 4/4); coverage FAIL 0.227 mm vs 0.2 at z 2.6 (3 layer(s) over); overprint PASS 0.013 mm vs 0.2
+        T1         connectivity PASS; coverage PASS 0.122 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.001 mm vs 0.2
+        T2         connectivity FAIL 3 of 15 layers (first z 2.6: parts 12/8, holes 1/6); coverage FAIL 4.716 mm vs 0.2 at z 2.6 (3 layer(s) over); overprint PASS 0.019 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.111 mm vs 0.2 at z 2.6 (0 layer(s) over); overprint PASS 0.000 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 13: 0.227 mm at bed (130.17, 127.36); on the edge shared with T1; the body there is narrower than one bead (bead 0.42 mm); part of the image: not identified
+          unprinted body area this layer 79.07 of 885.64 mm2; largest unprinted patches: 7.02 mm2, widest 0.69 mm, at (133.4, 142.1); 4.84 mm2, widest 0.40 mm, at (141.6, 141.9); 4.06 mm2, widest 0.26 mm, at (104.4, 131.8)
+        T2 layer 13: 4.716 mm at bed (114.75, 141.89); on the edge shared with T0; the body there is at least one bead wide (bead 0.42 mm); part of the image: the kept outline band and the leaf-vein lines
+          unprinted body area this layer 65.41 of 236.31 mm2; largest unprinted patches: 8.71 mm2, widest 0.48 mm, at (116.9, 146.2); 6.21 mm2, widest 0.50 mm, at (114.6, 119.2); 5.96 mm2, widest 0.49 mm, at (146.8, 129.2)
+        layer 13 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 79.1 of 885.6 mm2 (9%), beads 2130 mm long; T1 31.8 of 523.6 mm2 (6%), beads 1316 mm long; T2 65.4 of 236.3 mm2 (28%), beads 721 mm long; T3 3.7 of 32.3 mm2 (11%), beads 74 mm long
+        layer 14 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 79.0 of 885.6 mm2 (9%), beads 2147 mm long; T1 30.3 of 523.6 mm2 (6%), beads 1322 mm long; T2 65.4 of 236.3 mm2 (28%), beads 721 mm long; T3 3.7 of 32.3 mm2 (11%), beads 74 mm long
+        layer 15 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 27.8 of 885.6 mm2 (3%), beads 2349 mm long; T1 9.9 of 523.6 mm2 (2%), beads 1386 mm long; T2 65.4 of 236.3 mm2 (28%), beads 721 mm long; T3 2.7 of 32.3 mm2 (8%), beads 78 mm long
+        silhouette layer 13: printed parts 18 for 1; 21 split(s) under 0.5 mm, widths 0.000-0.450 mm; largest outline gap 0.037 mm at bed (116.26, 152.64)
+        silhouette layer 14: printed parts 18 for 1; 21 split(s) under 0.5 mm, widths 0.000-0.450 mm; largest outline gap 0.037 mm at bed (116.26, 152.64)
+        silhouette layer 15: printed parts 17 for 1; 20 split(s) under 0.5 mm, widths 0.000-0.450 mm; largest outline gap 0.037 mm at bed (116.26, 152.64)
+   -- face down: NOT CERTIFIED (G-code plate_1.gcode.failed)
+      changes 9 (true minimum from the start load 9, start load T1); flush 800.0 mm3; prime tower 548.2 mm3; time 2096 s (34.9 min)
+      filament per tool (header g / mm): T0 4.32 g / 1424.06 mm; T1 0.77 g / 255.27 mm; T2 0.48 g / 158.77 mm; T3 0.37 g / 121.94 mm
+      required F3 (status, value, allowance):
+        silhouette connectivity FAIL 3 of 15 layers (first z 0.2: parts 31/1, holes 0/0); coverage FAIL 0.637 mm vs 0.275 at z 0.2 (1 layer(s) over); overprint PASS 0.012 mm vs 0.2
+        T0         connectivity FAIL 3 of 15 layers (first z 0.2: parts 6/4, holes 3/4); coverage FAIL 0.444 mm vs 0.275 at z 0.2 (3 layer(s) over); overprint PASS 0.012 mm vs 0.2
+        T1         connectivity PASS; coverage PASS 0.122 mm vs 0.2 at z 0.4 (0 layer(s) over); overprint PASS 0.001 mm vs 0.2
+        T2         connectivity FAIL 3 of 15 layers (first z 0.2: parts 30/8, holes 0/6); coverage FAIL 10.333 mm vs 0.275 at z 0.2 (3 layer(s) over); overprint PASS 0.019 mm vs 0.2
+        T3         connectivity PASS; coverage PASS 0.110 mm vs 0.2 at z 0.4 (0 layer(s) over); overprint PASS 0.000 mm vs 0.2
+      largest per-tool edge gaps (over the allowance), on the color layers:
+        T0 layer 1: 0.444 mm at bed (137.10, 134.20); on the edge shared with T2; the body there is at least one bead wide (bead 0.50 mm); part of the image: not identified
+          unprinted body area this layer 93.49 of 885.64 mm2; largest unprinted patches: 7.67 mm2, widest 1.13 mm, at (105.1, 129.3); 5.86 mm2, widest 0.65 mm, at (114.3, 142.0); 4.96 mm2, widest 0.59 mm, at (151.4, 131.7)
+        T2 layer 1: 10.333 mm at bed (106.36, 126.81); on the model's outer edge; the body there is at least one bead wide (bead 0.50 mm); part of the image: the kept outline band and the leaf-vein lines
+          unprinted body area this layer 206.87 of 236.31 mm2; largest unprinted patches: 164.52 mm2, widest 0.55 mm, at (105.2, 128.0); 9.61 mm2, widest 0.52 mm, at (126.9, 140.2); 7.44 mm2, widest 0.49 mm, at (109.3, 129.2)
+        layer 1 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 93.5 of 885.6 mm2 (11%), beads 1827 mm long; T1 33.9 of 523.6 mm2 (6%), beads 1116 mm long; T2 206.9 of 236.3 mm2 (88%), beads 77 mm long; T3 4.7 of 32.3 mm2 (15%), beads 63 mm long
+        layer 2 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 80.5 of 885.6 mm2 (9%), beads 2137 mm long; T1 29.4 of 523.6 mm2 (6%), beads 1329 mm long; T2 65.7 of 236.3 mm2 (28%), beads 720 mm long; T3 4.7 of 32.3 mm2 (15%), beads 72 mm long
+        layer 3 body area no bead of its own tool covers (bead model: the beads are not squashed, so some is normal), and the tool's total bead length: T0 79.9 of 885.6 mm2 (9%), beads 2138 mm long; T1 30.5 of 523.6 mm2 (6%), beads 1320 mm long; T2 65.7 of 236.3 mm2 (28%), beads 720 mm long; T3 4.7 of 32.3 mm2 (15%), beads 72 mm long
+        silhouette layer 1: printed parts 31 for 1; 39 split(s) under 0.5 mm, widths 0.000-0.481 mm; largest outline gap 0.637 mm at bed (136.54, 97.62)
+        silhouette layer 2: printed parts 16 for 1; 17 split(s) under 0.5 mm, widths 0.000-0.093 mm; largest outline gap 0.037 mm at bed (139.74, 152.64)
+        silhouette layer 3: printed parts 16 for 1; 17 split(s) under 0.5 mm, widths 0.000-0.093 mm; largest outline gap 0.037 mm at bed (139.74, 152.64)
+
+== Reading (2026-11-13, from the images and the numbers above; an interpretation, not a check)
+1. The silhouette's F3.printed_connectivity FAILs on every color layer of every run because
+   neighbouring colors' beads meet edge to edge. The splits (cyan crosses) are 0.000-0.149 mm
+   wide on the drop plans and Oddie merge, where every body is printed. In the bead model two
+   colors side by side always leave such a hairline; this alone is not a missing part of the
+   model. On the keep plans some splits are wider (up to 0.36-0.48 mm): there an outline strip
+   between two colors is not printed (item 3).
+2. Drop plans and Oddie merge: the per-color coverage FAILs are 0.201-0.359 mm, 0.001-0.084 mm
+   over the allowance, at the model's outer edge or a shared edge where the body is narrower
+   than one bead (tips and corners). On the color layers 1-14% of each larger body has no bead
+   of its own tool (the bead model's unsquashed beads leave some); the small bodies (Roadie drop
+   T3, 4.2 mm2; Oddie merge T3, 36 mm2) 8-39%. Face up and face down look alike.
+3. Keep plans: the large gaps (Roadie keep T1 up to 7.59 mm, Oddie keep T2 up to 10.33 mm) are
+   outline color the slicer does not print.
+   - Face up: the thin lines of the outline color inside the picture (Roadie: the brown lines
+     between belly, body and eye; Oddie: the leaf veins and the lines between colors) are not
+     printed; the outer outline band is. 18-19% of Roadie's T1 and 28% of Oddie's T2 have no
+     bead on the top layers.
+   - Face down, layer 1 (the visible face): most of the outline color is not printed: 68% of
+     Roadie's T1 (beads 195 mm long, against 778 mm on face-up layer 13) and 88% of Oddie's T2
+     (77 mm against 721 mm). Layers 2 and 3 are like face up. The silhouette's coverage FAILs
+     there (1.179 and 0.637 mm). OrcaSlicer prints layer 1 with 0.5 mm lines (0.42 mm above);
+     that this is why the narrow outline is skipped is an inference, not tested.
+4. Face up against face down: changes 9 on both except Roadie drop face down (10; minimum 9).
+   Prime tower about 1,055 mm3 face up, 548-592 mm3 face down. Flush equal on Oddie merge,
+   +100 mm3 face down on Roadie drop and +200 on Oddie keep, -27 on Roadie keep. Time within
+   2 minutes (face up 1,873-2,124 s, face down 1,868-2,096 s).
