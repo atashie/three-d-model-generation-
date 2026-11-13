@@ -173,6 +173,11 @@ the last task.
        numbers which, if any, become information.
      - **Also from the Task 5 review:** prime-tower plastic must not reach into the
        silhouette (`F6.tool_placement`).
+     - **No quarter-turn search for color (controller, 2026-11-13):** R1 lets the model
+       match in any quarter turn. For a symmetric model, a color swap then equals a
+       correct print turned 180°, and it passed. OrcaSlicer places the color input in
+       place and centred, with no rotation (Task 2), so color slices are checked at that
+       placement only.
 5. **Glue plates:** each `glue-*.stl` is sliced as an R1 part, with R1's checks unchanged.
    Its record is beside the AMS record in the same `slice.json`.
 6. **PrusaSlicer:** `F6.portability` runs on the portable `model.3mf`: `--info` reads it
