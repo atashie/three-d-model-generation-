@@ -262,10 +262,11 @@ def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
         unknown = [i for i in conn if by[i].status == "UNKNOWN"]
         parts = []
         if failed:
-            parts.append(f"connectivity check FAIL for {where(failed)} (the printed lines "
-                         "split into more parts than the model; on the owner's plans this "
-                         "is where two colors' lines meet edge to edge, see "
-                         "research/verification/2026-11-13-color-slicing/owner-review.txt)")
+            each = "; ".join(f"{where([i])} {_mismatch(by[i].measured)}" for i in failed)
+            parts.append(f"connectivity check FAIL: {each}; on the owner's plans a "
+                         "connectivity FAIL is where two colors' lines meet edge to edge, "
+                         "see research/verification/2026-11-13-color-slicing/"
+                         "owner-review.txt")
         if unknown:
             reason = by[unknown[0]].note.split(";")[0]
             parts.append(f"connectivity check UNKNOWN for {where(unknown)}: {reason}")
@@ -273,6 +274,29 @@ def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
                     "filament": None, "index": None, "hex": None, "max_gap_mm": None,
                     "text": "; ".join(parts)})
     return out
+
+
+def _count(n, what: str) -> str:
+    return f"{n} {what}" + ("" if n == 1 else "s")
+
+
+def _mismatch(m) -> str:
+    """What a FAILed connectivity check measured (tdmg.printed's record: the first
+    mismatched layer's parts and holes, printed and in the model, and every mismatched z),
+    e.g. "printed 7 parts against 1 in the model (3 of 15 layers differ, z 2.6 to 3)"."""
+    if not isinstance(m, dict) or m.get("parts_printed") is None:
+        return "(its measurements are not recorded)"
+    said = []
+    if m["parts_printed"] != m["parts_model"]:
+        said.append(f"{_count(m['parts_printed'], 'part')} against {m['parts_model']}")
+    if m["holes_printed"] != m["holes_model"]:
+        said.append(f"{_count(m['holes_printed'], 'hole')} against {m['holes_model']}")
+    head = ("printed " + " and ".join(said) + " in the model" if said else
+            "printed parts and holes that do not match the model's one to one")
+    zs = m.get("mismatched_z") or [m.get("first_z")]
+    span = f"z {zs[0]:g}" if len(zs) == 1 else f"z {zs[0]:g} to {zs[-1]:g}"
+    return (f"{head} ({m.get('layers_mismatched', len(zs))} of {m.get('layers')} layers "
+            f"differ, {span})")
 
 
 def _who(f: dict) -> str:
@@ -710,6 +734,11 @@ def glue_piece_counts(record: dict) -> dict[str, int]:
     plates = {row["index"] for row in record["bodies"]
               if row["route"] == "glue" and row["role"] == "pieces"}
     reported = {k for k, v in per_color.items() if v}
+    rows = [row["index"] for row in record["bodies"]
+            if row["route"] == "glue" and row["role"] == "pieces"]
+    twice = sorted({i for i in rows if rows.count(i) > 1})
+    if twice:
+        raise SlicerError(f"{COLORED_RECORD}: two glue plate rows for color(s) {twice}")
     if reported - plates:
         raise SlicerError(f"{COLORED_RECORD}: the glue report has pieces for colors "
                           f"{sorted(reported - plates)} with no glue plate row (a glue "

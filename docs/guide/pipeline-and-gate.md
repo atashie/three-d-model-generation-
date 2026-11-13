@@ -440,8 +440,10 @@ CERTIFIED.
 warning that does not pass. For example: "warning: color 1 #451812 (filament 2): edge
 coverage FAIL, edges up to 4.99 mm from its printed lines (for example thin areas the
 slicer skips, or a part left unprinted)", and one connectivity line per face: "warning:
-connectivity check FAIL for the whole model, … (the printed lines split into more parts
-than the model; …)", or "connectivity check UNKNOWN for …: <the check's reason>". Then the
+connectivity check FAIL: the whole model printed 7 parts against 1 in the model (3 of 15
+layers differ, z 2.6 to 3); …", built from what each check measured (parts and holes,
+printed against the model), or "connectivity check UNKNOWN for …: <the check's reason>".
+Then the
 filament for each color, and what to print:
 - face up PRINTABLE: "to print face up: open model.3mf in Bambu Studio (it is face up)
   and give each color the filament listed; …";
