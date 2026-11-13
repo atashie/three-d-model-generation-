@@ -555,3 +555,37 @@ def _tree_model_xml(shells):
 def test_model_xml_text_equals_the_lxml_tree_serialization(which):
     shells = two_cubes() if which == "two_cubes" else gated_shells(which)
     assert model_xml(shells) == _tree_model_xml(shells)
+
+
+SLIC3RPE = b'xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" '
+# Edits lib3mf reads without complaint that keep every shell's geometry and colors
+# (review of R2 step 4 Tasks 3-4, r34/holes.py, applied to model.3mf).
+MODEL_EDITS = {
+    "mmu_segmentation": lambda m: m.replace(
+        b"<triangle v1", b'<triangle slic3rpe:mmu_segmentation="8" v1').replace(
+        b"xmlns:m=", SLIC3RPE + b"xmlns:m="),
+    "application_metadata": lambda m: m.replace(
+        b"<resources>",
+        b'<metadata name="Application">BambuStudio-01.09.00.00</metadata><resources>'),
+    "unused_basematerials": lambda m: m.replace(
+        b"<resources>", b'<resources><basematerials id="99"><base name="x" '
+        b'displaycolor="#FF0000"/></basematerials>'),
+    "build_whitespace": lambda m: m.replace(b"<build>", b"<build>\n  "),
+}
+
+
+@pytest.mark.parametrize("edit", MODEL_EDITS)
+def test_an_edited_model_part_fails_on_its_bytes(edit):
+    shells = gated_shells("box")
+    model = model_xml(shells)
+    bad = MODEL_EDITS[edit](model)
+    assert bad != model
+    c = export_3mf_check(package(bad), shells)
+    assert c.status == "FAIL"
+    assert c.measured["model_equal"] is False and c.threshold["model_equal"] is True
+
+
+def test_the_model_bytes_are_measured_on_a_pass_too():
+    shells = two_cubes()
+    c = export_3mf_check(write_multishell_3mf(shells), shells)
+    assert c.status == "PASS" and c.measured["model_equal"] is True

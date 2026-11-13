@@ -5,9 +5,9 @@ orca-input.3mf writer, and its gate check F2.orca_input_matches_bodies
 docs/plans/2026-11-13-color-slicing.md, Decisions 2 and 3, Tasks 3 and 4.
 """
 
+import hashlib
 import io
 import json
-import sys
 import zipfile
 from pathlib import Path
 
@@ -184,25 +184,25 @@ def test_a_rounding_float64_sum_is_refused():
 
 # --- Task 4: orca-input.3mf and F2.orca_input_matches_bodies ----------------------------
 
-REPO = Path(__file__).resolve().parents[1]
-PROTOTYPE = REPO / "research/verification/2026-11-12-color-3mf"
+# The step 3 prototype's output for two_cubes(), face up and face down, frozen as test
+# data: research/verification/2026-11-12-color-3mf/measure_import.py (as of commit
+# 82edb44, unchanged since) model_xml(bodies, "B") and bambu_model_settings(bodies),
+# the builders that wrote the B_msc files Task 2 sliced, run once outside the test
+# process with bodies = (shell name, float32 vertices, faces, HEX). The files are kept
+# byte-exact (.gitattributes: -text); their SHA-256 values are pinned here.
+FROZEN = Path(__file__).resolve().parent / "data" / "orca_input_prototype"
+FROZEN_SHA256 = {
+    "two-cubes-up.model": "dc954ab6bab3f93134869886ddd389e411cc4e5f250e1d143d54b3584fd0dbd0",
+    "two-cubes-down.model": "7f2b4044ce73342618cc5ddefced0b92e59338b88e5ebf4f1d7d9ec9562b5c37",
+    "two-cubes-up.config": "d40c8bd595772c529a78d4bfe025524115c2d3f88bd3053673a1a3886cdab74b",
+    "two-cubes-down.config": "d40c8bd595772c529a78d4bfe025524115c2d3f88bd3053673a1a3886cdab74b",
+}
 
 
-def prototype():
-    """Step 3's hand-written builders (research code, read-only), which wrote the B_msc
-    files that Task 2 sliced."""
-    sys.path.insert(0, str(PROTOTYPE))
-    try:
-        import measure_import
-    finally:
-        sys.path.remove(str(PROTOTYPE))
-    return measure_import
-
-
-def as_bodies(shells):
-    """The shells in the prototype's body form: (name, float32 vertices, faces, HEX)."""
-    return [(s.name, np.asarray(s.vertices, np.float32), np.asarray(s.faces),
-             s.hex[1:].upper()) for s in shells]
+def frozen(name: str) -> bytes:
+    data = (FROZEN / name).read_bytes()
+    assert hashlib.sha256(data).hexdigest() == FROZEN_SHA256[name], name
+    return data
 
 
 def parts_of(data: bytes) -> dict:
@@ -223,20 +223,17 @@ def from_root(root, data: bytes) -> bytes:
                        parts_of(data)[SETTINGS_PART])
 
 
-@pytest.mark.parametrize("case", CASES)
 @pytest.mark.parametrize("face", ["up", "down"])
-def test_the_writer_is_the_sliced_prototype_byte_for_byte(case, face):
-    shells = gated_shells(case)
+def test_the_writer_is_the_sliced_prototype_byte_for_byte(face):
+    shells = two_cubes()
     if face == "down":
         shells = turn_over(shells)
-    mi = prototype()
-    bodies = as_bodies(shells)
-    assert orca_model_xml(shells) == mi.model_xml(bodies, "B")
-    assert model_settings(shells) == mi.bambu_model_settings(bodies)
+    model, config = frozen(f"two-cubes-{face}.model"), frozen(f"two-cubes-{face}.config")
+    assert orca_model_xml(shells) == model
+    assert model_settings(shells) == config
     assert parts_of(write_orca_input(shells)) == {
         "[Content_Types].xml": CONTENT_TYPES, "_rels/.rels": RELS,
-        MODEL_PART: mi.model_xml(bodies, "B"),
-        SETTINGS_PART: mi.bambu_model_settings(bodies)}
+        MODEL_PART: model, SETTINGS_PART: config}
 
 
 def test_repeat_runs_are_byte_identical():
@@ -581,3 +578,41 @@ def test_model_3mf_is_not_an_orca_input():
     c = orca_input_check(write_multishell_3mf(shells), shells)
     assert c.status == "FAIL"
     assert c.measured["package_parts"] == list(PART_NAMES)
+
+
+SLIC3RPE = b'xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06" '
+# Edits that lib3mf reads without complaint and that leave every part's geometry, name,
+# color and transform as gated (review of Tasks 3-4, r34/holes.py). Each can change
+# what a slicer prints (painting, a property override, another application's metadata).
+MODEL_EDITS = {
+    "mmu_segmentation": lambda m: m.replace(
+        b"<triangle v1", b'<triangle slic3rpe:mmu_segmentation="8" v1').replace(
+        b"xmlns:m=", SLIC3RPE + b"xmlns:m="),
+    "application_metadata": lambda m: m.replace(
+        b"<resources>",
+        b'<metadata name="Application">BambuStudio-01.09.00.00</metadata><resources>'),
+    "triangle_property": lambda m: m.replace(b"<triangle v1", b'<triangle pid="2" p1="0" v1',
+                                             3),
+    "unused_basematerials": lambda m: m.replace(
+        b"<resources>", b'<resources><basematerials id="99"><base name="x" '
+        b'displaycolor="#FF0000"/></basematerials>'),
+    "build_whitespace": lambda m: m.replace(b"<build>", b"<build>\n  "),
+}
+
+
+@pytest.mark.parametrize("edit", MODEL_EDITS)
+def test_an_edited_model_part_fails_on_its_bytes(edit):
+    shells = gated_shells("box")
+    parts = parts_of(write_orca_input(shells))
+    model = MODEL_EDITS[edit](parts[MODEL_PART])
+    assert model != parts[MODEL_PART]
+    c = orca_input_check(repack_orca(model, parts[SETTINGS_PART]), shells)
+    assert c.status == "FAIL"
+    assert c.measured["model_equal"] is False
+    assert c.threshold["model_equal"] is True
+
+
+def test_the_model_bytes_are_measured_on_a_pass():
+    shells = two_cubes()
+    c = orca_input_check(write_orca_input(shells), shells)
+    assert c.status == "PASS" and c.measured["model_equal"] is True

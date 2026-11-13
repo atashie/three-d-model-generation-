@@ -17,9 +17,14 @@ the inlays by palette index) is filament i + 1, for any base palette index.
 
 Deliberate copy of what was sliced: [Content_Types].xml (tdmg.threemf's bytes) has no
 entry for the .config extension of Metadata/model_settings.config. OPC wants a content
-type for every part, so this departs from the standard, but it is exactly the package
-the step 3 prototype wrote and Task 2 sliced (lib3mf strict reads it without a warning;
-OrcaSlicer 2.5.0 applies its extruders). Adding the entry would be an unsliced change.
+type for every part, so this departs from the standard, but the parts (content types,
+relationships, model and config bytes) are exactly those of the package the step 3
+prototype wrote and Task 2 sliced (lib3mf strict reads it without a warning; OrcaSlicer
+2.5.0 applies its extruders), given the same part names: Task 2 named each part
+"<body> <hex>", tdmg names it after the body (checked on all four owner plans, both
+faces, with Task 2's names: byte-equal). The zip headers differ (create_system 3 here,
+0 in the prototype's zip written on Windows). Adding the entry would be an unsliced
+change.
 """
 
 from __future__ import annotations
@@ -121,8 +126,10 @@ def turn_over(shells: Sequence[Shell]) -> list[Shell]:
     ThreeMFError, never rounded. The gated meshes pass: their coordinates lie on one
     storage grid G = 2^(e-24) (tdmg.color_geometry.storage_grid_mm), so x0 + x1 - x is a
     multiple of G within the model's x range, which float32 holds exactly (Task 2 measured
-    0 inexact on all four owner plans). -0.0 cannot appear (an exact zero difference is
-    +0.0 in round-to-nearest). Turning twice gives the original vertices exactly.
+    0 inexact on all four owner plans). The x and z differences never produce -0.0 (an
+    exact zero difference is +0.0 in round-to-nearest); y is passed through unchanged, as
+    tdmg.threemf.check_shells returns it. Turning twice gives the original vertices
+    exactly.
 
     Shells must be as tdmg.threemf.check_shells accepts them (it raises ThreeMFError);
     names, roles, indices and hexes are kept, and the order too.

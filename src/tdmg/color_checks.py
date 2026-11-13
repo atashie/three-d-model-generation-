@@ -54,11 +54,13 @@ from tdmg.orca_input import (
     assembly_id,
     mesh_object_id,
     model_settings,
+    orca_model_xml,
 )
 from tdmg.orca_input import extruder as orca_extruder
 from tdmg.profiles import PrinterProfile
 from tdmg.threemf import (
     CONTENT_TYPES,
+    MODEL_PART,
     OBJECT_NAME,
     PART_NAMES,
     RELS,
@@ -66,6 +68,7 @@ from tdmg.threemf import (
     Shell,
     check_shells,
     color_3mf,
+    model_xml,
     shell_ranges,
 )
 
@@ -440,16 +443,38 @@ def _bad_directed_edges(faces: np.ndarray) -> int:
 IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]
 
 
-def _read_3mf(data: bytes) -> dict:
-    """The facts export_3mf_check compares, read by lib3mf (strict mode) from the bytes."""
-    wrapper = lib3mf.get_wrapper()
-    model = wrapper.CreateModel()
+def _identity(has_transform: bool, transform) -> tuple[bool, list]:
+    """(exactly no transform, the matrix as lib3mf reads it): has_transform false AND the
+    float32 fields exactly the identity. lib3mf's Has*Transform alone calls a matrix
+    within its tolerance of the identity (a 1.0001 scale) no transform (Codex review 4)."""
+    fields = [list(row) for row in transform.Fields]
+    return (not has_transform and fields == IDENTITY), fields
+
+
+def _strict_read(data: bytes):
+    """(lib3mf model, facts): the bytes read by lib3mf in strict mode, with the reader's
+    warnings, the unit, and the color groups ({unique resource id: {property id:
+    color}}, under "_groups") that both 3MF checks compare."""
+    model = lib3mf.get_wrapper().CreateModel()
     reader = model.QueryReader("3mf")
     reader.SetStrictModeActive(True)
     reader.ReadFromBuffer(data)
+    groups = {}
+    cg = model.GetColorGroups()
+    while cg.MoveNext():
+        g = cg.GetCurrentColorGroup()
+        groups[g.GetUniqueResourceID()] = {pid: g.GetColor(pid) for pid in g.GetAllPropertyIDs()}
     facts = {"reader_warnings": [reader.GetWarning(i)[1]
                                  for i in range(reader.GetWarningCount())],
-             "unit": lib3mf.ModelUnit(model.GetUnit()).name}
+             "unit": lib3mf.ModelUnit(model.GetUnit()).name,
+             "color_groups": len(groups), "_groups": groups}
+    return model, facts
+
+
+def _read_3mf(data: bytes) -> dict:
+    """The facts export_3mf_check compares, read by lib3mf (strict mode) from the bytes."""
+    model, facts = _strict_read(data)
+    groups = facts.pop("_groups")
     objects, meshes = [], []
     it = model.GetObjects()
     while it.MoveNext():
@@ -463,19 +488,12 @@ def _read_3mf(data: bytes) -> dict:
     bi = model.GetBuildItems()
     while bi.MoveNext():
         item = bi.GetCurrent()
-        fields = [list(row) for row in item.GetObjectTransform().Fields]
+        identity, fields = _identity(item.HasObjectTransform(), item.GetObjectTransform())
         items.append({"object_id": item.GetObjectResourceID(), "fields": fields,
-                      "transform": item.HasObjectTransform() or fields != IDENTITY})
+                      "transform": not identity})
     facts["build_items"] = len(items)
     if len(items) == 1:
         facts["item_transform"] = items[0]["fields"]
-    groups = {}
-    cg = model.GetColorGroups()
-    while cg.MoveNext():
-        g = cg.GetCurrentColorGroup()
-        groups[g.GetUniqueResourceID()] = {
-            pid: g.GetColor(pid) for pid in g.GetAllPropertyIDs()}
-    facts["color_groups"] = len(groups)
     if len(meshes) == 1:
         mo = meshes[0]
         facts["object_name"] = mo.GetName()
@@ -512,6 +530,12 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
       content types and relationships parts are the writer's bytes (read with zipfile,
       not lib3mf: lib3mf ignores a case or leading-slash alias of the model part that
       another reader, such as trimesh, may load instead; Codex review 4);
+    - the model part is exactly the bytes tdmg.threemf.model_xml writes for these shells
+      (model_equal). The writer is deterministic, so the file must be exactly what was
+      gated: lib3mf reads attributes and elements it does not compare (slic3rpe
+      mmu_segmentation painting, another application's metadata, an unused resource)
+      without a warning, and a slicer may act on them (review of R2 step 4 Tasks 3-4).
+      The lib3mf read-back below stays as the independent reader of those bytes;
     - no reader warnings; unit millimeter; exactly one object, a mesh of type model named
       tdmg.threemf.OBJECT_NAME; exactly one build item, on that object, with no
       transform: HasObjectTransform false and the matrix exactly the identity as lib3mf
@@ -553,12 +577,14 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
             "format.3mf.self_intersection_is_warning)")
     expected["package_parts"] = list(PART_NAMES)
     expected["package_files_equal"] = True
+    expected["model_equal"] = True
     parts = None
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             parts = [i.orig_filename for i in z.infolist()]
             same_files = parts == list(PART_NAMES) and (
                 z.read(PART_NAMES[0]) == CONTENT_TYPES and z.read(PART_NAMES[1]) == RELS)
+            model_part = z.read(MODEL_PART) if MODEL_PART in z.namelist() else None
         facts = _read_3mf(data)
     except Exception as exc:   # noqa: BLE001 - any failure to read the bytes is a FAIL
         failed = {"read_error": f"{type(exc).__name__}: {exc}"}
@@ -573,7 +599,8 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
         "manifold_and_oriented")}
     measured["package_parts"] = parts
     measured["package_files_equal"] = same_files
-    ok = (same_files and not facts["reader_warnings"]
+    measured["model_equal"] = model_part == model_xml(shells)
+    ok = (same_files and measured["model_equal"] and not facts["reader_warnings"]
           and facts["unit"].lower() == UNIT
           and facts["objects"] == 1 and facts["mesh_objects"] == 1
           and facts.get("item_ok") is True and facts["build_items"] == 1
@@ -611,29 +638,12 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
 # --- the OrcaSlicer-only slicing input (docs/plans/2026-11-13-color-slicing.md, D2) ----
 
 
-def _identity(has_transform: bool, transform) -> tuple[bool, list]:
-    fields = [list(row) for row in transform.Fields]
-    return (not has_transform and fields == IDENTITY), fields
-
-
 def _read_orca_input(data: bytes) -> dict:
     """The facts orca_input_check compares, read by lib3mf (strict mode) from the bytes.
     Objects are named by their resource id in the file (GetModelResourceID); lib3mf's
     unique ids are only used to look them up."""
-    wrapper = lib3mf.get_wrapper()
-    model = wrapper.CreateModel()
-    reader = model.QueryReader("3mf")
-    reader.SetStrictModeActive(True)
-    reader.ReadFromBuffer(data)
-    facts = {"reader_warnings": [reader.GetWarning(i)[1]
-                                 for i in range(reader.GetWarningCount())],
-             "unit": lib3mf.ModelUnit(model.GetUnit()).name}
-    groups = {}
-    cg = model.GetColorGroups()
-    while cg.MoveNext():
-        g = cg.GetCurrentColorGroup()
-        groups[g.GetUniqueResourceID()] = {pid: g.GetColor(pid) for pid in g.GetAllPropertyIDs()}
-    facts["color_groups"] = len(groups)
+    model, facts = _strict_read(data)
+    groups = facts.pop("_groups")
     file_id, meshes, assemblies, n_objects = {}, {}, [], 0
     it = model.GetObjects()
     while it.MoveNext():
@@ -711,9 +721,13 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
     read back by lib3mf 2.x in strict mode (from the bytes), and its zip with zipfile.
     PASS iff:
     - the zip's raw entry names (orig_filename) are exactly tdmg.orca_input.ORCA_PART_NAMES,
-      in order; the content types and relationships parts are tdmg.threemf's bytes; and
-      Metadata/model_settings.config is exactly the bytes tdmg.orca_input.model_settings
-      writes for these shells;
+      in order; the content types and relationships parts are tdmg.threemf's bytes;
+      the model part is exactly the bytes tdmg.orca_input.orca_model_xml writes for
+      these shells (model_equal; as in export_3mf_check, lib3mf reads attributes and
+      elements it does not compare, such as mmu_segmentation painting or a per-triangle
+      property, without a warning); and Metadata/model_settings.config is exactly the
+      bytes tdmg.orca_input.model_settings writes for these shells (settings_equal). The
+      lib3mf read-back below stays as the independent reader of those bytes;
     - no reader warnings; unit millimeter; n + 1 objects: n meshes of type model and one
       components object of type model, named tdmg.orca_input.ASSEMBLY_NAME, with its
       resource id; n colorgroups; one build item, on the components object, with no
@@ -742,7 +756,7 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
                 "color_groups": n, "build_items": 1, "components": n,
                 "assembly": {"id": assembly_id(n), "name": ASSEMBLY_NAME, "type": "Model"},
                 "package_parts": list(ORCA_PART_NAMES), "package_files_equal": True,
-                "settings_equal": True,
+                "model_equal": True, "settings_equal": True,
                 "parts": [{"name": s.name, "object_id": mesh_object_id(i, n),
                            "extruder": orca_extruder(i), "color": color_3mf(s.hex)}
                           for i, s in enumerate(shells)]}
@@ -759,6 +773,7 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
             same_files = parts == list(ORCA_PART_NAMES) and (
                 z.read(PART_NAMES[0]) == CONTENT_TYPES and z.read(PART_NAMES[1]) == RELS)
             settings = z.read(SETTINGS_PART) if SETTINGS_PART in names else None
+            model_part = z.read(MODEL_PART) if MODEL_PART in names else None
         facts = _read_orca_input(data)
     except Exception as exc:   # noqa: BLE001 - any failure to read the bytes is a FAIL
         failed = {"read_error": f"{type(exc).__name__}: {exc}"}
@@ -772,6 +787,7 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
         "color_groups", "build_items", "item_transform")}
     measured["package_parts"] = parts
     measured["package_files_equal"] = same_files
+    measured["model_equal"] = model_part == orca_model_xml(shells)
     measured["settings_equal"] = settings == model_settings(shells)
     extruders = {}
     if settings is None:
@@ -791,7 +807,8 @@ def orca_input_check(data: bytes, shells: list[Shell]) -> CheckResult:
     measured["item_ok"] = (asm is not None and facts["build_items"] == 1
                            and facts.get("item_object_id") == asm["id"]
                            and facts.get("item_identity") is True)
-    ok = (same_files and measured["settings_equal"] and "settings_error" not in measured
+    ok = (same_files and measured["model_equal"] and measured["settings_equal"]
+          and "settings_error" not in measured
           and not facts["reader_warnings"] and facts["unit"].lower() == UNIT
           and facts["objects"] == n + 1 and facts["mesh_objects"] == n
           and facts["components_objects"] == 1 and facts["color_groups"] == n
