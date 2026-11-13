@@ -1,0 +1,184 @@
+{
+ "pinned": {
+  "sha256": "0254183f025d9f34351caa8371018bae540203344020ec69fc9bd5be0d741104",
+  "filament_colour": "(absent)"
+ },
+ "derived": {
+  "roadie-tol30-60-drop-v3-f64/filament-0.json": {
+   "sha256": "130523b58e9f44b38883b3a9000da939ae9f5a77b29c4a00bbba7c5dc0f62c8a",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#F60606"
+   ],
+   "palette_hex": "#F60606",
+   "ok": true
+  },
+  "roadie-tol30-60-drop-v3-f64/filament-1.json": {
+   "sha256": "1639de9d251f35df28306604c46b79c8c894e2738ba274183f5e1d5e65cfd8dc",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#F5F5F5"
+   ],
+   "palette_hex": "#F5F5F5",
+   "ok": true
+  },
+  "roadie-tol30-60-drop-v3-f64/filament-2.json": {
+   "sha256": "64460c7bcc724b84f96ba158e89588be41ed2be550c7d2d381150707ff015095",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#F0F10A"
+   ],
+   "palette_hex": "#F0F10A",
+   "ok": true
+  },
+  "roadie-tol30-60-drop-v3-f64/filament-3.json": {
+   "sha256": "0c8449ca5488fbce8a3fb018ff7d2bdc9e59d43b2b9040959cb9d977c765dcc4",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#451812"
+   ],
+   "palette_hex": "#451812",
+   "ok": true
+  },
+  "roadie-tol30-60-keep-v4-f64/filament-0.json": {
+   "sha256": "130523b58e9f44b38883b3a9000da939ae9f5a77b29c4a00bbba7c5dc0f62c8a",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#F60606"
+   ],
+   "palette_hex": "#F60606",
+   "ok": true
+  },
+  "roadie-tol30-60-keep-v4-f64/filament-1.json": {
+   "sha256": "0c8449ca5488fbce8a3fb018ff7d2bdc9e59d43b2b9040959cb9d977c765dcc4",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#451812"
+   ],
+   "palette_hex": "#451812",
+   "ok": true
+  },
+  "roadie-tol30-60-keep-v4-f64/filament-2.json": {
+   "sha256": "1639de9d251f35df28306604c46b79c8c894e2738ba274183f5e1d5e65cfd8dc",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#F5F5F5"
+   ],
+   "palette_hex": "#F5F5F5",
+   "ok": true
+  },
+  "roadie-tol30-60-keep-v4-f64/filament-3.json": {
+   "sha256": "64460c7bcc724b84f96ba158e89588be41ed2be550c7d2d381150707ff015095",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#F0F10A"
+   ],
+   "palette_hex": "#F0F10A",
+   "ok": true
+  },
+  "oddie-60-merge-blues-v3-f64/filament-0.json": {
+   "sha256": "a01ce07d20eaa1866ceecfc450fdd4fb9fd723fa6f6edfa921e615dc868a66df",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#25561B"
+   ],
+   "palette_hex": "#25561B",
+   "ok": true
+  },
+  "oddie-60-merge-blues-v3-f64/filament-1.json": {
+   "sha256": "761ebba80808792685b6731007f1c2b8e224d8d4b65b10c809d482f9e0b934a6",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#547E9D"
+   ],
+   "palette_hex": "#547E9D",
+   "ok": true
+  },
+  "oddie-60-merge-blues-v3-f64/filament-2.json": {
+   "sha256": "99782a2e0bfd6906ba44591f0bd13c3bb2ef7c01591e088c627dc9e684b9209d",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#48A835"
+   ],
+   "palette_hex": "#48A835",
+   "ok": true
+  },
+  "oddie-60-merge-blues-v3-f64/filament-3.json": {
+   "sha256": "00e6f31389f83e72ab36b983d6f98f44e41502b61c37f16345eb91925532c72b",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#DD4F47"
+   ],
+   "palette_hex": "#DD4F47",
+   "ok": true
+  },
+  "oddie-60-keep-merge-blues-greens-v4-f64/filament-0.json": {
+   "sha256": "a01ce07d20eaa1866ceecfc450fdd4fb9fd723fa6f6edfa921e615dc868a66df",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#25561B"
+   ],
+   "palette_hex": "#25561B",
+   "ok": true
+  },
+  "oddie-60-keep-merge-blues-greens-v4-f64/filament-1.json": {
+   "sha256": "761ebba80808792685b6731007f1c2b8e224d8d4b65b10c809d482f9e0b934a6",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#547E9D"
+   ],
+   "palette_hex": "#547E9D",
+   "ok": true
+  },
+  "oddie-60-keep-merge-blues-greens-v4-f64/filament-2.json": {
+   "sha256": "df6613bd14b9b769d71ec13d71cbe4dafb32153d8cf8b635d4169b093cead7e2",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#0D100D"
+   ],
+   "palette_hex": "#0D100D",
+   "ok": true
+  },
+  "oddie-60-keep-merge-blues-greens-v4-f64/filament-3.json": {
+   "sha256": "00e6f31389f83e72ab36b983d6f98f44e41502b61c37f16345eb91925532c72b",
+   "differing_keys": [
+    "filament_colour"
+   ],
+   "filament_colour": [
+    "#DD4F47"
+   ],
+   "palette_hex": "#DD4F47",
+   "ok": true
+  }
+ }
+}

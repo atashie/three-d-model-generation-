@@ -1,0 +1,170 @@
+{
+ "oddie-60-keep-merge-blues-greens-v4-f64-down": {
+  "start_tools": [
+   [
+    1,
+    1
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 1,
+  "first_tool_any_feature_layer1": 1,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 10,
+  "real_changes": 10,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 10
+ },
+ "oddie-60-keep-merge-blues-greens-v4-f64-up": {
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 0,
+  "first_tool_any_feature_layer1": 0,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 9,
+  "real_changes": 9,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 9
+ },
+ "oddie-60-merge-blues-v3-f64-down": {
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 0,
+  "first_tool_any_feature_layer1": 0,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 10,
+  "real_changes": 10,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 10
+ },
+ "oddie-60-merge-blues-v3-f64-up": {
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 0,
+  "first_tool_any_feature_layer1": 0,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 9,
+  "real_changes": 9,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 9
+ },
+ "roadie-tol30-60-drop-v3-f64-down": {
+  "start_tools": [
+   [
+    2,
+    2
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 2,
+  "first_tool_any_feature_layer1": 2,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 10,
+  "real_changes": 10,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 10
+ },
+ "roadie-tol30-60-drop-v3-f64-up": {
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 0,
+  "first_tool_any_feature_layer1": 0,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 9,
+  "real_changes": 9,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 9
+ },
+ "roadie-tol30-60-keep-v4-f64-down": {
+  "start_tools": [
+   [
+    3,
+    3
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 3,
+  "first_tool_any_feature_layer1": 3,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 10,
+  "real_changes": 10,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 10
+ },
+ "roadie-tol30-60-keep-v4-f64-up": {
+  "start_tools": [
+   [
+    0,
+    0
+   ]
+  ],
+  "t1000_lines": 2,
+  "first_model_tool_layer1": 0,
+  "first_tool_any_feature_layer1": 0,
+  "d2_start_loads_one_filament_the_first_of_layer1": true,
+  "d4a_sets_equal_bodies": true,
+  "d4b_contiguous_runs": true,
+  "d4c_formula": 9,
+  "real_changes": 9,
+  "d4c_holds": true,
+  "d4d_exact_minimum_from_loaded": 9,
+  "d4d_exact_minimum_from_base": 9,
+  "d4d_exact_minimum_free_start": 9,
+  "statistics_filament_changes": 9
+ }
+}

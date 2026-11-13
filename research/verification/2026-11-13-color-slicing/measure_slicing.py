@@ -784,6 +784,89 @@ def analyse(out: Path, variant: str = "plain") -> None:
             indent=1, default=str), encoding="utf-8")
 
 
+# --- The amended rules (controller decisions after the stop) ---------------------------------
+
+def check_rules(out: Path, variant: str) -> None:
+    """Check the amended Decisions 2 and 4 on every run of a variant, from the full analysis.
+
+    Decision 2: the start block loads exactly one filament (one T<n> below 255, T1000 aside,
+    inside its M620 S<n>A pair), and it is the first tool that prints on layer 1 (model
+    features; also checked over all features, the prime tower included).
+    Decision 4: (a) each layer's set of tools printing model features equals the set of
+    bodies on it; (b) on each layer each tool prints in one contiguous run; (c) the real
+    change count equals sum(colors - 1) + the boundaries where a layer's first tool differs
+    from the previous layer's last (layer 1 against the start-loaded tool); (d) the exact
+    minimum, as information.
+    """
+    full = json.loads((out / f"analysis-{variant}-full.json").read_text("utf-8"))
+    res = {}
+    for stem, a in sorted(full.items()):
+        orders, sets = a["orders_model"], a["expected_sets"]
+        start = [t for t in a["start_tools"] if t["T"] < 255]
+        loaded = start[0]["T"] if len(start) == 1 else None
+        first_model = orders[0][0] if orders and orders[0] else None
+        first_any = (a["orders_all_features"][0][0] if a["orders_all_features"]
+                     and a["orders_all_features"][0] else None)
+        d2 = (len(start) == 1 and start[0]["in_m620_for"] == loaded
+              and loaded == first_model)
+        sets_ok = all(sorted(set(o)) == s for o, s in zip(orders, sets, strict=True))
+        contiguous = all(len(o) == len(set(o)) for o in orders)
+        formula, prev = 0, loaded
+        for o in orders:
+            if not o:
+                continue
+            formula += len(o) - 1 + (1 if o[0] != prev else 0)
+            prev = o[-1]
+        res[stem] = {
+            "start_tools": [(t["T"], t["in_m620_for"]) for t in start],
+            "t1000_lines": len(a["t1000"]),
+            "first_model_tool_layer1": first_model,
+            "first_tool_any_feature_layer1": first_any,
+            "d2_start_loads_one_filament_the_first_of_layer1": d2,
+            "d4a_sets_equal_bodies": sets_ok,
+            "d4b_contiguous_runs": contiguous,
+            "d4c_formula": formula, "real_changes": a["real_changes"],
+            "d4c_holds": formula == a["real_changes"],
+            "d4d_exact_minimum_from_loaded": min_changes(sets, loaded),
+            "d4d_exact_minimum_from_base": a["minimum_changes"],
+            "d4d_exact_minimum_free_start": min(min_changes(sets, t) for t in sets[0]),
+            "statistics_filament_changes": (a["statistics"] or {}).get("filament_changes")}
+        r = res[stem]
+        print(stem, r["start_tools"], "L1 first", first_model, first_any, "D2", d2, "a", sets_ok,
+              "b", contiguous, "c", formula, a["real_changes"], "min", r[
+                  "d4d_exact_minimum_from_loaded"], r["d4d_exact_minimum_free_start"],
+              "stats", r["statistics_filament_changes"])
+    (out / f"rules-{variant}.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+
+
+def check_profiles(out: Path) -> None:
+    """The derived filament profiles of the colours variant: sha256, and the parsed-JSON
+    difference from the pinned filament profile (must be exactly filament_colour)."""
+    pin = slicer.load_pin()
+    orc = slicer.locate(REPO / "artifacts/tools/orcaslicer-2.5.0", pin, full_tree=False)
+    pinned_path = Path(orc.profiles["filament"])
+    pinned = json.loads(pinned_path.read_text("utf-8"))
+    res = {"pinned": {"sha256": mi.sha(pinned_path),
+                      "filament_colour": pinned.get("filament_colour", "(absent)")},
+           "derived": {}}
+    for plan in PLANS:
+        pal = json.loads((RUNS / plan / "palette.json").read_text("utf-8"))
+        hexes = {s["index"]: s["hex"].upper() for s in pal["shells"]}
+        for p in sorted((out / "filaments" / plan).glob("filament-*.json")):
+            d = json.loads(p.read_text("utf-8"))
+            keys = sorted(set(d) | set(pinned))
+            diff = [k for k in keys if d.get(k, "(absent)") != pinned.get(k, "(absent)")]
+            idx = int(p.stem.split("-")[1])
+            res["derived"][f"{plan}/{p.name}"] = {
+                "sha256": mi.sha(p), "differing_keys": diff,
+                "filament_colour": d.get("filament_colour"),
+                "palette_hex": hexes[idx],
+                "ok": diff == ["filament_colour"] and d["filament_colour"] == [hexes[idx]]}
+            print(plan, p.name, res["derived"][f"{plan}/{p.name}"]["ok"], diff,
+                  d.get("filament_colour"))
+    (out / "profiles-colours.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+
+
 if __name__ == "__main__":
     cmd, outdir = sys.argv[1], Path(sys.argv[2])
     if cmd == "build":
@@ -793,5 +876,9 @@ if __name__ == "__main__":
              sys.argv[4] if len(sys.argv) > 4 else None)
     elif cmd == "analyse":
         analyse(outdir, sys.argv[3] if len(sys.argv) > 3 else "plain")
+    elif cmd == "rules":
+        check_rules(outdir, sys.argv[3] if len(sys.argv) > 3 else "plain")
+    elif cmd == "profiles":
+        check_profiles(outdir)
     else:
         raise SystemExit(f"unknown command {cmd}")
