@@ -180,8 +180,8 @@ source.
 - **Step 4 (Task 6 done; Tasks 7 and 8 open):** `tdmg slice` slices both faces and the
   glue plates. Per face, `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used`
   read the G-code against the bodies, and every F3 result is required until the owner's
-  Task 7 review; so no face is PRINTABLE yet. `F6.portability` on `model.3mf` leaves the
-  volume unjudged (UNKNOWN). Owner plans:
+  Task 7 review; so no face is PRINTABLE yet. `F6.portability` on `model.3mf` records the
+  volume as information. Owner plans:
   `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.
 
 ## Calibration needed

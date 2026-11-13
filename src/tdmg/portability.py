@@ -760,7 +760,7 @@ def _motion_failure(layers: dict, exp: Expected) -> str | None:
 def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | None,
                       exp: Expected, timeout_rule: str | None, *, model: str = "model.stl",
                       source: str = "flat.json", meaning: str | None = None,
-                      volume_unjudged: str | None = None) -> tuple[CheckResult, dict]:
+                      volume_note: str | None = None) -> tuple[CheckResult, dict]:
     """F6.portability from both runs, and the measurements for the record.
 
     PASS only if --info exits 0 and reads a manifold, unrepaired mesh with flat.json's
@@ -780,9 +780,9 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
 
     model and source name the file and the record in the notes; meaning replaces
     PORTABILITY_MEANING and SHARED_READER_NOTE in a PASS note. With exp.volume_tol_mm3
-    None the volume is not compared, and a run that passes every other condition is
-    UNKNOWN, not PASS, with volume_unjudged as the reason (tdmg.color_slicing: no
-    tolerance is known for PrusaSlicer's 3MF volume).
+    None the volume is information, not a condition (tdmg.color_slicing, for model.3mf:
+    plan Decision 6 asks only for one manifold object that slices): measured adds the
+    expected volume and the difference, and volume_note is added to the note.
     """
     parsed, info_problem = None, None
     if info_run.returncode == 0 and not info_run.timed_out:
@@ -842,17 +842,19 @@ def portability_check(info_run: PrusaRun, gcode_run: PrusaRun, gcode: bytes | No
                  "size_tol_mm": exp.size_tol_mm, "volume_mm3": exp.volume_mm3,
                  "volume_tol_mm3": exp.volume_tol_mm3, "layers": exp.layer_counts,
                  "top_z_mm": top}
-    if reason is None and exp.volume_tol_mm3 is None:
-        check = CheckResult("F6.portability", "UNKNOWN", measured, threshold, None,
-                            "PrusaSlicer 2.9.7: every condition passed except the volume, "
-                            f"which is not judged: {volume_unjudged}. {PRUSA_GCODE_NOTE}")
-    elif reason is None:
+    extra = ""
+    if exp.volume_tol_mm3 is None:
+        got = measured["volume_mm3"]
+        measured |= {"palette_volume_mm3": exp.volume_mm3,
+                     "volume_difference_mm3": None if got is None else got - exp.volume_mm3}
+        extra = f" {volume_note}" if volume_note else ""
+    if reason is None:
         said = meaning or f"{PORTABILITY_MEANING}. {SHARED_READER_NOTE}"
         check = CheckResult("F6.portability", "PASS", measured, threshold, None,
-                            f"{said}. {PRUSA_GCODE_NOTE}")
+                            f"{said}.{extra} {PRUSA_GCODE_NOTE}")
     else:
         check = CheckResult("F6.portability", "FAIL", measured, threshold, rule,
-                            f"PrusaSlicer 2.9.7: {reason}")
+                            f"PrusaSlicer 2.9.7: {reason}" + (f".{extra}" if extra else ""))
     measurements = {
         "info": {**info_run.summary(), "parsed": parsed},
         "gcode": {**gcode_run.summary(), "bytes": None if gcode is None else len(gcode),

@@ -71,7 +71,7 @@ def main() -> None:
             f"{port['expected']['parts']}, facets {m.get('facets')} / "
             f"{port['expected']['facets']}, layers {m.get('layers')}, volume "
             f"{m.get('volume_mm3')} mm3 (PrusaSlicer minus palette sum "
-            f"{'?' if diff is None else f'{diff:+.3f}'} mm3, not judged)")
+            f"{'?' if diff is None else f'{diff:+.3f}'} mm3, information)")
         n = len(rec["filament_map"])
         for face in ("up", "down"):
             f = rec["faces"][face]

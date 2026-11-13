@@ -151,13 +151,20 @@ def test_record_and_files_with_the_fake(colored, orca, tmp_path):
     # Glue plates: R1 records, with R1's required set; the two flat-only checks missing.
     glue = [b for b in src["bodies"] if b["route"] == "glue"]
     assert sorted(rec["glue"]["plates"]) == sorted(b["file"][:-4] for b in glue)
+    report = src["glue"]["report"]
     for name, plate in rec["glue"]["plates"].items():
+        row = next(b for b in glue if b["file"] == f"{name}.stl")
         assert plate["algorithm"] == "slice-5"
-        assert plate["required_checks"] == sorted(SLICE_REQUIRED_CHECKS)
-        assert plate["certification"].endswith("F2.target_width missing, "
-                                                "F4.body_count missing")
+        assert plate["required_checks"] == sorted(SLICE_REQUIRED_CHECKS - {"F2.target_width"})
+        assert "F2.target_width" in plate["not_applicable"]
+        assert "missing" not in plate["certification"]
+        body = next(c for c in plate["checks"] if c["id"] == "F4.body_count")
+        want = 1 if row["role"] == "base" else next(
+            c["pieces"] for c in report["colors"] if c["index"] == row["index"])
+        assert (body["status"], body["measured"], body["threshold"]) == ("PASS", want, want)
         assert (out / name / "plate_1.gcode").is_file()
         assert plate["gcode"]["file"] == f"{name}/plate_1.gcode"
+    assert any(c["pieces"] > 1 for c in report["colors"])      # the test covers several
     assert rec["portability"]["configured"] is False
     assert rec["portability"]["check"]["status"] == "UNKNOWN"
     assert rec["model_3mf"]["check"]["status"] == "PASS"
@@ -408,22 +415,28 @@ def _expected_parts(colored):
     return sum(b["bodies"] for b in _record(colored)["bodies"] if b["route"] == "ams")
 
 
-def test_portability_reads_model_3mf_and_leaves_the_volume_unjudged(colored, orca,
-                                                                    prusa, tmp_path):
+def test_portability_reads_model_3mf_and_records_the_volume_as_information(
+        colored, orca, prusa, tmp_path):
     out = tmp_path / "a"
-    rec = _run(colored, out, orca(),
-               prusaslicer_dir=prusa(info={"number_of_parts": _expected_parts(colored)}))
+    volume = 1234.5
+    rec = _run(colored, out, orca(), prusaslicer_dir=prusa(
+        info={"number_of_parts": _expected_parts(colored), "volume": f"{volume:.6f}"}))
     port = rec["portability"]
     check = port["check"]
-    assert check["status"] == "UNKNOWN", check
-    assert "every condition passed except the volume" in check["note"]
+    assert check["status"] == "PASS", check          # a volume far off does not FAIL it
+    assert "information" in check["note"] and "No derivation" in check["note"]
+    assert "model.3mf" in check["note"]
+    palette = sum(b["volume_mm3"] for b in _record(colored)["bodies"] if b["route"] == "ams")
+    assert check["measured"]["volume_mm3"] == volume
+    assert check["measured"]["palette_volume_mm3"] == pytest.approx(palette)
+    assert check["measured"]["volume_difference_mm3"] == pytest.approx(volume - palette)
+    assert check["threshold"]["volume_tol_mm3"] is None
     assert port["commands"]["info"] == ["<prusa-slicer-console.exe>", "--info", "<model.3mf>"]
     assert port["expected"]["volume_judged"] is False
-    assert check["threshold"]["volume_tol_mm3"] is None
     assert port["gcode"]["file"] == "prusaslicer.portability-only.gcode.txt"
     assert (out / "prusaslicer.portability-only.gcode.txt").is_file()
     for face in ("up", "down"):
-        assert "F6.portability UNKNOWN" in rec["faces"][face]["certification"]
+        assert "F6.portability" not in rec["faces"][face]["certification"]
 
 
 def test_portability_fails_on_the_wrong_part_count(colored, orca, prusa,
@@ -458,8 +471,29 @@ def test_the_test_plan_slices_with_the_real_slicers(colored, tmp_path):
         assert rec["faces"][face]["summary"]["changes"] is not None
         assert len([c for c in by if c.startswith("F3.") and ".T" in c]) == 3 * n
     port = rec["portability"]["check"]
-    assert port["status"] == "UNKNOWN", port
-    assert "except the volume" in port["note"]
+    assert port["status"] == "PASS", port
+    assert "volume_difference_mm3" in port["measured"]
     for plate in rec["glue"]["plates"].values():
         by = {c["id"]: c["status"] for c in plate["checks"]}
         assert by["F6.slicer_exit"] == "PASS" and by["F6.layer_count"] == "PASS"
+        assert by["F4.body_count"] == "PASS"
+
+
+def test_a_glue_plate_with_the_wrong_body_count_fails_it(folder, tmp_path, orca):
+    def more(r):
+        r["glue"]["report"]["colors"][0]["pieces"] += 1
+    _edit(folder, more)
+    with pytest.raises(SlicerError, match="glue report"):
+        _run(folder, tmp_path / "a", orca())       # colors and pieces disagree: refused
+    assert not (tmp_path / "a").exists()
+
+
+def test_the_body_count_check_compares_the_stl_with_the_report():
+    import trimesh
+    two = trimesh.util.concatenate([trimesh.creation.box((1, 1, 1)),
+                                    trimesh.creation.box((1, 1, 1)).apply_translation(
+                                        (3, 0, 0))])
+    data = two.export(file_type="stl")
+    assert cs.glue_body_count_check(data, 2).status == "PASS"
+    bad = cs.glue_body_count_check(data, 3)
+    assert (bad.status, bad.measured, bad.threshold) == ("FAIL", 2, 3)

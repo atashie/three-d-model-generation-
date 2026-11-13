@@ -289,11 +289,13 @@ follows in Task 8; in short:
   `F6.filaments_used`, R1's slicer F6 checks and every F3 result (silhouette and per tool,
   all required until the owner's Task 7 review).
 - **Glue plates:** each `glue-*.stl` is sliced as an R1 part into its own folder, with R1's
-  checks and required set. `tdmg flat --colors` makes no `F2.target_width` or
-  `F4.body_count`, so R1 names them missing and a glue plate is not PRINTABLE.
+  checks and required set, except `F2.target_width`, which does not apply to a plate of
+  pieces. `F4.body_count` requires the plate's bodies to be its pieces in the glue report
+  (1 for the base).
 - **Portability:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded but not
-  judged (no tolerance is known for its 3MF volume), so `F6.portability` is at best
-  UNKNOWN, and no face is PRINTABLE yet.
+  a condition: plan Decision 6 asks for one manifold object that slices, and no
+  derivation of PrusaSlicer's 3MF volume exists. The difference from the palette sum is
+  recorded.
 - **Record:** `OUT/slice.json`, schema `tdmg.colorslice/1`, with `colorslice_id`, a verdict
   per face and per glue plate, and the filament for each color.
 - **Message:** the verdict and the changes, flush, prime tower and time per face, and the

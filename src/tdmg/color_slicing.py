@@ -32,20 +32,23 @@ tdmg.colorslice/1) last. It prints nothing.
    F6.layer_count with the layer count from the bodies' z extent as stored, and
    F6.single_object), with F6.layer_count cross-checked against the G-code's own layers;
    and tdmg.color_gcode.color_slice_checks.
-5. Each glue-*.stl: tdmg.slicing.slice_stl, R1's run and checks unchanged, with R1's
-   required set. The glue rows lack two checks R1 requires of flat.json
-   (F2.target_width, F4.body_count: tdmg flat --colors does not make them), so R1's
-   certification names them "missing" and a glue plate is not PRINTABLE.
+5. Each glue-*.stl: tdmg.slicing.slice_stl, R1's run and checks, with R1's required set
+   minus F2.target_width (controller decision, 2026-11-13: a plate of pieces has no
+   target width; the record says so under not_applicable). F4.body_count is computed here
+   (glue_body_count_check): the STL's bodies must equal the plate's pieces in the glue
+   report (1 for the glue base); a report whose per-color counts and piece list disagree
+   is refused.
 6. F6.portability (Decision 6): PrusaSlicer --info on model.3mf must read one manifold
    object, unrepaired, with the AMS bodies' parts (connected pieces) and triangles, and
    their overall size within R1's size tolerance; --export-gcode must slice it (one
-   extruder) to the allowed layers, as R1 judges its G-code. The volume is recorded and
-   NOT judged (VOLUME_UNJUDGED), so a run that passes the rest is UNKNOWN, never PASS.
+   extruder) to the allowed layers, as R1 judges its G-code. The volume is information
+   (VOLUME_NOTE; controller decision, 2026-11-13): PrusaSlicer's volume, the palette sum
+   and the difference are recorded in measured, and do not decide the status.
 7. Verdicts: per face, PRINTABLE only if every required check passes: the inherited ones
    (the record's required_checks minus the glue-only ones, F6.slicer and
    F3.thin_regions), F2.orca_input_matches_bodies, color_gcode.required_check_ids, R1's
-   four slicer F6 checks and F6.portability. Per glue plate, R1's. A FAIL quarantines that
-   face's or plate's G-code (.failed); PrusaSlicer's G-code is quarantined when
+   four slicer F6 checks and F6.portability. Per glue plate, GLUE_REQUIRED_CHECKS. A FAIL
+   quarantines that face's or plate's G-code (.failed); PrusaSlicer's G-code is quarantined when
    F6.portability or an inherited AMS check FAILs.
 
 colorslice_id is the SHA-256 of the canonical JSON of: the algorithm (COLORSLICE_ALGORITHM);
@@ -95,6 +98,7 @@ from tdmg.colored_flat import (
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import RECORD_SCHEMA as COLORFLAT_SCHEMA
 from tdmg.flat import STL_COORD_RTOL
+from tdmg.flat import _body_count as body_count
 from tdmg.orca_input import ENCODING as ORCA_ENCODING
 from tdmg.orca_input import ORCA_INPUT_NAME, filament_map, turn_over, write_orca_input
 from tdmg.portability import (
@@ -163,13 +167,28 @@ SLICER_F6_IDS = frozenset({"F6.slicer_exit", "F6.gcode_present", "F6.layer_count
 # glue-only ones (a face is the AMS route), the F6.slicer placeholder (this run slices)
 # and F3.thin_regions (information, as in R1).
 INHERITED_DROPPED = frozenset({"F6.slicer", THIN_REGIONS})
-VOLUME_UNJUDGED = (
-    "no tolerance is known for the volume PrusaSlicer 2.9.7 reports for a 3MF. R1's "
-    "volume_tolerance_mm3 is derived for admesh's get_volume on an STL in file order, and "
-    "a float32 emulation of that computation on model.3mf's triangles (in file order) does "
-    "not reproduce PrusaSlicer's printed 3MF volumes (step 3, Task 5 measured differences "
-    "of -1.23 to +0.25 mm3 from the palette sum, cause not investigated). Open for the "
-    "controller (plan Task 6)")
+# Plan Decision 6 asks of model.3mf only that --info reads one manifold object and that it
+# slices; the volume is information (controller decision, 2026-11-13, Task 6).
+VOLUME_NOTE = (
+    "The volume is information, not a condition: PrusaSlicer's --info volume, the palette "
+    "sum (the AMS bodies' volumes in colored.json) and their difference are in measured. No "
+    "derivation of how PrusaSlicer 2.9.7 computes a 3MF's volume exists: R1's "
+    "volume_tolerance_mm3 is derived for admesh's get_volume on an STL, and float32 "
+    "emulations of that computation and of an its_volume-like one on model.3mf's triangles "
+    "(in file order, centred or not) did not reproduce PrusaSlicer's printed 3MF volumes "
+    "(Task 6, 2026-11-13; step 3 Task 5 measured differences of -1.23 to +0.25 mm3, cause "
+    "not investigated).")
+COLOR_PORTABILITY_MEANING = (
+    "a second slicer (PrusaSlicer 2.9.7) reads model.3mf as one manifold object, unrepaired, "
+    "with the AMS bodies' parts (connected pieces), triangles and size, and slices it on one "
+    "extruder to its full height, with extrusion on every layer at its height (its other "
+    "settings are PrusaSlicer's defaults)")
+TARGET_WIDTH = "F2.target_width"
+BODY_COUNT = "F4.body_count"
+TARGET_WIDTH_NA = ("not applicable to a glue plate: a plate of pieces has no target width; "
+                   "the colored record's width belongs to the whole model (controller "
+                   "decision, 2026-11-13, Task 6)")
+GLUE_REQUIRED_CHECKS = SLICE_REQUIRED_CHECKS - {TARGET_WIDTH}
 SIZE_NOTE = ("the size tolerance is R1's size_tolerance_mm, derived for PrusaSlicer's STL "
              "import; for model.3mf its --info sizes matched the bodies' extents to all 6 "
              "decimals on the four owner plans (step 3, Task 5)")
@@ -203,7 +222,7 @@ COLOR_REVIEW = (
     "G-code; time is the slicer's estimate. Every F3 result (silhouette and per tool) is "
     "required until the owner's Task 7 review. Glue plates are sliced as R1 parts. "
     "F6.portability runs PrusaSlicer 2.9.7 on model.3mf when --prusaslicer-dir or "
-    "TDMG_PRUSASLICER_DIR is given; its volume is not judged, so it is at best UNKNOWN. "
+    "TDMG_PRUSASLICER_DIR is given; its volume is information, not a condition. "
     "When any required check FAILs, that G-code is kept as plate_1.gcode.failed; do not "
     "print it.")
 
@@ -435,14 +454,15 @@ def _portability(ctx: Context, model_3mf: bytes, shells: list[Shell], rows: list
             ctx.prusa_timeout["value"], prusa, placeholder=f"<{MODEL_3MF}>")
     check, measurements = portability_check(
         info_run, gcode_run, gcode, expected, ctx.prusa_timeout["rule"], model=MODEL_3MF,
-        source="the AMS bodies of colored.json", volume_unjudged=VOLUME_UNJUDGED)
+        source="the AMS bodies of colored.json", meaning=COLOR_PORTABILITY_MEANING,
+        volume_note=VOLUME_NOTE)
     commands = command_templates(settings, f"<{MODEL_3MF}>")
     section = {"configured": True, "reason": None, "note": PRUSA_GCODE_NOTE,
                "model": MODEL_3MF,
                "slicer": {"name": prusa.pin.name, "pin": prusa.pin.id, **prusa.identity()},
                "settings": settings, "commands": commands,
                "expected": {**expected.as_dict(), "volume_judged": False,
-                            "volume_note": VOLUME_UNJUDGED, "size_note": SIZE_NOTE},
+                            "volume_note": VOLUME_NOTE, "size_note": SIZE_NOTE},
                "tolerances": measurements["tolerances"], "info": measurements["info"],
                "gcode": measurements["gcode"]}
     identity = {"slicer": prusa.identity(),
@@ -555,20 +575,67 @@ def slice_face(ctx: Context, face: str, shells: list[Shell], filaments: list[dic
             "identity": {"orca_input_sha256": _sha(orca)}}
 
 
+def glue_piece_counts(record: dict) -> dict[str, int]:
+    """The number of bodies each glue plate must have, by STL name: 1 for the glue base;
+    for a color's plate, its pieces in the glue report. SlicerError unless the report's
+    per-color counts ("colors": pieces) and its piece list ("pieces": index) agree, and
+    every glue plate has its count."""
+    report = record["glue"].get("report")
+    try:
+        per_color = {int(c["index"]): int(c["pieces"]) for c in report["colors"]}
+        listed: dict[int, int] = {}
+        for piece in report["pieces"]:
+            listed[int(piece["index"])] = listed.get(int(piece["index"]), 0) + 1
+        dup = len(per_color) != len(report["colors"])
+    except (KeyError, TypeError, ValueError) as err:
+        raise SlicerError(f"{COLORED_RECORD}: the glue report gives no piece count per "
+                          f"color ({err})") from None
+    if dup or {k: v for k, v in per_color.items() if v} != listed:
+        raise SlicerError(f"{COLORED_RECORD}: the glue report's pieces per color "
+                          f"{per_color} disagree with its piece list {listed}")
+    out = {}
+    for row in record["bodies"]:
+        if row["route"] != "glue":
+            continue
+        if row["role"] == "base":
+            out[row["file"]] = 1
+        elif per_color.get(row["index"], 0) >= 1:
+            out[row["file"]] = per_color[row["index"]]
+        else:
+            raise SlicerError(f"{COLORED_RECORD}: the glue report has no pieces for "
+                              f"{row['file']}")
+    return out
+
+
+def glue_body_count_check(stl: bytes, expected: int) -> CheckResult:
+    """F4.body_count for a glue plate: the bodies of its STL, read as the gate reads it
+    (parsed back and merged exactly; tdmg.flat's count of connected bodies), must be the
+    plate's pieces in the glue report (1 for the base)."""
+    mesh = merge_exact(trimesh.load(io.BytesIO(stl), file_type="stl", process=False))
+    n = body_count(mesh)
+    how = ("bodies in the plate's STL against its pieces in colored.json's glue report "
+           "(1 for the glue base)")
+    return CheckResult(BODY_COUNT, "PASS" if n == expected else "FAIL", n, expected, None,
+                       how if n == expected else f"{how}: {n} bodies, not {expected}")
+
+
 def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, stl: bytes,
-                     assembly: list[CheckResult]) -> dict:
-    """One glue plate as an R1 part (tdmg.slicing.slice_stl, R1's required set). Its
-    files go in a folder named after the STL."""
+                     assembly: list[CheckResult], pieces: int) -> dict:
+    """One glue plate as an R1 part (tdmg.slicing.slice_stl), with R1's checks and
+    required set except F2.target_width (not applicable), and F4.body_count against the
+    plate's pieces. Its files go in a folder named after the STL."""
     folder = row["file"].removesuffix(".stl")
-    previous = _checks(row.get("checks"), row["file"]) + assembly
+    previous = (_checks(row.get("checks"), row["file"]) + assembly
+                + [glue_body_count_check(stl, pieces)])
     mesh = {k: row.get(k) for k in ("bodies", "triangles", "extents_mm", "volume_mm3")}
-    part = slice_stl(ctx, stl, previous, mesh)
+    part = slice_stl(ctx, stl, previous, mesh, required=GLUE_REQUIRED_CHECKS)
     z_min, z_max = part["z"]
     identity = {"algorithm": SLICE_ALGORITHM_VERSION, "colorflat_id": record["colorflat_id"],
                 "colored_record_sha256": colored_sha, "plate": row["file"],
                 "model_stl_sha256": _sha(stl), "slicer": ctx.slicer_identity(),
                 "profiles": ctx.profile_hashes(), "command": COMMAND_TEMPLATE,
-                "f3": ctx.f3_identity(), **part["identity"]}
+                "f3": ctx.f3_identity(), "required": sorted(GLUE_REQUIRED_CHECKS),
+                "expected_bodies": pieces, **part["identity"]}
     files = {f"{folder}/{name}": data for name, data in part["files"].items()}
     rec = part["record"]
     if rec["gcode"] is not None:
@@ -586,12 +653,12 @@ def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, st
                                      "its layer counts come from its STL's z extent",
                    "stl_z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
                    "expected_layer_counts": sorted(part["allowed"])},
-        "required_checks": sorted(SLICE_REQUIRED_CHECKS),
-        "inherited_note": ("R1's checks and required set unchanged (plan Decision 5). The "
-                           "inherited checks are this plate's body checks and the glue "
-                           "assembly's from colored.json; tdmg flat --colors makes no "
-                           "F2.target_width or F4.body_count for a glue plate, so R1's "
-                           "certification names them missing."),
+        "required_checks": sorted(GLUE_REQUIRED_CHECKS),
+        "not_applicable": {TARGET_WIDTH: TARGET_WIDTH_NA},
+        "inherited_note": ("R1's checks (plan Decision 5). The inherited checks are this "
+                           "plate's body checks and the glue assembly's from colored.json, "
+                           "plus F4.body_count against the plate's pieces in the glue "
+                           "report; F2.target_width is not applicable."),
         "command": COMMAND_TEMPLATE, **rec}
     return {"record": plate, "files": files, "slice_id": plate["slice_id"]}
 
@@ -624,6 +691,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
         - INHERITED_DROPPED
     glue_assembly = [c for c in _checks(assembly.get("glue", []), "assembly.glue")
                      if c.id != "F6.slicer"]
+    pieces = glue_piece_counts(record_in) if record_in["glue"]["built"] else {}
     try:
         create_folder = check_output_dir(out_dir)
     except RecordError as err:
@@ -668,7 +736,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
         if row["route"] != "glue":
             continue
         done = slice_glue_plate(ctx, record_in, colored_sha, row, files_in[row["file"]],
-                                glue_assembly)
+                                glue_assembly, pieces[row["file"]])
         plates[done["record"]["folder"]] = done["record"]
         files.update(done["files"])
 
