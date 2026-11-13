@@ -1,0 +1,126 @@
+=== roadie-tol30 60x3: old roadie-tol30-60x3-f64 (slice-4) -> new roadie-tol30-60x3-slice5c (slice-5)
+verdict: PRINTABLE -> PRINTABLE
+certification: PRINTABLE -> PRINTABLE
+layer_count: 15 -> 15
+time_s: 471.899 -> 866.684
+weight_g: 2.2724 -> 2.2474
+volume_mm3: 1803.504 -> 1783.641
+gcode sha256: 76e3415014829195... -> e86b758a5be65e13... (quarantined False -> False)
+slice_id: 86b7d85d17476039... -> bcc0f600a98d33ab...
+  F1.finite: PASS -> PASS
+  F1.no_degenerate_faces: PASS -> PASS
+  F1.no_duplicate_faces: PASS -> PASS
+  F1.edge_manifold: PASS -> PASS
+  F1.consistent_orientation: PASS -> PASS
+  F1.vertex_manifold: PASS -> PASS
+  F1.positive_volume: PASS -> PASS
+  F2.fits_build_volume: PASS -> PASS
+  F2.target_width: PASS -> PASS
+  F2.export_matches_geometry: PASS -> PASS
+  F3.thin_regions: UNKNOWN -> UNKNOWN
+  F4.body_count: PASS -> PASS
+  F5.triangles: PASS -> PASS
+  F3.printed_connectivity: PASS -> PASS
+  F3.edge_coverage: PASS -> PASS
+  F3.edge_overprint: PASS -> PASS
+  F6.slicer_exit: PASS -> PASS
+  F6.gcode_present: PASS -> PASS
+  F6.layer_count: PASS -> PASS
+  F6.single_object: PASS -> PASS
+  F6.portability: PASS -> PASS
+  F3.printed_connectivity old: {'layers': 15, 'layers_mismatched': 0, 'angle_deg': 0}
+  F3.printed_connectivity new: {'layers': 15, 'layers_mismatched': 0, 'angle_deg': 0}
+  F3.edge_coverage old: {'max_gap_mm': 0.23120785697504878, 'share_over_allowance': 0.0, 'layers_over': 0, 'angle_deg': 0}
+  F3.edge_coverage new: {'max_gap_mm': 0.23120785697504878, 'share_over_allowance': 0.0, 'layers_over': 0, 'angle_deg': 0}
+  F3.edge_overprint old: {'layers_over': 0, 'angle_deg': 0}
+  F3.edge_overprint new: {'layers_over': 0, 'angle_deg': 0}
+old plate_1.gcode: start G-code 40 lines, M620 lines 0; first lines after the header:
+    M73 P0 R7
+    M201 X6000 Y6000 Z1500 E5000
+    M203 X500 Y500 Z30 E30
+    M204 P12000 R5000 T12000
+    M205 X9.00 Y9.00 Z3.00 E3.00 ; sets the jerk limits, mm/sec
+    M190 S35 ; set bed temperature and wait for it to be reached
+    ; FEATURE: Custom
+    G0 Z20 F9000
+    G92 E0; G1 E-10 F1200
+    G28
+    M970 Q1 A10 B10 C130 K0
+    M970 Q1 A10 B131 C250 K1
+new plate_1.gcode: start G-code 626 lines, M620 lines 3; first lines after the header:
+    M73 P0 R14
+    M201 X6000 Y6000 Z1500 E5000
+    M203 X500 Y500 Z30 E30
+    M204 P12000 R5000 T12000
+    M205 X9.00 Y9.00 Z3.00 E3.00 ; sets the jerk limits, mm/sec
+    ; FEATURE: Custom
+    ;===== machine: A1 =========================
+    ;===== date: 20260513 ==================
+    G392 S0
+    M9833.2
+    ;M400
+    ;M73 P1.717
+
+=== oddie 60x3: old oddie-60x3-f64 (slice-4) -> new oddie-60x3-slice5c (slice-5)
+verdict: PRINTABLE -> PRINTABLE
+certification: PRINTABLE -> PRINTABLE
+layer_count: 15 -> 15
+time_s: 484.189 -> 876.098
+weight_g: 4.3461 -> 4.3211
+volume_mm3: 3449.273 -> 3429.41
+gcode sha256: 3604a00a634df0ef... -> aee2e1bf37082f1d... (quarantined False -> False)
+slice_id: a50eceadbc539dfb... -> ce44c481e9ffa7c6...
+  F1.finite: PASS -> PASS
+  F1.no_degenerate_faces: PASS -> PASS
+  F1.no_duplicate_faces: PASS -> PASS
+  F1.edge_manifold: PASS -> PASS
+  F1.consistent_orientation: PASS -> PASS
+  F1.vertex_manifold: PASS -> PASS
+  F1.positive_volume: PASS -> PASS
+  F2.fits_build_volume: PASS -> PASS
+  F2.target_width: PASS -> PASS
+  F2.export_matches_geometry: PASS -> PASS
+  F3.thin_regions: UNKNOWN -> UNKNOWN
+  F4.body_count: PASS -> PASS
+  F5.triangles: PASS -> PASS
+  F3.printed_connectivity: PASS -> PASS
+  F3.edge_coverage: PASS -> PASS
+  F3.edge_overprint: PASS -> PASS
+  F6.slicer_exit: PASS -> PASS
+  F6.gcode_present: PASS -> PASS
+  F6.layer_count: PASS -> PASS
+  F6.single_object: PASS -> PASS
+  F6.portability: PASS -> PASS
+  F3.printed_connectivity old: {'layers': 15, 'layers_mismatched': 0, 'angle_deg': 0}
+  F3.printed_connectivity new: {'layers': 15, 'layers_mismatched': 0, 'angle_deg': 0}
+  F3.edge_coverage old: {'max_gap_mm': 0.22234656130346278, 'share_over_allowance': 0.0, 'layers_over': 0, 'angle_deg': 0}
+  F3.edge_coverage new: {'max_gap_mm': 0.22234656130346278, 'share_over_allowance': 0.0, 'layers_over': 0, 'angle_deg': 0}
+  F3.edge_overprint old: {'layers_over': 0, 'angle_deg': 0}
+  F3.edge_overprint new: {'layers_over': 0, 'angle_deg': 0}
+old plate_1.gcode: start G-code 40 lines, M620 lines 0; first lines after the header:
+    M73 P0 R8
+    M201 X6000 Y6000 Z1500 E5000
+    M203 X500 Y500 Z30 E30
+    M204 P12000 R5000 T12000
+    M205 X9.00 Y9.00 Z3.00 E3.00 ; sets the jerk limits, mm/sec
+    M190 S35 ; set bed temperature and wait for it to be reached
+    ; FEATURE: Custom
+    G0 Z20 F9000
+    G92 E0; G1 E-10 F1200
+    G28
+    M970 Q1 A10 B10 C130 K0
+    M970 Q1 A10 B131 C250 K1
+new plate_1.gcode: start G-code 625 lines, M620 lines 3; first lines after the header:
+    M73 P0 R14
+    M201 X6000 Y6000 Z1500 E5000
+    M203 X500 Y500 Z30 E30
+    M204 P12000 R5000 T12000
+    M205 X9.00 Y9.00 Z3.00 E3.00 ; sets the jerk limits, mm/sec
+    ; FEATURE: Custom
+    ;===== machine: A1 =========================
+    ;===== date: 20260513 ==================
+    G392 S0
+    M9833.2
+    ;M400
+    ;M73 P1.717
+

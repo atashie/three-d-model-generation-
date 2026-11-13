@@ -2,7 +2,7 @@
 
     uv run python research/verification/2026-11-13-a1-profile-include/compare_slices.py
 
-Reads artifacts/slice-runs/<sel>-60x3-f64/ (2026-11-11) and <sel>-60x3-slice5/
+Reads artifacts/slice-runs/<sel>-60x3-f64/ (2026-11-11) and <sel>-60x3-slice5c/
 (2026-11-13) for sel in roadie-tol30 and oddie: slice.json and plate_1.gcode (or
 plate_1.gcode.failed). Prints verdict, every check's status, layers, time, weight, the F3
 numbers and the first lines of the start G-code.
@@ -31,7 +31,7 @@ def start_block(lines):
 
 
 for sel in ("roadie-tol30", "oddie"):
-    old_dir, new_dir = RUNS / f"{sel}-60x3-f64", RUNS / f"{sel}-60x3-slice5"
+    old_dir, new_dir = RUNS / f"{sel}-60x3-f64", RUNS / f"{sel}-60x3-slice5c"
     old = json.loads((old_dir / "slice.json").read_text(encoding="utf-8"))
     new = json.loads((new_dir / "slice.json").read_text(encoding="utf-8"))
     print(f"=== {sel} 60x3: old {old_dir.name} ({old['algorithm']}) -> new {new_dir.name} "

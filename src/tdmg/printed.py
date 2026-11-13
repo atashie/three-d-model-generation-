@@ -99,6 +99,16 @@ CUSTOM_G_COMMAND = re.compile(r"G(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
 # arc planes (G18, G19), inches (G20), coordinate systems and offsets (G10, G53 to G59 and
 # their subcodes, G29.1, a Bambu Z offset) and any subcode of a command this parser follows
 # (G0.n to G3.n, G90.1 and G91.1 arc-centre modes, G92.n, ...), except G29's.
+# The A1 time-lapse code is read as Custom is, between these two comment lines. They are
+# not OrcaSlicer's: they are lines 4 and 61 of the 63-line time_lapse_gcode in the pinned
+# template "Bambu Lab A1 0.4 nozzle template time_lapse_gcode.json" (sha256 febd4212...,
+# profiles/slicers/orcaslicer-2.5.0.yaml), written at each layer change with no FEATURE line.
+# Inside them the owner's G-code has G392, G39.3 and G39 (research/verification/
+# 2026-11-13-a1-profile-include/scan-gcommands.txt) and no extrusion. Since this code runs
+# between model layers, a block may not extrude at all (only E <= 0), must not hold a
+# FEATURE line, and the two lines must pair; the FEATURE in force is unchanged by it.
+SKIPPABLE_START = "SKIPPABLE_START"
+SKIPPABLE_END = "SKIPPABLE_END"
 CUSTOM_REFUSED_G = frozenset({"G10", "G18", "G19", "G20", "G53", "G54", "G55", "G56", "G57",
                               "G58", "G59"})
 # A word: an upper-case letter and a plain decimal number (no exponent, nan or inf).
@@ -353,7 +363,10 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     other than G29), and it makes X, Y and the commanded Z unknown until the next absolute
     ones, as G28 does. Its words must be finite plain numbers and its X and Y within
     plate.within_bound. Moves in Custom (relative or R-form arcs, G0 with E) are followed
-    for the position only; none is analysed. M- and
+    for the position only; none is analysed. The A1 time-lapse code, between the comment
+    lines "; SKIPPABLE_START" and "; SKIPPABLE_END" (SKIPPABLE_START), is read as Custom is
+    for G-commands, but must pair, must not hold a FEATURE line or any move with positive
+    E, and leaves the FEATURE in force unchanged; its moves set the position only. M- and
     T-commands are ignored except M82 and M83, which set the extrusion mode: the others
     in this G-code (M17, M73, M104, M106, M109, M140, M190, M201, M203, M204, M205, M220,
     M221, M400, M620-M625, M970, M971, M974, M981, M991, M1002 and T255) set temperatures,
@@ -378,11 +391,25 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     layers: dict[float, Layer] = {}
     model_lines: list[int] = []            # lines of model extrusions
     custom_lines: list[int] = []           # lines of Custom extrusions
+    skippable = None                       # the line of an open SKIPPABLE_START
     for lineno, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if line.startswith(";"):
             tag = line[1:].lstrip()
-            if tag.startswith("Z_HEIGHT:"):
+            if tag == SKIPPABLE_START:
+                if skippable is not None:
+                    raise UnsupportedGcode(f"line {lineno}: SKIPPABLE_START inside the block "
+                                           f"opened at line {skippable}")
+                skippable = lineno
+            elif tag == SKIPPABLE_END:
+                if skippable is None:
+                    raise UnsupportedGcode(f"line {lineno}: SKIPPABLE_END without a "
+                                           "SKIPPABLE_START")
+                skippable = None
+            elif tag.startswith("FEATURE:") and skippable is not None:
+                raise UnsupportedGcode(f"line {lineno}: a FEATURE inside the SKIPPABLE block "
+                                       f"opened at line {skippable}")
+            elif tag.startswith("Z_HEIGHT:"):
                 new_z = _comment_value(tag, lineno)
                 if z is not None and not new_z > z:
                     raise UnsupportedGcode(f"line {lineno}: Z_HEIGHT {new_z:g} does not "
@@ -406,7 +433,8 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
         if not code:
             continue
         command = code.split()[0]
-        if feature == CUSTOM and command.startswith("G") and command not in G_COMMANDS:
+        if ((feature == CUSTOM or skippable is not None) and command.startswith("G")
+                and command not in G_COMMANDS):
             _check_firmware(command, code, lineno, plate)
             x = y = z_cmd = None               # where the firmware leaves it is not known
             continue
@@ -454,6 +482,12 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                     z_cmd = words["Z"]
             moves = (nx, ny) != (x, y) or (command in ("G2", "G3") and "E" in words)
             e = words.get("E", 0.0)
+            if skippable is not None:
+                if e > 0:
+                    raise UnsupportedGcode(f"{where}: an extrusion inside a SKIPPABLE block "
+                                           "(the A1 time-lapse code, between model layers)")
+                x, y = nx, ny
+                continue
             if moves and e != 0.0 and feature != CUSTOM and relative_e is not True:
                 raise UnsupportedGcode(f"{where}: absolute extrusion (M82, or no M83 before "
                                        "it): only relative E is supported")
@@ -477,6 +511,9 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
                         layers[z].segments.append(Segment(px, py, qx, qy, width, feature))
                     px, py = qx, qy
             x, y = nx, ny
+    if skippable is not None:
+        raise UnsupportedGcode(f"line {skippable}: SKIPPABLE_START without a SKIPPABLE_END "
+                               "by the end of the file")
     if not layers:
         raise UnsupportedGcode("no Z_HEIGHT layer: this is not OrcaSlicer G-code with layer "
                                "comments")

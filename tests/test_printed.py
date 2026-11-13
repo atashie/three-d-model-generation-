@@ -825,3 +825,68 @@ def test_firmware_commands_in_custom_are_still_read_strictly(command, message):
     start = A1_START.replace("G29.4\n", f"G29.4\n{command}\n")
     with pytest.raises(UnsupportedGcode, match=message):
         parse(gcode([layer(0.2, GOOD)], start=start))
+
+
+# --- The A1 time-lapse blocks: "; SKIPPABLE_START" to "; SKIPPABLE_END" ------------------
+# The A1 template's time_lapse_gcode, written at each layer change with no FEATURE line,
+# holds firmware G-commands between these markers. They are read as in Custom, but must not
+# extrude at all, must pair, and must not change the FEATURE.
+
+SKIP = ("; SKIPPABLE_START\n; SKIPTYPE: timelapse\nM622.1 S1\nG92 E0\nG1 Z1.2\n"
+        "G1 X0 Y128.001 F18000\nG1 X-48.2 F3000\nM400\nG92 E0\nG1 X0 F18000\n"
+        "; SKIPTYPE: head_wrap_detect\nG0 Z2 F4000\nG0 X261 Y250 F20000\nG39 S1\n"
+        "G392 S0\nG90\nM83\nG0 Z1.2 F4000\nG39.3 S1\nG0 Z1.2 F4000\nG392 S0\n"
+        "; SKIPPABLE_END\n")
+AFTER = "G1 X100 Y100 F42000\nG1 Z.4\nG1 X101 Y100 E.1\n"      # no new FEATURE line
+
+
+def _two_layers(between: str, after: str = AFTER) -> str:
+    return gcode([layer(0.2, GOOD + between),
+                  f"; CHANGE_LAYER\n; Z_HEIGHT: 0.4\n; LAYER_HEIGHT: 0.2\n{after}"])
+
+
+def test_a_skippable_block_is_read_like_custom_and_keeps_the_feature():
+    layers = parse(_two_layers(SKIP))
+    assert [(s.x0, s.y0, s.x1, s.y1, s.feature) for s in layers[0.4].segments] == [
+        (100, 100, 101, 100, "Outer wall")]
+
+
+def test_a_model_extrusion_straight_after_a_skippable_block_is_refused():
+    with pytest.raises(UnsupportedGcode, match="unknown position"):
+        parse(_two_layers(SKIP, after="G1 X101 Y100 E.1\n"))
+    with pytest.raises(UnsupportedGcode, match="commanded Z None"):
+        parse(_two_layers(SKIP, after="G1 X100 Y100\nG1 X101 Y100 E.1\n"))
+
+
+@pytest.mark.parametrize("move", ["G1 X10 Y10 E.1", "G1 E.8 F1800", "G0 X10 E1",
+                                  "G2 X10 Y10 I1 J0 E.1", "G3 E.1 I1 J0"])
+def test_any_extrusion_in_a_skippable_block_is_refused(move):
+    block = SKIP.replace("; SKIPPABLE_END\n", move + "\n; SKIPPABLE_END\n")
+    with pytest.raises(UnsupportedGcode, match="extrusion inside a SKIPPABLE block"):
+        parse(_two_layers(block))
+
+
+def test_a_retraction_in_a_skippable_block_is_followed():
+    block = SKIP.replace("; SKIPPABLE_END\n", "G1 E-.8 F1800\n; SKIPPABLE_END\n")
+    assert len(parse(_two_layers(block))[0.4].segments) == 1
+
+
+@pytest.mark.parametrize(("between", "message"), [
+    (SKIP.replace("; SKIPTYPE: head", "; SKIPPABLE_START\n; SKIPTYPE: head"),
+     "SKIPPABLE_START inside"),
+    ("; SKIPPABLE_END\n", "SKIPPABLE_END without"),
+    (SKIP.replace("G39 S1\n", "; FEATURE: Outer wall\nG39 S1\n"), "FEATURE inside"),
+    (SKIP.replace("G39 S1\n", "G18\n"), "G18"),
+    (SKIP.replace("G39 S1\n", "G380 X100000\n"), "beyond the plate"),
+    (SKIP.replace("G39 S1\n", "G392 Snan\n"), "'Snan'")])
+def test_skippable_blocks_are_read_strictly(between, message):
+    with pytest.raises(UnsupportedGcode, match=message):
+        parse(_two_layers(between))
+
+
+def test_a_skippable_block_open_at_the_end_is_refused():
+    with pytest.raises(UnsupportedGcode, match="SKIPPABLE_START without"):
+        parse(gcode([layer(0.2, GOOD)]) + SKIP.replace("; SKIPPABLE_END\n", ""))
+    # Left open before a layer, the next model extrusion is inside it, and is refused.
+    with pytest.raises(UnsupportedGcode, match="extrusion inside a SKIPPABLE block"):
+        parse(_two_layers(SKIP.replace("; SKIPPABLE_END\n", "")))

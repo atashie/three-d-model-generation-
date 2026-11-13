@@ -1,0 +1,12 @@
+PRINTABLE
+PRINTABLE means every required gate check passed for this file with the pinned slicers (OrcaSlicer 2.5.0 and, for portability, PrusaSlicer 2.9.7) and the A1 profile; for portability, a second slicer (PrusaSlicer 2.9.7) accepts model.stl as modelled (its admesh read agrees with tdmg's trimesh read: parts, facets, sizes, volume) and slices its full height, with extrusion on every layer, given the A1 bed, nozzle, layer and filament settings (its other settings are PrusaSlicer's defaults). OrcaSlicer and PrusaSlicer share the admesh STL reader, so a 3MF output must re-run portability with truly different readers. It is not a guarantee: the acceptance tolerance (acceptance.dimension.tolerance) is still a hypothesis, no calibration print has been measured, and strength is not judged.
+slice model.stl in Bambu Studio to print; plate_1.gcode is for checking only (tdmg's G-code is not yet printed or compared with Bambu Studio's own slice); prusaslicer.portability-only.gcode.txt is not for printing
+slicer exit 0 (CLI_SUCCESS)
+  F3.thin_regions UNKNOWN - measured area_mm2=3.981, min_width_mm=0.9, pieces=1228; threshold 0.9: tapered tips always appear; information only: tdmg slice judges thin features from the G-code with F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint
+15 layers, 866.7 s, 2.247 g (slicer estimates)
+portability: PrusaSlicer 2.9.7 PASS - 1 part, 31200 facets, size 59.97 x 49.40 x 3.00 mm, volume 2277.74 mm3, 15 layers; prusaslicer.portability-only.gcode.txt is generic G-code for a generic printer, not Bambu firmware G-code and not for the A1: it is evidence of portability only; never print it
+slice_id bcc0f600a98d33ab59e0dfae89e5b16381850bc1bb0964bc9e9ce7b2268f9dd8
+wrote artifacts\slice-runs\roadie-tol30-60x3-slice5c\plate_1.gcode
+wrote artifacts\slice-runs\roadie-tol30-60x3-slice5c\prusaslicer.portability-only.gcode.txt (portability evidence only; not for printing)
+wrote artifacts\slice-runs\roadie-tol30-60x3-slice5c\plate_1.statistics.json
+wrote artifacts\slice-runs\roadie-tol30-60x3-slice5c\slice.json

@@ -332,3 +332,70 @@ give. It is not a decision.
 `PRINT_THIS` now gives a reason that is true: "slice model.stl in Bambu Studio to print;
 plate_1.gcode is for checking only (tdmg's G-code is not yet printed or compared with
 Bambu Studio's own slice); …".
+
+## Addendum 2: the time-lapse blocks, 2026-11-13
+
+The controller decided (after the addendum above) to read the A1 template's
+`; SKIPPABLE_START` … `; SKIPPABLE_END` blocks as Custom is read for G-commands, with
+extra limits.
+
+**Short answer:** both owner models are **PRINTABLE** again. Their F3 numbers are
+identical to the 2026-11-11 (`slice-4`) ones.
+
+### The rule (`src/tdmg/printed.py`, `SKIPPABLE_START`, `SKIPPABLE_END`)
+
+- **Where the markers come from:** they are lines 4 and 61 of the 63-line
+  `time_lapse_gcode` in the pinned template `Bambu Lab A1 0.4 nozzle template
+  time_lapse_gcode.json` (sha256 `febd4212…`). They are not OrcaSlicer's. No other pinned
+  template has them.
+- **What is inside:** the owner's G-code has G392, G39.3 and G39 between them
+  (`scan-gcommands.txt`), and no FEATURE line.
+- **Firmware G-commands:** inside a block they are read as in Custom. The refused list
+  `CUSTOM_REFUSED_G` applies there too. After one, the position and the commanded Z are
+  unknown.
+- **Stricter than Custom:** this code runs between model layers, so any move with
+  positive E (G0 to G3, with or without X and Y) is refused. A retraction (E ≤ 0) is
+  followed. The template has none: it uses only `G92 E0` (template lines 9 and 17), and
+  the owner's G-code has no E move inside any block.
+- **The markers must pair.** These are refused:
+  - a SKIPPABLE_START inside a block;
+  - a SKIPPABLE_END without a SKIPPABLE_START;
+  - a block still open at the end of the file;
+  - a FEATURE line inside a block.
+- **The FEATURE:** the one in force after the block is the one before it. The block does
+  not change it.
+- **Tests (`tests/test_printed.py`):**
+  - a block taken from the template's forms, followed by an absolute move, Z and an
+    extrusion: parses, and the extrusion keeps the earlier FEATURE;
+  - an extrusion straight after the block: refused ("unknown position");
+  - after X and Y but no Z: refused ("commanded Z None");
+  - five forms of positive E inside a block: refused;
+  - a retraction inside a block: followed;
+  - each pairing and FEATURE fault, a refused command, an out-of-bound X and a bad word:
+    refused.
+
+### The R1 slices
+
+- **The command:** as before, into `artifacts/slice-runs/<sel>-60x3-slice5c`.
+  `compare_slices.py` now compares `*-60x3-f64` with `*-60x3-slice5c`
+  (`compare-slices-5c.txt`). The earlier `compare-slices.txt` was made against
+  `*-60x3-slice5`, and is kept.
+- **The CLI output:** `cli-roadie-tol30-slice5c.txt` and `cli-oddie-slice5c.txt`.
+
+| | Roadie old | Roadie new (`slice5c`) | Oddie old | Oddie new |
+|---|---|---|---|---|
+| Verdict | PRINTABLE | PRINTABLE | PRINTABLE | PRINTABLE |
+| Layers | 15 | 15 | 15 | 15 |
+| Time | 471.9 s | 866.7 s | 484.2 s | 876.1 s |
+| Weight | 2.2724 g | 2.2474 g | 4.3461 g | 4.3211 g |
+| F3.printed_connectivity | 15 layers, 0 mismatched | 15, 0 | 15, 0 | 15, 0 |
+| F3.edge_coverage max gap | 0.23120785697504878 mm | the same | 0.22234656130346278 mm | the same |
+| F3.edge_coverage / F3.edge_overprint layers over | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+
+- **Every other check:** PASS in both runs. `F3.thin_regions` is UNKNOWN (information
+  only).
+- **The slice_id:** `bcc0f600…` (Roadie) and `ce44c481…` (Oddie). These are the same as
+  the `slice5` and `slice5b` runs, which were NOT CERTIFIED. The id covers the inputs and
+  the label `slice-5`, which was kept (unpushed), not the reader's code.
+- **Still true:** PRINTABLE has the caveats in `PRINTABLE_MEANING`. Nothing from `tdmg`
+  has been printed, and `tdmg slice` still says to slice `model.stl` in Bambu Studio.
