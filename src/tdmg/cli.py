@@ -15,11 +15,11 @@ from tdmg import __version__
 from tdmg.color_outline import THIN_SHARE_RULE
 from tdmg.color_slicing import (
     COLOR_DO_NOT_PRINT,
-    COLOR_PRINT_THIS,
     FACE_FOLDER,
     FACES,
     is_colored_folder,
     make_color_slice,
+    print_message,
 )
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
@@ -376,17 +376,25 @@ def _color_slice_output(rec: dict, out: Path) -> None:
             typer.echo(f"  {f['certification_note']}")
     for name, plate in rec["glue"]["plates"].items():
         typer.echo(f"{name} (glue plate, sliced as an R1 part): {plate['certification']}")
-        if plate["certification"] == "PRINTABLE":     # R1's rule: never tdmg's G-code
+    route = rec["glue"]["route"]
+    if route is not None and route["printable"]:
+        typer.echo("glue route: printable: every glue plate is PRINTABLE; a glue print needs "
+                   "all of them")
+        for name, plate in rec["glue"]["plates"].items():     # R1's rule: never our G-code
             typer.echo(f"{name}: slice {plate['plate']} in Bambu Studio to print; its "
                        f"{GCODE_NAME} is for checking only")
+    elif route is not None:
+        typer.echo(f"glue route: not printable: {', '.join(route['blocking'])} not PRINTABLE "
+                   "(a glue print needs every plate)")
     if not rec["glue"]["built"]:
         typer.echo(f"glue: not built - {rec['glue']['reason']}")
     typer.echo(_portability_line(rec["portability"]))
     if not rec["slicer"]["app_tree_verified"]:
         typer.echo("app tree not verified (--skip-tree-check)")
     typer.echo(_filament_line(rec["filament_map"]))
-    if any(f["verdict"] == "PRINTABLE" for f in rec["faces"].values()):
-        typer.echo(COLOR_PRINT_THIS)
+    message = print_message([f for f in FACES if rec["faces"][f]["verdict"] == "PRINTABLE"])
+    if message:
+        typer.echo(message)
     else:
         typer.echo("no face is PRINTABLE: do not print yet; model.3mf is the file to print "
                    "from once a face is, with the filaments above")

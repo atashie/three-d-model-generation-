@@ -155,7 +155,8 @@ def test_record_and_files_with_the_fake(colored, orca, tmp_path):
     for name, plate in rec["glue"]["plates"].items():
         row = next(b for b in glue if b["file"] == f"{name}.stl")
         assert plate["algorithm"] == "slice-5"
-        assert plate["required_checks"] == sorted(SLICE_REQUIRED_CHECKS - {"F2.target_width"})
+        assert plate["required_checks"] == sorted(
+            SLICE_REQUIRED_CHECKS - {"F2.target_width"} | {"F4.glue_fit", "F4.glue_partition"})
         assert "F2.target_width" in plate["not_applicable"]
         assert "missing" not in plate["certification"]
         body = next(c for c in plate["checks"] if c["id"] == "F4.body_count")
@@ -322,12 +323,17 @@ def test_a_failed_inherited_check_is_carried_and_quarantines(folder, tmp_path,
 
 # --- Verdicts ------------------------------------------------------------------------------
 
-def _all_pass(monkeypatch):
-    """Make the color checks and F6.portability PASS (the fakes cannot produce them)."""
+def _all_pass(monkeypatch, faces=("up", "down")):
+    """Make the color checks (on these faces; the faces are sliced up, then down) and
+    F6.portability PASS (the fakes cannot produce them)."""
     real = cs.color_slice_checks
+    calls = []
 
     def passing(gcode, shells, setup, statistics=None, not_measured=None):
         checks, record = real(gcode, shells, setup, statistics, not_measured)
+        calls.append(None)
+        if ("up", "down")[len(calls) - 1] not in faces:
+            return checks, record
         req = required_check_ids(len(list(shells)))
         return [CheckResult(c.id, "PASS", c.measured, c.threshold, c.rule, c.note)
                 if c.id in req else c for c in checks], record
@@ -349,17 +355,34 @@ def test_printable_when_every_required_check_passes(colored, orca, tmp_path,
     assert rec["verdicts"]["face-up"] == "PRINTABLE"
 
 
-def test_cli_printable_says_to_print_from_model_3mf(colored, orca, tmp_path,
-                                                    monkeypatch):
-    _all_pass(monkeypatch)
+def test_the_print_message_names_the_printable_faces():
+    assert cs.print_message([]) is None
+    up, down, both = (cs.print_message(f) for f in (["up"], ["down"], ["up", "down"]))
+    for m in (up, down, both):
+        assert "open model.3mf in Bambu Studio" in m
+        assert "give each color the filament listed" in m
+        assert "face-up/plate_1.gcode and face-down/plate_1.gcode are for checking only" in m
+        assert "prusaslicer.portability-only.gcode.txt is not for printing" in m
+    assert up.startswith("to print face up: ") and "it is face up" in up
+    assert "turn" not in up.split(";")[0]
+    assert down.startswith("to print face down: ")
+    assert "turn it over" in down and "model.3mf is face up" in down
+    assert both.startswith("both faces are PRINTABLE; the default face is not set yet")
+    assert "Task 7" in both and "turn it over for face down" in both
+
+
+@pytest.mark.parametrize("faces", [("up",), ("down",), ("up", "down")])
+def test_cli_printable_names_the_printable_faces(colored, orca, tmp_path, monkeypatch,
+                                                 faces):
+    _all_pass(monkeypatch, faces)
     r = runner.invoke(app, ["slice", str(colored), "--out", str(tmp_path / "s"),
                             "--slicer-dir", str(orca())])
     assert r.exit_code == 0, r.output
     lines = r.stdout.splitlines()
-    assert "face-up: PRINTABLE" in lines and "face-down: PRINTABLE" in lines
-    assert cs.COLOR_PRINT_THIS in lines
-    assert cs.COLOR_PRINT_THIS.startswith("to print: open model.3mf in Bambu Studio")
-    assert "plate_1.gcode are for checking only" in cs.COLOR_PRINT_THIS
+    for face in ("up", "down"):
+        assert (f"face-{face}: PRINTABLE" in lines) == (face in faces)
+    assert cs.print_message(list(faces)) in lines
+    assert not any(line.startswith("no face is PRINTABLE") for line in lines)
     assert not any(line.startswith("print ") for line in lines)
 
 
@@ -387,7 +410,13 @@ def test_cli_output_for_a_colored_folder(colored, orca, tmp_path):
                for line in lines)
     assert ("no face is PRINTABLE: do not print yet; model.3mf is the file to print from "
             "once a face is, with the filaments above") in lines
-    assert cs.COLOR_PRINT_THIS not in lines
+    assert not any(line.startswith(("to print face", "both faces")) for line in lines)
+    # The glue route: not printable, naming the plates that block it; no plate is offered.
+    blocking = [n for n, p in rec["glue"]["plates"].items() if p["verdict"] != "PRINTABLE"]
+    assert rec["glue"]["route"] == {"printable": False, "blocking": blocking}
+    assert (f"glue route: not printable: {', '.join(blocking)} not PRINTABLE (a glue print "
+            "needs every plate)") in lines
+    assert not any("in Bambu Studio to print" in line for line in lines)
     assert f"colorslice_id {rec['colorslice_id']}" in lines
     assert f"wrote {out / 'slice.json'}" in lines
     assert f"wrote {out / 'face-up' / 'plate_1.gcode'}" in lines
@@ -532,8 +561,130 @@ def test_a_printable_glue_plate_names_its_own_stl(colored, orca, prusa, tmp_path
     # R1's texts are unchanged.
     assert printable_meaning() == PRINTABLE_MEANING and "model.stl" in PRINTABLE_MEANING
     lines = r.stdout.splitlines()
-    assert ("glue-base: slice glue-base.stl in Bambu Studio to print; its plate_1.gcode is "
-            "for checking only") in lines
-    printable = {n for n, p in rec["glue"]["plates"].items() if p["verdict"] == "PRINTABLE"}
-    assert sum("in Bambu Studio to print; its plate_1.gcode" in line for line in lines) \
-        == len(printable)
+    assert rec["glue"]["route"]["printable"] is False       # the multi-piece plates FAIL
+    assert "glue-base" not in rec["glue"]["route"]["blocking"]
+    assert not any("in Bambu Studio to print" in line for line in lines)
+
+
+def test_a_printable_glue_route_offers_every_plate(colored, orca, prusa, tmp_path,
+                                                  monkeypatch):
+    import tdmg.slicing
+    _f3_pass(monkeypatch)
+    monkeypatch.setattr(tdmg.slicing, "portability_check", lambda *a, **kw: (
+        CheckResult("F6.portability", "PASS", None, None, None, "test"),
+        {"tolerances": None, "info": None, "gcode": {}}))
+
+    def run_portability(*a, **kw):
+        from tdmg.portability import PrusaRun
+        done = PrusaRun(0, False, 1.0, "", "")
+        return done, done, None
+    monkeypatch.setattr(tdmg.slicing, "run_portability", run_portability)
+    out = tmp_path / "s"
+    r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
+                            str(orca()), "--prusaslicer-dir",
+                            str(prusa(info={"number_of_parts": _expected_parts(colored)}))])
+    assert r.exit_code == 0, r.output
+    rec = json.loads((out / "slice.json").read_bytes())
+    plates = rec["glue"]["plates"]
+    assert all(p["verdict"] == "PRINTABLE" for p in plates.values()), \
+        {n: p["certification"] for n, p in plates.items()}
+    assert rec["glue"]["route"] == {"printable": True, "blocking": []}
+    lines = r.stdout.splitlines()
+    assert ("glue route: printable: every glue plate is PRINTABLE; a glue print needs all "
+            "of them") in lines
+    for name in plates:
+        assert (f"{name}: slice {name}.stl in Bambu Studio to print; its plate_1.gcode is "
+                "for checking only") in lines
+
+
+# --- Glue plates: the glue-only checks and the body count ----------------------------------
+
+def test_a_failed_glue_fit_blocks_every_glue_plate(folder, tmp_path, orca):
+    def fail(r):
+        next(c for c in r["assembly"]["glue"] if c["id"] == "F4.glue_fit")["status"] = "FAIL"
+    _edit(folder, fail)
+    out = tmp_path / "out"
+    r = runner.invoke(app, ["slice", str(folder), "--out", str(out), "--slicer-dir",
+                            str(orca())])
+    assert r.exit_code == 1, r.output
+    rec = json.loads((out / "slice.json").read_bytes())
+    for name, plate in rec["glue"]["plates"].items():
+        assert "F4.glue_fit" in plate["required_checks"]
+        assert "F4.glue_partition" in plate["required_checks"]
+        assert "F4.glue_fit FAIL" in plate["certification"]
+        assert plate["gcode"]["quarantined"] is True
+        assert (out / name / "plate_1.gcode.failed").is_file()
+        assert not (out / name / "plate_1.gcode").exists()
+    lines = r.stdout.splitlines()
+    assert cs.COLOR_DO_NOT_PRINT in lines
+    assert not any("in Bambu Studio to print" in line for line in lines)
+    # The faces do not carry the glue assembly.
+    assert all("F4.glue_fit" not in rec["faces"][f]["certification"] for f in ("up", "down"))
+
+
+def test_a_glue_plate_body_count_fail_quarantines_it(folder, tmp_path, orca):
+    def extra_piece(r):
+        report = r["glue"]["report"]
+        color = report["colors"][0]
+        color["pieces"] += 1
+        report["pieces"].append({**next(p for p in report["pieces"]
+                                        if p["index"] == color["index"]), "number": 999})
+    _edit(folder, extra_piece)
+    rec = _run(folder, tmp_path / "out", orca())
+    index = _record(folder)["glue"]["report"]["colors"][0]["index"]
+    name = next(n for n, p in rec["glue"]["plates"].items() if p["index"] == index
+                and p["role"] == "pieces")
+    plate = rec["glue"]["plates"][name]
+    body = next(c for c in plate["checks"] if c["id"] == "F4.body_count")
+    assert body["status"] == "FAIL" and body["threshold"] == body["measured"] + 1
+    assert "F4.body_count FAIL" in plate["certification"]
+    assert plate["gcode"]["quarantined"] is True
+    assert (tmp_path / "out" / name / "plate_1.gcode.failed").is_file()
+
+
+# --- A color check FAILs through the real reader ---------------------------------------------
+
+def test_a_color_check_fail_from_the_gcode_quarantines_the_face(colored, orca, tmp_path):
+    """A fake G-code the real reader reads (tests/test_color_gcode.py's two-layer print):
+    its layers print colors the bodies do not have there, so F6.color_changes FAILs."""
+    from test_color_gcode import GOOD, text_of
+    out = tmp_path / "out"
+    rec = _run(colored, out, orca(gcode_text=text_of(**GOOD, head="")))
+    for face in ("up", "down"):
+        f = rec["faces"][face]
+        by = {c["id"]: c for c in f["checks"]}
+        assert f["color"]["measured"] is True, f["color"]["reason"]
+        assert by["F6.color_changes"]["status"] == "FAIL", by["F6.color_changes"]
+        assert "F6.color_changes FAIL" in f["certification"]
+        assert f["gcode"]["quarantined"] is True
+        assert (out / f["folder"] / "plate_1.gcode.failed").is_file()
+
+
+# --- More refusals: the fields the colored path reads -----------------------------------------
+
+@pytest.mark.parametrize(("route", "field", "value", "message"), [
+    ("ams", "bodies", None, "bodies"),
+    ("ams", "volume_mm3", "big", "volume_mm3"),
+    ("ams", "triangles", 0, "triangles"),
+    ("ams", "extents_mm", [1, 2], "extents_mm"),
+    ("glue", "bodies", None, "bodies"),
+    ("glue", "volume_mm3", float("inf"), "volume_mm3"),
+    ("glue", "checks", "x", "checks"),
+])
+def test_a_body_row_field_is_validated_before_slicing(folder, tmp_path, orca, route, field,
+                                                      value, message):
+    def change(r):
+        for b in r["bodies"]:
+            if b["route"] == route:
+                if value is None:
+                    b.pop(field)
+                else:
+                    b[field] = value
+    rec = _record(folder)
+    change(rec)
+    (folder / "colored.json").write_text(json.dumps(rec, allow_nan=True), encoding="utf-8")
+    out = tmp_path / "out"
+    with pytest.raises(SlicerError, match=message) as err:
+        _run(folder, out, orca())
+    assert "colored.json" in str(err.value) and "flat.json" not in str(err.value)
+    assert not out.exists()

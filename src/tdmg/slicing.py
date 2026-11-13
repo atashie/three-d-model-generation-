@@ -441,7 +441,7 @@ def _cross_check_layers(f6: list[CheckResult], stats: dict | None,
     return out
 
 
-def _expected_mesh(flat: dict) -> dict:
+def _expected_mesh(flat: dict, source: str = "flat.json") -> dict:
     """flat.json's mesh facts PrusaSlicer is compared with, checked. SlicerError if not."""
     mesh = flat.get("mesh") if isinstance(flat.get("mesh"), dict) else {}
 
@@ -459,7 +459,7 @@ def _expected_mesh(flat: dict) -> dict:
           "mesh.volume_mm3": number(mesh.get("volume_mm3"))}
     bad = [name for name, good in ok.items() if not good]
     if bad:
-        raise SlicerError(f"flat.json is missing or has invalid: {', '.join(bad)}")
+        raise SlicerError(f"{source} is missing or has invalid: {', '.join(bad)}")
     return mesh
 
 
@@ -580,7 +580,8 @@ def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict 
     setup = ctx.setup(allowed)
     settings, expected = ctx.settings(), None
     if ctx.prusa is not None:
-        expected = expected_for_stl(stl, _expected_mesh({"mesh": mesh}), allowed, ctx.process)
+        expected = expected_for_stl(stl, _expected_mesh({"mesh": mesh}, source), allowed,
+                                    ctx.process)
     prusa = ctx.prusa
     with tempfile.TemporaryDirectory(prefix="tdmg-slice-") as tmp:
         base = Path(tmp)

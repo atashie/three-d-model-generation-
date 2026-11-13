@@ -280,7 +280,9 @@ follows in Task 8; in short:
   identity that does not match `colorflat_id`, or any listed file (STL, `model.3mf`,
   `palette.json`, PNG) missing or changed since `tdmg flat --colors`. The colored record's
   own checks are not a refusal: as with `DIR/flat.json`, they are carried into each verdict,
-  and a FAIL quarantines the G-code.
+  and a FAIL quarantines the G-code. As in R1, a file changed together with its hash in
+  `colored.json` is not detected; `colorslice_id` records the lineage (the hash of
+  `colored.json`).
 - **Face up and face down:** each face writes `face-up/` or `face-down/` with
   `orca-input.3mf` (the OrcaSlicer-only input, gated by `F2.orca_input_matches_bodies`; not
   a deliverable), `plate_1.gcode` (or `.failed`) and the statistics. Each color is on its
@@ -291,7 +293,9 @@ follows in Task 8; in short:
 - **Glue plates:** each `glue-*.stl` is sliced as an R1 part into its own folder, with R1's
   checks and required set, except `F2.target_width`, which does not apply to a plate of
   pieces. `F4.body_count` requires the plate's bodies to be its pieces in the glue report
-  (1 for the base).
+  (1 for the base), and the glue assembly's `F4.glue_fit` and `F4.glue_partition` are
+  required too. A glue print needs every plate, so the glue route is printable only when
+  every glue plate is PRINTABLE; the message names the plates that block it.
 - **Portability:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded but not
   a condition: plan Decision 6 asks for one manifold object that slices, and no
   derivation of PrusaSlicer's 3MF volume exists. The difference from the palette sum is
@@ -300,6 +304,8 @@ follows in Task 8; in short:
   per face and per glue plate, and the filament for each color.
 - **Message:** the verdict and the changes, flush, prime tower and time per face, and the
   filament for each color. To print, open `model.3mf` in Bambu Studio and assign the
-  filaments as listed; `tdmg`'s G-code is for checking only.
+  filaments as listed; `tdmg`'s G-code is for checking only. `model.3mf` is face up: when
+  only face down is PRINTABLE, the message says to turn it over; when both are, it says
+  that the default face is not set yet (Task 7).
 
 The owner's four plans: `research/verification/2026-11-13-color-slicing/owner-slices-task6.txt`.

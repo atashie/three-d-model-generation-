@@ -47,7 +47,9 @@ tdmg.colorslice/1) last. It prints nothing.
 7. Verdicts: per face, PRINTABLE only if every required check passes: the inherited ones
    (the record's required_checks minus the glue-only ones, F6.slicer and
    F3.thin_regions), F2.orca_input_matches_bodies, color_gcode.required_check_ids, R1's
-   four slicer F6 checks and F6.portability. Per glue plate, GLUE_REQUIRED_CHECKS. A FAIL
+   four slicer F6 checks and F6.portability. Per glue plate, GLUE_REQUIRED_CHECKS and
+   the record's required glue-only checks (F4.glue_fit, F4.glue_partition). The glue route
+   is printable only when every glue plate is PRINTABLE (glue_route). A FAIL
    quarantines that face's or plate's G-code (.failed); PrusaSlicer's G-code is quarantined when
    F6.portability or an inherited AMS check FAILs.
 
@@ -66,6 +68,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import platform
 import tempfile
 from dataclasses import replace
@@ -206,11 +209,33 @@ COLOR_PRINTABLE_MEANING = (
     "model.3mf) and the A1 profile. It is not a guarantee: the acceptance tolerance "
     "(acceptance.dimension.tolerance) is still a hypothesis, no calibration print has been "
     "measured, no tdmg G-code has been printed, and strength is not judged.")
-COLOR_PRINT_THIS = (
-    "to print: open model.3mf in Bambu Studio and give each color the filament listed; "
-    "face-up/plate_1.gcode and face-down/plate_1.gcode are for checking only (tdmg's G-code "
-    f"is not yet printed or compared with Bambu Studio's own slice); {PRUSA_GCODE_NAME} is "
-    "not for printing")
+PRINT_TAIL = (
+    "give each color the filament listed; face-up/plate_1.gcode and face-down/plate_1.gcode "
+    "are for checking only (tdmg's G-code is not yet printed or compared with Bambu "
+    f"Studio's own slice); {PRUSA_GCODE_NAME} is not for printing")
+PRINT_FACE = {
+    ("up",): "to print face up: open model.3mf in Bambu Studio (it is face up) and "
+             + PRINT_TAIL,
+    ("down",): "to print face down: open model.3mf in Bambu Studio and turn it over "
+               "(model.3mf is face up; face down is it turned 180 degrees about the y axis, "
+               "the inlays on the bed), then " + PRINT_TAIL,
+    ("up", "down"): "both faces are PRINTABLE; the default face is not set yet (the owner's "
+                    "Task 7 decision): open model.3mf in Bambu Studio (it is face up; turn "
+                    "it over for face down) and " + PRINT_TAIL}
+
+
+def print_message(printable_faces) -> str | None:
+    """What to print, for the PRINTABLE faces ("up", "down"); None when there are none.
+    model.3mf is the file to print from, and it is face up."""
+    faces = tuple(f for f in FACES if f in printable_faces)
+    return PRINT_FACE.get(faces)
+
+
+def glue_route(plates: dict) -> dict:
+    """The glue route as one print: printable only when every glue plate is PRINTABLE.
+    blocking: the plates that are not, in plate order."""
+    blocking = [name for name, p in plates.items() if p["verdict"] != "PRINTABLE"]
+    return {"printable": bool(plates) and not blocking, "blocking": blocking}
 COLOR_DO_NOT_PRINT = (f"a check FAILed: the G-code of that face or plate is kept as "
                       f"{FAILED_GCODE_NAME}; do not print it")
 COLOR_REVIEW = (
@@ -257,6 +282,28 @@ def _checks(raw, where: str) -> list[CheckResult]:
             check = replace(check, note=_thin_regions_note(check.note))
         out.append(check)
     return out
+
+
+def _row_facts(row: dict, path: Path) -> None:
+    """A body row's mesh facts and checks, as the colored path reads them (the AMS rows'
+    parts and volume for F6.portability, the glue rows' facts for PrusaSlicer and their
+    checks for the verdict). SlicerError naming colored.json if any is not valid."""
+    def count(v):
+        return isinstance(v, int) and not isinstance(v, bool) and v >= 1
+
+    def number(v):
+        return (isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v))
+    extents = row.get("extents_mm")
+    ok = {"bodies": count(row.get("bodies")), "triangles": count(row.get("triangles")),
+          "extents_mm": (isinstance(extents, list) and len(extents) == 3
+                         and all(number(v) for v in extents)),
+          "volume_mm3": number(row.get("volume_mm3"))}
+    bad = [name for name, good in ok.items() if not good]
+    if bad:
+        raise SlicerError(f"{path}: body row {row['file']} is missing or has invalid: "
+                          f"{', '.join(bad)}")
+    _checks(row.get("checks"), f"body row {row['file']} (checks)")
 
 
 def read_colored(colored_dir: Path) -> tuple[dict, bytes, dict[str, bytes]]:
@@ -310,6 +357,12 @@ def read_colored(colored_dir: Path) -> tuple[dict, bytes, dict[str, bytes]]:
                 ("base", "inlay", "pieces")):
             raise SlicerError(f"{path}: a body row is not valid or its file is not among "
                               f"the outputs: {b.get('file') if isinstance(b, dict) else b!r}")
+        _row_facts(b, path)
+    for route, roles in (("ams", ("base", "inlay")), ("glue", ("base", "pieces"))):
+        rows = [b for b in bodies if b["route"] == route]
+        if rows and (any(b["role"] not in roles for b in rows)
+                     or sum(b["role"] == "base" for b in rows) != 1):
+            raise SlicerError(f"{path}: the {route} rows need one base and roles {roles}")
     if any(b["route"] == "glue" for b in bodies) != glue["built"]:
         raise SlicerError(f"{path} is inconsistent: glue rows and the glue section disagree")
     m3 = record.get("model_3mf")
@@ -620,7 +673,8 @@ def glue_body_count_check(stl: bytes, expected: int) -> CheckResult:
 
 
 def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, stl: bytes,
-                     assembly: list[CheckResult], pieces: int) -> dict:
+                     assembly: list[CheckResult], pieces: int,
+                     required: frozenset[str] = GLUE_REQUIRED_CHECKS) -> dict:
     """One glue plate as an R1 part (tdmg.slicing.slice_stl), with R1's checks and
     required set except F2.target_width (not applicable), and F4.body_count against the
     plate's pieces. Its files go in a folder named after the STL."""
@@ -628,14 +682,14 @@ def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, st
     previous = (_checks(row.get("checks"), row["file"]) + assembly
                 + [glue_body_count_check(stl, pieces)])
     mesh = {k: row.get(k) for k in ("bodies", "triangles", "extents_mm", "volume_mm3")}
-    part = slice_stl(ctx, stl, previous, mesh, required=GLUE_REQUIRED_CHECKS,
+    part = slice_stl(ctx, stl, previous, mesh, required=required,
                      model_name=row["file"], source="colored.json")
     z_min, z_max = part["z"]
     identity = {"algorithm": SLICE_ALGORITHM_VERSION, "colorflat_id": record["colorflat_id"],
                 "colored_record_sha256": colored_sha, "plate": row["file"],
                 "model_stl_sha256": _sha(stl), "slicer": ctx.slicer_identity(),
                 "profiles": ctx.profile_hashes(), "command": COMMAND_TEMPLATE,
-                "f3": ctx.f3_identity(), "required": sorted(GLUE_REQUIRED_CHECKS),
+                "f3": ctx.f3_identity(), "required": sorted(required),
                 "expected_bodies": pieces, **part["identity"]}
     files = {f"{folder}/{name}": data for name, data in part["files"].items()}
     rec = part["record"]
@@ -654,7 +708,7 @@ def slice_glue_plate(ctx: Context, record: dict, colored_sha: str, row: dict, st
                                      "its layer counts come from its STL's z extent",
                    "stl_z_mm": {"min": z_min, "max": z_max, "extent": z_max - z_min},
                    "expected_layer_counts": sorted(part["allowed"])},
-        "required_checks": sorted(GLUE_REQUIRED_CHECKS),
+        "required_checks": sorted(required),
         "not_applicable": {TARGET_WIDTH: TARGET_WIDTH_NA},
         "inherited_note": ("R1's checks (plan Decision 5). The inherited checks are this "
                            "plate's body checks and the glue assembly's from colored.json, "
@@ -693,6 +747,11 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     glue_assembly = [c for c in _checks(assembly.get("glue", []), "assembly.glue")
                      if c.id != "F6.slicer"]
     pieces = glue_piece_counts(record_in) if record_in["glue"]["built"] else {}
+    # A glue plate requires R1's set (less F2.target_width) and the record's required
+    # glue-only checks (the glue assembly's F4.glue_fit and F4.glue_partition), as a face
+    # requires the record's AMS checks.
+    glue_required = GLUE_REQUIRED_CHECKS | (frozenset(record_in["required_checks"])
+                                            & GLUE_ONLY_CHECKS)
     try:
         create_folder = check_output_dir(out_dir)
     except RecordError as err:
@@ -737,7 +796,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
         if row["route"] != "glue":
             continue
         done = slice_glue_plate(ctx, record_in, colored_sha, row, files_in[row["file"]],
-                                glue_assembly, pieces[row["file"]])
+                                glue_assembly, pieces[row["file"]], glue_required)
         plates[done["record"]["folder"]] = done["record"]
         files.update(done["files"])
 
@@ -782,7 +841,8 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
                               "information only"},
         "portability": port_section,
         "faces": face_records,
-        "glue": {"built": glue["built"], "reason": glue.get("reason"), "plates": plates},
+        "glue": {"built": glue["built"], "reason": glue.get("reason"), "plates": plates,
+                 "route": glue_route(plates) if glue["built"] else None},
         "verdicts": {**{FACE_FOLDER[f]: face_records[f]["verdict"] for f in FACES},
                      **{name: p["verdict"] for name, p in plates.items()}},
         "outputs": {name: _sha(data) for name, data in files.items()},
