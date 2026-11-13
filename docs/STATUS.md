@@ -66,9 +66,11 @@ Keep this page current. A new session reads it right after `CLAUDE.md`, and it i
 
 CI includes `macos-15` (arm64), `ubuntu-latest`, and `windows-latest`; the wheel smoke step selects the platform's Python path. All three jobs passed for commit `cc331ad` in [GitHub Actions run 42746111436](https://github.com/atashie/three-d-model-generation-/actions/runs/42746111436), verified on 2026-11-09. The last CI-verified commit is `fdb6e67`, which includes `tdmg slice` (run 42877445218, verified 2026-11-10); the real slicer is not installed in CI. CI passed on all three OSes for `5e87442` (run 42922009479, verified 2026-11-10). That commit includes the F3 thin-wall policy (`slice-3`), the documentation audit and the F3 Codex review fixes; the real slicer is not installed in CI. For `5632ca4` (`F6.portability`, `slice-4`, and the portability Codex review fixes; run 43033039270, checked 2026-11-11), `ubuntu-latest` and `windows-latest` passed; `macos-15` did not run: GitHub cancelled it after no macOS runner picked it up ("The job was not acquired by Runner of type hosted even after multiple attempts"). CI then passed on all three OSes for `c93dfa1`, which adds only this STATUS note to `5632ca4` (run 43035563763, verified 2026-11-11); the real slicers are not installed in CI.
 
-Latest local validation (2026-11-12, Windows PC, R2 step 2 after the Codex review 3 fixes):
-`uv run pytest -q` gave **2097 passed and 3 skipped** (the skips are the real-slicer tests);
+Latest local validation (2026-11-13, Windows PC, R2 step 3 after the Codex review 4 fixes):
+`uv run pytest -q` gave **2150 passed and 3 skipped** (the skips are the real-slicer tests);
 `uv run ruff check .` and `uv run python scripts/gen_docs.py --check` passed.
+
+Earlier (2026-11-12, R2 step 2 after the Codex review 3 fixes): 2097 passed and 3 skipped.
 
 Earlier, latest local validation (2026-11-11, Windows PC, R2 step 1 after the Task 8 review fixes):
 `uv run pytest -q` gave **1777 passed and 3 skipped** (after Codex review 2, `058f474`;
@@ -199,7 +201,11 @@ passed. These commits are pushed; for CI see above.
      "1) yes. 2) yes. 3) yes" (in place, filaments assignable, slices). The pinned
      OrcaSlicer and PrusaSlicer CLIs slice all four in place, exit 0; OrcaSlicer uses one
      filament.
-   - **Task 6:** docs done; Codex review 4 and CI: see the handoff.
+   - **Task 6:** docs done. Codex review 4 (`research/reviews/2026-11-12-color-3mf/`):
+     2 Medium and 1 Low finding, all held and fixed. The 3MF check now also checks the
+     zip's raw part names and package files, and the exact build transform; a subagent
+     review of the fix found 2 more gaps (a corrupt zip could raise; a Windows-only
+     backslash name), also fixed. CI: see the handoff.
    - **Carry into step 4:**
      - the OrcaSlicer CLI prints `model.3mf` on one filament: measuring color changes
        needs an Orca-specific extra file (PLAN point 7) or another route;
@@ -315,6 +321,19 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
+- **Latest session (2026-11-13): R2 step 3 (multicolor 3MF) finished.**
+  - **Commits:** `ddd37c6..HEAD`. Push and CI: see the next bullet.
+  - **CI:** pending at the time of writing; the result is reported to the owner.
+  - **Owner answers:** the plan was approved; the hand-made files in Bambu Studio ("A and
+    D had all colors in place", encoding D chosen); the real `model.3mf`: "1) yes. 2) yes.
+    3) yes".
+  - **Next, when the owner says to proceed:** R2 step 4, AMS slicing (the color-change
+    count, the purge waste, face up against face down). Two findings to start from: the
+    OrcaSlicer CLI slices `model.3mf` on one filament, and the pinned A1 start G-code
+    selects no filament.
+  - **Open:** PrusaSlicer's `--info` volumes differ from the palette sums by −1.23 to
+    +0.25 mm³ (not investigated); everything from step 2's open list still holds.
+  - **Housekeeping:** the stray `C:\c\...` folder still needs deleting by the owner.
 - **Latest session (2026-11-12): R2 step 2 (`tdmg flat --colors`) finished.**
   - **Commits:** `a4a2a4f..HEAD`, pushed. The CI result is in the next bullet.
   - **Owner decisions:** the plan was approved with its three values. "Match preview":
