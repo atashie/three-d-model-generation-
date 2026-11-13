@@ -1,0 +1,54 @@
+﻿probe-inlay-only-A 0 46377
+   tools {'T255': 1} M620 {'S255': 1}
+    color-1 #f5f5f5 {'None': 24.35} xy [5.21, 5.21, 14.79, 14.79] z [0.2, 0.6]
+      extent color-1 #f5f5f5 | None [5.21, 5.21, 14.79, 14.79, 0.2, 0.6]
+    stats objects [('color-1 #f5f5f5', 58.566)] filaments [(1, 130.725)] changes 0
+roadie-A -64 None
+   stderr Prime tower is partially outside the printable area, and it cannot be printed.
+
+
+
+ log ['process transform arrange', 'before arrange, need_arrange=0, duplicate_count 0, filament_color_changed 0', 'Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0', 'printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1', 'got error when validate: Prime tower is partially outside the printable area, and it cannot be printed.']
+roadie-A_shared -101 None
+   stderr  log ['got warnings: color-1 #f5f5f5 is too close to others, and collisions may be caused.', 'color-2 #f0f10a is too close to others, and collisions may be caused.', 'color-3 #451812 is too close to others, and collisions may be caused.', 'Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing.', 'gcode path conflicts found between color-1 #f5f5f5 and base #f60606']
+roadie-B 0 768398
+   tools {'T255': 1} M620 {'S255': 1}
+    assembly {'None': 719.7} xy [0.251, 0.222, 59.73, 49.19] z [0.2, 3.0]
+      extent assembly | None [0.251, 0.222, 59.73, 49.19, 0.2, 3.0]
+    stats objects [('assembly', 1731.082)] filaments [(1, 1803.241)] changes 0
+roadie-B_msc -64 None
+   stderr Prime tower is partially outside the printable area, and it cannot be printed.
+
+
+
+ log ['process transform arrange', 'before arrange, need_arrange=0, duplicate_count 0, filament_color_changed 0', 'Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0', 'printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1', 'got error when validate: Prime tower is partially outside the printable area, and it cannot be printed.']
+roadie-C -101 None
+   stderr  log ['got warnings: color-1 #f5f5f5 is too close to others, and collisions may be caused.', 'color-2 #f0f10a is too close to others, and collisions may be caused.', 'color-3 #451812 is too close to others, and collisions may be caused.', 'Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing.', 'gcode path conflicts found between color-1 #f5f5f5 and base #f60606']
+roadie-D 0 769049
+   tools {'T255': 1} M620 {'S255': 1}
+    model {'None': 719.82} xy [0.251, 0.222, 59.73, 49.19] z [0.2, 3.0]
+      extent model | None [0.251, 0.222, 59.73, 49.19, 0.2, 3.0]
+    stats objects [('model', 1731.359)] filaments [(1, 1803.517)] changes 0
+synthetic-A -101 None
+   stderr  log ['Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0', 'printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1', 'got warnings: color-1 #f5f5f5 is too close to others, and collisions may be caused.', 'Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing.', 'gcode path conflicts found between color-1 #f5f5f5 and base #f60606']
+synthetic-A_shared -101 None
+   stderr  log ['Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0', 'printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1', 'got warnings: color-1 #f5f5f5 is too close to others, and collisions may be caused.', 'Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing.', 'gcode path conflicts found between color-1 #f5f5f5 and base #f60606']
+synthetic-B 0 89822
+   tools {'T255': 1} M620 {'S255': 1}
+    assembly {'None': 343.32} xy [0.21, 0.21, 19.79, 19.79] z [0.2, 3.0]
+      extent assembly | None [0.21, 0.21, 19.79, 19.79, 0.2, 3.0]
+    stats objects [('assembly', 825.778)] filaments [(1, 897.936)] changes 0
+synthetic-B_msc 0 160992
+   tools {'T1': 2, 'T0': 1, 'T255': 1} M620 {'S1A': 2, 'S0A': 1, 'S255': 1}
+    assembly {'None': 269.74, 'T1': 24.44, 'T0': 49.32} xy [0.21, 0.21, 19.79, 19.79] z [0.2, 3.0]
+      extent assembly | None [0.21, 0.21, 19.79, 19.79, 0.2, 2.6]
+      extent assembly | T1 [5.21, 5.21, 14.79, 14.79, 2.6, 3.0]
+      extent assembly | T0 [0.21, 0.21, 19.79, 19.79, 2.8, 3.0]
+    stats objects [('assembly', 826.197)] filaments [(1, 118.617), (2, 779.738)] changes 2
+synthetic-C -101 None
+   stderr  log ['Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0', 'printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1', 'got warnings: color-1 #f5f5f5 is too close to others, and collisions may be caused.', 'Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing.', 'gcode path conflicts found between color-1 #f5f5f5 and base #f60606']
+synthetic-D 0 89732
+   tools {'T255': 1} M620 {'S255': 1}
+    model {'None': 343.32} xy [0.21, 0.21, 19.79, 19.79] z [0.2, 3.0]
+      extent model | None [0.21, 0.21, 19.79, 19.79, 0.2, 3.0]
+    stats objects [('model', 825.778)] filaments [(1, 897.936)] changes 0

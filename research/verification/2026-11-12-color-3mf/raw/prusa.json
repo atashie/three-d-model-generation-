@@ -1,0 +1,4041 @@
+{
+ "slicer_verified": {
+  "exe_sha256": "086bcf2ba47625738cf2ec120975eb8d78a16fb432c4ed05a95c1b7ed130dbff",
+  "libraries": {
+   "app/PrusaSlicer-2.9.7/PrusaSlicer.dll": "6070610345f2c4c56fdfc462c64218b68a9d2dac9973674cc2a7642e3bc73c7c"
+  },
+  "app_tree": {
+   "files": 1119,
+   "sha256": "5515fb4aecfadd7f97bb9dee5639ec14e6f19ae0d3330bddd3594f486d0b921a"
+  }
+ },
+ "settings": {
+  "--bed-shape": {
+   "value": "0x0,256x0,256x256,0x256",
+   "profile": "machine",
+   "key": "printable_area"
+  },
+  "--max-print-height": {
+   "value": "256",
+   "profile": "machine",
+   "key": "printable_height"
+  },
+  "--nozzle-diameter": {
+   "value": "0.4",
+   "profile": "machine",
+   "key": "nozzle_diameter"
+  },
+  "--layer-height": {
+   "value": "0.2",
+   "profile": "process",
+   "key": "layer_height"
+  },
+  "--first-layer-height": {
+   "value": "0.2",
+   "profile": "process",
+   "key": "initial_layer_print_height"
+  },
+  "--filament-diameter": {
+   "value": "1.75",
+   "profile": "filament",
+   "key": "filament_diameter"
+  }
+ },
+ "runs": {
+  "probe-inlay-only-A-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[probe-inlay-only-A.3mf]",
+      "size_x": "10.000000",
+      "size_y": "10.000000",
+      "size_z": "0.600000",
+      "min_x": "-5.000000",
+      "min_y": "-5.000000",
+      "min_z": "-0.300000",
+      "max_x": "5.000000",
+      "max_y": "5.000000",
+      "max_z": "0.300000",
+      "number_of_facets": "12",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "59.999996"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\probe-inlay-only-A.3mf",
+     "-o",
+     "<out>\\prusa\\probe-inlay-only-A-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\probe-inlay-only-A-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\probe-inlay-only-A-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 19986,
+    "gcode": {
+     "lines": 733,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 27.77",
+      "; filament used [cm3] = 0.07",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 3,
+     "max_z_marker": 0.6,
+     "objects_in_order": [
+      "probe-inlay-only-A"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "probe-inlay-only-A": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "probe-inlay-only-A | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 2.33
+      },
+      "probe-inlay-only-A": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "probe-inlay-only-A": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "probe-inlay-only-A-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\probe-inlay-only-A.3mf",
+     "-o",
+     "<out>\\prusa\\probe-inlay-only-A-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\probe-inlay-only-A-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\probe-inlay-only-A-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 19986,
+    "gcode": {
+     "lines": 733,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 27.77",
+      "; filament used [cm3] = 0.07",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 3,
+     "max_z_marker": 0.6,
+     "objects_in_order": [
+      "probe-inlay-only-A"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "probe-inlay-only-A": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "probe-inlay-only-A | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 2.33
+      },
+      "probe-inlay-only-A": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "probe-inlay-only-A": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "roadie-A-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-A.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "64184",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2090.488770"
+     },
+     {
+      "header": "[roadie-A.3mf]",
+      "size_x": "46.347851",
+      "size_y": "44.283588",
+      "size_z": "0.600000",
+      "min_x": "-23.173923",
+      "min_y": "-22.141794",
+      "min_z": "-0.300000",
+      "max_x": "23.173927",
+      "max_y": "22.141794",
+      "max_z": "0.300000",
+      "number_of_facets": "19548",
+      "manifold": "yes",
+      "number_of_parts": "7",
+      "volume": "126.908630"
+     },
+     {
+      "header": "[roadie-A.3mf]",
+      "size_x": "17.987656",
+      "size_y": "12.311676",
+      "size_z": "0.600000",
+      "min_x": "-8.993828",
+      "min_y": "-6.155838",
+      "min_z": "-0.300000",
+      "max_x": "8.993828",
+      "max_y": "6.155838",
+      "max_z": "0.300000",
+      "number_of_facets": "6128",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "57.799355"
+     },
+     {
+      "header": "[roadie-A.3mf]",
+      "size_x": "2.394047",
+      "size_y": "2.696453",
+      "size_z": "0.600000",
+      "min_x": "-1.197021",
+      "min_y": "-1.348225",
+      "min_z": "-0.300000",
+      "max_x": "1.197025",
+      "max_y": "1.348228",
+      "max_z": "0.300000",
+      "number_of_facets": "1080",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2.508382"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-A.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-A-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "ng support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:04:56.541919] [0x00003ff8] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-A-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-3 #451812",
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-A-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-A.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-A-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "pport spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:00.500219] [0x00004efc] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-A-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-2 #f0f10a",
+      "color-3 #451812",
+      "color-1 #f5f5f5",
+      "base #f60606"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-A_shared-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-A_shared.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "64184",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2090.488770"
+     },
+     {
+      "header": "[roadie-A_shared.3mf]",
+      "size_x": "46.347851",
+      "size_y": "44.283588",
+      "size_z": "0.600000",
+      "min_x": "-23.173923",
+      "min_y": "-22.141794",
+      "min_z": "-0.300000",
+      "max_x": "23.173927",
+      "max_y": "22.141794",
+      "max_z": "0.300000",
+      "number_of_facets": "19548",
+      "manifold": "yes",
+      "number_of_parts": "7",
+      "volume": "126.908630"
+     },
+     {
+      "header": "[roadie-A_shared.3mf]",
+      "size_x": "17.987656",
+      "size_y": "12.311676",
+      "size_z": "0.600000",
+      "min_x": "-8.993828",
+      "min_y": "-6.155838",
+      "min_z": "-0.300000",
+      "max_x": "8.993828",
+      "max_y": "6.155838",
+      "max_z": "0.300000",
+      "number_of_facets": "6128",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "57.799355"
+     },
+     {
+      "header": "[roadie-A_shared.3mf]",
+      "size_x": "2.394047",
+      "size_y": "2.696453",
+      "size_z": "0.600000",
+      "min_x": "-1.197021",
+      "min_y": "-1.348225",
+      "min_z": "-0.300000",
+      "max_x": "1.197025",
+      "max_y": "1.348228",
+      "max_z": "0.300000",
+      "number_of_facets": "1080",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2.508382"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-A_shared.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-A_shared-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "ort spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:04.682879] [0x00002194] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-A_shared-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-3 #451812",
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-A_shared-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-A_shared.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-A_shared-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "pots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:08.369927] [0x00008290] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-A_shared-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a",
+      "color-3 #451812"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-B-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-B.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "64184",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2090.488770"
+     },
+     {
+      "header": "[roadie-B.3mf]",
+      "size_x": "46.347851",
+      "size_y": "44.283588",
+      "size_z": "0.600000",
+      "min_x": "-23.173923",
+      "min_y": "-22.141794",
+      "min_z": "-0.300000",
+      "max_x": "23.173927",
+      "max_y": "22.141794",
+      "max_z": "0.300000",
+      "number_of_facets": "19548",
+      "manifold": "yes",
+      "number_of_parts": "7",
+      "volume": "126.908630"
+     },
+     {
+      "header": "[roadie-B.3mf]",
+      "size_x": "17.987656",
+      "size_y": "12.311676",
+      "size_z": "0.600000",
+      "min_x": "-8.993828",
+      "min_y": "-6.155838",
+      "min_z": "-0.300000",
+      "max_x": "8.993828",
+      "max_y": "6.155838",
+      "max_z": "0.300000",
+      "number_of_facets": "6128",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "57.799355"
+     },
+     {
+      "header": "[roadie-B.3mf]",
+      "size_x": "2.394047",
+      "size_y": "2.696453",
+      "size_z": "0.600000",
+      "min_x": "-1.197021",
+      "min_y": "-1.348225",
+      "min_z": "-0.300000",
+      "max_x": "1.197025",
+      "max_y": "1.348228",
+      "max_z": "0.300000",
+      "number_of_facets": "1080",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2.508382"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-B.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-B-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "ng support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:13.782512] [0x0000389c] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-B-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-3 #451812",
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a",
+      "base #f60606"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-B-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-B.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-B-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "pport spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:17.843349] [0x00006278] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-B-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-1 #f5f5f5",
+      "color-3 #451812",
+      "base #f60606",
+      "color-2 #f0f10a"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-B_msc-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-B_msc.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "64184",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2090.488770"
+     },
+     {
+      "header": "[roadie-B_msc.3mf]",
+      "size_x": "46.347851",
+      "size_y": "44.283588",
+      "size_z": "0.600000",
+      "min_x": "-23.173923",
+      "min_y": "-22.141794",
+      "min_z": "-0.300000",
+      "max_x": "23.173927",
+      "max_y": "22.141794",
+      "max_z": "0.300000",
+      "number_of_facets": "19548",
+      "manifold": "yes",
+      "number_of_parts": "7",
+      "volume": "126.908630"
+     },
+     {
+      "header": "[roadie-B_msc.3mf]",
+      "size_x": "17.987656",
+      "size_y": "12.311676",
+      "size_z": "0.600000",
+      "min_x": "-8.993828",
+      "min_y": "-6.155838",
+      "min_z": "-0.300000",
+      "max_x": "8.993828",
+      "max_y": "6.155838",
+      "max_z": "0.300000",
+      "number_of_facets": "6128",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "57.799355"
+     },
+     {
+      "header": "[roadie-B_msc.3mf]",
+      "size_x": "2.394047",
+      "size_y": "2.696453",
+      "size_z": "0.600000",
+      "min_x": "-1.197021",
+      "min_y": "-1.348225",
+      "min_z": "-0.300000",
+      "max_x": "1.197025",
+      "max_y": "1.348228",
+      "max_z": "0.300000",
+      "number_of_facets": "1080",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2.508382"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-B_msc.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-B_msc-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "upport spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:22.297080] [0x00008354] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-B_msc-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a",
+      "color-3 #451812",
+      "base #f60606"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-B_msc-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-B_msc.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-B_msc-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "t spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:26.572564] [0x000022e8] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-B_msc-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a",
+      "color-3 #451812"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-C-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-C.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "64184",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2090.488770"
+     },
+     {
+      "header": "[roadie-C.3mf]",
+      "size_x": "46.347851",
+      "size_y": "44.283588",
+      "size_z": "0.600000",
+      "min_x": "-23.173923",
+      "min_y": "-22.141794",
+      "min_z": "-0.300000",
+      "max_x": "23.173927",
+      "max_y": "22.141794",
+      "max_z": "0.300000",
+      "number_of_facets": "19548",
+      "manifold": "yes",
+      "number_of_parts": "7",
+      "volume": "126.908630"
+     },
+     {
+      "header": "[roadie-C.3mf]",
+      "size_x": "17.987656",
+      "size_y": "12.311676",
+      "size_z": "0.600000",
+      "min_x": "-8.993828",
+      "min_y": "-6.155838",
+      "min_z": "-0.300000",
+      "max_x": "8.993828",
+      "max_y": "6.155838",
+      "max_z": "0.300000",
+      "number_of_facets": "6128",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "57.799355"
+     },
+     {
+      "header": "[roadie-C.3mf]",
+      "size_x": "2.394047",
+      "size_y": "2.696453",
+      "size_z": "0.600000",
+      "min_x": "-1.197021",
+      "min_y": "-1.348225",
+      "min_z": "-0.300000",
+      "max_x": "1.197025",
+      "max_y": "1.348228",
+      "max_z": "0.300000",
+      "number_of_facets": "1080",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "2.508382"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-C.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-C-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "ng support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:31.154829] [0x0000755c] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-C-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-3 #451812",
+      "color-1 #f5f5f5",
+      "color-2 #f0f10a"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-C-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-C.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-C-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "pport spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\nprint warning: Detected print stability issues:\r\n\r\nLow bed adhesion\r\ncolor-1 #f5f5f5, color-3 #451812\r\n\r\nConsider enabling supports.\r\nAlso consider enabling brim.\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:36.440223] [0x00003ef4] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\roadie-C-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 1053016,
+    "gcode": {
+     "lines": 41651,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 850.39",
+      "; filament used [cm3] = 2.05",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-1 #f5f5f5",
+      "base #f60606",
+      "color-3 #451812",
+      "color-2 #f0f10a"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a": [
+       0.2,
+       0.6
+      ],
+      "color-3 #451812": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       13.864,
+       0.219,
+       59.789,
+       44.082,
+       0.2,
+       0.6
+      ],
+      "color-2 #f0f10a | None": [
+       33.044,
+       31.924,
+       50.607,
+       43.77,
+       0.2,
+       0.6
+      ],
+      "color-3 #451812 | None": [
+       35.002,
+       41.057,
+       36.958,
+       43.3,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "base #f60606": {
+       "None": 765.7
+      },
+      "color-1 #f5f5f5": {
+       "None": 52.79
+      },
+      "color-2 #f0f10a": {
+       "None": 24.65
+      },
+      "color-3 #451812": {
+       "None": 0.97
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ],
+      "color-1 #f5f5f5": [
+       13.864,
+       0.219,
+       59.789,
+       44.082
+      ],
+      "color-2 #f0f10a": [
+       33.044,
+       31.924,
+       50.607,
+       43.77
+      ],
+      "color-3 #451812": [
+       35.002,
+       41.057,
+       36.958,
+       43.3
+      ]
+     }
+    }
+   }
+  },
+  "roadie-D-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-D.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "90940",
+      "manifold": "yes",
+      "number_of_parts": "10",
+      "volume": "2277.693359"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-D.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-D-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\roadie-D-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\roadie-D-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 928228,
+    "gcode": {
+     "lines": 36481,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 814.52",
+      "; filament used [cm3] = 1.96",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "roadie-D"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "roadie-D": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "roadie-D | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "roadie-D": {
+       "None": 808.25
+      }
+     },
+     "extrusion_xy_by_object": {
+      "roadie-D": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ]
+     }
+    }
+   }
+  },
+  "roadie-D-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-D.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-D-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\roadie-D-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\roadie-D-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 928228,
+    "gcode": {
+     "lines": 36481,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 814.52",
+      "; filament used [cm3] = 1.96",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "roadie-D"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "roadie-D": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "roadie-D | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "roadie-D": {
+       "None": 808.25
+      }
+     },
+     "extrusion_xy_by_object": {
+      "roadie-D": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-A-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[synthetic-A.3mf]",
+      "size_x": "20.000000",
+      "size_y": "20.000000",
+      "size_z": "3.000000",
+      "min_x": "-10.000000",
+      "min_y": "-10.000000",
+      "min_z": "-1.500000",
+      "max_x": "10.000000",
+      "max_y": "10.000000",
+      "max_z": "1.500000",
+      "number_of_facets": "28",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "1140.000000"
+     },
+     {
+      "header": "[synthetic-A.3mf]",
+      "size_x": "10.000000",
+      "size_y": "10.000000",
+      "size_z": "0.600000",
+      "min_x": "-5.000000",
+      "min_y": "-5.000000",
+      "min_z": "-0.300000",
+      "max_x": "5.000000",
+      "max_y": "5.000000",
+      "max_z": "0.300000",
+      "number_of_facets": "12",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "59.999996"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-A.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-A-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:42.665480] [0x00002cf4] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-A-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-A-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-A.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-A-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:45.315265] [0x00007d58] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-A-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-A_shared-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[synthetic-A_shared.3mf]",
+      "size_x": "20.000000",
+      "size_y": "20.000000",
+      "size_z": "3.000000",
+      "min_x": "-10.000000",
+      "min_y": "-10.000000",
+      "min_z": "-1.500000",
+      "max_x": "10.000000",
+      "max_y": "10.000000",
+      "max_z": "1.500000",
+      "number_of_facets": "28",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "1140.000000"
+     },
+     {
+      "header": "[synthetic-A_shared.3mf]",
+      "size_x": "10.000000",
+      "size_y": "10.000000",
+      "size_z": "0.600000",
+      "min_x": "-5.000000",
+      "min_y": "-5.000000",
+      "min_z": "-0.300000",
+      "max_x": "5.000000",
+      "max_y": "5.000000",
+      "max_z": "0.300000",
+      "number_of_facets": "12",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "59.999996"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-A_shared.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-A_shared-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:47.933178] [0x00003928] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-A_shared-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-A_shared-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-A_shared.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-A_shared-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:50.482845] [0x00007ccc] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-A_shared-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-B-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[synthetic-B.3mf]",
+      "size_x": "20.000000",
+      "size_y": "20.000000",
+      "size_z": "3.000000",
+      "min_x": "-10.000000",
+      "min_y": "-10.000000",
+      "min_z": "-1.500000",
+      "max_x": "10.000000",
+      "max_y": "10.000000",
+      "max_z": "1.500000",
+      "number_of_facets": "28",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "1140.000000"
+     },
+     {
+      "header": "[synthetic-B.3mf]",
+      "size_x": "10.000000",
+      "size_y": "10.000000",
+      "size_z": "0.600000",
+      "min_x": "-5.000000",
+      "min_y": "-5.000000",
+      "min_z": "-0.300000",
+      "max_x": "5.000000",
+      "max_y": "5.000000",
+      "max_z": "0.300000",
+      "number_of_facets": "12",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "59.999996"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-B.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-B-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:53.132081] [0x000066f0] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-B-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-B-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-B.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-B-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:56.032320] [0x0000169c] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-B-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-B_msc-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[synthetic-B_msc.3mf]",
+      "size_x": "20.000000",
+      "size_y": "20.000000",
+      "size_z": "3.000000",
+      "min_x": "-10.000000",
+      "min_y": "-10.000000",
+      "min_z": "-1.500000",
+      "max_x": "10.000000",
+      "max_y": "10.000000",
+      "max_z": "1.500000",
+      "number_of_facets": "28",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "1140.000000"
+     },
+     {
+      "header": "[synthetic-B_msc.3mf]",
+      "size_x": "10.000000",
+      "size_y": "10.000000",
+      "size_z": "0.600000",
+      "min_x": "-5.000000",
+      "min_y": "-5.000000",
+      "min_z": "-0.300000",
+      "max_x": "5.000000",
+      "max_y": "5.000000",
+      "max_z": "0.300000",
+      "number_of_facets": "12",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "59.999996"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-B_msc.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-B_msc-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:05:59.065254] [0x00005fd4] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-B_msc-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "base #f60606",
+      "color-1 #f5f5f5"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-B_msc-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-B_msc.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-B_msc-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:06:02.015717] [0x00001494] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-B_msc-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-1 #f5f5f5",
+      "base #f60606"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-C-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[synthetic-C.3mf]",
+      "size_x": "20.000000",
+      "size_y": "20.000000",
+      "size_z": "3.000000",
+      "min_x": "-10.000000",
+      "min_y": "-10.000000",
+      "min_z": "-1.500000",
+      "max_x": "10.000000",
+      "max_y": "10.000000",
+      "max_z": "1.500000",
+      "number_of_facets": "28",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "1140.000000"
+     },
+     {
+      "header": "[synthetic-C.3mf]",
+      "size_x": "10.000000",
+      "size_y": "10.000000",
+      "size_z": "0.600000",
+      "min_x": "-5.000000",
+      "min_y": "-5.000000",
+      "min_z": "-0.300000",
+      "max_x": "5.000000",
+      "max_y": "5.000000",
+      "max_z": "0.300000",
+      "number_of_facets": "12",
+      "manifold": "yes",
+      "number_of_parts": "1",
+      "volume": "59.999996"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-C.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-C-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:06:05.582889] [0x00005ce4] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-C-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-1 #f5f5f5",
+      "base #f60606"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-C-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-C.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-C-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 3221225477,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n[2026-11-12 19:06:08.032877] [0x000015f0] [error]   gcode path conflicts found between color-1 #f5f5f5 and base #f60606\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-C-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 87159,
+    "gcode": {
+     "lines": 3572,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 378.80",
+      "; filament used [cm3] = 0.91",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "color-1 #f5f5f5",
+      "base #f60606"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "base #f60606": [
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5": [
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "base #f60606 | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ],
+      "color-1 #f5f5f5 | None": [
+       5.2,
+       5.2,
+       14.8,
+       14.8,
+       0.2,
+       0.6
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "base #f60606": {
+       "None": 349.84
+      },
+      "color-1 #f5f5f5": {
+       "None": 25.44
+      }
+     },
+     "extrusion_xy_by_object": {
+      "base #f60606": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ],
+      "color-1 #f5f5f5": [
+       5.2,
+       5.2,
+       14.8,
+       14.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-D-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[synthetic-D.3mf]",
+      "size_x": "20.000000",
+      "size_y": "20.000000",
+      "size_z": "3.000000",
+      "min_x": "-10.000000",
+      "min_y": "-10.000000",
+      "min_z": "-1.500000",
+      "max_x": "10.000000",
+      "max_y": "10.000000",
+      "max_z": "1.500000",
+      "number_of_facets": "40",
+      "manifold": "yes",
+      "number_of_parts": "2",
+      "volume": "1200.000000"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-D.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-D-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-D-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\synthetic-D-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 55074,
+    "gcode": {
+     "lines": 2251,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 339.79",
+      "; filament used [cm3] = 0.82",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "synthetic-D"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "synthetic-D": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "synthetic-D | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "synthetic-D": {
+       "None": 336.28
+      }
+     },
+     "extrusion_xy_by_object": {
+      "synthetic-D": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ]
+     }
+    }
+   }
+  },
+  "synthetic-D-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\synthetic-D.3mf",
+     "-o",
+     "<out>\\prusa\\synthetic-D-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\synthetic-D-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\synthetic-D-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 55074,
+    "gcode": {
+     "lines": 2251,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 339.79",
+      "; filament used [cm3] = 0.82",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "synthetic-D"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "synthetic-D": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "synthetic-D | None": [
+       0.2,
+       0.2,
+       19.8,
+       19.8,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 3.52
+      },
+      "synthetic-D": {
+       "None": 336.28
+      }
+     },
+     "extrusion_xy_by_object": {
+      "synthetic-D": [
+       0.2,
+       0.2,
+       19.8,
+       19.8
+      ]
+     }
+    }
+   }
+  }
+ }
+}

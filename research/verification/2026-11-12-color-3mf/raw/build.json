@@ -1,0 +1,705 @@
+{
+ "synthetic": {
+  "bodies": [
+   {
+    "name": "base #f60606",
+    "vertices": 16,
+    "triangles": 28,
+    "volume_mm3": 1140.00001,
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     20.0,
+     20.0,
+     3.0
+    ]
+   },
+   {
+    "name": "color-1 #f5f5f5",
+    "vertices": 8,
+    "triangles": 12,
+    "volume_mm3": 59.99999,
+    "min": [
+     5.0,
+     5.0,
+     2.4000000953674316
+    ],
+    "max": [
+     15.0,
+     15.0,
+     3.0
+    ]
+   }
+  ],
+  "files": {
+   "A": {
+    "file": "synthetic-A.3mf",
+    "bytes": 1323,
+    "sha256": "ae36adf84d31279434255104d0569f3d24a81937a854b7d5e7a18e5701685751",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 16,
+       "triangles": 28,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 8,
+       "triangles": 12,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 2,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 2,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true
+     ]
+    }
+   },
+   "B": {
+    "file": "synthetic-B.3mf",
+    "bytes": 1352,
+    "sha256": "d43cde381dbe3b399dda03ad1d22300cf8faf9cad088eb98fd2c238b5bdc1724",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 16,
+       "triangles": 28,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 8,
+       "triangles": 12,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 2,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 1,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true
+     ]
+    }
+   },
+   "C": {
+    "file": "synthetic-C.3mf",
+    "bytes": 1326,
+    "sha256": "7932e5282f55cfbb3c4eff588f991f9aac3b5dfb82de8e0123172a042de1a2f0",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 16,
+       "triangles": 28,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 8,
+       "triangles": 12,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 2
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 2,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true
+     ]
+    }
+   },
+   "A_shared": {
+    "file": "synthetic-A_shared.3mf",
+    "bytes": 1320,
+    "sha256": "9a69f3aa1b8c5ba727884d51acf2466c9baee4df7e8df8d78d2d7eeb6b02fff2",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 16,
+       "triangles": 28,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 8,
+       "triangles": 12,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 2
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 2,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true
+     ]
+    }
+   },
+   "D": {
+    "file": "synthetic-D.3mf",
+    "bytes": 1316,
+    "sha256": "649bbc804e30052d94d6f2bd24bef52633021504cc4d143ca7ee5378a4b95a61",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "model",
+       "vertices": 24,
+       "triangles": 40,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true
+     ]
+    }
+   },
+   "B_msc": {
+    "file": "synthetic-B_msc.3mf",
+    "bytes": 1668,
+    "sha256": "40957bd75888f85963c6db35b0e598f50e066f889192964b2bc40c2cff2a008e",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 16,
+       "triangles": 28,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 8,
+       "triangles": 12,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 2,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 1,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true
+     ]
+    }
+   }
+  }
+ },
+ "roadie": {
+  "bodies": [
+   {
+    "name": "base #f60606",
+    "vertices": 32094,
+    "triangles": 64184,
+    "volume_mm3": 2090.524745,
+    "min": [
+     0.0293731689453125,
+     0.00043487548828125,
+     0.0
+    ],
+    "max": [
+     60.0,
+     49.40464782714844,
+     3.0
+    ]
+   },
+   {
+    "name": "color-1 #f5f5f5",
+    "vertices": 9788,
+    "triangles": 19548,
+    "volume_mm3": 126.908371,
+    "min": [
+     13.652149200439453,
+     0.00043487548828125,
+     2.4000000953674316
+    ],
+    "max": [
+     60.0,
+     44.28402328491211,
+     3.0
+    ]
+   },
+   {
+    "name": "color-2 #f0f10a",
+    "vertices": 3066,
+    "triangles": 6128,
+    "volume_mm3": 57.799371,
+    "min": [
+     32.8360481262207,
+     31.658565521240234,
+     2.4000000953674316
+    ],
+    "max": [
+     50.82370376586914,
+     43.97024154663086,
+     3.0
+    ]
+   },
+   {
+    "name": "color-3 #451812",
+    "vertices": 542,
+    "triangles": 1080,
+    "volume_mm3": 2.508382,
+    "min": [
+     34.80168914794922,
+     40.856754302978516,
+     2.4000000953674316
+    ],
+    "max": [
+     37.195735931396484,
+     43.55320739746094,
+     3.0
+    ]
+   }
+  ],
+  "files": {
+   "A": {
+    "file": "roadie-A.3mf",
+    "bytes": 939562,
+    "sha256": "92f8e0aed0fe1ecacdfa2fff59cbfe54180c397daf5a27b21f1bbccb2dde2178",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 32094,
+       "triangles": 64184,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 9788,
+       "triangles": 19548,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 2,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-2 #f0f10a",
+       "vertices": 3066,
+       "triangles": 6128,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 3,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-3 #451812",
+       "vertices": 542,
+       "triangles": 1080,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 4,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 4,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true,
+      true,
+      true
+     ]
+    }
+   },
+   "B": {
+    "file": "roadie-B.3mf",
+    "bytes": 939634,
+    "sha256": "ea4a75b05a8073b95b913e41261dbb80e951db57320d3f480531faa4a07b4371",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 32094,
+       "triangles": 64184,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 9788,
+       "triangles": 19548,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 2,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-2 #f0f10a",
+       "vertices": 3066,
+       "triangles": 6128,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 3,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-3 #451812",
+       "vertices": 542,
+       "triangles": 1080,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 4,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 1,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true,
+      true,
+      true
+     ]
+    }
+   },
+   "C": {
+    "file": "roadie-C.3mf",
+    "bytes": 939581,
+    "sha256": "d9335da9617f179ae173fa4486d64b320217b1ef7f5601d191bc86a89aa6e42f",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 32094,
+       "triangles": 64184,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 9788,
+       "triangles": 19548,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 2
+       }
+      },
+      {
+       "name": "color-2 #f0f10a",
+       "vertices": 3066,
+       "triangles": 6128,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 3
+       }
+      },
+      {
+       "name": "color-3 #451812",
+       "vertices": 542,
+       "triangles": 1080,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 4
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 4,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true,
+      true,
+      true
+     ]
+    }
+   },
+   "A_shared": {
+    "file": "roadie-A_shared.3mf",
+    "bytes": 939542,
+    "sha256": "3fe55c6becb98875ef85b7c90b647b6af7d7343daaffb06ae45c7c38739716c9",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 32094,
+       "triangles": 64184,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 9788,
+       "triangles": 19548,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 2
+       }
+      },
+      {
+       "name": "color-2 #f0f10a",
+       "vertices": 3066,
+       "triangles": 6128,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 3
+       }
+      },
+      {
+       "name": "color-3 #451812",
+       "vertices": 542,
+       "triangles": 1080,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 4
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 4,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true,
+      true,
+      true
+     ]
+    }
+   },
+   "D": {
+    "file": "roadie-D.3mf",
+    "bytes": 962632,
+    "sha256": "531ad2c5ba02e465489ffc1ec45cc974a6592afe8f8d972dc1d22fce11c6a30e",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "model",
+       "vertices": 45490,
+       "triangles": 90940,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true
+     ]
+    }
+   },
+   "B_msc": {
+    "file": "roadie-B_msc.3mf",
+    "bytes": 939980,
+    "sha256": "e6958fb7794dca6cbbb7296580b4560006279dec17c08e66763828e2d052aef7",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "base #f60606",
+       "vertices": 32094,
+       "triangles": 64184,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 9788,
+       "triangles": 19548,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 2,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-2 #f0f10a",
+       "vertices": 3066,
+       "triangles": 6128,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 3,
+        "lib3mf_property_id": 1
+       }
+      },
+      {
+       "name": "color-3 #451812",
+       "vertices": 542,
+       "triangles": 1080,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 4,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 1,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true,
+      true,
+      true,
+      true
+     ]
+    }
+   }
+  }
+ },
+ "probe": {
+  "files": {
+   "A": {
+    "file": "probe-inlay-only-A.3mf",
+    "bytes": 1103,
+    "sha256": "e28bee5d9d6a376ce55dc799473ab0e4e88d0572fd504b0efd2ed126437b0316",
+    "lib3mf": {
+     "unit": "1 (MilliMeter)",
+     "mesh_objects": [
+      {
+       "name": "color-1 #f5f5f5",
+       "vertices": 8,
+       "triangles": 12,
+       "manifold_oriented": true,
+       "object_property": {
+        "has": true,
+        "resource_id": 1,
+        "lib3mf_property_id": 1
+       }
+      }
+     ],
+     "components_objects": 0,
+     "build_items": 1,
+     "warnings": [],
+     "vertices_exact": [
+      true
+     ]
+    }
+   }
+  }
+ }
+}
