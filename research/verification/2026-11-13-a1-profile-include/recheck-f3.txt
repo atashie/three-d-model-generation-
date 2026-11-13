@@ -1,0 +1,6 @@
+roadie-tol30 F3.printed_connectivity: PASS; status and measured equal to slice5c's: True
+roadie-tol30 F3.edge_coverage: PASS; status and measured equal to slice5c's: True
+roadie-tol30 F3.edge_overprint: PASS; status and measured equal to slice5c's: True
+oddie F3.printed_connectivity: PASS; status and measured equal to slice5c's: True
+oddie F3.edge_coverage: PASS; status and measured equal to slice5c's: True
+oddie F3.edge_overprint: PASS; status and measured equal to slice5c's: True

@@ -424,3 +424,48 @@ identical to the 2026-11-11 (`slice-4`) ones.
   E word is refused.
 - **M- and T-commands in the new G-code:** `scan_mt_commands.py` → `scan-mt-commands.txt`
   (both `slice5c` G-codes). The `parse_gcode` docstring lists them.
+
+### Quality review fixes, 2026-11-13
+
+Each fix was made test-first. It applies to `slice-5`, which is still unpushed.
+
+- **I1: the position after a conditional block.** The firmware may or may not run an
+  `M622 … M623` block. So after every M623, and after every SKIPPABLE_END, the X, Y and
+  commanded Z are now unknown.
+  - **Before:** a block whose only moves were inside `M622 J1 … M623` left the position
+    at its last move. An extrusion straight after it was then accepted.
+  - **While testing:** a move with X or Y from or to an unknown position now counts as a
+    move. Before, a relative extrusion from an unknown position (G91 left on) was
+    silently dropped; now it is refused.
+- **I2: an allowlist of firmware commands.** In Custom and in SKIPPABLE blocks, only the
+  firmware G-commands the pinned A1 template writes are accepted: G392, G380, G39, G39.3,
+  G39.4, G29.2, G29.4 and G2814. This is the union of both columns of
+  `scan-gcommands.txt`. Any other G-command outside `G_COMMANDS` is refused (for example
+  G9999, G4, G29.3, G18 or G54). The denylist is removed.
+- **M1: firmware commands with E.** A firmware command with an E word is refused
+  everywhere. None of the template's has one.
+- **M4: a template value equal to OrcaSlicer's default.**
+  - **Pinned:** `include_defaults_sha256` in the pin holds the sha256 of each of the five
+    settings' defaults, from the `PrintConfig.cpp` lines quoted in `source-excerpts.txt`.
+    A test ties the pin to those quotes.
+  - **Refused:** a template value equal to its default (OrcaSlicer would keep the
+    parent's value), and a setting with no pinned default.
+- **M5: template keys.** A template must have exactly `type`, `name`, `instantiation`
+  and one setting.
+- **M2 and M3 (`--profiles-only`):**
+  - An existing `profiles-flat.previous` is refused before any check or fetch, and
+    nothing changes.
+  - If putting the new folder in place fails after the old one was moved aside, the old
+    one is moved back.
+- **The real files:**
+  - The network flatten with the new checks gives the pinned bytes (all four files equal
+    to the installed ones).
+  - `recheck_f3.py` (`recheck-f3.txt`) runs the current reader on the kept
+    `*-60x3-slice5c` G-codes. Every F3 status and measurement equals that run's
+    `slice.json`, so no new slice was needed.
+  - The old `slice-4` G-codes still parse to the same segments.
+- **Tests after these fixes (2026-11-13, PC):**
+  - `uv run pytest -q`: 2230 passed and 3 skipped.
+  - `pytest -m slicer`, with both pinned slicers: 3 passed.
+  - `uv run ruff check .`, `gen_docs.py --check` and `setup_orcaslicer.py --verify-only`
+    pass.
