@@ -1,0 +1,94 @@
+{
+ "oddie-60-keep-merge-blues-greens-v4-f64": {
+  "sha256": "cae93cd7566f35e9592302e2f895b970e26247a7d643bf249885db3cac3746ad",
+  "bytes": 3091874,
+  "palette_model_3mf_sha256": "cae93cd7566f35e9592302e2f895b970e26247a7d643bf249885db3cac3746ad",
+  "shells": [
+   [
+    "ams-base",
+    "#25561b"
+   ],
+   [
+    "ams-color-1-547e9d",
+    "#547e9d"
+   ],
+   [
+    "ams-color-2-0d100d",
+    "#0d100d"
+   ],
+   [
+    "ams-color-3-dd4f47",
+    "#dd4f47"
+   ]
+  ]
+ },
+ "oddie-60-merge-blues-v3-f64": {
+  "sha256": "be056afbd833d212c0c720321562891a60890ba650afa28701f34b1773f56b07",
+  "bytes": 1017762,
+  "palette_model_3mf_sha256": "be056afbd833d212c0c720321562891a60890ba650afa28701f34b1773f56b07",
+  "shells": [
+   [
+    "ams-base",
+    "#25561b"
+   ],
+   [
+    "ams-color-1-547e9d",
+    "#547e9d"
+   ],
+   [
+    "ams-color-2-48a835",
+    "#48a835"
+   ],
+   [
+    "ams-color-3-dd4f47",
+    "#dd4f47"
+   ]
+  ]
+ },
+ "roadie-tol30-60-drop-v3-f64": {
+  "sha256": "ec2961184e1b235fb4f051c00824095f9642128a565a829e4f1527b1a4f822d7",
+  "bytes": 884882,
+  "palette_model_3mf_sha256": "ec2961184e1b235fb4f051c00824095f9642128a565a829e4f1527b1a4f822d7",
+  "shells": [
+   [
+    "ams-base",
+    "#f60606"
+   ],
+   [
+    "ams-color-1-f5f5f5",
+    "#f5f5f5"
+   ],
+   [
+    "ams-color-2-f0f10a",
+    "#f0f10a"
+   ],
+   [
+    "ams-color-3-451812",
+    "#451812"
+   ]
+  ]
+ },
+ "roadie-tol30-60-keep-v4-f64": {
+  "sha256": "d11abea71e9b2fe5a176d86a56d299df7a875628a57a3346790c9fd046a41dda",
+  "bytes": 2191835,
+  "palette_model_3mf_sha256": "d11abea71e9b2fe5a176d86a56d299df7a875628a57a3346790c9fd046a41dda",
+  "shells": [
+   [
+    "ams-base",
+    "#f60606"
+   ],
+   [
+    "ams-color-1-451812",
+    "#451812"
+   ],
+   [
+    "ams-color-2-f5f5f5",
+    "#f5f5f5"
+   ],
+   [
+    "ams-color-3-f0f10a",
+    "#f0f10a"
+   ]
+  ]
+ }
+}

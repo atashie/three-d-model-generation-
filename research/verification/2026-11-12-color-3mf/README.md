@@ -249,3 +249,48 @@ filaments they have, as they said.
 **Open for step 4:** OrcaSlicer CLI slicing of D puts everything on one filament.
 Measuring color changes in OrcaSlicer will need either an Orca-specific extra file
 (PLAN point 7) or another route.
+
+## Task 5: the real `model.3mf` (2026-11-13)
+
+From here on the files are the ones `tdmg flat --colors` writes (colorflat-3, encoding D),
+not the hand-written Task 1 files.
+
+### The owner's check in Bambu Studio
+
+The owner opened `artifacts/colored-runs/roadie-tol30-60-drop-v3-f64/model.3mf` in their
+Bambu Studio. They were asked:
+
+1. Does it open with the white, yellow and dark parts in place in the top of the red body?
+2. Can you assign each color a filament? (`palette.json` lists which part is which color.)
+3. Optional: does it slice?
+
+Their answer, verbatim:
+
+> 1) yes. 2) yes. 3) yes
+
+This is a manual check of one plan in the owner's slicer; it is not a gate, and nothing was
+printed.
+
+### Re-import in the pinned slicers, all four owner plans
+
+`measure_reimport.py OUT` copies each run's `model.3mf` (its SHA-256 checked against
+`palette.json`), then runs the same OrcaSlicer `plain` run and PrusaSlicer runs as Task 1
+(commands above). Windows, the owner's PC, 2026-11-13. Raw: `raw/reimport-inputs.json`,
+`raw/reimport-orca-plain.json`, `raw/reimport-prusa.json`.
+
+| Plan | `model.3mf` bytes | OrcaSlicer 2.5.0 | PrusaSlicer 2.9.7 `--info` | PrusaSlicer slice (default and `--dont-arrange`) |
+|---|---|---|---|---|
+| roadie-tol30-60-drop-v3-f64 | 884,882 | exit 0; one object `model`; layers 0.2–3.0 mm; one filament, 0 changes | 10 parts, manifold, volume 2277.72 mm³, 59.97 x 49.40 x 3.00 mm | exit 0 both; layers 0.2–3.0 mm |
+| roadie-tol30-60-keep-v4-f64 | 2,191,835 | as above | 13 parts, manifold, 2277.99 mm³, same size | exit 0 both; layers 0.2–3.0 mm |
+| oddie-60-merge-blues-v3-f64 | 1,017,762 | as above | 8 parts, manifold, 5033.41 mm³, 59.99 x 65.87 x 3.00 mm | exit 0 both; layers 0.2–3.0 mm |
+| oddie-60-keep-merge-blues-greens-v4-f64 | 3,091,874 | as above | 14 parts, manifold, 5032.42 mm³, same size | exit 0 both; layers 0.2–3.0 mm |
+
+- **Volumes:** the `palette.json` volumes sum to 2277.741 mm³ (Roadie) and 5033.649 mm³
+  (Oddie). PrusaSlicer's `--info` volumes are 0.03 to 1.23 mm³ below those. The cause
+  was not investigated.
+- **Parts:** PrusaSlicer splits the one object into connected shells, so its part count is
+  the number of connected pieces, not the number of colors.
+- **OrcaSlicer** logs "found 3mf from other vendor, split as instance" and arranges the one
+  object; everything prints on filament 1, as in Task 1. This stays open for step 4.
+- **Not checked here:** per-color filaments in either CLI. Neither CLI assigns them from
+  this file; the owner assigns them in the slicer. No G-code is kept.

@@ -1,0 +1,906 @@
+{
+ "slicer_verified": {
+  "exe_sha256": "086bcf2ba47625738cf2ec120975eb8d78a16fb432c4ed05a95c1b7ed130dbff",
+  "libraries": {
+   "app/PrusaSlicer-2.9.7/PrusaSlicer.dll": "6070610345f2c4c56fdfc462c64218b68a9d2dac9973674cc2a7642e3bc73c7c"
+  },
+  "app_tree": {
+   "files": 1119,
+   "sha256": "5515fb4aecfadd7f97bb9dee5639ec14e6f19ae0d3330bddd3594f486d0b921a"
+  }
+ },
+ "settings": {
+  "--bed-shape": {
+   "value": "0x0,256x0,256x256,0x256",
+   "profile": "machine",
+   "key": "printable_area"
+  },
+  "--max-print-height": {
+   "value": "256",
+   "profile": "machine",
+   "key": "printable_height"
+  },
+  "--nozzle-diameter": {
+   "value": "0.4",
+   "profile": "machine",
+   "key": "nozzle_diameter"
+  },
+  "--layer-height": {
+   "value": "0.2",
+   "profile": "process",
+   "key": "layer_height"
+  },
+  "--first-layer-height": {
+   "value": "0.2",
+   "profile": "process",
+   "key": "initial_layer_print_height"
+  },
+  "--filament-diameter": {
+   "value": "1.75",
+   "profile": "filament",
+   "key": "filament_diameter"
+  }
+ },
+ "runs": {
+  "oddie-60-keep-merge-blues-greens-v4-f64-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[oddie-60-keep-merge-blues-greens-v4-f64.3mf]",
+      "size_x": "59.986748",
+      "size_y": "65.870964",
+      "size_z": "3.000000",
+      "min_x": "-29.993374",
+      "min_y": "-32.935482",
+      "min_z": "-1.500000",
+      "max_x": "29.993374",
+      "max_y": "32.935482",
+      "max_z": "1.500000",
+      "number_of_facets": "302586",
+      "manifold": "yes",
+      "number_of_parts": "14",
+      "volume": "5032.416504"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\oddie-60-keep-merge-blues-greens-v4-f64.3mf",
+     "-o",
+     "<out>\\prusa\\oddie-60-keep-merge-blues-greens-v4-f64-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\oddie-60-keep-merge-blues-greens-v4-f64-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\oddie-60-keep-merge-blues-greens-v4-f64-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 507645,
+    "gcode": {
+     "lines": 18742,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 1367.37",
+      "; filament used [cm3] = 3.29",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "oddie-60-keep-merge-blues-greens-v4-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "oddie-60-keep-merge-blues-greens-v4-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "oddie-60-keep-merge-blues-greens-v4-f64 | None": [
+       0.228,
+       0.203,
+       59.77,
+       65.643,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.64
+      },
+      "oddie-60-keep-merge-blues-greens-v4-f64": {
+       "None": 1360.73
+      }
+     },
+     "extrusion_xy_by_object": {
+      "oddie-60-keep-merge-blues-greens-v4-f64": [
+       0.228,
+       0.203,
+       59.77,
+       65.643
+      ]
+     }
+    }
+   }
+  },
+  "oddie-60-keep-merge-blues-greens-v4-f64-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\oddie-60-keep-merge-blues-greens-v4-f64.3mf",
+     "-o",
+     "<out>\\prusa\\oddie-60-keep-merge-blues-greens-v4-f64-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\oddie-60-keep-merge-blues-greens-v4-f64-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\oddie-60-keep-merge-blues-greens-v4-f64-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 507645,
+    "gcode": {
+     "lines": 18742,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 1367.37",
+      "; filament used [cm3] = 3.29",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "oddie-60-keep-merge-blues-greens-v4-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "oddie-60-keep-merge-blues-greens-v4-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "oddie-60-keep-merge-blues-greens-v4-f64 | None": [
+       0.228,
+       0.203,
+       59.77,
+       65.643,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.64
+      },
+      "oddie-60-keep-merge-blues-greens-v4-f64": {
+       "None": 1360.73
+      }
+     },
+     "extrusion_xy_by_object": {
+      "oddie-60-keep-merge-blues-greens-v4-f64": [
+       0.228,
+       0.203,
+       59.77,
+       65.643
+      ]
+     }
+    }
+   }
+  },
+  "oddie-60-merge-blues-v3-f64-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[oddie-60-merge-blues-v3-f64.3mf]",
+      "size_x": "59.986748",
+      "size_y": "65.870964",
+      "size_z": "3.000000",
+      "min_x": "-29.993374",
+      "min_y": "-32.935482",
+      "min_z": "-1.500000",
+      "max_x": "29.993374",
+      "max_y": "32.935482",
+      "max_z": "1.500000",
+      "number_of_facets": "101984",
+      "manifold": "yes",
+      "number_of_parts": "8",
+      "volume": "5033.411621"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\oddie-60-merge-blues-v3-f64.3mf",
+     "-o",
+     "<out>\\prusa\\oddie-60-merge-blues-v3-f64-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\oddie-60-merge-blues-v3-f64-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\oddie-60-merge-blues-v3-f64-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 507562,
+    "gcode": {
+     "lines": 18720,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 1367.37",
+      "; filament used [cm3] = 3.29",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "oddie-60-merge-blues-v3-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "oddie-60-merge-blues-v3-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "oddie-60-merge-blues-v3-f64 | None": [
+       0.228,
+       0.203,
+       59.77,
+       65.643,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.64
+      },
+      "oddie-60-merge-blues-v3-f64": {
+       "None": 1360.73
+      }
+     },
+     "extrusion_xy_by_object": {
+      "oddie-60-merge-blues-v3-f64": [
+       0.228,
+       0.203,
+       59.77,
+       65.643
+      ]
+     }
+    }
+   }
+  },
+  "oddie-60-merge-blues-v3-f64-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\oddie-60-merge-blues-v3-f64.3mf",
+     "-o",
+     "<out>\\prusa\\oddie-60-merge-blues-v3-f64-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\oddie-60-merge-blues-v3-f64-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\oddie-60-merge-blues-v3-f64-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 507562,
+    "gcode": {
+     "lines": 18720,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 1367.37",
+      "; filament used [cm3] = 3.29",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "oddie-60-merge-blues-v3-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "oddie-60-merge-blues-v3-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "oddie-60-merge-blues-v3-f64 | None": [
+       0.228,
+       0.203,
+       59.77,
+       65.643,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.64
+      },
+      "oddie-60-merge-blues-v3-f64": {
+       "None": 1360.73
+      }
+     },
+     "extrusion_xy_by_object": {
+      "oddie-60-merge-blues-v3-f64": [
+       0.228,
+       0.203,
+       59.77,
+       65.643
+      ]
+     }
+    }
+   }
+  },
+  "roadie-tol30-60-drop-v3-f64-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-tol30-60-drop-v3-f64.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "90940",
+      "manifold": "yes",
+      "number_of_parts": "10",
+      "volume": "2277.716309"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-tol30-60-drop-v3-f64.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-tol30-60-drop-v3-f64-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\roadie-tol30-60-drop-v3-f64-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\roadie-tol30-60-drop-v3-f64-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 928314,
+    "gcode": {
+     "lines": 36475,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 814.52",
+      "; filament used [cm3] = 1.96",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "roadie-tol30-60-drop-v3-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "roadie-tol30-60-drop-v3-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "roadie-tol30-60-drop-v3-f64 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "roadie-tol30-60-drop-v3-f64": {
+       "None": 808.25
+      }
+     },
+     "extrusion_xy_by_object": {
+      "roadie-tol30-60-drop-v3-f64": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ]
+     }
+    }
+   }
+  },
+  "roadie-tol30-60-drop-v3-f64-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-tol30-60-drop-v3-f64.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-tol30-60-drop-v3-f64-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\roadie-tol30-60-drop-v3-f64-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\roadie-tol30-60-drop-v3-f64-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 928314,
+    "gcode": {
+     "lines": 36475,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 814.52",
+      "; filament used [cm3] = 1.96",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "roadie-tol30-60-drop-v3-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "roadie-tol30-60-drop-v3-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "roadie-tol30-60-drop-v3-f64 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "roadie-tol30-60-drop-v3-f64": {
+       "None": 808.25
+      }
+     },
+     "extrusion_xy_by_object": {
+      "roadie-tol30-60-drop-v3-f64": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ]
+     }
+    }
+   }
+  },
+  "roadie-tol30-60-keep-v4-f64-default": {
+   "info": {
+    "returncode": 0,
+    "objects": [
+     {
+      "header": "[roadie-tol30-60-keep-v4-f64.3mf]",
+      "size_x": "59.970627",
+      "size_y": "49.404213",
+      "size_z": "3.000000",
+      "min_x": "-29.985313",
+      "min_y": "-24.702106",
+      "min_z": "-1.500000",
+      "max_x": "29.985313",
+      "max_y": "24.702106",
+      "max_z": "1.500000",
+      "number_of_facets": "214544",
+      "manifold": "yes",
+      "number_of_parts": "13",
+      "volume": "2277.990967"
+     }
+    ],
+    "stderr_tail": ""
+   },
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-tol30-60-keep-v4-f64.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-tol30-60-keep-v4-f64-default\\out.gcode",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\roadie-tol30-60-keep-v4-f64-default\\out.gcode\r\nSlicing result exported to <out>\\prusa\\roadie-tol30-60-keep-v4-f64-default\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 927891,
+    "gcode": {
+     "lines": 36473,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 814.52",
+      "; filament used [cm3] = 1.96",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "roadie-tol30-60-keep-v4-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "roadie-tol30-60-keep-v4-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "roadie-tol30-60-keep-v4-f64 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "roadie-tol30-60-keep-v4-f64": {
+       "None": 808.25
+      }
+     },
+     "extrusion_xy_by_object": {
+      "roadie-tol30-60-keep-v4-f64": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ]
+     }
+    }
+   }
+  },
+  "roadie-tol30-60-keep-v4-f64-dont-arrange": {
+   "slice": {
+    "args_template": [
+     "<repo>\\artifacts\\tools\\prusaslicer-2.9.7\\app\\PrusaSlicer-2.9.7\\prusa-slicer-console.exe",
+     "--export-gcode",
+     "<out>\\roadie-tol30-60-keep-v4-f64.3mf",
+     "-o",
+     "<out>\\prusa\\roadie-tol30-60-keep-v4-f64-dont-arrange\\out.gcode",
+     "--dont-arrange",
+     "--gcode-label-objects",
+     "octoprint",
+     "--bed-shape",
+     "0x0,256x0,256x256,0x256",
+     "--max-print-height",
+     "256",
+     "--nozzle-diameter",
+     "0.4",
+     "--layer-height",
+     "0.2",
+     "--first-layer-height",
+     "0.2",
+     "--filament-diameter",
+     "1.75"
+    ],
+    "returncode": 0,
+    "stdout_tail": "10 => Processing triangulated mesh\r\n20 => Generating perimeters\r\n30 => Preparing infill\r\n45 => Making infill\r\n65 => Searching support spots\r\n69 => Alert if supports needed\r\n89 => Calculating overhanging perimeters\r\n88 => Generating skirt and brim\r\n90 => Exporting G-code to <out>\\prusa\\roadie-tol30-60-keep-v4-f64-dont-arrange\\out.gcode\r\nSlicing result exported to <out>\\prusa\\roadie-tol30-60-keep-v4-f64-dont-arrange\\out.gcode\r\n",
+    "stderr_tail": "",
+    "gcode_bytes": 927891,
+    "gcode": {
+     "lines": 36473,
+     "tool_commands": {},
+     "M620": {},
+     "M621": {},
+     "config_lines": [
+      "; filament used [mm] = 814.52",
+      "; filament used [cm3] = 1.96",
+      "; total filament used [g] = 0.00",
+      "; total filament cost = 0.00",
+      "; total filament used for wipe tower [g] = 0.00",
+      "; extruder_colour = \"\"",
+      "; filament_colour = #29B2B2",
+      "; filament_settings_id = \"\"",
+      "; filament_type = PLA",
+      "; single_extruder_multi_material = 0",
+      "; single_extruder_multi_material_priming = 1",
+      "; wipe_tower = 0",
+      "; wipe_tower_acceleration = 0",
+      "; wipe_tower_bridging = 10",
+      "; wipe_tower_brim_width = 2",
+      "; wipe_tower_cone_angle = 0",
+      "; wipe_tower_extra_flow = 100%",
+      "; wipe_tower_extra_spacing = 100%",
+      "; wipe_tower_extruder = 0",
+      "; wipe_tower_no_sparse_layers = 0",
+      "; wipe_tower_width = 60"
+     ],
+     "layer_markers": 15,
+     "max_z_marker": 3.0,
+     "objects_in_order": [
+      "roadie-tol30-60-keep-v4-f64"
+     ],
+     "label_ids": {},
+     "extrusion_layer_z_by_object": {
+      "roadie-tol30-60-keep-v4-f64": [
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_extent_by_object_and_tool": {
+      "roadie-tol30-60-keep-v4-f64 | None": [
+       0.257,
+       0.203,
+       59.766,
+       49.188,
+       0.2,
+       3.0
+      ]
+     },
+     "extrusion_mm_by_object_and_tool": {
+      "(no object)": {
+       "None": 6.27
+      },
+      "roadie-tol30-60-keep-v4-f64": {
+       "None": 808.25
+      }
+     },
+     "extrusion_xy_by_object": {
+      "roadie-tol30-60-keep-v4-f64": [
+       0.257,
+       0.203,
+       59.766,
+       49.188
+      ]
+     }
+    }
+   }
+  }
+ }
+}

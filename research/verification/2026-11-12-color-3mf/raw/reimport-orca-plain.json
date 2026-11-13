@@ -1,0 +1,1098 @@
+{
+ "slicer_verified": {
+  "exe_sha256": "e1c85e9b1994c9b1f23d3cc780c5a97bc42e6640a9dfddbe78581630aa54b65f",
+  "libraries": {
+   "app/OrcaSlicer.dll": "4c6a3772c21851623dfa88860f530a9971288bc8ca6e0d0b6b914c145cb987af"
+  },
+  "profiles": {
+   "machine": {
+    "name": "Bambu Lab A1 0.4 nozzle",
+    "file": "machine.json",
+    "sha256": "cac6616b1320e588f8d8eb58c6a65e7306963293187df7ce577c6929a2b21af1"
+   },
+   "process": {
+    "name": "0.20mm Standard @BBL A1",
+    "file": "process.json",
+    "sha256": "b4af99bd1e6c8256430ae7c21604aa755e63a9e33ac8871d58a60ddde2e8988c"
+   },
+   "filament": {
+    "name": "Bambu PLA Basic @BBL A1",
+    "file": "filament.json",
+    "sha256": "0254183f025d9f34351caa8371018bae540203344020ec69fc9bd5be0d741104"
+   }
+  },
+  "app_tree": {
+   "files": 4054,
+   "sha256": "b5cf3ff821f71bb6dbfb07b2fb1e806ee15e58e5af76d605d59182f0a2c33402"
+  }
+ },
+ "variant": "plain",
+ "extra_args": [],
+ "runs": {
+  "oddie-60-keep-merge-blues-greens-v4-f64": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\oddie-60-keep-merge-blues-greens-v4-f64.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\plain\\oddie-60-keep-merge-blues-greens-v4-f64\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\plain\\oddie-60-keep-merge-blues-greens-v4-f64\\slicer.log"
+   ],
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "stdout_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 387228,
+   "gcode": {
+    "lines": 12126,
+    "tool_commands": {
+     "T255": 1
+    },
+    "M620": {
+     "S255": 1
+    },
+    "M621": {
+     "S255": 1
+    },
+    "header_lines": [
+     "; model printing time: 7m 46s; total estimated time: 8m 5s",
+     "; estimated first layer printing time (normal mode) = 19s",
+     "; total layer number: 15",
+     "; model label id: 8",
+     "; filament_density: 1.26,1.26,1.26,1.26",
+     "; filament_diameter: 1.75,1.75,1.75,1.75",
+     "; filament: 1",
+     "; adaptive_pressure_advance_model = \"0,0,0\\n0,0,0\"",
+     "; additional_fan_full_speed_layer = 0,0,0,0",
+     "; align_infill_direction_to_model = 0",
+     "; bed_custom_model = ",
+     "; before_layer_change_gcode = ",
+     "; belt_purge_tower_object = 0",
+     "; best_object_pos = 0.5,0.5",
+     "; bottom_color_penetration_layers = 3",
+     "; bottom_layer_direction = -1",
+     "; bottom_shell_layers = 3",
+     "; bottom_surface_filament_id = 0",
+     "; brim_object_gap = 0.1",
+     "; change_filament_gcode = M620 S[next_extruder]A\\nM204 S9000\\nG1 Z{max_layer_z + 3.0} F1200\\n\\nG1 X70 F21000\\nG1 Y245\\nG1 Y265 F3000\\nM400\\nM106 P1 S0\\nM106 P2 S0\\n{if old_filament_temp > 142 && next_extruder < 255}\\nM104 S[old_filament_temp]\\n{endif}\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 X120 F15000\\n\\nG1 X20 Y50 F21000\\nG1 Y-3\\n{if toolchange_count == 2}\\n; get travel path for change filament\\nM620.1 X[travel_point_1_x] Y[travel_point_1_y] F21000 P0\\nM620.1 X[travel_point_2_x] Y[travel_point_2_y] F21000 P1\\nM620.1 X[travel_point_3_x] Y[travel_point_3_y] F21000 P2\\n{endif}\\nM620.1 E F[old_filament_e_feedrate] T{nozzle_temperature_range_high[previous_extruder]}\\nT[next_extruder]\\nM620.1 E F[new_filament_e_feedrate] T{nozzle_temperature_range_high[next_extruder]}\\n\\n{if next_extruder < 255}\\nM400\\n\\nG92 E0\\n{if flush_length_1 > 1}\\n; FLUSH_START\\n; always use highest temperature to flush\\nM400\\nM109 S[nozzle_temperature_range_high]\\n{if flush_length_1 > 23.7}\\nG1 E23.7 F{old_filament_e_feedrate} ; do not need pulsatile flushing for start part\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{old_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\n{else}\\nG1 E{flush_length_1} F{old_filament_e_feedrate}\\n{endif}\\n; FLUSH_END\\nG1 E-[old_retract_length_toolchange] F1800\\nG1 E[old_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_2 > 1}\\n; FLUSH_START\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_3 > 1}\\n; FLUSH_START\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_4 > 1}\\n; FLUSH_START\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\n; FLUSH_END\\n{endif}\\n; FLUSH_START\\nM400\\nM109 S[new_filament_temp]\\nG1 E2 F{new_filament_e_feedrate} ;Compensate for filament spillage during waiting temperature\\n; FLUSH_END\\nM400\\nG92 E0\\nG1 E-[new_retract_length_toolchange] F1800\\nM106 P1 S255\\nM400 S3\\nG1 X80 F15000\\nG1 X60 F15000\\nG1 X80 F15000\\nG1 X60 F15000; shake to put down garbage\\n\\nG1 X70 F5000\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 Y265 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X165 F15000; wipe and shake\\nG1 Y256 ; move Y to aside, prevent collision\\nM400\\nG1 Z{max_layer_z + 3.0} F3000\\n{if layer_z <= (initial_layer_print_height + 0.001)}\\nM204 S[initial_layer_acceleration]\\n{else}\\nM204 S[default_acceleration]\\n{endif}\\n{else}\\nG1 X[x_after_toolchange] Y[y_after_toolchange] Z[z_after_toolchange] F12000\\n{endif}\\nM621 S[next_extruder]A",
+     "; close_additional_fan_first_x_layers = 1,1,1,1",
+     "; close_fan_the_first_x_layers = 1,1,1,1",
+     "; cool_plate_temp_initial_layer = 35,35,35,35",
+     "; default_filament_colour = \"\"",
+     "; default_filament_profile = \"Bambu PLA Basic @BBL A1\"",
+     "; elefant_foot_compensation_layers = 1",
+     "; elefant_foot_layers_density = 100%",
+     "; enable_extra_bridge_layer = disabled",
+     "; enable_filament_dynamic_map = 0",
+     "; enable_filament_ramming = 1",
+     "; enable_mixed_color_sublayer = 0",
+     "; enforce_support_layers = 0",
+     "; eng_plate_temp_initial_layer = 0,0,0,0",
+     "; exclude_object = 0",
+     "; exclude_object_tolerance = 0.1",
+     "; fan_cooling_layer_time = 80,80,80,80",
+     "; filament_adaptive_volumetric_speed = 0,0,0,0",
+     "; filament_adhesiveness_category = 100,100,100,100",
+     "; filament_change_extrusion_role_gcode = \"\"",
+     "; filament_change_length = 5,5,5,5"
+    ],
+    "config_lines": [
+     "; filament used [mm] = 1434.04, 0.00, 0.00, 0.00",
+     "; filament used [cm3] = 3.45, 0.00, 0.00, 0.00",
+     "; filament used [g] = 4.35, 0.00, 0.00, 0.00",
+     "; filament cost = 0.07, 0.00, 0.00, 0.00"
+    ],
+    "layer_markers": 15,
+    "max_z_marker": 3.0,
+    "objects_in_order": [
+     "model"
+    ],
+    "label_ids": {
+     "8": "model"
+    },
+    "extrusion_layer_z_by_object": {
+     "model": [
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_extent_by_object_and_tool": {
+     "model | None": [
+      98.219,
+      95.277,
+      157.778,
+      160.722,
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_mm_by_object_and_tool": {
+     "(no object)": {
+      "None": 45.0
+     },
+     "model": {
+      "None": 1404.04
+     }
+    },
+    "extrusion_xy_by_object": {
+     "model": [
+      98.219,
+      95.277,
+      157.778,
+      160.722
+     ]
+    }
+   },
+   "statistics": {
+    "version": 1,
+    "generator": "OrcaSlicer 2.5.0",
+    "units": {
+     "time": "s",
+     "length": "mm",
+     "volume": "mm3",
+     "weight": "g"
+    },
+    "summary": {
+     "time": 485.225,
+     "prepare_time": 19.144,
+     "travel_time": 48.335,
+     "travel_distance": 3458.8,
+     "layer_count": 15,
+     "volume": 3449.275,
+     "weight": 4.3461,
+     "filament_cost": 0.07,
+     "filament_changes": 0,
+     "filaments": [
+      {
+       "id": 1,
+       "length": 1434.04,
+       "volume": 3449.275,
+       "weight": 4.3461,
+       "cost": 0.07,
+       "model": {
+        "volume": 3449.275,
+        "weight": 4.3461
+       },
+       "support": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "prime_tower": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "flush": {
+        "volume": 0.0,
+        "weight": 0.0
+       }
+      }
+     ],
+     "features": {
+      "Inner wall": {
+       "time": 44.284,
+       "volume": 296.486,
+       "weight": 0.3736
+      },
+      "Outer wall": {
+       "time": 48.673,
+       "volume": 307.355,
+       "weight": 0.3873
+      },
+      "Sparse infill": {
+       "time": 31.977,
+       "volume": 331.031,
+       "weight": 0.4171
+      },
+      "Internal solid infill": {
+       "time": 131.596,
+       "volume": 1448.723,
+       "weight": 1.8254
+      },
+      "Top surface": {
+       "time": 39.961,
+       "volume": 311.153,
+       "weight": 0.3921
+      },
+      "Bottom surface": {
+       "time": 64.549,
+       "volume": 279.215,
+       "weight": 0.3518
+      },
+      "Internal Bridge": {
+       "time": 50.974,
+       "volume": 400.541,
+       "weight": 0.5047
+      },
+      "Gap infill": {
+       "time": 1.124,
+       "volume": 2.613,
+       "weight": 0.0033
+      },
+      "Custom": {
+       "time": 14.403,
+       "volume": 72.158,
+       "weight": 0.0909
+      }
+     }
+    },
+    "objects": [
+     {
+      "name": "model",
+      "instance": 0,
+      "volume": 3377.117,
+      "weight": 4.2552,
+      "support_volume": 0.0,
+      "support_weight": 0.0
+     }
+    ]
+   },
+   "log_lines": 168,
+   "log_extract": [
+    "allow_multicolor_oneplate 1, allow_rotations 0 skip_modified_gcodes 0 avoid_extrusion_cali_region 0 loaded_filament_ids size 0, clone_objects size 0, skip_useless_pick 0, allow_newer_file 0, allow_mix_temp 0",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 1",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2201, begin to assemble objects, size 1",
+    "object model, id :5, from stl or other 3mf",
+    "select filament color from cli, size 0",
+    "project filament colors size 4",
+    "project filament 0 original color #F2754E",
+    "project filament 1 original color #FFFFFF",
+    "project filament 2 original color #FFFFFF",
+    "project filament 3 original color #FFFFFF",
+    "translate_old 0, shrink_to_new_bed 0, old bed size {256, 256, 256}",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing."
+   ]
+  },
+  "oddie-60-merge-blues-v3-f64": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\oddie-60-merge-blues-v3-f64.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\plain\\oddie-60-merge-blues-v3-f64\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\plain\\oddie-60-merge-blues-v3-f64\\slicer.log"
+   ],
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "stdout_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 386409,
+   "gcode": {
+    "lines": 12098,
+    "tool_commands": {
+     "T255": 1
+    },
+    "M620": {
+     "S255": 1
+    },
+    "M621": {
+     "S255": 1
+    },
+    "header_lines": [
+     "; model printing time: 7m 46s; total estimated time: 8m 5s",
+     "; estimated first layer printing time (normal mode) = 19s",
+     "; total layer number: 15",
+     "; model label id: 8",
+     "; filament_density: 1.26,1.26,1.26,1.26",
+     "; filament_diameter: 1.75,1.75,1.75,1.75",
+     "; filament: 1",
+     "; adaptive_pressure_advance_model = \"0,0,0\\n0,0,0\"",
+     "; additional_fan_full_speed_layer = 0,0,0,0",
+     "; align_infill_direction_to_model = 0",
+     "; bed_custom_model = ",
+     "; before_layer_change_gcode = ",
+     "; belt_purge_tower_object = 0",
+     "; best_object_pos = 0.5,0.5",
+     "; bottom_color_penetration_layers = 3",
+     "; bottom_layer_direction = -1",
+     "; bottom_shell_layers = 3",
+     "; bottom_surface_filament_id = 0",
+     "; brim_object_gap = 0.1",
+     "; change_filament_gcode = M620 S[next_extruder]A\\nM204 S9000\\nG1 Z{max_layer_z + 3.0} F1200\\n\\nG1 X70 F21000\\nG1 Y245\\nG1 Y265 F3000\\nM400\\nM106 P1 S0\\nM106 P2 S0\\n{if old_filament_temp > 142 && next_extruder < 255}\\nM104 S[old_filament_temp]\\n{endif}\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 X120 F15000\\n\\nG1 X20 Y50 F21000\\nG1 Y-3\\n{if toolchange_count == 2}\\n; get travel path for change filament\\nM620.1 X[travel_point_1_x] Y[travel_point_1_y] F21000 P0\\nM620.1 X[travel_point_2_x] Y[travel_point_2_y] F21000 P1\\nM620.1 X[travel_point_3_x] Y[travel_point_3_y] F21000 P2\\n{endif}\\nM620.1 E F[old_filament_e_feedrate] T{nozzle_temperature_range_high[previous_extruder]}\\nT[next_extruder]\\nM620.1 E F[new_filament_e_feedrate] T{nozzle_temperature_range_high[next_extruder]}\\n\\n{if next_extruder < 255}\\nM400\\n\\nG92 E0\\n{if flush_length_1 > 1}\\n; FLUSH_START\\n; always use highest temperature to flush\\nM400\\nM109 S[nozzle_temperature_range_high]\\n{if flush_length_1 > 23.7}\\nG1 E23.7 F{old_filament_e_feedrate} ; do not need pulsatile flushing for start part\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{old_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\n{else}\\nG1 E{flush_length_1} F{old_filament_e_feedrate}\\n{endif}\\n; FLUSH_END\\nG1 E-[old_retract_length_toolchange] F1800\\nG1 E[old_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_2 > 1}\\n; FLUSH_START\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_3 > 1}\\n; FLUSH_START\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_4 > 1}\\n; FLUSH_START\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\n; FLUSH_END\\n{endif}\\n; FLUSH_START\\nM400\\nM109 S[new_filament_temp]\\nG1 E2 F{new_filament_e_feedrate} ;Compensate for filament spillage during waiting temperature\\n; FLUSH_END\\nM400\\nG92 E0\\nG1 E-[new_retract_length_toolchange] F1800\\nM106 P1 S255\\nM400 S3\\nG1 X80 F15000\\nG1 X60 F15000\\nG1 X80 F15000\\nG1 X60 F15000; shake to put down garbage\\n\\nG1 X70 F5000\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 Y265 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X165 F15000; wipe and shake\\nG1 Y256 ; move Y to aside, prevent collision\\nM400\\nG1 Z{max_layer_z + 3.0} F3000\\n{if layer_z <= (initial_layer_print_height + 0.001)}\\nM204 S[initial_layer_acceleration]\\n{else}\\nM204 S[default_acceleration]\\n{endif}\\n{else}\\nG1 X[x_after_toolchange] Y[y_after_toolchange] Z[z_after_toolchange] F12000\\n{endif}\\nM621 S[next_extruder]A",
+     "; close_additional_fan_first_x_layers = 1,1,1,1",
+     "; close_fan_the_first_x_layers = 1,1,1,1",
+     "; cool_plate_temp_initial_layer = 35,35,35,35",
+     "; default_filament_colour = \"\"",
+     "; default_filament_profile = \"Bambu PLA Basic @BBL A1\"",
+     "; elefant_foot_compensation_layers = 1",
+     "; elefant_foot_layers_density = 100%",
+     "; enable_extra_bridge_layer = disabled",
+     "; enable_filament_dynamic_map = 0",
+     "; enable_filament_ramming = 1",
+     "; enable_mixed_color_sublayer = 0",
+     "; enforce_support_layers = 0",
+     "; eng_plate_temp_initial_layer = 0,0,0,0",
+     "; exclude_object = 0",
+     "; exclude_object_tolerance = 0.1",
+     "; fan_cooling_layer_time = 80,80,80,80",
+     "; filament_adaptive_volumetric_speed = 0,0,0,0",
+     "; filament_adhesiveness_category = 100,100,100,100",
+     "; filament_change_extrusion_role_gcode = \"\"",
+     "; filament_change_length = 5,5,5,5"
+    ],
+    "config_lines": [
+     "; filament used [mm] = 1434.04, 0.00, 0.00, 0.00",
+     "; filament used [cm3] = 3.45, 0.00, 0.00, 0.00",
+     "; filament used [g] = 4.35, 0.00, 0.00, 0.00",
+     "; filament cost = 0.07, 0.00, 0.00, 0.00"
+    ],
+    "layer_markers": 15,
+    "max_z_marker": 3.0,
+    "objects_in_order": [
+     "model"
+    ],
+    "label_ids": {
+     "8": "model"
+    },
+    "extrusion_layer_z_by_object": {
+     "model": [
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_extent_by_object_and_tool": {
+     "model | None": [
+      98.219,
+      95.277,
+      157.778,
+      160.722,
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_mm_by_object_and_tool": {
+     "(no object)": {
+      "None": 45.0
+     },
+     "model": {
+      "None": 1404.04
+     }
+    },
+    "extrusion_xy_by_object": {
+     "model": [
+      98.219,
+      95.277,
+      157.778,
+      160.722
+     ]
+    }
+   },
+   "statistics": {
+    "version": 1,
+    "generator": "OrcaSlicer 2.5.0",
+    "units": {
+     "time": "s",
+     "length": "mm",
+     "volume": "mm3",
+     "weight": "g"
+    },
+    "summary": {
+     "time": 485.254,
+     "prepare_time": 19.143,
+     "travel_time": 45.371,
+     "travel_distance": 3458.43,
+     "layer_count": 15,
+     "volume": 3449.276,
+     "weight": 4.3461,
+     "filament_cost": 0.07,
+     "filament_changes": 0,
+     "filaments": [
+      {
+       "id": 1,
+       "length": 1434.04,
+       "volume": 3449.276,
+       "weight": 4.3461,
+       "cost": 0.07,
+       "model": {
+        "volume": 3449.276,
+        "weight": 4.3461
+       },
+       "support": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "prime_tower": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "flush": {
+        "volume": 0.0,
+        "weight": 0.0
+       }
+      }
+     ],
+     "features": {
+      "Inner wall": {
+       "time": 44.31,
+       "volume": 296.487,
+       "weight": 0.3736
+      },
+      "Outer wall": {
+       "time": 48.704,
+       "volume": 307.355,
+       "weight": 0.3873
+      },
+      "Sparse infill": {
+       "time": 31.977,
+       "volume": 331.031,
+       "weight": 0.4171
+      },
+      "Internal solid infill": {
+       "time": 131.596,
+       "volume": 1448.723,
+       "weight": 1.8254
+      },
+      "Top surface": {
+       "time": 42.961,
+       "volume": 311.153,
+       "weight": 0.3921
+      },
+      "Bottom surface": {
+       "time": 64.549,
+       "volume": 279.215,
+       "weight": 0.3518
+      },
+      "Internal Bridge": {
+       "time": 50.974,
+       "volume": 400.541,
+       "weight": 0.5047
+      },
+      "Gap infill": {
+       "time": 1.132,
+       "volume": 2.613,
+       "weight": 0.0033
+      },
+      "Custom": {
+       "time": 14.403,
+       "volume": 72.158,
+       "weight": 0.0909
+      }
+     }
+    },
+    "objects": [
+     {
+      "name": "model",
+      "instance": 0,
+      "volume": 3377.118,
+      "weight": 4.2552,
+      "support_volume": 0.0,
+      "support_weight": 0.0
+     }
+    ]
+   },
+   "log_lines": 168,
+   "log_extract": [
+    "allow_multicolor_oneplate 1, allow_rotations 0 skip_modified_gcodes 0 avoid_extrusion_cali_region 0 loaded_filament_ids size 0, clone_objects size 0, skip_useless_pick 0, allow_newer_file 0, allow_mix_temp 0",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 1",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2201, begin to assemble objects, size 1",
+    "object model, id :5, from stl or other 3mf",
+    "select filament color from cli, size 0",
+    "project filament colors size 4",
+    "project filament 0 original color #F2754E",
+    "project filament 1 original color #FFFFFF",
+    "project filament 2 original color #FFFFFF",
+    "project filament 3 original color #FFFFFF",
+    "translate_old 0, shrink_to_new_bed 0, old bed size {256, 256, 256}",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing."
+   ]
+  },
+  "roadie-tol30-60-drop-v3-f64": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\roadie-tol30-60-drop-v3-f64.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\slicer.log"
+   ],
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "stdout_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 807620,
+   "gcode": {
+    "lines": 25715,
+    "tool_commands": {
+     "T255": 1
+    },
+    "M620": {
+     "S255": 1
+    },
+    "M621": {
+     "S255": 1
+    },
+    "header_lines": [
+     "; model printing time: 7m 32s; total estimated time: 7m 51s",
+     "; estimated first layer printing time (normal mode) = 19s",
+     "; total layer number: 15",
+     "; model label id: 8",
+     "; filament_density: 1.26,1.26,1.26,1.26",
+     "; filament_diameter: 1.75,1.75,1.75,1.75",
+     "; filament: 1",
+     "; adaptive_pressure_advance_model = \"0,0,0\\n0,0,0\"",
+     "; additional_fan_full_speed_layer = 0,0,0,0",
+     "; align_infill_direction_to_model = 0",
+     "; bed_custom_model = ",
+     "; before_layer_change_gcode = ",
+     "; belt_purge_tower_object = 0",
+     "; best_object_pos = 0.5,0.5",
+     "; bottom_color_penetration_layers = 3",
+     "; bottom_layer_direction = -1",
+     "; bottom_shell_layers = 3",
+     "; bottom_surface_filament_id = 0",
+     "; brim_object_gap = 0.1",
+     "; change_filament_gcode = M620 S[next_extruder]A\\nM204 S9000\\nG1 Z{max_layer_z + 3.0} F1200\\n\\nG1 X70 F21000\\nG1 Y245\\nG1 Y265 F3000\\nM400\\nM106 P1 S0\\nM106 P2 S0\\n{if old_filament_temp > 142 && next_extruder < 255}\\nM104 S[old_filament_temp]\\n{endif}\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 X120 F15000\\n\\nG1 X20 Y50 F21000\\nG1 Y-3\\n{if toolchange_count == 2}\\n; get travel path for change filament\\nM620.1 X[travel_point_1_x] Y[travel_point_1_y] F21000 P0\\nM620.1 X[travel_point_2_x] Y[travel_point_2_y] F21000 P1\\nM620.1 X[travel_point_3_x] Y[travel_point_3_y] F21000 P2\\n{endif}\\nM620.1 E F[old_filament_e_feedrate] T{nozzle_temperature_range_high[previous_extruder]}\\nT[next_extruder]\\nM620.1 E F[new_filament_e_feedrate] T{nozzle_temperature_range_high[next_extruder]}\\n\\n{if next_extruder < 255}\\nM400\\n\\nG92 E0\\n{if flush_length_1 > 1}\\n; FLUSH_START\\n; always use highest temperature to flush\\nM400\\nM109 S[nozzle_temperature_range_high]\\n{if flush_length_1 > 23.7}\\nG1 E23.7 F{old_filament_e_feedrate} ; do not need pulsatile flushing for start part\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{old_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\n{else}\\nG1 E{flush_length_1} F{old_filament_e_feedrate}\\n{endif}\\n; FLUSH_END\\nG1 E-[old_retract_length_toolchange] F1800\\nG1 E[old_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_2 > 1}\\n; FLUSH_START\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_3 > 1}\\n; FLUSH_START\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_4 > 1}\\n; FLUSH_START\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\n; FLUSH_END\\n{endif}\\n; FLUSH_START\\nM400\\nM109 S[new_filament_temp]\\nG1 E2 F{new_filament_e_feedrate} ;Compensate for filament spillage during waiting temperature\\n; FLUSH_END\\nM400\\nG92 E0\\nG1 E-[new_retract_length_toolchange] F1800\\nM106 P1 S255\\nM400 S3\\nG1 X80 F15000\\nG1 X60 F15000\\nG1 X80 F15000\\nG1 X60 F15000; shake to put down garbage\\n\\nG1 X70 F5000\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 Y265 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X165 F15000; wipe and shake\\nG1 Y256 ; move Y to aside, prevent collision\\nM400\\nG1 Z{max_layer_z + 3.0} F3000\\n{if layer_z <= (initial_layer_print_height + 0.001)}\\nM204 S[initial_layer_acceleration]\\n{else}\\nM204 S[default_acceleration]\\n{endif}\\n{else}\\nG1 X[x_after_toolchange] Y[y_after_toolchange] Z[z_after_toolchange] F12000\\n{endif}\\nM621 S[next_extruder]A",
+     "; close_additional_fan_first_x_layers = 1,1,1,1",
+     "; close_fan_the_first_x_layers = 1,1,1,1",
+     "; cool_plate_temp_initial_layer = 35,35,35,35",
+     "; default_filament_colour = \"\"",
+     "; default_filament_profile = \"Bambu PLA Basic @BBL A1\"",
+     "; elefant_foot_compensation_layers = 1",
+     "; elefant_foot_layers_density = 100%",
+     "; enable_extra_bridge_layer = disabled",
+     "; enable_filament_dynamic_map = 0",
+     "; enable_filament_ramming = 1",
+     "; enable_mixed_color_sublayer = 0",
+     "; enforce_support_layers = 0",
+     "; eng_plate_temp_initial_layer = 0,0,0,0",
+     "; exclude_object = 0",
+     "; exclude_object_tolerance = 0.1",
+     "; fan_cooling_layer_time = 80,80,80,80",
+     "; filament_adaptive_volumetric_speed = 0,0,0,0",
+     "; filament_adhesiveness_category = 100,100,100,100",
+     "; filament_change_extrusion_role_gcode = \"\"",
+     "; filament_change_length = 5,5,5,5"
+    ],
+    "config_lines": [
+     "; filament used [mm] = 749.82, 0.00, 0.00, 0.00",
+     "; filament used [cm3] = 1.80, 0.00, 0.00, 0.00",
+     "; filament used [g] = 2.27, 0.00, 0.00, 0.00",
+     "; filament cost = 0.04, 0.00, 0.00, 0.00"
+    ],
+    "layer_markers": 15,
+    "max_z_marker": 3.0,
+    "objects_in_order": [
+     "model"
+    ],
+    "label_ids": {
+     "8": "model"
+    },
+    "extrusion_layer_z_by_object": {
+     "model": [
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_extent_by_object_and_tool": {
+     "model | None": [
+      98.237,
+      103.52,
+      157.716,
+      152.488,
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_mm_by_object_and_tool": {
+     "(no object)": {
+      "None": 45.0
+     },
+     "model": {
+      "None": 719.82
+     }
+    },
+    "extrusion_xy_by_object": {
+     "model": [
+      98.237,
+      103.52,
+      157.716,
+      152.488
+     ]
+    }
+   },
+   "statistics": {
+    "version": 1,
+    "generator": "OrcaSlicer 2.5.0",
+    "units": {
+     "time": "s",
+     "length": "mm",
+     "volume": "mm3",
+     "weight": "g"
+    },
+    "summary": {
+     "time": 471.867,
+     "prepare_time": 19.074,
+     "travel_time": 63.191,
+     "travel_distance": 4615.01,
+     "layer_count": 15,
+     "volume": 1803.517,
+     "weight": 2.2724,
+     "filament_cost": 0.04,
+     "filament_changes": 0,
+     "filaments": [
+      {
+       "id": 1,
+       "length": 749.82,
+       "volume": 1803.517,
+       "weight": 2.2724,
+       "cost": 0.04,
+       "model": {
+        "volume": 1803.517,
+        "weight": 2.2724
+       },
+       "support": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "prime_tower": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "flush": {
+        "volume": 0.0,
+        "weight": 0.0
+       }
+      }
+     ],
+     "features": {
+      "Inner wall": {
+       "time": 78.18,
+       "volume": 333.158,
+       "weight": 0.4198
+      },
+      "Outer wall": {
+       "time": 98.322,
+       "volume": 382.424,
+       "weight": 0.4819
+      },
+      "Sparse infill": {
+       "time": 22.019,
+       "volume": 135.199,
+       "weight": 0.1704
+      },
+      "Internal solid infill": {
+       "time": 78.861,
+       "volume": 495.382,
+       "weight": 0.6242
+      },
+      "Top surface": {
+       "time": 28.585,
+       "volume": 125.294,
+       "weight": 0.1579
+      },
+      "Bottom surface": {
+       "time": 34.187,
+       "volume": 88.14,
+       "weight": 0.1111
+      },
+      "Internal Bridge": {
+       "time": 20.887,
+       "volume": 133.599,
+       "weight": 0.1683
+      },
+      "Gap infill": {
+       "time": 15.078,
+       "volume": 38.163,
+       "weight": 0.0481
+      },
+      "Custom": {
+       "time": 14.403,
+       "volume": 72.158,
+       "weight": 0.0909
+      }
+     }
+    },
+    "objects": [
+     {
+      "name": "model",
+      "instance": 0,
+      "volume": 1731.359,
+      "weight": 2.1815,
+      "support_volume": 0.0,
+      "support_weight": 0.0
+     }
+    ]
+   },
+   "log_lines": 168,
+   "log_extract": [
+    "allow_multicolor_oneplate 1, allow_rotations 0 skip_modified_gcodes 0 avoid_extrusion_cali_region 0 loaded_filament_ids size 0, clone_objects size 0, skip_useless_pick 0, allow_newer_file 0, allow_mix_temp 0",
+    "read model file:<out>\\roadie-tol30-60-drop-v3-f64.3mf",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 1",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2201, begin to assemble objects, size 1",
+    "object model, id :5, from stl or other 3mf",
+    "select filament color from cli, size 0",
+    "project filament colors size 4",
+    "project filament 0 original color #F2754E",
+    "project filament 1 original color #FFFFFF",
+    "project filament 2 original color #FFFFFF",
+    "project filament 3 original color #FFFFFF",
+    "translate_old 0, shrink_to_new_bed 0, old bed size {256, 256, 256}",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing.",
+    "process finished, will export gcode temporarily to <out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\out/plate_1.gcode",
+    "Will export G-code to <out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\out/plate_1.gcode soon",
+    "rename_file from <out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\out/plate_1.gcode.tmp to <out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\out/plate_1.gcode successfully",
+    "Slicing result exported to <out>\\orca\\plain\\roadie-tol30-60-drop-v3-f64\\out/plate_1.gcode"
+   ]
+  },
+  "roadie-tol30-60-keep-v4-f64": {
+   "args_template": [
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\app\\orca-slicer.exe",
+    "<out>\\roadie-tol30-60-keep-v4-f64.3mf",
+    "--load-settings",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\machine.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\process.json",
+    "--load-filaments",
+    "<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json;<repo>\\artifacts\\tools\\orcaslicer-2.5.0\\profiles-flat\\filament.json",
+    "--slice",
+    "0",
+    "--outputdir",
+    "<out>\\orca\\plain\\roadie-tol30-60-keep-v4-f64\\out",
+    "--export-statistics",
+    "--debug",
+    "3",
+    "--logfile",
+    "<out>\\orca\\plain\\roadie-tol30-60-keep-v4-f64\\slicer.log"
+   ],
+   "exit": {
+    "raw": 0,
+    "signed": 0,
+    "name": "CLI_SUCCESS",
+    "decoding": {
+     "platform": "windows",
+     "rule": "unsigned32",
+     "status": "measured",
+     "source": "research/verification/2026-11-10-orcaslicer-windows/README.md: Windows exit codes are not truncated."
+    }
+   },
+   "timed_out": false,
+   "stderr_tail": "",
+   "stdout_tail": "",
+   "outputs": [
+    "plate_1.gcode",
+    "plate_1.statistics.json"
+   ],
+   "gcode_bytes": 808904,
+   "gcode": {
+    "lines": 25771,
+    "tool_commands": {
+     "T255": 1
+    },
+    "M620": {
+     "S255": 1
+    },
+    "M621": {
+     "S255": 1
+    },
+    "header_lines": [
+     "; model printing time: 7m 33s; total estimated time: 7m 53s",
+     "; estimated first layer printing time (normal mode) = 19s",
+     "; total layer number: 15",
+     "; model label id: 8",
+     "; filament_density: 1.26,1.26,1.26,1.26",
+     "; filament_diameter: 1.75,1.75,1.75,1.75",
+     "; filament: 1",
+     "; adaptive_pressure_advance_model = \"0,0,0\\n0,0,0\"",
+     "; additional_fan_full_speed_layer = 0,0,0,0",
+     "; align_infill_direction_to_model = 0",
+     "; bed_custom_model = ",
+     "; before_layer_change_gcode = ",
+     "; belt_purge_tower_object = 0",
+     "; best_object_pos = 0.5,0.5",
+     "; bottom_color_penetration_layers = 3",
+     "; bottom_layer_direction = -1",
+     "; bottom_shell_layers = 3",
+     "; bottom_surface_filament_id = 0",
+     "; brim_object_gap = 0.1",
+     "; change_filament_gcode = M620 S[next_extruder]A\\nM204 S9000\\nG1 Z{max_layer_z + 3.0} F1200\\n\\nG1 X70 F21000\\nG1 Y245\\nG1 Y265 F3000\\nM400\\nM106 P1 S0\\nM106 P2 S0\\n{if old_filament_temp > 142 && next_extruder < 255}\\nM104 S[old_filament_temp]\\n{endif}\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 X120 F15000\\n\\nG1 X20 Y50 F21000\\nG1 Y-3\\n{if toolchange_count == 2}\\n; get travel path for change filament\\nM620.1 X[travel_point_1_x] Y[travel_point_1_y] F21000 P0\\nM620.1 X[travel_point_2_x] Y[travel_point_2_y] F21000 P1\\nM620.1 X[travel_point_3_x] Y[travel_point_3_y] F21000 P2\\n{endif}\\nM620.1 E F[old_filament_e_feedrate] T{nozzle_temperature_range_high[previous_extruder]}\\nT[next_extruder]\\nM620.1 E F[new_filament_e_feedrate] T{nozzle_temperature_range_high[next_extruder]}\\n\\n{if next_extruder < 255}\\nM400\\n\\nG92 E0\\n{if flush_length_1 > 1}\\n; FLUSH_START\\n; always use highest temperature to flush\\nM400\\nM109 S[nozzle_temperature_range_high]\\n{if flush_length_1 > 23.7}\\nG1 E23.7 F{old_filament_e_feedrate} ; do not need pulsatile flushing for start part\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{old_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\nG1 E{(flush_length_1 - 23.7) * 0.02} F50\\nG1 E{(flush_length_1 - 23.7) * 0.23} F{new_filament_e_feedrate}\\n{else}\\nG1 E{flush_length_1} F{old_filament_e_feedrate}\\n{endif}\\n; FLUSH_END\\nG1 E-[old_retract_length_toolchange] F1800\\nG1 E[old_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_2 > 1}\\n; FLUSH_START\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\nG1 E{flush_length_2 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_2 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_3 > 1}\\n; FLUSH_START\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\nG1 E{flush_length_3 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_3 * 0.02} F50\\n; FLUSH_END\\nG1 E-[new_retract_length_toolchange] F1800\\nG1 E[new_retract_length_toolchange] F300\\n{endif}\\n\\n{if flush_length_4 > 1}\\n; FLUSH_START\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\nG1 E{flush_length_4 * 0.18} F{new_filament_e_feedrate}\\nG1 E{flush_length_4 * 0.02} F50\\n; FLUSH_END\\n{endif}\\n; FLUSH_START\\nM400\\nM109 S[new_filament_temp]\\nG1 E2 F{new_filament_e_feedrate} ;Compensate for filament spillage during waiting temperature\\n; FLUSH_END\\nM400\\nG92 E0\\nG1 E-[new_retract_length_toolchange] F1800\\nM106 P1 S255\\nM400 S3\\nG1 X80 F15000\\nG1 X60 F15000\\nG1 X80 F15000\\nG1 X60 F15000; shake to put down garbage\\n\\nG1 X70 F5000\\nG1 X90 F3000\\nG1 Y255 F4000\\nG1 X100 F5000\\nG1 Y265 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X70 F10000\\nG1 X100 F5000\\nG1 X165 F15000; wipe and shake\\nG1 Y256 ; move Y to aside, prevent collision\\nM400\\nG1 Z{max_layer_z + 3.0} F3000\\n{if layer_z <= (initial_layer_print_height + 0.001)}\\nM204 S[initial_layer_acceleration]\\n{else}\\nM204 S[default_acceleration]\\n{endif}\\n{else}\\nG1 X[x_after_toolchange] Y[y_after_toolchange] Z[z_after_toolchange] F12000\\n{endif}\\nM621 S[next_extruder]A",
+     "; close_additional_fan_first_x_layers = 1,1,1,1",
+     "; close_fan_the_first_x_layers = 1,1,1,1",
+     "; cool_plate_temp_initial_layer = 35,35,35,35",
+     "; default_filament_colour = \"\"",
+     "; default_filament_profile = \"Bambu PLA Basic @BBL A1\"",
+     "; elefant_foot_compensation_layers = 1",
+     "; elefant_foot_layers_density = 100%",
+     "; enable_extra_bridge_layer = disabled",
+     "; enable_filament_dynamic_map = 0",
+     "; enable_filament_ramming = 1",
+     "; enable_mixed_color_sublayer = 0",
+     "; enforce_support_layers = 0",
+     "; eng_plate_temp_initial_layer = 0,0,0,0",
+     "; exclude_object = 0",
+     "; exclude_object_tolerance = 0.1",
+     "; fan_cooling_layer_time = 80,80,80,80",
+     "; filament_adaptive_volumetric_speed = 0,0,0,0",
+     "; filament_adhesiveness_category = 100,100,100,100",
+     "; filament_change_extrusion_role_gcode = \"\"",
+     "; filament_change_length = 5,5,5,5"
+    ],
+    "config_lines": [
+     "; filament used [mm] = 749.81, 0.00, 0.00, 0.00",
+     "; filament used [cm3] = 1.80, 0.00, 0.00, 0.00",
+     "; filament used [g] = 2.27, 0.00, 0.00, 0.00",
+     "; filament cost = 0.04, 0.00, 0.00, 0.00"
+    ],
+    "layer_markers": 15,
+    "max_z_marker": 3.0,
+    "objects_in_order": [
+     "model"
+    ],
+    "label_ids": {
+     "8": "model"
+    },
+    "extrusion_layer_z_by_object": {
+     "model": [
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_extent_by_object_and_tool": {
+     "model | None": [
+      98.237,
+      103.52,
+      157.716,
+      152.488,
+      0.2,
+      3.0
+     ]
+    },
+    "extrusion_mm_by_object_and_tool": {
+     "(no object)": {
+      "None": 45.0
+     },
+     "model": {
+      "None": 719.81
+     }
+    },
+    "extrusion_xy_by_object": {
+     "model": [
+      98.237,
+      103.52,
+      157.716,
+      152.488
+     ]
+    }
+   },
+   "statistics": {
+    "version": 1,
+    "generator": "OrcaSlicer 2.5.0",
+    "units": {
+     "time": "s",
+     "length": "mm",
+     "volume": "mm3",
+     "weight": "g"
+    },
+    "summary": {
+     "time": 473.004,
+     "prepare_time": 19.075,
+     "travel_time": 63.692,
+     "travel_distance": 4716.75,
+     "layer_count": 15,
+     "volume": 1803.516,
+     "weight": 2.2724,
+     "filament_cost": 0.04,
+     "filament_changes": 0,
+     "filaments": [
+      {
+       "id": 1,
+       "length": 749.81,
+       "volume": 1803.516,
+       "weight": 2.2724,
+       "cost": 0.04,
+       "model": {
+        "volume": 1803.516,
+        "weight": 2.2724
+       },
+       "support": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "prime_tower": {
+        "volume": 0.0,
+        "weight": 0.0
+       },
+       "flush": {
+        "volume": 0.0,
+        "weight": 0.0
+       }
+      }
+     ],
+     "features": {
+      "Inner wall": {
+       "time": 78.245,
+       "volume": 333.158,
+       "weight": 0.4198
+      },
+      "Outer wall": {
+       "time": 98.455,
+       "volume": 382.424,
+       "weight": 0.4819
+      },
+      "Sparse infill": {
+       "time": 22.03,
+       "volume": 135.199,
+       "weight": 0.1704
+      },
+      "Internal solid infill": {
+       "time": 78.853,
+       "volume": 495.382,
+       "weight": 0.6242
+      },
+      "Top surface": {
+       "time": 28.585,
+       "volume": 125.294,
+       "weight": 0.1579
+      },
+      "Bottom surface": {
+       "time": 34.187,
+       "volume": 88.14,
+       "weight": 0.1111
+      },
+      "Internal Bridge": {
+       "time": 20.887,
+       "volume": 133.599,
+       "weight": 0.1683
+      },
+      "Gap infill": {
+       "time": 15.106,
+       "volume": 38.163,
+       "weight": 0.0481
+      },
+      "Custom": {
+       "time": 14.403,
+       "volume": 72.158,
+       "weight": 0.0909
+      }
+     }
+    },
+    "objects": [
+     {
+      "name": "model",
+      "instance": 0,
+      "volume": 1731.358,
+      "weight": 2.1815,
+      "support_volume": 0.0,
+      "support_weight": 0.0
+     }
+    ]
+   },
+   "log_lines": 168,
+   "log_extract": [
+    "allow_multicolor_oneplate 1, allow_rotations 0 skip_modified_gcodes 0 avoid_extrusion_cali_region 0 loaded_filament_ids size 0, clone_objects size 0, skip_useless_pick 0, allow_newer_file 0, allow_mix_temp 0",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2143, found 3mf from other vendor, split as instance",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2186, process group colors, size 1",
+    "Slic3r::_BBS_3MF_Importer::_load_model_from_file:2201, begin to assemble objects, size 1",
+    "object model, id :5, from stl or other 3mf",
+    "select filament color from cli, size 0",
+    "project filament colors size 4",
+    "project filament 0 original color #F2754E",
+    "project filament 1 original color #FFFFFF",
+    "project filament 2 original color #FFFFFF",
+    "project filament 3 original color #FFFFFF",
+    "translate_old 0, shrink_to_new_bed 0, old bed size {256, 256, 256}",
+    "before arrange, need_arrange=1, duplicate_count 0, filament_color_changed 0",
+    "\"allow_multi_materials_on_same_plate\":1,\"avoid_extrusion_cali_region\":0,\"is_seq_print\":0,\"bed_shrink_x\":1.000000,\"bed_shrink_y\":1.000000,\"brim_skirt_distance\":0.000000,\"clearance_height_to_rod\":25.000000,\"clearance_height_to_lid\":256.000000,\"clearance_radius\":73.000000,\"printable_height\":256.000000,",
+    "arrange: items selected before arranging: 1",
+    "arrange: items unselected before arranging: 0",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:before rebuild, plates count 1, recycle_plates 1",
+    "Slic3r::GUI::PartPlateList::rebuild_plates_after_arrangement:after rebuild, plates count 1",
+    "Slic3r::GUI::PartPlate::estimate_wipe_tower_polygonarrange wipe_tower: wp_brim_width 0",
+    "printer_model_string: Bambu Lab A1, is_bbl_vendor_preset 1",
+    "Slic3r::Print::update_filament_maps_to_config: filament maps changed after pre-slicing."
+   ]
+  }
+ }
+}
