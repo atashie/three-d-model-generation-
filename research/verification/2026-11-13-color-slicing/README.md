@@ -310,3 +310,23 @@ The production reader and checks (`src/tdmg/color_gcode.py`) were run on the eig
 - **Placement margin:** the largest distance of a tool's bead outside its own body is 0.0253 mm (Roadie keep, T1), against the 0.2 mm allowance.
 - **F3 (information only until Task 7):** the silhouette's `F3.printed_connectivity` FAILs on all 8, always on the three multicolor layers: the union of every tool's beads splits into 4 to 64 parts. Neighbouring bodies' beads meet edge to edge at their shared outline, and the bead model leaves gaps between them of 0 to about 0.03 mm (Roadie drop face up, layer 13: 11 parts, the nearest two 0.025 and 0.026 mm from the largest). The silhouette's `F3.edge_coverage` FAILs on Roadie keep and Oddie keep face down (1.179 and 0.637 mm on layer 1) and is UNKNOWN on Roadie drop face down (0.251 against 0.275 mm). Per-tool F3 results are in the JSON.
 - **Prime tower E:** written E over the model's bead formula has median 1.0204 (min 1.0185, max 1.0219) over 8,533 tower moves, about 1 / `filament_flow_ratio` (0.98). The reader does not check tower amounts.
+
+### Revision after the controller's review (2026-11-13)
+
+The controller's review of `354e9c1` changed three things the addendum above describes: every F3 result of `tdmg.color_gcode` (the silhouette's and each tool's) is now **required for PRINTABLE** until the owner's Task 7 review, not information; the prime tower's beads may not reach into the silhouette by more than the tools' allowance (in `F6.tool_placement`); and a turn ambiguity is judged on each check's own status. The line "F3 (information only until Task 7)" above is superseded by this. The cross-check was re-run with that code (`raw/crosscheck-task5.txt`, `.json`; `required_statuses`, `f3_values` and `verdict` per run).
+
+- `F6.color_changes`, `F6.tool_placement` and `F6.filaments_used` still PASS on all 8; every number still equals this record. The prime tower prints nothing inside the silhouette in any run.
+- **Verdict on all 8: NOT CERTIFIED**, from the required F3 checks below. Values: connectivity = layers mismatched of 15; coverage = largest model-edge gap (mm, at its z); allowance 0.275 mm on layer 1 (z 0.2), 0.2 mm above. Overprint PASSes everywhere (largest 0.025 mm), so it is left out.
+
+| Run | Silhouette conn. / cov. | T0 conn. / cov. | T1 conn. / cov. | T2 conn. / cov. | T3 conn. / cov. |
+|---|---|---|---|---|---|
+| Roadie drop, up | FAIL 3 / PASS 0.231 | FAIL 2 / FAIL 0.284 | FAIL 3 / PASS 0.158 | PASS / PASS 0.135 | PASS / PASS 0.144 |
+| Roadie drop, down | FAIL 3 / UNKNOWN 0.251 | FAIL 3 / FAIL 0.359 | FAIL 3 / PASS 0.230 | PASS / PASS 0.135 | PASS / PASS 0.144 |
+| Roadie keep, up | FAIL 3 / PASS 0.231 | FAIL 3 / FAIL 1.588 | FAIL 3 / FAIL 4.994 | FAIL 2 / FAIL 0.234 | PASS / PASS 0.139 |
+| Roadie keep, down | FAIL 3 / FAIL 1.179 | FAIL 3 / FAIL 2.204 | FAIL 3 / FAIL 7.591 | FAIL 3 / FAIL 0.247 | PASS / PASS 0.215 |
+| Oddie merge blues, up | FAIL 3 / PASS 0.152 | PASS / FAIL 0.201 | PASS / PASS 0.122 | PASS / PASS 0.173 | FAIL 2 / PASS 0.111 |
+| Oddie merge blues, down | FAIL 3 / PASS 0.244 | PASS / FAIL 0.290 | FAIL 1 / PASS 0.122 | PASS / FAIL 0.288 | PASS / PASS 0.110 |
+| Oddie keep, up | FAIL 3 / PASS 0.221 | FAIL 2 / FAIL 0.227 | PASS / PASS 0.122 | FAIL 3 / FAIL 4.716 | PASS / PASS 0.111 |
+| Oddie keep, down | FAIL 3 / FAIL 0.637 | FAIL 3 / FAIL 0.444 | PASS / PASS 0.122 | FAIL 3 / FAIL 10.333 | PASS / PASS 0.110 |
+
+The large per-tool coverage gaps (4.7 to 10.3 mm) are on the kept outline bands narrower than a bead (Roadie keep T1, Oddie keep T2), which the slicer leaves unprinted; plan Decision 4 expected these to show here.

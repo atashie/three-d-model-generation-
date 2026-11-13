@@ -41,8 +41,11 @@ from tdmg.color_gcode import (  # noqa: E402
     GATED_CHECK_IDS,
     TOOL_PLACEMENT,
     color_slice_checks,
+    f3_required_ids,
     per_tool_id,
+    required_check_ids,
 )
+from tdmg.checks import verdict  # noqa: E402
 from tdmg.orca_input import turn_over  # noqa: E402
 from tdmg.printed import (  # noqa: E402
     F3_SLICE_CHECK_IDS,
@@ -81,6 +84,22 @@ def setup_for(shells) -> Setup:
     return Setup(plate_from_profile(machine), flow_from_profile(filament), tolerance,
                  elephant_foot_mm(process), frozenset(slicer.expected_layer_counts(top,
                                                                                     process)))
+
+
+def f3_value(c) -> str:
+    """One F3 result's key number, for the table: connectivity's mismatched layers,
+    coverage's largest gap, overprint's largest distance outside (mm, at its z)."""
+    m = c.measured or {}
+    if "layers_mismatched" in m:
+        return f"{c.status} {m['layers_mismatched']}/{m['layers']} layers"
+    if "max_gap_mm" in m:
+        return f"{c.status} {m['max_gap_mm']:.3f} mm at z {m['worst_z']:g}"
+    if "max_over_mm" in m:
+        return f"{c.status} {m['max_over_mm']:.3f} mm at z {m['worst_z']:g}"
+    for key in ("nothing_printed_z", "printed_without_model_z", "turns"):
+        if key in m:
+            return f"{c.status} ({key})"
+    return c.status
 
 
 def r3(v):
@@ -135,8 +154,15 @@ def main(out: Path) -> None:
             per_tool_f3 = {per_tool_id(c, t): by[per_tool_id(c, t)].status
                            for t in range(len(shells)) for c in F3_SLICE_CHECK_IDS}
             placement = by[TOOL_PLACEMENT].measured
+            required = required_check_ids(len(shells))
+            f3_values = {i: f3_value(by[i]) for i in f3_required_ids(len(shells))}
+            certified = verdict(checks, set(required))
             rows.append((stem, statuses, mine, differ, seconds))
             full[stem] = {"statuses": statuses, "per_tool_f3": per_tool_f3,
+                          "required_statuses": {i: by[i].status for i in sorted(required)},
+                          "f3_values": f3_values, "verdict": certified,
+                          "prime_tower_into_model_mm":
+                              (placement or {}).get("prime_tower_into_model_mm"),
                           "mine": mine, "record": theirs, "differ": differ,
                           "tool_placement": placement.get("tools") if placement else None,
                           "tool_placement_note": by[TOOL_PLACEMENT].note,
@@ -148,12 +174,14 @@ def main(out: Path) -> None:
                   + f" | changes {mine['changes']} rule_c {mine['rule_c']} min "
                   f"{mine['minimum']} start T{mine['start_load']} flush {mine['flush_mm3']} "
                   f"tower {mine['prime_tower_mm3']} time {mine['time_s']} | differs from the "
-                  f"record: {differ or 'nothing'} | {seconds:.0f} s")
+                  f"record: {differ or 'nothing'} | {certified} | {seconds:.0f} s")
+            print("    silhouette F3: " + "; ".join(f"{i.split('.')[1]} {f3_values[i]}"
+                                                    for i in F3_SLICE_CHECK_IDS))
             for t, d in (placement or {}).get("tools", {}).items():
                 print(f"    T{t}: layers {d['layers'][0]}-{d['layers'][-1]}, largest outside "
                       f"its body {d['max_outside_mm']:.4f} mm (allowance "
                       f"{d['at_allowance_mm']:g}, layer {d['worst_layer']}); per-tool F3 "
-                      + ", ".join(f"{c.split('.')[1]} {per_tool_f3[per_tool_id(c, int(t))]}"
+                      + ", ".join(f"{c.split('.')[1]} {f3_values[per_tool_id(c, int(t))]}"
                                   for c in F3_SLICE_CHECK_IDS))
     (HERE / "raw/crosscheck-task5.json").write_text(json.dumps(full, indent=1),
                                                     encoding="utf-8")

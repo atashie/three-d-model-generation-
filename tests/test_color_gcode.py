@@ -11,15 +11,19 @@ import io
 import json
 import math
 import os
+import re
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 import shapely
 import trimesh
-from gcode_fixtures import FLOW, START, layer, solid
+from gcode_fixtures import FLOW, START, layer, path_moves, solid
 from test_printed import PLATE, placed
 
+from tdmg import color_gcode
+from tdmg.checks import verdict
 from tdmg.color_gcode import (
     COLOR_CHANGES,
     COLOR_FILAMENT,
@@ -30,10 +34,12 @@ from tdmg.color_gcode import (
     INFO_CHECK_IDS,
     TOOL_PLACEMENT,
     color_slice_checks,
+    f3_required_ids,
     layer_sets,
     min_changes,
     per_tool_id,
     read_multicolor,
+    required_check_ids,
 )
 from tdmg.flat import extrude
 from tdmg.orca_input import turn_over
@@ -194,16 +200,17 @@ def test_a_correct_two_layer_print_passes():
     turns = {t["angle_deg"]: t["placement"] for t in record["tool_turns"]}
     assert turns == {0: "PASS", 90: "FAIL", 180: "FAIL", 270: "FAIL"}
     assert checks[TOOL_PLACEMENT].measured["angle_deg"] == 0
-    # Every F3 here is information only until Task 7: the silhouette's ...
-    assert all("information only" in checks[i].note for i in F3_SLICE_CHECK_IDS)
-    # ... and the per-tool ones.
-    for t in range(3):
-        for cid in F3_SLICE_CHECK_IDS:
-            c = checks[per_tool_id(cid, t)]
-            assert "information only" in c.note
-    assert status(checks, [per_tool_id(c, 1) for c in F3_SLICE_CHECK_IDS]) == ["PASS"] * 3
+    # Every F3 here is required until Task 7, the silhouette's and each tool's.
+    required = required_check_ids(3)
+    assert required == frozenset((*GATED_CHECK_IDS, *F3_SLICE_CHECK_IDS, *(
+        per_tool_id(c, t) for t in range(3) for c in F3_SLICE_CHECK_IDS)))
+    assert all("Required for PRINTABLE" in checks[i].note for i in required
+               if i.startswith("F3."))
+    assert not required & set(INFO_CHECK_IDS)
+    assert verdict(list(checks.values()), set(required)) == "PRINTABLE"
     for cid in INFO_CHECK_IDS:
         assert checks[cid].status == "UNKNOWN" and "information only" in checks[cid].note
+    assert checks[TOOL_PLACEMENT].measured["prime_tower_into_model_mm"] is None
 
 
 def test_the_information_measures_are_read_from_the_gcode():
@@ -429,6 +436,142 @@ def test_r1_gcode_is_read_by_r1_unchanged():
     from tdmg.printed import parse_gcode
     with pytest.raises(UnsupportedGcode):
         parse_gcode(text_of(**GOOD), PLATE, FLOW)
+
+
+# --- Review fixes (2026-11-13): F3 required, the tower, the turn ambiguity ----------------
+
+
+def printable(checks, tools=3):
+    return verdict(list(checks.values()), set(required_check_ids(tools))) == "PRINTABLE"
+
+
+@pytest.mark.parametrize(("steps1", "steps2"), [
+    ([SQUARE], [RING, 1, shapely.box(2, 6, 5, 14), 2, B]),     # half of inlay 1
+    ([SQUARE], [RING, 1, shapely.box(4, 9, 5, 10), 2, B]),     # only a dot of inlay 1
+    ([shapely.box(0, 0, 20, 10)], [RING, 1, A, 2, B]),         # half the base's layer 1
+], ids=["half inlay", "dot inlay", "half base L1"])
+def test_a_body_left_partly_unprinted_fails_a_required_f3_check(steps1, steps2):
+    checks, _ = run(text_of(steps1, steps2))
+    # The F6 checks alone pass these: they judge plastic outside a body, not a body left
+    # unprinted. The F3 checks catch them, and they are required.
+    assert status(checks) == ["PASS"] * 3
+    failed = [i for i in sorted(required_check_ids(3)) if checks[i].status == "FAIL"]
+    assert failed and all(i.startswith("F3.") for i in failed), failed
+    assert not printable(checks)
+
+
+def _tower_line(y):
+    """A prime-tower bead along the model's lower edge (model y = y), outside any change."""
+    return path_moves(placed(shapely.LineString([(2, y), (18, y)]), SQUARE).coords,
+                      feature="Prime tower")
+
+
+def test_prime_tower_beads_over_the_model_fail_tool_placement():
+    blob = re.sub(r"; FEATURE: [^\n]*", "; FEATURE: Prime tower", prints(B))
+    checks, _ = run(text_of([SQUARE], [RING, 1, A, blob, 2, B]))
+    assert checks[TOOL_PLACEMENT].status == "FAIL"
+    assert "the prime tower reaches" in checks[TOOL_PLACEMENT].note
+    assert checks[TOOL_PLACEMENT].measured["prime_tower_into_model_mm"] > 2
+
+
+@pytest.mark.parametrize(("y", "want"), [
+    (-0.4, "PASS"),     # the bead (0.42 mm) stays outside the model
+    (-0.1, "PASS"),     # 0.11 mm in: within 0.2 mm, with the 0.06 mm sampling bound
+    (0.1, "FAIL"),      # 0.31 mm in
+])
+def test_the_prime_tower_gets_the_tools_allowance(y, want):
+    checks, _ = run(text_of([SQUARE], [RING, 1, A, 2, B, _tower_line(y)]))
+    assert checks[TOOL_PLACEMENT].status == want, checks[TOOL_PLACEMENT].note
+
+
+def test_when_every_close_turn_fails_tool_placement_fails():
+    # A T2 inside the first change's flush: T2 then prints inlay 1. Every turn the
+    # silhouette cannot tell apart FAILs, so the check FAILs (not UNKNOWN).
+    raw = change(1, 0.4).replace("; FLUSH_START\n", "; FLUSH_START\nT2\n", 1)
+    checks, record = run(text_of([SQUARE], [RING, raw, A, 2, B]))
+    assert checks[TOOL_PLACEMENT].status == "FAIL", checks[TOOL_PLACEMENT].note
+    assert {t["placement"] for t in record["tool_turns"]} == {"FAIL"}
+
+
+def _tool_turns_patched(monkeypatch, placement, tool_f3=None):
+    """Make the real _at_turn give these placement statuses per angle, every per-tool F3
+    PASS except the given ones (by index), and equal scores, so every tied turn is
+    close."""
+    real = color_gcode._at_turn
+
+    def fake(angle, *args):
+        pl, f3, records, _ = real(angle, *args)
+        f3 = [replace(c, status=(tool_f3 or {}).get(angle, {}).get(j, "PASS"))
+              for j, c in enumerate(f3)]
+        return replace(pl, status=placement[angle]), f3, records, 0.0
+    monkeypatch.setattr(color_gcode, "_at_turn", fake)
+
+
+def test_close_turns_that_disagree_leave_tool_placement_unknown(monkeypatch):
+    _tool_turns_patched(monkeypatch, {0: "PASS", 90: "FAIL", 180: "PASS", 270: "PASS"},
+                        {90: {4: "FAIL"}})
+    checks, _ = run(text_of(**GOOD))
+    c = checks[TOOL_PLACEMENT]
+    assert c.status == "UNKNOWN" and "the placement is ambiguous" in c.note
+    assert "turn 90 deg: FAIL" in c.note and "turn 0 deg: PASS" in c.note
+    assert [t["angle_deg"] for t in c.measured["turns"]] == [0, 90, 180, 270]
+    # Each per-tool F3 check is judged on its own disagreement: index 4 (tool 1's
+    # coverage) differs, the others agree and keep the best turn's PASS.
+    assert checks[per_tool_id(F3_SLICE_CHECK_IDS[1], 1)].status == "UNKNOWN"
+    assert checks[per_tool_id(F3_SLICE_CHECK_IDS[0], 1)].status == "PASS"
+    assert status(checks, F3_SLICE_CHECK_IDS) == ["PASS"] * 3
+    assert checks[COLOR_CHANGES].status == "PASS"
+
+
+def test_close_turns_that_all_fail_fail(monkeypatch):
+    _tool_turns_patched(monkeypatch, dict.fromkeys((0, 90, 180, 270), "FAIL"))
+    checks, _ = run(text_of(**GOOD))
+    assert checks[TOOL_PLACEMENT].status == "FAIL"
+
+
+def test_an_ambiguous_silhouette_leaves_the_tools_unknown(monkeypatch):
+    real = color_gcode.judge_f3
+
+    def fake(analysis, setup, truncation=True):
+        checks, record = real(analysis, setup, truncation)
+        if truncation:                                  # the silhouette's call
+            record["reason"] = "placement ambiguous: (test)"
+        return checks, record
+    monkeypatch.setattr(color_gcode, "judge_f3", fake)
+    checks, _ = run(text_of(**GOOD))
+    assert checks[TOOL_PLACEMENT].status == "UNKNOWN"
+    assert "the silhouette's placement is not known" in checks[TOOL_PLACEMENT].note
+    assert all(checks[per_tool_id(c, t)].status == "UNKNOWN"
+               for t in range(3) for c in F3_SLICE_CHECK_IDS)
+    assert checks[COLOR_CHANGES].status == "PASS" and checks[FILAMENTS_USED].status == "PASS"
+
+
+def test_a_geometry_error_is_unknown_and_keeps_the_other_checks(monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(color_gcode, "analyse_sections", boom)
+    checks, record = run(text_of(**GOOD))
+    geometry = [TOOL_PLACEMENT, *f3_required_ids(3)]
+    assert all(checks[i].status == "UNKNOWN" for i in geometry)
+    assert "analysis error: RuntimeError: boom" in record["geometry_reason"]
+    assert checks[COLOR_CHANGES].status == "PASS" and checks[FILAMENTS_USED].status == "PASS"
+    assert not printable(checks)
+
+
+def test_a_model_with_no_section_at_the_first_layer_is_unknown():
+    lifted = [Shell(s.name, s.role, s.index, s.hex,
+                    (np.asarray(s.vertices, np.float64) + [0, 0, 0.2]).astype(np.float32),
+                    s.faces) for s in bodies()]
+    checks, record = run(text_of(**GOOD), lifted)
+    assert "no section at the first layer" in record["geometry_reason"]
+    assert all(checks[i].status == "UNKNOWN" for i in [TOOL_PLACEMENT, *f3_required_ids(3)])
+    assert checks[COLOR_CHANGES].status == "FAIL"       # layer 1 holds no body
+
+
+@pytest.mark.parametrize("command", ["M600", "M601"])
+def test_a_manual_filament_change_or_pause_is_unknown(command):
+    checks, record = run(text_of([SQUARE], [RING, 1, A, f"{command}\n", 2, B]))
+    assert _all_unknown(checks) and command in record["reason"]
 
 
 # --- Real slicer ---------------------------------------------------------------------------
