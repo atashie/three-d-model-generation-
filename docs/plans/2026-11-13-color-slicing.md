@@ -180,8 +180,18 @@ the last task.
        placement only.
 5. **Glue plates:** each `glue-*.stl` is sliced as an R1 part, with R1's checks unchanged.
    Its record is beside the AMS record in the same `slice.json`.
+   - **Amended in Task 6 (controller, 2026-11-13):** two R1 checks do not fit a plate of
+     loose pieces.
+     - `F2.target_width` is dropped for glue plates: the target width belongs to the
+       whole model.
+     - `F4.body_count` is required against the plate's piece count from `colored.json`'s
+       glue report (the glue base is one body).
 6. **PrusaSlicer:** `F6.portability` runs on the portable `model.3mf`: `--info` reads it
-   as one manifold object, and it slices, single extruder, as measured in step 3. The
+   as one manifold object, and it slices, single extruder, as measured in step 3.
+   - **Note (Task 6):** the volume is information, not a condition. R1's STL volume
+     tolerance is derived for admesh's computation, which does not reproduce
+     PrusaSlicer's 3MF volumes. Measured differences from the palette sum: −1.23 to
+     +0.25 mm³. The
    OrcaSlicer-only input is not given to PrusaSlicer.
 7. **Record and command:**
    - **Command:** `tdmg slice COLORED_DIR --out DIR` writes `slice.json` (schema
