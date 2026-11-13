@@ -45,8 +45,10 @@ from tdmg.color_glue import Glue
 from tdmg.flat import build_volume_check, encode_stl, export_match, triangle_check
 from tdmg.profiles import PrinterProfile
 from tdmg.threemf import (
+    CONTENT_TYPES,
     OBJECT_NAME,
     PART_NAMES,
+    RELS,
     UNIT,
     Shell,
     check_shells,
@@ -492,14 +494,17 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
     bytes parsed back and merged exactly), base first, then inlays by index. data is
     read back by lib3mf 2.x in strict mode, an independent reader (from the bytes; no
     file). PASS iff:
-    - the zip's entry names are exactly tdmg.threemf.PART_NAMES, in order (read with
-      zipfile, not lib3mf: lib3mf ignores a case or leading-slash alias of the model part
-      that another reader, such as trimesh, may load instead; Codex review 4);
+    - the zip's raw entry names (ZipInfo.orig_filename: on Windows, ZipInfo.filename
+      turns a backslash into "/") are exactly tdmg.threemf.PART_NAMES, in order, and the
+      content types and relationships parts are the writer's bytes (read with zipfile,
+      not lib3mf: lib3mf ignores a case or leading-slash alias of the model part that
+      another reader, such as trimesh, may load instead; Codex review 4);
     - no reader warnings; unit millimeter; exactly one object, a mesh of type model named
       tdmg.threemf.OBJECT_NAME; exactly one build item, on that object, with no
-      transform: HasObjectTransform false and the matrix exactly the identity
-      (HasObjectTransform alone calls a matrix within lib3mf's tolerance of identity,
-      such as a 1.0001 scale, no transform; Codex review 4); one color group;
+      transform: HasObjectTransform false and the matrix exactly the identity as lib3mf
+      reads it (float32 fields; HasObjectTransform alone calls a matrix within lib3mf's
+      tolerance of identity, such as a 1.0001 scale, no transform; Codex review 4); one
+      color group;
     - the object's vertices and triangles split into the shells in order
       (tdmg.threemf.shell_ranges): shell i's vertices equal its gated mesh's vertices
       exactly, compared as float32 arrays in the same order (both sides are float32
@@ -515,7 +520,8 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
     carries them. Errors: shells that tdmg.threemf.check_shells refuses raise
     ThreeMFError (a caller error), and a missing lib3mf native library raises when this
     module is imported (an environment error); anything wrong with data itself, including
-    bytes lib3mf cannot read, is a FAIL with what was measured. The shells touch along
+    bytes zipfile or lib3mf cannot read (any exception while reading), is a FAIL with
+    what was measured. The shells touch along
     shared walls, which the 3MF core covers only as a self-intersection warning (rule
     format.3mf.self_intersection_is_warning).
     """
@@ -533,20 +539,28 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
             "self-intersection warning in the 3MF core (rule "
             "format.3mf.self_intersection_is_warning)")
     expected["package_parts"] = list(PART_NAMES)
+    expected["package_files_equal"] = True
+    parts = None
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
-            parts = [i.filename for i in z.infolist()]
+            parts = [i.orig_filename for i in z.infolist()]
+            same_files = parts == list(PART_NAMES) and (
+                z.read(PART_NAMES[0]) == CONTENT_TYPES and z.read(PART_NAMES[1]) == RELS)
         facts = _read_3mf(data)
-    except (lib3mf.ELib3MFException, ValueError, zipfile.BadZipFile) as exc:   # unreadable
-        return CheckResult("F2.export_3mf_matches_bodies", "FAIL",
-                           {"read_error": str(exc)}, expected, None, note)
+    except Exception as exc:   # noqa: BLE001 - any failure to read the bytes is a FAIL
+        failed = {"read_error": f"{type(exc).__name__}: {exc}"}
+        if parts is not None:
+            failed["package_parts"] = parts
+        return CheckResult("F2.export_3mf_matches_bodies", "FAIL", failed, expected, None,
+                           note)
     v, f, colors = facts.pop("_v", None), facts.pop("_f", None), facts.pop("_colors", None)
     measured = {k: facts.get(k) for k in (
         "reader_warnings", "unit", "objects", "mesh_objects", "build_items", "item_ok",
         "item_transform", "color_groups", "object_name", "object_type",
         "manifold_and_oriented")}
     measured["package_parts"] = parts
-    ok = (parts == list(PART_NAMES) and not facts["reader_warnings"]
+    measured["package_files_equal"] = same_files
+    ok = (same_files and not facts["reader_warnings"]
           and facts["unit"].lower() == UNIT
           and facts["objects"] == 1 and facts["mesh_objects"] == 1
           and facts.get("item_ok") is True and facts["build_items"] == 1

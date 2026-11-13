@@ -339,8 +339,63 @@ def test_an_extra_or_aliased_package_part_fails(alias):
     c = export_3mf_check(bad, shells)
     assert c.status == "FAIL"
     assert alias in c.measured["package_parts"]
+    assert c.measured["item_ok"] is True    # the name check alone fails it
     assert c.threshold["package_parts"] == ["[Content_Types].xml", "_rels/.rels",
                                             MODEL_PART]
+
+
+def _raw_names(data: bytes, names: dict) -> bytes:
+    """data's zip with entries renamed raw (no os.sep conversion), metadata kept."""
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        own = [(i.filename, z.read(i)) for i in z.infolist()]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, part in own:
+            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            info.filename = info.orig_filename = names.get(name, name)
+            if name == "_rels/.rels":
+                part = part.replace(b"/3D/3dmodel.model", b"/3D\\3dmodel.model")
+            z.writestr(info, part)
+    return buf.getvalue()
+
+
+def test_a_backslash_model_part_name_fails_on_every_platform():
+    # Review of the Codex 4 fix: on Windows, zipfile turns "3D\\3dmodel.model" into
+    # "3D/3dmodel.model" in ZipInfo.filename; the raw name (orig_filename) is compared.
+    shells = gated_shells("box")
+    bad = _raw_names(write_multishell_3mf(shells), {MODEL_PART: "3D\\3dmodel.model"})
+    c = export_3mf_check(bad, shells)
+    assert c.status == "FAIL"
+    assert "3D\\3dmodel.model" in c.measured["package_parts"]
+
+
+def test_a_zip_that_zipfile_cannot_open_is_a_fail_not_an_error():
+    # Review of the Codex 4 fix: a "version needed" above zipfile's support makes
+    # zipfile raise NotImplementedError; the check must still return FAIL.
+    shells = gated_shells("box")
+    data = bytearray(write_multishell_3mf(shells))
+    cd = data.index(b"PK\x01\x02")
+    data[cd + 6:cd + 8] = (79).to_bytes(2, "little")
+    c = export_3mf_check(bytes(data), shells)
+    assert c.status == "FAIL" and "read_error" in c.measured
+
+
+@pytest.mark.parametrize("part", ["[Content_Types].xml", "_rels/.rels"])
+def test_edited_package_files_fail(part):
+    # The two fixed package files must be the writer's bytes.
+    shells = gated_shells("box")
+    data = write_multishell_3mf(shells)
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        own = [(i.filename, z.read(i)) for i in z.infolist()]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, b in own:
+            z.writestr(zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0)),
+                       b.replace(b"?>", b"?><!-- edited -->", 1) if name == part else b)
+    c = export_3mf_check(buf.getvalue(), shells)
+    assert c.status == "FAIL"
+    assert c.measured["package_files_equal"] is False
+    assert all(r["pass"] for r in c.measured["shells"]) and c.measured["item_ok"] is True
 
 
 def test_the_package_parts_are_measured_on_a_pass():

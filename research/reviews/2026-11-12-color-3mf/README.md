@@ -58,3 +58,30 @@ expected) before the fix.
   (`research/verification/2026-11-12-color-geometry/colored-runs.txt`).
 - **Codex found no defect** in the shared-wall construction against the 3MF core 1.3
   vertex-index manifold definition.
+
+## Review of the fixes (subagent code review, 2026-11-13)
+
+A subagent reviewer checked commit `8407443` (the fixes above), running probes against the
+new and the old check. It confirmed both Codex findings closed, and found:
+
+1. **Important: a corrupt zip could raise instead of FAIL.** `zipfile` raises
+   `NotImplementedError` for a too-high "version needed" field, which the new `except`
+   did not catch (found by a 3000-case byte-flip fuzz; the old code returned FAIL on
+   every one). **Fixed:** any exception while reading the bytes is a FAIL with its type
+   and message; the part names are kept in `measured` when they were read. Test:
+   `test_a_zip_that_zipfile_cannot_open_is_a_fail_not_an_error`.
+2. **Important: on Windows a backslash model part name passed.** `ZipInfo.filename` turns
+   `os.sep` into "/", so `3D\3dmodel.model` (with a matching relationship) read as the
+   writer's name on Windows only. **Fixed:** the raw names (`orig_filename`) are compared.
+   Test: `test_a_backslash_model_part_name_fails_on_every_platform`.
+3. **Minor: "exactly the identity" is exact at float32,** as lib3mf reads the matrix.
+   **Fixed** in the docstring.
+4. **Minor: names lost on a read error.** Fixed with item 1.
+5. **Minor: the alias test did not show that the name check alone failed it.** **Fixed:**
+   it also asserts `item_ok`.
+6. **Suggestion: the content types and relationships parts were checked by name only.**
+   **Done:** both must be the writer's bytes (`package_files_equal`). Test:
+   `test_edited_package_files_fail`.
+
+The owner's four runs were re-made again: exit 0, `model.3mf` byte-identical, run summary
+unchanged.
