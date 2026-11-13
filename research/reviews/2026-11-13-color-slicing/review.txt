@@ -1,0 +1,45 @@
+Found five issues. The first two allow required color checks to PASS despite unaccounted printer behavior.
+
+1. **High — Firmware conditionals are treated as unconditional execution.**  
+   [printed.py:512](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:512), [color_gcode.py:448](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_gcode.py:448)
+
+   `M623` invalidates XYZ, but preserves modes established inside the conditional. The structure reader also records conditional tool changes as definitely executed.
+
+   Confirmed three scenarios:
+   - Wrapping an entire inlay’s extrusion in `M622 J1 … M623` leaves **every required color check PASS**, even though skipping that branch omits the whole inlay.
+   - Wrapping a complete tool-change sequence similarly passes; skipping it leaves the previous filament loaded.
+   - Setting `G91/M82` before a conditional containing `G90/M83`, then restoring XYZ afterward, passes although a skipped branch leaves the printer in different positioning/extrusion modes.
+
+   **Confirmed by running:** synthetic fixtures for all three; the mode variant also passed all nine required color checks on an in-memory edit of the owner’s Roadie G-code. Conditional execution needs conservative tracking or refusal—not just position invalidation. This exceeds the owner’s accepted *partial coverage warning* trade-off.
+
+2. **High — Flush extrusion can occur directly on the model without failing placement.**  
+   [color_gcode.py:458](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_gcode.py:458), [printed.py:563](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:563)
+
+   FLUSH validation checks command shape and relative E, but never checks where the nozzle is. Stationary extrusion produces no segment, so neither tool placement nor tower intrusion examines it.
+
+   In the valid two-layer fixture, I moved the flush position to `X128 Y128 Z0.4`, inside the model. Each change still flushes 27.8 mm of filament—approximately **66.9 mm³ onto the model**—yet every required color check passes. Check flush location independently; an E-only move is not necessarily harmless unretraction.
+
+   **Confirmed by running** the modified fixture through `color_slice_checks`.
+
+3. **Medium — Missing glue plates disappear from route certification.**  
+   [color_slicing.py:699](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py:699)
+
+   `glue_piece_counts` validates each existing plate against the report, but never requires a plate for every reported color. Deleting both glue-piece rows from Roadie’s `bodies` list leaves the report’s seven pieces intact, yet input validation accepts it and returns only `{'glue-base.stl': 1}`. Those omitted plates are never sliced. If the remaining plates pass, `glue_route` declares the incomplete kit printable.
+
+   **Confirmed by running** the input checks against an in-memory edited owner record, followed by the count and route functions. No slicer run was performed. Require an exact correspondence between reported piece colors and glue plate rows.
+
+4. **Low — Connectivity warnings assert an unmeasured cause, including for UNKNOWN.**  
+   [color_slicing.py:253](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py:253)
+
+   Every non-PASS connectivity result becomes “printed colors meet edge to edge, so the connectivity check fails.” The existing “dot inlay” scenario instead has a largely missing, disconnected inlay. An unsupported `G4 X1` produces UNKNOWN connectivity but receives the same asserted diagnosis.
+
+   **Confirmed by running** both scenarios through `face_warnings`. Preserve the actual status and describe the measured mismatch; reserve the edge-contact explanation for cases where evidence establishes it.
+
+5. **Low — STATUS still directs subsequent work toward an already completed owner decision.**  
+   [docs/STATUS.md:241](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:241)
+
+   STATUS says Task 7 is next and elsewhere says colored folders are not sliced yet. HEAD implements Task 7’s face-up default and warning policy, and the Task 7 record reports PRINTABLE face-up results. A new session following the mandatory STATUS handoff receives contradictory instructions.
+
+   **Confirmed by reading** STATUS, the amended plan, implementation, and owner-run records. Update current status while preserving historical research records.
+
+Validation: **372 reader/3MF tests passed**, plus **30 flattening tests**. A swap test could not start because temporary-directory writes were blocked. Installed-profile reads were also denied; I did not rerun slicers or verify their installations. The current reader produced identical model segments from both owners’ old and fixed-profile R1 G-codes. All reproductions were in memory; no files were modified.

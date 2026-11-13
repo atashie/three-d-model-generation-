@@ -1,9 +1,9 @@
 # Project status
 
-**Last updated:** 2026-11-13 (R2 step 4 started: plan `docs/plans/2026-11-13-color-slicing.md`
-approved; Task 1 fixed the pinned A1 profile, whose own start, end and filament-change
-G-code had been missing; R2 step 3 done earlier the same day). Phase 1 (R1, flat single-color) is under way,
-with three commands, and R2 (flat multicolor) has two:
+**Last updated:** 2026-11-13 (R2 step 4, multicolor slicing: Tasks 1–7 done, Task 8 under
+way — Codex review 5 handled, push and CI next; plan `docs/plans/2026-11-13-color-slicing.md`).
+Phase 1 (R1, flat single-color) is under way, with three commands, and R2 (flat
+multicolor) has two, plus `tdmg slice` on a colored folder:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
 - **`tdmg flat`** (S2–S4, S8): makes a flat STL, smoothed by default (`--smooth-px 0`
@@ -34,7 +34,13 @@ with three commands, and R2 (flat multicolor) has two:
     reads the 3MF back with lib3mf and compares every shell exactly
     (`F2.export_3mf_matches_bodies`). The owner opened one in Bambu Studio: in place,
     filaments assignable, it slices.
-  - **Not done yet:** `tdmg` does not slice it, and nothing is printed (steps 4–5).
+  - **Slicing (step 4):** `tdmg slice COLORED_DIR` slices it face up by default
+    (`--face down|both`), each color on its own filament, and gates the G-code (color
+    changes, placement, filaments, the outer-edge F3 checks; per-color coverage and
+    connectivity are warnings, owner decision). All four owner plans are PRINTABLE face
+    up, with warnings (the keep plans' thin interior outline lines are skipped by the
+    slicer). To print: open `model.3mf` in Bambu Studio and assign the filaments listed.
+  - **Not done yet:** nothing is printed (step 5).
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -238,7 +244,16 @@ passed. These commits are pushed; for CI see above.
      Plan amendments: glue plates drop `F2.target_width` and check `F4.body_count`
      against the glue report; the PrusaSlicer volume is information. Reviewed and
      approved.
-   - **Next:** Task 7, the owner's review (default face; which F3 checks gate color).
+   - **Task 7 done:** the owner chose "Face up (Recommended)" as the default and "Outer
+     edge only (Recommended)" for F3 gating (material: `owner-review.txt`,
+     `artifacts/color-review/`). Implemented; all four plans PRINTABLE face up
+     (`owner-slices-task7.txt`); Roadie drop face down NOT CERTIFIED (whole-model edge
+     coverage UNKNOWN). A CLI bug (warnings set exit 1) was found in review and fixed.
+   - **Task 8:** docs done (`463ba81`). Codex review 5
+     (`research/reviews/2026-11-13-color-slicing/`): 2 High (firmware conditionals read
+     as always run; flush position not checked), 1 Medium (a missing glue plate not
+     noticed), 2 Low (warning wording; this STATUS). All held and were fixed (`07b445a`,
+     `0c720f7`); record in `research/reviews/2026-11-13-color-slicing/README.md`.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
@@ -375,7 +390,16 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest (2026-11-13): R2 step 4, Task 1 done** (see item 2b and the note at the top).
+- **Latest (2026-11-13): R2 step 4, Tasks 1–7 done; Task 8 under way** (item 2b).
+  - **Owner decisions:** plan approved ("approved; please proceed"); Task 7: face up
+    default, F3 "Outer edge only".
+  - **Controller decisions** (each recorded as a plan amendment): start load = layer 1's
+    first tool; the change-count rule follows OrcaSlicer's order; filament profiles carry
+    the palette colors; extruder = shell position + 1; color slices checked at the plate
+    placement (no quarter turns); glue plates drop `F2.target_width` and check
+    `F4.body_count`; PrusaSlicer's 3MF volume is information.
+  - **Runs:** `artifacts/slice-runs/color2-<plan>` (Task 7 rules).
+- **Earlier (2026-11-13): R2 step 4, Task 1 done.**
   - **Controller decisions in Task 1** (no owner input needed, recorded in the research
     README): firmware G-commands are read only inside Custom and the template's
     SKIPPABLE blocks, by allowlist; the print message stays "slice model.stl in Bambu
