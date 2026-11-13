@@ -1247,7 +1247,9 @@ def test_cli_printable(square_flat, fake, prusa, tmp_path):
     # 2026-11-13-color-slicing.md, Decision 1), the message must not say to print it.
     assert PRINT_THIS.startswith("slice model.stl in Bambu Studio to print")
     assert "plate_1.gcode is for checking only" in PRINT_THIS
-    assert "start and end G-code are not the A1's" in PRINT_THIS
+    assert ("tdmg's G-code is not yet printed or compared with Bambu Studio's own slice"
+            in PRINT_THIS)
+    assert "incomplete" not in PRINT_THIS         # the profile was fixed on 2026-11-13
     assert "prusaslicer.portability-only.gcode.txt is not for printing" in PRINT_THIS
     assert not any(line.startswith("print plate_1.gcode") for line in lines)
     assert (f"wrote {out / PRUSA_FILE} (portability evidence only; not for printing)"

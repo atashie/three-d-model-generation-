@@ -1,0 +1,13 @@
+NOT CERTIFIED: F3.printed_connectivity UNKNOWN, F3.edge_coverage UNKNOWN, F3.edge_overprint UNKNOWN
+slicer exit 0 (CLI_SUCCESS)
+  F3.thin_regions UNKNOWN - measured area_mm2=1.298, min_width_mm=0.9, pieces=1154; threshold 0.9: tapered tips always appear; information only: tdmg slice judges thin features from the G-code with F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint
+  F3.printed_connectivity UNKNOWN: not measured: the G-code cannot be measured: line 3486: G39 is not a G-command this check reads
+  F3.edge_coverage UNKNOWN - threshold first_layer_mm=0.275, other_layers_mm=0.2: not measured: the G-code cannot be measured: line 3486: G39 is not a G-command this check reads
+  F3.edge_overprint UNKNOWN - threshold first_layer_mm=0.275, other_layers_mm=0.2: not measured: the G-code cannot be measured: line 3486: G39 is not a G-command this check reads
+15 layers, 876.1 s, 4.321 g (slicer estimates)
+portability: PrusaSlicer 2.9.7 PASS - 1 part, 29020 facets, size 59.99 x 65.87 x 3.00 mm, volume 5033.67 mm3, 15 layers; prusaslicer.portability-only.gcode.txt is generic G-code for a generic printer, not Bambu firmware G-code and not for the A1: it is evidence of portability only; never print it
+slice_id ce44c481e9ffa7c6783deb45581cb66954df783c3a8e821b21fc4c8e2eaba289
+wrote artifacts\slice-runs\oddie-60x3-slice5b\plate_1.gcode
+wrote artifacts\slice-runs\oddie-60x3-slice5b\prusaslicer.portability-only.gcode.txt (portability evidence only; not for printing)
+wrote artifacts\slice-runs\oddie-60x3-slice5b\plate_1.statistics.json
+wrote artifacts\slice-runs\oddie-60x3-slice5b\slice.json

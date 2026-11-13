@@ -1,6 +1,6 @@
 """Compare the old flat machine.json with the new one, key by key.
 
-    uv run python research/verification/2026-11-13-a1-profile-include/compare_flat.py         OLD NEW TEMPLATES
+    uv run python research/verification/2026-11-13-a1-profile-include/compare_flat.py OLD NEW TEMPLATES
 
 OLD and NEW are machine.json files; TEMPLATES is a folder with the five upstream template
 files (machine/Bambu Lab A1 0.4 nozzle template <key>.json). Also checks the condition

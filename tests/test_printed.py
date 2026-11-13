@@ -766,3 +766,62 @@ def test_a_hole_within_sampling_uncertainty_does_not_pass():
     assert overprint.status in ("UNKNOWN", "FAIL")
     if overprint.status == "UNKNOWN":
         assert "within sampling uncertainty" in overprint.note
+
+
+# --- Firmware G-commands in the A1 start and end code (FEATURE "Custom") -----------------
+# The A1 template G-code (research/verification/2026-11-13-a1-profile-include/) writes
+# Bambu firmware G-commands in Custom: G392, G380, G39.4, G29.2, G2814, G29.4, and relative
+# G2 arcs (nozzle wipe) and G0 moves with E (extrusion test). In Custom they are accepted and
+# make the position unknown until the next absolute X, Y and Z; elsewhere they are refused.
+
+A1_START = ("; FEATURE: Custom\nG392 S0\nM9833.2\nG380 S2 Z40 F1200\nG39.4\nG29.2 S0\n"
+            "G39.3 S1\nG2814 Z0.32\nG28\nG1 X128 Y250 F20000\nG0 Z-1.01 F1200\n"
+            "G91\nG2 I1 J0 X2 Y0 F2000.1\nG2 I-0.75 J0 X-1.5\nG90\n"
+            "G0 X128 E8 F600\nG0 X133 E.3742\nG2 X20 Y20 R3\nG29.4\n"
+            "G90\nG21\nM83 ; use relative distances for extrusion\n")
+
+
+def test_firmware_g_commands_in_custom_are_followed_as_unknown_position():
+    layers = parse(gcode([layer(0.2, GOOD)], start=A1_START))
+    assert [(s.x0, s.y0, s.x1, s.y1) for s in layers[0.2].segments] == [(100, 100, 101, 100)]
+
+
+@pytest.mark.parametrize(("command", "message"), [
+    ("G392 S0", "G392 is not a G-command this check reads"),
+    ("G380 S3 Z-5 F1200", "G380 is not a G-command this check reads"),
+    ("G2814 Z0.32", "G2814 is not a G-command this check reads"),
+    ("G39.3 S1", "'G39.3' .* is not a command as OrcaSlicer writes it"),
+    ("G29.2 S0", "'G29.2' .* is not a command as OrcaSlicer writes it")])
+def test_firmware_g_commands_outside_custom_are_refused(command, message):
+    with pytest.raises(UnsupportedGcode, match=message):
+        parse(gcode([layer(0.2, GOOD + command + "\nG1 X102 Y100 E.1\n")]))
+
+
+@pytest.mark.parametrize("last", ["G392 S0", "G39.3 S1", "G29.2 S0", "G380 S3 Z-5"])
+def test_a_model_extrusion_straight_after_a_firmware_command_is_refused(last):
+    # No absolute X and Y after it: the position is unknown.
+    start = A1_START + "; FEATURE: Custom\n" + last + "\n"
+    body = "; FEATURE: Outer wall\n; LINE_WIDTH: 0.42\nG1 X101 Y100 E.1\n"
+    with pytest.raises(UnsupportedGcode, match="unknown position"):
+        parse(gcode([layer(0.2, body)], start=start))
+
+
+def test_a_model_extrusion_after_a_firmware_command_needs_a_commanded_z():
+    # X and Y are set again, but not Z: the commanded Z is unknown.
+    start = A1_START + "; FEATURE: Custom\nG380 S3 Z-5\n"
+    text = (start + "; CHANGE_LAYER\n; Z_HEIGHT: 0.2\n; LAYER_HEIGHT: 0.2\n" + GOOD)
+    with pytest.raises(UnsupportedGcode, match="commanded Z None"):
+        parse(text)
+
+
+@pytest.mark.parametrize(("command", "message"), [
+    ("G392 Snan", "'Snan'"), ("G380 S3 Z1e3", "'Z1e3'"),
+    ("G380 X100000", "beyond the plate"), ("G380 Y-100000", "beyond the plate"),
+    # Plane, units and coordinate systems change how later model moves are read.
+    ("G18", "G18"), ("G19", "G19"), ("G20", "G20"), ("G10 L2 P1 X1", "G10"),
+    ("G54", "G54"), ("G59.3", "G59.3"), ("G53 X1", "G53"), ("G92.1", "G92.1"),
+    ("G29.1 Z-0.02", "G29.1"), ("G1.5 X1", "G1.5")])
+def test_firmware_commands_in_custom_are_still_read_strictly(command, message):
+    start = A1_START.replace("G29.4\n", f"G29.4\n{command}\n")
+    with pytest.raises(UnsupportedGcode, match=message):
+        parse(gcode([layer(0.2, GOOD)], start=start))

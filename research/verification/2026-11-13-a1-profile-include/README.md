@@ -224,3 +224,111 @@ task.
 - **Another case of the default rule.** The flattener cannot tell when an included value
   equals Orca's default (item 4 above). That case does not occur in the pinned files.
 - **Other machines and versions.** Only the Windows PC and OrcaSlicer 2.5.0 were run.
+
+## Addendum: the G-code reader and the A1 firmware commands, 2026-11-13
+
+The controller decided how `tdmg.printed.parse_gcode` should read the A1 template G-code:
+strict outside FEATURE "Custom", and firmware G-commands accepted inside it.
+
+**Short answer: this is a second stop-and-report point.** The reader change is made and
+tested, but the real G-code still cannot be measured. The time-lapse G-code runs at every
+layer change, and it holds firmware G-commands **outside** Custom. Outside Custom the
+reader stays strict, as decided, so F3 is still UNKNOWN and the verdict is still NOT
+CERTIFIED.
+
+### The reader change (`src/tdmg/printed.py`)
+
+- **Inside Custom:** a G-command that is not in `G_COMMANDS` is a firmware command. It
+  may have a `.n` subcode (`CUSTOM_G_COMMAND`).
+  - **The effect:** it is accepted, and it makes X, Y and the commanded Z unknown until
+    the next absolute ones, as G28 does.
+  - **Its words:** they must be finite plain numbers, and X and Y must be within
+    `plate.within_bound`.
+  - **Moves in Custom:** relative G2 arcs, R-form arcs and G0 with E are followed for the
+    position only. They were already excluded from the model, and none goes through the
+    arc splitter, so none can raise there except at the bound.
+- **Refused even in Custom** (`CUSTOM_REFUSED_G`; my addition, not in the controller's
+  list): these change how every later model move is read.
+  - arc planes: G18, G19;
+  - inches: G20;
+  - coordinate systems and offsets: G10, G53 to G59 and their subcodes, and G29.1 (the
+    template's Bambu Z offset, written only for a textured PEI plate);
+  - a subcode of any followed command except G29: G0.n to G3.n, G90.1, G91.1 and G92.n.
+- **Outside Custom:** unchanged.
+- **Tests** (`tests/test_printed.py`):
+  - a Custom block with G392 S0, G380, G39.4, G29.2, G39.3, G2814, G29.4, relative G2
+    arcs, an R-form arc and G0 with E, then a model extrusion after an absolute move:
+    this parses;
+  - the same commands outside Custom: refused;
+  - a model extrusion straight after a firmware command, with no absolute X and Y:
+    refused ("unknown position");
+  - X and Y set again but not Z: refused ("commanded Z None");
+  - bad words, out-of-bound X or Y, and each command in `CUSTOM_REFUSED_G`, in Custom:
+    refused.
+
+### What the real G-code holds (`scan_gcommands.py` → `scan-gcommands.txt`)
+
+Both owner G-codes (`*-60x3-slice5b`) hold these G-commands outside `G_COMMANDS`, by the
+FEATURE in force:
+- **In Custom (the start and end code):** G392 (2), G380 (23), G39.4 (1), G29.2 (2),
+  G2814 (1) and G29.4 (1).
+- **Outside Custom:** G392 (24), G39.3 (12) and G39 (1). The FEATURE in force is the
+  previous layer's last feature, for example "Outer wall".
+  - **Where they come from:** the template's `time_lapse_gcode`. OrcaSlicer writes it at
+    each layer change, inside the template's own `; SKIPPABLE_START` and
+    `; SKIPPABLE_END` comments, with no FEATURE line.
+  - **G39 S1:** on the third layer, at `G0 X261 Y250`.
+  - **G39.3 S1, between G392 S0 lines:** from the fourth layer on.
+  - The old, generic `time_lapse_gcode` (429 characters) had no firmware G-commands.
+- **Extrusion:** there is no Custom extrusion after the first model extrusion, so the
+  end code does not extrude, and the rule that refuses one still holds. The time-lapse
+  blocks do not extrude either: they use G92 E0 and travel only.
+- **The first model extrusion:** it does not come from an unknown position or Z in
+  either file. In the experiment below, the parse reached and passed every model move.
+
+### An experiment only: SKIPPABLE blocks read as Custom (not in the code)
+
+`experiment_skippable.py` (→ `experiment-skippable.txt`) runs `f3_checks` on the real
+G-code with a "; FEATURE: Custom" line added after each `; SKIPPABLE_START`, and the
+previous FEATURE restored after each `; SKIPPABLE_END`. This shows what such a rule would
+give. It is not a decision.
+
+| | F3.printed_connectivity | F3.edge_coverage | F3.edge_overprint |
+|---|---|---|---|
+| Roadie, old (slice-4) | PASS, 0 layers mismatched | PASS, max gap 0.23120786 mm, 0 layers over | PASS, 0 over |
+| Roadie, experiment | PASS, 0 mismatched | PASS, max gap 0.23120786 mm, 0 over | PASS, 0 over |
+| Oddie, old | PASS, 0 mismatched | PASS, max gap 0.22234656 mm, 0 over | PASS, 0 over |
+| Oddie, experiment | PASS, 0 mismatched | PASS, max gap 0.22234656 mm, 0 over | PASS, 0 over |
+
+- **Why the numbers are identical:** the model's moves are identical. The positive E
+  outside Custom is the same to the micrometre in old and new: 891.810 mm (Roadie) and
+  1,480.841 mm (Oddie) (`extrusion-by-feature.txt`).
+
+### The weight drop (`extrusion_by_feature.py` → `extrusion-by-feature.txt`)
+
+- **The drop is the same on both models.** The header's "filament used [mm]" falls by
+  exactly 8.26 mm on both: Roadie 749.81 → 741.55, Oddie 1,434.04 → 1,425.78. That is
+  0.025 g, or about 20 mm³.
+- **It is not the model:** the model's extrusion is unchanged.
+- **It is not the new purge, counted:** the start code's positive E in Custom grows from
+  45.8 mm to 147.5 mm, yet the slicer's total falls.
+- **So:** the slicer's filament estimate does not equal the G-code's positive E. The
+  start and end code changes it by a constant. How OrcaSlicer counts Custom E (for
+  example, retractions in the end code, or E moves inside the firmware's conditional
+  blocks) was not traced.
+
+### The slices again
+
+- **The command:** as before, into `artifacts/slice-runs/<sel>-60x3-slice5b`. The
+  `*-60x3-slice5` runs are kept.
+- **The result:** both slices are NOT CERTIFIED with F3 UNKNOWN. Roadie stops at line
+  5719 and Oddie at line 3486, on `G39`, outside Custom.
+- **The G-code** differs from slice5's only in the header timestamp.
+- **`pytest -m slicer`:** `test_roadie_slices_with_the_real_slicer` still fails, for
+  this reason.
+
+### The message
+
+`PRINT_THIS` now gives a reason that is true: "slice model.stl in Bambu Studio to print;
+plate_1.gcode is for checking only (tdmg's G-code is not yet printed or compared with
+Bambu Studio's own slice); …".

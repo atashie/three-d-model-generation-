@@ -86,6 +86,21 @@ G_COMMANDS = frozenset({"G0", "G1", "G2", "G3", "G17", "G21", "G28", "G29", "G90
 # checksums (*nn), lower case, leading zeros and words run together are not written by
 # OrcaSlicer, so they are refused rather than parsed.
 COMMAND = re.compile(r"(?:G|T)(?:0|[1-9][0-9]*)|M(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
+# In FEATURE "Custom" (the start and end code), a G-command may also have a ".n" subcode:
+# the A1 template G-code writes firmware commands such as G29.2, G39.3 and G39.4.
+CUSTOM_G_COMMAND = re.compile(r"G(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
+# Firmware G-commands seen in FEATURE "Custom" of the pinned A1 template G-code, on the
+# owner's Roadie and Oddie (research/verification/2026-11-13-a1-profile-include/): G392
+# (clog detection), G380 (move to a stop), G39.4, G29.2 (bed levelling on/off), G2814 and
+# G29.4. A firmware G-command in Custom is accepted, whichever it is, and makes the X, Y and
+# commanded Z unknown until the next absolute ones, as G28 does; its words must still be
+# finite plain numbers, and X and Y within plate.within_bound.
+# Except these, refused even in Custom, since they change how every later move is read:
+# arc planes (G18, G19), inches (G20), coordinate systems and offsets (G10, G53 to G59 and
+# their subcodes, G29.1, a Bambu Z offset) and any subcode of a command this parser follows
+# (G0.n to G3.n, G90.1 and G91.1 arc-centre modes, G92.n, ...), except G29's.
+CUSTOM_REFUSED_G = frozenset({"G10", "G18", "G19", "G20", "G53", "G54", "G55", "G56", "G57",
+                              "G58", "G59"})
 # A word: an upper-case letter and a plain decimal number (no exponent, nan or inf).
 WORD = re.compile(r"([A-Z])(-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))")
 CONNECTIVITY = "F3.printed_connectivity"
@@ -331,7 +346,14 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
     single features (a bridge is written 0.4 mm high) and do not change the layer.
 
     Every line that is not a comment must start with a command matching COMMAND, and a
-    G-command must be in G_COMMANDS; anything else is refused, never skipped. M- and
+    G-command must be in G_COMMANDS; anything else is refused, never skipped. The one
+    exception is FEATURE "Custom", the start and end code: there a G-command outside
+    G_COMMANDS (with an optional ".n" subcode, CUSTOM_G_COMMAND) is a firmware command,
+    accepted unless it is in CUSTOM_REFUSED_G (or G29.1, or a subcode of a followed command
+    other than G29), and it makes X, Y and the commanded Z unknown until the next absolute
+    ones, as G28 does. Its words must be finite plain numbers and its X and Y within
+    plate.within_bound. Moves in Custom (relative or R-form arcs, G0 with E) are followed
+    for the position only; none is analysed. M- and
     T-commands are ignored except M82 and M83, which set the extrusion mode: the others
     in this G-code (M17, M73, M104, M106, M109, M140, M190, M201, M203, M204, M205, M220,
     M221, M400, M620-M625, M970, M971, M974, M981, M991, M1002 and T255) set temperatures,
@@ -384,6 +406,10 @@ def parse_gcode(text: str, plate: Plate, flow: Flow | None = None) -> dict[float
         if not code:
             continue
         command = code.split()[0]
+        if feature == CUSTOM and command.startswith("G") and command not in G_COMMANDS:
+            _check_firmware(command, code, lineno, plate)
+            x = y = z_cmd = None               # where the firmware leaves it is not known
+            continue
         if COMMAND.fullmatch(command) is None:
             raise UnsupportedGcode(f"line {lineno}: {command!r} in {code!r} is not a command "
                                    "as OrcaSlicer writes it")
@@ -521,6 +547,25 @@ def _check_amount(where, e, length, sweep, width, height, bridge, flow: Flow) ->
         raise UnsupportedGcode(f"{where}: extrusion amount E{e:g} does not match the stated "
                                f"width {width:g} mm and height {height:g} mm over "
                                f"{length:.3f} mm (expected {expected:.5f})")
+
+
+def _check_firmware(command: str, code: str, lineno: int, plate: Plate) -> None:
+    """Refuse a firmware G-command in Custom that this parser cannot follow as an unknown
+    position: a malformed one, a CUSTOM_REFUSED_G one, a subcode of a followed command
+    other than G29's, bad words, or an X or Y beyond plate.within_bound."""
+    if CUSTOM_G_COMMAND.fullmatch(command) is None:
+        raise UnsupportedGcode(f"line {lineno}: {command!r} in {code!r} is not a command "
+                               "as OrcaSlicer writes it")
+    base, _, sub = command.partition(".")
+    if (base in CUSTOM_REFUSED_G or command == "G29.1"
+            or (sub and base in G_COMMANDS and base != "G29")):
+        raise UnsupportedGcode(f"line {lineno}: {command} changes how later moves are read, "
+                               "which this check does not follow")
+    words = _words(code, lineno)
+    cx, cy = plate.centre
+    if not plate.within_bound(words.get("X", cx), words.get("Y", cy)):
+        raise UnsupportedGcode(f"line {lineno} ({code!r}): an X or Y beyond the plate by "
+                               "more than its own size")
 
 
 def _check_bound(where, x, y, plate: Plate) -> None:

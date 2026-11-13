@@ -1,0 +1,8 @@
+artifacts/slice-runs/roadie-tol30-60x3-f64/plate_1.gcode positive E: Custom 45.800 mm (110.16 mm3), other 891.810 mm (2145.05 mm3); net E 763.210 mm (1835.73 mm3)
+   ['; filament used [mm] = 749.81', '; filament used [cm3] = 1.80', '; filament used [g] = 2.27']
+artifacts/slice-runs/roadie-tol30-60x3-slice5b/plate_1.gcode positive E: Custom 147.542 mm (354.88 mm3), other 891.810 mm (2145.05 mm3); net E 863.752 mm (2077.57 mm3)
+   ['; filament used [mm] = 741.55', '; filament used [cm3] = 1.78', '; filament used [g] = 2.25']
+artifacts/slice-runs/oddie-60x3-f64/plate_1.gcode positive E: Custom 45.800 mm (110.16 mm3), other 1480.841 mm (3561.84 mm3); net E 1447.441 mm (3481.50 mm3)
+   ['; filament used [mm] = 1434.04', '; filament used [cm3] = 3.45', '; filament used [g] = 4.35']
+artifacts/slice-runs/oddie-60x3-slice5b/plate_1.gcode positive E: Custom 147.542 mm (354.88 mm3), other 1480.841 mm (3561.84 mm3); net E 1547.983 mm (3723.34 mm3)
+   ['; filament used [mm] = 1425.78', '; filament used [cm3] = 3.43', '; filament used [g] = 4.32']

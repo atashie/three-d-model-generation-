@@ -1,0 +1,8 @@
+artifacts/slice-runs/roadie-tol30-60x3-slice5b/plate_1.gcode
+ unknown G by feature: {('G392', 'Custom'): 2, ('G380', 'Custom'): 23, ('G39.4', 'Custom'): 1, ('G29.2', 'Custom'): 2, ('G2814', 'Custom'): 1, ('G29.4', 'Custom'): 1, ('G39', 'Outer wall'): 1, ('G392', 'Outer wall'): 24, ('G39.3', 'Outer wall'): 12}
+ first model extrusion line 1399
+ Custom XY extrusions after model: [] 0
+artifacts/slice-runs/oddie-60x3-slice5b/plate_1.gcode
+ unknown G by feature: {('G392', 'Custom'): 2, ('G380', 'Custom'): 23, ('G39.4', 'Custom'): 1, ('G29.2', 'Custom'): 2, ('G2814', 'Custom'): 1, ('G29.4', 'Custom'): 1, ('G39', 'Outer wall'): 1, ('G392', 'Outer wall'): 24, ('G39.3', 'Outer wall'): 12}
+ first model extrusion line 1398
+ Custom XY extrusions after model: [] 0

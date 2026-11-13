@@ -117,8 +117,8 @@ the float64 blur of flat-3; `research/verification/2026-11-11-prusaslicer-window
 PRINTABLE means: every check this project requires passed, for this exact file, with
 these exact slicer versions and the A1 profile. To print, open `model.stl` in Bambu Studio
 and slice it there; `tdmg slice` says so. `plate_1.gcode` is for checking only: no G-code
-from `tdmg` has been printed, and until 2026-11-13 the pinned A1 profile lacked the A1's
-own start, end and filament-change G-code
+from `tdmg` has been printed or compared with Bambu Studio's own slice, and until
+2026-11-13 the pinned A1 profile lacked the A1's own start, end and filament-change G-code
 (`research/verification/2026-11-13-a1-profile-include/`). PRINTABLE is a strong "nothing
 we know how to measure is wrong", not a promise:
 
