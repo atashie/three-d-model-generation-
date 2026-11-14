@@ -710,6 +710,80 @@ def test_a_required_fail_makes_its_strip_not_certified(orca, tmp_path, monkeypat
     assert not (out / "clearance/slice/pieces/plate_1.gcode").exists()
 
 
+def _fail_on_base(monkeypatch, ids):
+    """On top of _pass_required: the base plate's F3 checks in ids FAIL."""
+    _pass_required(monkeypatch)
+    real = tdmg.slicing.f3_checks
+
+    def base_fail(gcode, stl, setup, not_measured=None):
+        checks, printed = real(gcode, stl, setup, not_measured)
+        if _body_count(_stl(stl)) == 1:
+            checks = [replace(c, status="FAIL") if c.id in ids else c for c in checks]
+        return checks, printed
+    monkeypatch.setattr(tdmg.slicing, "f3_checks", base_fail)
+
+
+def test_the_owner_accepted_connectivity_fail_gets_a_note(orca, tmp_path, monkeypatch):
+    # The owner's decision of 2026-11-14 ("Keep the FAIL, print anyway"): noted, not
+    # relabelled.
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    cl = rec["clearance"]
+    assert cl["verdict"] == "NOT CERTIFIED"
+    assert cl["certification"] == "NOT CERTIFIED: base: F3.printed_connectivity FAIL"
+    assert rec["verdicts"] == {"clearance": "NOT CERTIFIED", "skin": "PRINTABLE"}
+    note = cl["known_failures"]
+    assert note["checks"] == ["F3.printed_connectivity"]
+    assert note["parts"] == ["base"]
+    assert note["decision"] == ts.KNOWN_FAILURE_DECISION
+    assert "Keep the FAIL, print anyway" in note["decision"]
+    assert note["source"] == ts.SOURCE
+    assert "infill" in note["cause"] and "NOT CERTIFIED" in note["note"]
+    assert rec["skin"]["known_failures"] is None
+    # The G-code is still quarantined: the verdict is not changed.
+    assert (tmp_path / "strip/clearance/slice/base/plate_1.gcode.failed").is_file()
+
+
+@pytest.mark.parametrize("ids", [
+    {"F3.edge_coverage"},                                   # another check
+    {"F3.printed_connectivity", "F3.edge_coverage"},        # more than the accepted one
+])
+def test_any_other_failure_gets_no_note(orca, tmp_path, monkeypatch, ids):
+    _fail_on_base(monkeypatch, ids)
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    assert rec["clearance"]["verdict"] == "NOT CERTIFIED"
+    assert rec["clearance"]["known_failures"] is None
+
+
+def test_an_unverified_app_tree_gets_no_note(orca, tmp_path, monkeypatch):
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    rec = ts.make_strips(tmp_path / "strip", orca(), check_tree=False)
+    assert rec["clearance"]["known_failures"] is None
+    assert rec["skin"]["known_failures"] is None
+
+
+def test_known_failures_needs_every_other_required_check_to_pass():
+    def part(statuses, cert, required=("F3.printed_connectivity", "F1.finite")):
+        return {"required_checks": list(required), "certification": cert,
+                "checks": [{"id": i, "status": s} for i, s in statuses]}
+    ok = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "PASS")],
+              "NOT CERTIFIED: F3.printed_connectivity FAIL")
+    good = part([("F3.printed_connectivity", "PASS"), ("F1.finite", "PASS")], "PRINTABLE")
+    assert ts.known_failures({"a": ok, "b": good})["parts"] == ["a"]
+    assert ts.known_failures({"a": good}) is None                       # nothing failed
+    unknown = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "UNKNOWN")],
+                   "NOT CERTIFIED: F3.printed_connectivity FAIL, F1.finite UNKNOWN")
+    assert ts.known_failures({"a": unknown}) is None
+    missing = part([("F3.printed_connectivity", "FAIL")],
+                   "NOT CERTIFIED: F3.printed_connectivity FAIL, F1.finite missing")
+    assert ts.known_failures({"a": missing}) is None
+    # The record's own certification must agree (an unverified tree is named there).
+    tree = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "PASS")],
+                "NOT CERTIFIED: app tree not verified (--skip-tree-check), "
+                "F3.printed_connectivity FAIL")
+    assert ts.known_failures({"a": tree}) is None
+
+
 def test_a_failed_slice_fails_both_strips(orca, tmp_path):
     rec = ts.make_strips(tmp_path / "strip", orca(exit=-50))
     assert rec["verdicts"] == {"clearance": "NOT CERTIFIED", "skin": "NOT CERTIFIED"}
@@ -807,20 +881,27 @@ def test_a_missing_slicer_is_refused_with_nothing_written(tmp_path, monkeypatch)
 @pytest.mark.slicer
 @pytest.mark.skipif(not os.environ.get("TDMG_ORCASLICER_DIR"),
                     reason="TDMG_ORCASLICER_DIR is not set to a verified OrcaSlicer install")
-@pytest.mark.xfail(strict=True, reason=(
-    "measured 2026-11-14 on the PC (plan Task 2 amendments): the skin strip, laid out long "
-    "along y, is PRINTABLE, but the clearance base plate's F3.printed_connectivity FAILs "
-    "(infill islands at z 1.6 and 2.0 mm, not in a narrow gap between features; the "
-    "derived gap rule did not remove them); open for the controller and the owner"))
-def test_both_strips_are_printable_with_the_real_slicer(tmp_path):
+def test_the_strips_with_the_real_slicer(tmp_path):
+    # Measured 2026-11-14 on the PC (plan Task 2 amendments): the skin strip and the pieces
+    # plate are PRINTABLE; the base plate is NOT CERTIFIED by F3.printed_connectivity alone
+    # (infill islands), which the owner decided to keep and print anyway.
     out = tmp_path / "strip"
     rec = ts.make_strips(out)
-    assert rec["clearance"]["certification"] == "PRINTABLE", rec["clearance"]["certification"]
+    cl = rec["clearance"]
+    assert cl["plates"]["pieces"]["certification"] == "PRINTABLE"
+    assert cl["plates"]["base"]["certification"] == \
+        "NOT CERTIFIED: F3.printed_connectivity FAIL"
+    assert cl["certification"] == "NOT CERTIFIED: base: F3.printed_connectivity FAIL"
+    assert cl["verdict"] == "NOT CERTIFIED"
+    assert cl["known_failures"]["checks"] == ["F3.printed_connectivity"]
+    assert cl["known_failures"]["parts"] == ["base"]
     assert rec["skin"]["certification"] == "PRINTABLE", rec["skin"]["certification"]
-    for plate in rec["clearance"]["plates"].values():
+    assert rec["skin"]["known_failures"] is None
+    for name, plate in cl["plates"].items():
         by = {c["id"]: c["status"] for c in plate["checks"]}
         assert by["F6.slicer_exit"] == by["F6.layer_count"] == by["F4.body_count"] == "PASS"
-        assert plate["gcode"]["quarantined"] is False
+        assert by["F3.edge_coverage"] == by["F3.edge_overprint"] == "PASS"
+        assert plate["gcode"]["quarantined"] is (name == "base")
     face = rec["skin"]["face"]
     assert face["summary"]["changes"] is not None and face["summary"]["changes"] > 0
     assert rec["slicer"]["app_tree_verified"] is True

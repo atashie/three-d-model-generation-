@@ -374,7 +374,26 @@ task.
     z 1.6 and 2.0; 15 layers, 1372 s, 6.12 g). The pieces plate is PRINTABLE (3 layers,
     490 s, 0.47 g).
   - **Open, for the controller and the owner:** the clearance base plate. The
-    real-slicer test stays `xfail(strict=True)`, with the reason updated.
+    real-slicer test stays `xfail(strict=True)`, with the reason updated. (Decided the
+    same day: see "Owner decision: keep the FAIL, print anyway" below.)
+- **Owner decision: keep the FAIL, print anyway (2026-11-14).** The owner's words: "Keep
+  the FAIL, print anyway".
+  - The clearance base plate stays NOT CERTIFIED and is printed anyway. The checks do not
+    change, and neither does the layout: the derived-gap rule (2.19 mm, above) was tried
+    and not kept.
+  - `strip.json` gives each strip a `known_failures` entry (`known_failures` in
+    `tdmg.calibration_strip`). It is a note only when, over the strip's parts, the only
+    required check that is not PASS is `F3.printed_connectivity` (FAIL), no required check
+    is missing, and each part's certification is PRINTABLE or exactly "NOT CERTIFIED:
+    F3.printed_connectivity FAIL" (so an unverified app tree gets no note). Otherwise it
+    is null.
+  - The note cites this decision and this plan. It gives the cause: the slicer's infill
+    fragments inside the part, while the outer shape, edge and hole checks pass. The
+    verdict stays NOT CERTIFIED, and the G-code stays quarantined.
+  - The real-slicer test now expects exactly this: the skin strip and the pieces plate
+    PRINTABLE, the base plate "NOT CERTIFIED: F3.printed_connectivity FAIL", with the
+    note on the clearance strip and none on the skin strip. It passed on the PC on
+    2026-11-14 (pinned OrcaSlicer 2.5.0).
 - **How the pieces are told apart (controller decision, 2026-11-14):** by plate order
   only, as the Task 2 amendment says. Task 3's form explains it to the owner.
 

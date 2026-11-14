@@ -592,6 +592,56 @@ REVIEW = (
     "required check FAIL: do not print it.")
 
 
+# The owner's decision of 2026-11-14 on the clearance base plate (plan Task 2 amendment,
+# "Owner decision: keep the FAIL, print anyway"). The checks do not change and the verdict
+# stays NOT CERTIFIED; strip.json carries a note, only for exactly this failure.
+KNOWN_FAILURE_CHECK = "F3.printed_connectivity"
+KNOWN_FAILURE_DECISION = (
+    "the owner's decision of 2026-11-14 (\"Keep the FAIL, print anyway\"): a strip whose "
+    "only failing required check is F3.printed_connectivity, with every other required "
+    "check PASS, stays NOT CERTIFIED and is printed anyway; the checks do not change")
+KNOWN_FAILURE_CAUSE = (
+    "the slicer's infill fragments inside the part: on a few layers a piece of sparse or "
+    "solid infill, clipped where two fill regions meet, does not touch the other beads in "
+    "the bead model, so the layer has one printed part more than the model section. The "
+    "outer shape, edge and hole checks pass (F3.edge_coverage, F3.edge_overprint, and the "
+    "same holes printed as modelled)")
+KNOWN_FAILURE_NOTE = ("The verdict stays NOT CERTIFIED and the G-code stays quarantined; "
+                      "print from Bambu Studio as for every strip.")
+
+
+def known_failures(parts: dict[str, dict]) -> dict | None:
+    """The owner-accepted failure note for one strip, or None.
+
+    parts: part name -> its record (required_checks, checks as dicts, certification).
+    A note only when, over all parts, the required checks that are not PASS are exactly
+    KNOWN_FAILURE_CHECK with status FAIL (at least once), every required check is present,
+    and each part's own certification is PRINTABLE or exactly "NOT CERTIFIED:
+    <KNOWN_FAILURE_CHECK> FAIL" (so an unverified app tree, or anything else the record
+    names, gets no note). It never changes a verdict.
+    """
+    only = f"NOT CERTIFIED: {KNOWN_FAILURE_CHECK} FAIL"
+    failing = []
+    for name, part in parts.items():
+        required = set(part["required_checks"])
+        checks = part["checks"]
+        if required - {c["id"] for c in checks}:
+            return None
+        bad = {(c["id"], c["status"]) for c in checks
+               if c["id"] in required and c["status"] != "PASS"}
+        if bad - {(KNOWN_FAILURE_CHECK, "FAIL")}:
+            return None
+        if part["certification"] != ("PRINTABLE" if not bad else only):
+            return None
+        if bad:
+            failing.append(name)
+    if not failing:
+        return None
+    return {"checks": [KNOWN_FAILURE_CHECK], "parts": failing,
+            "decision": KNOWN_FAILURE_DECISION, "source": SOURCE,
+            "cause": KNOWN_FAILURE_CAUSE, "note": KNOWN_FAILURE_NOTE}
+
+
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -771,6 +821,7 @@ def _clearance(ctx, strip: ClearanceStrip, printer: PrinterProfile, rules: dict,
     section = {
         "verdict": verdict, "certification": cert,
         "certification_note": STRIP_PRINTABLE_MEANING if verdict == "PRINTABLE" else None,
+        "known_failures": known_failures(plates),
         "gaps_mm": list(strip.gaps_mm), "pockets": pockets,
         "pieces_layout": ("each piece where glue_geometry made it, in its pocket's place: "
                           "left to right in gap order, at the pocket pitch "
@@ -858,6 +909,7 @@ def _skin(ctx, strip: SkinStrip, printer: PrinterProfile, rules: dict, geometry_
     section = {
         "verdict": verdict, "certification": cert,
         "certification_note": STRIP_PRINTABLE_MEANING if verdict == "PRINTABLE" else None,
+        "known_failures": known_failures({face["folder"]: face}),
         "depths_mm": list(strip.depths_mm), "patches": _patches(strip),
         "palette": [{"index": i, "hex": h,
                      "role": "base" if i == SKIN_BASE_INDEX else "patches"}
