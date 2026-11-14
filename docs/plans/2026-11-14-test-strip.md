@@ -27,8 +27,8 @@ the strips. They are not in this plan.
 `tdmg.color_checks`, `tdmg.threemf`, `tdmg.orca_input`, `tdmg.slicing`,
 `tdmg.color_slicing` and `tdmg.color_gcode`. No new dependency.
 
-**Status:** written 2026-11-14 from the owner's answers on 2026-11-14 (below). It is not
-yet approved.
+**Status:** written 2026-11-14 from the owner's answers on 2026-11-14 (below). The owner approved
+it on 2026-11-14 ("build it").
 
 **Format:** the repo's plan style: decisions with evidence, then tasks. Every task is
 test-first and gets subagent spec and quality reviews. The Codex review is the last code
