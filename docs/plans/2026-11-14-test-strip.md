@@ -284,6 +284,99 @@ task.
       flush 1125 mm³, prime tower 769 mm³.
   - **Open, for the controller and the owner:** the real-slicer test asserts PRINTABLE.
     It is marked `xfail(strict=True)` with this reason until the two causes are decided.
+- **Amended after the real-slicer run (2026-11-14), the skin strip is laid out long
+  along y (controller decision).**
+  - **Cause (found in the OrcaSlicer 2.5.0 source, and seen in a measured run):**
+    - The CLI arranges a model it loads ("before arrange, need_arrange=1" in the log).
+    - With no `--align_to_y_axis` option, it sets `align_to_y_axis` when the machine's
+      `printer_structure` is `i3` (`src/OrcaSlicer.cpp` at tag v2.5.0, the two
+      "arrange_cfg.align_to_y_axis = (printer_structure_opt->value ==
+      PrinterStructure::psI3)" lines). The A1's flattened `machine.json` has
+      `"printer_structure": "i3"`.
+    - `update_selected_items_axis_align` (`src/libslic3r/Arrange.cpp`, v2.5.0) then
+      turns each item so that the principal axis of its second moments of area lies
+      along y. It does not turn an item whose two second moments have a ratio above
+      0.66. For a rectangle w × h the ratio is (min / max)². For 118 × 26.5 mm that is
+      0.05, and the turn is +90°.
+    - The measured run agrees: the log places the item at translation (141.25, 69), and
+      the plastic spans bed x 115 to 141 and y 69 to 187.
+    - A rectangle longer in y than in x has its principal axis along y already, so
+      OrcaSlicer turns it by 0.
+  - **Change:**
+    - `SKIN_ALONG_Y = True`: the skin strip is its x layout turned a quarter turn
+      counterclockwise (x = H − v, y = u). It is 26.5 × 118 mm, patch 1 at the front
+      (smallest y), and the label holes to the right of their patches.
+    - `skin_layout` refuses a layout that is not longer in y than in x (StripError).
+    - No layout number changes. The clearance strip stays long along x: its plates are
+      R1 parts, which are judged in any quarter turn.
+    - The algorithm label is now `strip-2`. The geometry identity records
+      `skin_along_y`.
+  - **Real-slicer verdict (2026-11-14, on the PC; pinned OrcaSlicer 2.5.0, app tree
+    checked): the skin strip is PRINTABLE.**
+    - Every check PASSes, the warnings included. Only the information checks and
+      `F6.portability` are UNKNOWN.
+    - The plastic spans bed x 114.75 to 141.25 and y 69 to 187 mm: unturned, centred on
+      (128, 128).
+    - 15 layers and 15 color changes. 2727 s (G-code header: model 39 m 12 s, total
+      45 m 27 s). 10.29 g (8.51 g black and 1.78 g white). Flush 1125 mm³, prime tower
+      769 mm³.
+- **Amended after the real-slicer run (2026-11-14), the clearance base plate's islands
+  are mapped. The layout is not changed.**
+  - **Where they are.** R1 found the plate turned 90°, so model x = 47.5 + (bed y − 128)
+    and model y = 12.25 − (bed x − 128).
+    - **z 1.6 mm:** one sparse-infill path of five segments, 1.63 mm², at model x 13.2
+      to 15.3 and y 5.2 to 7.3. That is right of pocket 1's label hole (centre (10, 6.5),
+      edge near x 11) and below pocket 1's lower right corner (15, 9.5), about 2.2 mm
+      from each.
+      - z 1.6 is the first of the five top shell layers (`top_shell_layers` 5) under the
+        pocket floors at z 2.4. On it an internal bridge covers most of the plate above
+        the label band, reaching well past the pockets.
+      - The sparse infill left in the label band is cut into pieces by the bridge
+        region and the holes' walls.
+      - This piece touches nothing. Its nearest bead is a bridge line 0.0032 mm away.
+    - **z 2.0 mm:** one internal-solid-infill dot of 0.27 mm² (one closed path about
+      0.1 mm across) at model x 64.1 to 64.7 and y 19.9 to 20.4.
+      - That is at the corner of the solid-infill region under pocket 5's floor (the
+        pocket plus about 0.8 mm), just outside the pocket's top left corner (65, 19.5).
+      - It is 0.097 mm from that region's nearest solid-infill line.
+      - A plot of the layer shows similar small pieces at corners of pockets 1, 2 and
+        4. They touch the rest (the layer has only the one island).
+  - **Why: not a narrow gap between features.**
+    - The pinned process profile has `wall_loops` 2, outer wall 0.42 mm, inner wall
+      0.45 mm, sparse infill 0.45 mm (15 %, grid), internal solid infill 0.42 mm and
+      `minimum_sparse_infill_area` 15 mm².
+    - Neither island lies between two walls. Below the pocket floor there is no wall
+      around a pocket. Both islands are pieces of infill clipped where two fill regions
+      meet, away from any wall: sparse against bridge, and solid against sparse.
+  - **Artefact or real part:**
+    - **z 1.6:** most likely an artefact of the bead model. The gap is 0.0032 mm. The
+      bead model is recorded to leave gaps of 0 to about 0.03 mm between beads that
+      meet edge to edge (`research/verification/2026-11-13-color-slicing/README.md`,
+      "Task 5 cross-check").
+    - **z 2.0:** the gap is 0.097 mm, more than that. By the bead model it is a separate
+      dab of 0.27 mm².
+  - **The suggested rule, tested once with the real slicer and not kept:**
+    - The rule: the solid between two holes, and between a hole and a pocket or the
+      edge, is at least 2 × (outer wall + (`wall_loops` − 1) × inner wall) + one
+      sparse line = 2 × 0.87 + 0.45 = 2.19 mm. The values were read from the pinned
+      flattened profile.
+    - Applied as `LABEL_GAP_MM` 2.19 and `HOLE_PITCH_MM` 2.0 + 2.19 = 4.19 (a scratch
+      run; the strip became 95 × 25.57 mm, thinnest wall 2.18 mm).
+    - Result: the z 1.6 island is gone. But z 2.0 has an island again: 0.41 mm² of
+      internal solid infill at model x 68.2 to 68.8 and y 5.6 to 6.2, among pocket 5's
+      label holes, 0.0175 mm from a hole's inner wall. NOT CERTIFIED (1 of 15 layers),
+      1387 s, 6.39 g.
+    - The rule did not remove the islands, and the islands are not in the gaps it
+      governs. So it was not kept, and no other numbers were tried. The layout
+      constants are unchanged.
+  - **Real-slicer verdict with the committed code (2026-11-14):** clearance NOT
+    CERTIFIED. The base plate is as measured before (`F3.printed_connectivity` FAIL at
+    z 1.6 and 2.0; 15 layers, 1372 s, 6.12 g). The pieces plate is PRINTABLE (3 layers,
+    490 s, 0.47 g).
+  - **Open, for the controller and the owner:** the clearance base plate. The
+    real-slicer test stays `xfail(strict=True)`, with the reason updated.
+- **How the pieces are told apart (controller decision, 2026-11-14):** by plate order
+  only, as the Task 2 amendment says. Task 3's form explains it to the owner.
 
 ### Task 3: command, owner form, docs
 

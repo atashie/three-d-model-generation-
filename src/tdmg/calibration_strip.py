@@ -36,7 +36,7 @@ slices and writes both strips:
   F5.triangles and F2.export_3mf_matches_bodies, and the per-body R1 mesh checks;
   sliced face up by tdmg.color_slicing.slice_face (F2.orca_input_matches_bodies and the
   step 4 color checks) in skin/slice/;
-- strip.json last (schema tdmg.strip/1, algorithm strip-1).
+- strip.json last (schema tdmg.strip/1, algorithm strip-2).
 The required sets (PLATE_REQUIRED; SKIN_INHERITED_REQUIRED and slice_face's own), and
 why each check that is not required is not (not_required_reasons), are in the plan's
 Task 2 amendments. PrusaSlicer is never run for a strip: F6.portability is UNKNOWN and
@@ -139,6 +139,11 @@ HOLES_PER_ROW = 3
 HOLE_PITCH_MM = 3.5
 LABEL_GAP_MM = 2.0
 LABEL_ROWS = 2  # rows below every square: ceil(max holes / HOLES_PER_ROW), both strips
+# The skin strip runs long along y: its x layout turned a quarter turn counterclockwise,
+# patch 1 at the front (smallest y), label holes to the right. The pinned OrcaSlicer turns
+# a part long along x on the A1 (skin_layout says why; plan Task 2 amendment). The
+# clearance strip stays along x: its plates are R1 parts, judged in any quarter turn.
+SKIN_ALONG_Y = True
 # Each hole is a regular polygon of HOLE_SEGMENTS sides, the circle tdmg.flat's buffers
 # draw (4 x QUAD_SEGS per circle). An approximation setting, not a rule.
 HOLE_SEGMENTS = 4 * QUAD_SEGS
@@ -179,10 +184,10 @@ class Layout:
     """One strip's rectangles and holes in model mm, before the grid.
 
     width_mm, height_mm: the strip, [0, width] x [0, height]. squares: the pockets or
-    patches, left to right. hole_centres, holes: per square, its label holes (centres and
-    polygons). hole_apothem_mm: each hole polygon's inscribed radius. silhouette: the
-    strip minus every hole. grid_mm: G, storage_grid_mm of the strip's largest
-    coordinate: the grid color_cells puts it on.
+    patches in order (left to right, or front to back for the skin strip). hole_centres,
+    holes: per square, its label holes (centres and polygons). hole_apothem_mm: each hole
+    polygon's inscribed radius. silhouette: the strip minus every hole. grid_mm: G,
+    storage_grid_mm of the strip's largest coordinate: the grid color_cells puts it on.
     """
 
     width_mm: float
@@ -214,16 +219,27 @@ def min_wall_mm(layout: Layout) -> float:
     return min(walls)
 
 
-def _layout(side: float, spacing: float, counts: tuple[int, ...], rules: dict) -> Layout:
+def _layout(side: float, spacing: float, counts: tuple[int, ...], rules: dict,
+            along_y: bool = False) -> Layout:
+    """The strip in its own frame (u, v): squares left to right along u, label holes
+    below them (smaller v). along_y False: x = u, y = v. along_y True: the same layout
+    turned a quarter turn counterclockwise, x = H - v, y = u (H the strip's v extent), so
+    the squares run front to back along y and the holes sit to the right (larger x) of
+    their squares."""
     if -(-max(counts) // HOLES_PER_ROW) > LABEL_ROWS:
         raise StripError(f"{max(counts)} holes do not fit in {LABEL_ROWS} rows of "
                          f"{HOLES_PER_ROW}")
     n = len(counts)
-    width = 2 * EDGE_MARGIN_MM + n * side + (n - 1) * spacing
+    length = 2 * EDGE_MARGIN_MM + n * side + (n - 1) * spacing
     hole_d = float(rules[HOLE_RULE].default)
     r = hole_d / 2
     below = LABEL_GAP_MM + 2 * r + (LABEL_ROWS - 1) * HOLE_PITCH_MM + LABEL_GAP_MM
-    height = below + side + EDGE_MARGIN_MM
+    breadth = below + side + EDGE_MARGIN_MM
+    width, height = (breadth, length) if along_y else (length, breadth)
+
+    def place(u: float, v: float) -> tuple[float, float]:
+        return (breadth - v, u) if along_y else (u, v)
+
     grid = storage_grid_mm(max(width, height))
     # Snap rounding moves every boundary point by at most snap_move_mm(G), and float64
     # rounding each vertex by at most vertex_dist; the apothem adds both, so the gridded
@@ -231,15 +247,16 @@ def _layout(side: float, spacing: float, counts: tuple[int, ...], rules: dict) -
     apothem = r + snap_move_mm(grid) + vertex_dist([shapely.box(0, 0, width, height)])
     squares, centres, holes = [], [], []
     for i, count in enumerate(counts):
-        x0 = EDGE_MARGIN_MM + i * (side + spacing)
-        y0 = below
-        squares.append(shapely.box(x0, y0, x0 + side, y0 + side))
-        mid = x0 + side / 2
+        u0 = EDGE_MARGIN_MM + i * (side + spacing)
+        v0 = below
+        (xa, ya), (xb, yb) = place(u0, v0), place(u0 + side, v0 + side)
+        squares.append(shapely.box(min(xa, xb), min(ya, yb), max(xa, xb), max(ya, yb)))
+        mid = u0 + side / 2
         mine = []
         for row in range(LABEL_ROWS):
             k = max(0, min(HOLES_PER_ROW, count - row * HOLES_PER_ROW))
-            y = y0 - LABEL_GAP_MM - r - row * HOLE_PITCH_MM
-            mine += [(mid + (j - (k - 1) / 2) * HOLE_PITCH_MM, y) for j in range(k)]
+            v = v0 - LABEL_GAP_MM - r - row * HOLE_PITCH_MM
+            mine += [place(mid + (j - (k - 1) / 2) * HOLE_PITCH_MM, v) for j in range(k)]
         centres.append(tuple(mine))
         holes.append(tuple(_hole(c, apothem) for c in mine))
     all_holes = [h for hs in holes for h in hs]
@@ -265,8 +282,25 @@ def clearance_layout(*, rules: dict) -> Layout:
 
 
 def skin_layout(*, rules: dict) -> Layout:
-    """The skin strip's layout (Decision 2)."""
-    return _layout(PATCH_SIDE_MM, PATCH_SPACING_MM, PATCH_HOLES, rules)
+    """The skin strip's layout (Decision 2), long along y (SKIN_ALONG_Y).
+
+    Why along y (plan Task 2 amendment, "The skin strip is laid out long along y"): the
+    pinned OrcaSlicer 2.5.0 arranges a model it loads, and on a printer whose
+    printer_structure is i3 (the A1's flattened machine.json) it sets align_to_y_axis
+    (src/OrcaSlicer.cpp) and turns each item so that its principal axis of the second
+    moments of area lies along y (update_selected_items_axis_align in
+    src/libslic3r/Arrange.cpp), unless the ratio of the two second moments exceeds 0.66.
+    The color checks place the model unturned (color_gcode.PLACEMENT_ANGLE), so a strip
+    long along x is printed turned and FAILs them. A rectangle longer in y than in x is
+    already aligned: OrcaSlicer turns it by 0. StripError if the layout is not longer in
+    y than in x.
+    """
+    layout = _layout(PATCH_SIDE_MM, PATCH_SPACING_MM, PATCH_HOLES, rules,
+                     along_y=SKIN_ALONG_Y)
+    if not layout.height_mm > layout.width_mm:
+        raise StripError(f"the skin strip is {layout.width_mm:g} x {layout.height_mm:g} mm; "
+                         "it must be longer in y than in x, or OrcaSlicer turns it")
+    return layout
 
 
 # --- inputs ------------------------------------------------------------------------------
@@ -438,7 +472,7 @@ def clearance_strip(gaps_mm, *, rules: dict,
 class SkinStrip:
     """depths_mm: the five depths, patch 2 first. layout, cells: the strip and its cells
     (white patches labelled SKIN_WHITE_INDEX, the rest SKIN_BASE_INDEX). patches: per
-    cell, its patch number (1 to 7, left to right) for white cells, 0 for black cells
+    cell, its patch number (1 to 7, front to back) for white cells, 0 for black cells
     (patch 1 is black only, so it has none of its own). base: the black body. white: the
     white body (name f"color-{SKIN_WHITE_INDEX}")."""
 
@@ -506,8 +540,9 @@ def skin_strip(depths_mm, *, rules: dict) -> SkinStrip:
 
 RECORD_SCHEMA = "tdmg.strip/1"
 # The version of what strip_id names (plan Decision 4), bumped whenever the verdict for
-# the same request can change. strip-1 (2026-11-14): plan Task 2.
-ALGORITHM = "strip-1"
+# the same request can change. strip-1 (2026-11-14): plan Task 2. strip-2 (2026-11-14):
+# the skin strip laid out long along y (plan Task 2 amendment).
+ALGORITHM = "strip-2"
 SOURCE = "docs/plans/2026-11-14-test-strip.md"
 OWNER_SOURCE = "the owner's answers of 2026-11-14 (the plan's \"What is known\")"
 RECORD_NAME = "strip.json"
@@ -636,7 +671,8 @@ def geometry_identity(clearance: ClearanceStrip, skin: SkinStrip, rules: dict,
                    "patch_spacing_mm": PATCH_SPACING_MM, "pocket_holes": list(POCKET_HOLES),
                    "patch_holes": list(PATCH_HOLES), "holes_per_row": HOLES_PER_ROW,
                    "hole_pitch_mm": HOLE_PITCH_MM, "label_gap_mm": LABEL_GAP_MM,
-                   "label_rows": LABEL_ROWS, "hole_segments": HOLE_SEGMENTS},
+                   "label_rows": LABEL_ROWS, "hole_segments": HOLE_SEGMENTS,
+                   "skin_along_y": SKIN_ALONG_Y},
         "palette": [{"index": i, "hex": h} for i, h in SKIN_PALETTE],
         "printer": printer.id,
         "rules": {r: rules[r].default for r in (SKIN_RULE, MIN_SIDE_RULE, WALL_RULE,

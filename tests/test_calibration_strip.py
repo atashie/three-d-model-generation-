@@ -117,10 +117,40 @@ def test_layout_walls_and_holes_meet_the_rules(make):
         for (x, y), hole in zip(centres, holes, strict=True):
             # The circle of the rule's diameter at the centre lies inside the hole.
             assert shapely.distance(shapely.Point(x, y), hole.exterior) >= HOLE / 2
-    # Every square is EDGE_MARGIN_MM from the strip's left, right and top edges.
-    minx, _, maxx, maxy = shapely.union_all(layout.squares).bounds
-    assert (minx, maxx, maxy) == (ts.EDGE_MARGIN_MM, layout.width_mm - ts.EDGE_MARGIN_MM,
-                                  layout.height_mm - ts.EDGE_MARGIN_MM)
+    minx, miny, maxx, maxy = shapely.union_all(layout.squares).bounds
+    if make is clearance_layout:
+        # Every square is EDGE_MARGIN_MM from the strip's left, right and top edges.
+        assert (minx, maxx, maxy) == (ts.EDGE_MARGIN_MM, layout.width_mm - ts.EDGE_MARGIN_MM,
+                                      layout.height_mm - ts.EDGE_MARGIN_MM)
+    else:
+        # Turned a quarter turn counterclockwise: from the front, back and left edges.
+        assert (miny, maxy, minx) == (ts.EDGE_MARGIN_MM, layout.height_mm - ts.EDGE_MARGIN_MM,
+                                      ts.EDGE_MARGIN_MM)
+
+
+def test_the_skin_strip_is_long_along_y_and_the_clearance_strip_along_x():
+    # Plan Task 2 amendment: the pinned OrcaSlicer turns a part long along x on the A1
+    # (align_to_y_axis), and the color checks place the model unturned.
+    skin = skin_layout(rules=RULES)
+    clearance = clearance_layout(rules=RULES)
+    assert skin.height_mm > skin.width_mm
+    assert clearance.width_mm > clearance.height_mm
+    # The same strip, turned: the skin strip's extents are its x layout's, swapped.
+    n = len(ts.PATCH_HOLES)
+    length = 2 * ts.EDGE_MARGIN_MM + n * ts.PATCH_SIDE_MM + (n - 1) * ts.PATCH_SPACING_MM
+    assert skin.height_mm == length
+    # The same label band and margin as the clearance strip, with the larger square.
+    assert skin.width_mm == clearance.height_mm - ts.POCKET_SIDE_MM + ts.PATCH_SIDE_MM
+    # Patches front to back: each square's y above the previous one's, x the same.
+    ys = [sq.bounds[1] for sq in skin.squares]
+    assert ys == sorted(ys) and len(set(ys)) == n
+    assert len({sq.bounds[0] for sq in skin.squares}) == 1
+
+
+def test_a_skin_layout_long_along_x_is_refused(monkeypatch):
+    monkeypatch.setattr(ts, "SKIN_ALONG_Y", False)
+    with pytest.raises(StripError, match="longer in y"):
+        skin_layout(rules=RULES)
 
 
 def test_a_rule_that_the_layout_cannot_meet_is_refused():
@@ -264,15 +294,17 @@ def test_a_glue_call_with_a_pinch_fix_is_refused(monkeypatch):
         clearance_strip(OWNER_GAPS_MM, rules=RULES)
 
 
-def label_holes(silhouette, squares):
-    """Per square, the holes of the gridded silhouette below it (centroid x inside the
-    square's x span, centroid y below it)."""
+def label_holes(silhouette, squares, along_y=False):
+    """Per square, the holes of the gridded silhouette beside it: below it (centroid x
+    inside the square's x span, centroid y below it), or with along_y to its right
+    (centroid y inside the square's y span, centroid x right of it)."""
     holes = [shapely.Polygon(r) for r in silhouette.interiors]
     out = []
     for sq in squares:
-        x0, y0, x1, _ = sq.bounds
+        x0, y0, x1, y1 = sq.bounds
         out.append([h for h in holes
-                    if x0 <= h.centroid.x <= x1 and h.centroid.y < y0])
+                    if ((y0 <= h.centroid.y <= y1 and h.centroid.x > x1) if along_y
+                        else (x0 <= h.centroid.x <= x1 and h.centroid.y < y0))])
     return holes, out
 
 
@@ -382,8 +414,9 @@ def test_skin_partition_passes(skin):
 
 def test_skin_holes_walls_and_meshes(skin):
     s = skin.cells.silhouette
-    _, below = label_holes(s, skin.layout.squares)
-    assert [len(b) for b in below] == [0, 1, 2, 3, 4, 5, 0]
+    holes, beside = label_holes(s, skin.layout.squares, along_y=True)
+    assert [len(b) for b in beside] == [0, 1, 2, 3, 4, 5, 0]
+    assert len(holes) == 15  # each hole beside exactly one patch
     assert gridded_walls(s, skin.layout.squares) >= WALL
     assert gridded_hole_radius(s, skin.layout) >= HOLE / 2
     assert_closed(skin.base)
@@ -548,7 +581,7 @@ def test_make_strips_writes_the_folder_and_the_record(fake, orca, tmp_path):
     rec = ts.make_strips(out, orca())
     assert _files(out) == FILES | {"strip.json"}
     assert json.loads((out / "strip.json").read_bytes()) == rec
-    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-1")
+    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-2")
     assert rec["source"] == "docs/plans/2026-11-14-test-strip.md"
     assert (Path(__file__).parents[1] / rec["source"]).is_file()
     assert rec["outputs"] == {n: _sha((out / n).read_bytes()) for n in FILES}
@@ -775,10 +808,10 @@ def test_a_missing_slicer_is_refused_with_nothing_written(tmp_path, monkeypatch)
 @pytest.mark.skipif(not os.environ.get("TDMG_ORCASLICER_DIR"),
                     reason="TDMG_ORCASLICER_DIR is not set to a verified OrcaSlicer install")
 @pytest.mark.xfail(strict=True, reason=(
-    "measured 2026-11-14 on the PC (plan Task 2 amendment, 'Measured with the real "
-    "slicer'): the base plate's F3.printed_connectivity FAILs (an infill island at z 1.6 "
-    "and 2.0 mm), and OrcaSlicer turns the skin strip a quarter turn, so its fixed-placement "
-    "color checks FAIL; open for the controller and the owner"))
+    "measured 2026-11-14 on the PC (plan Task 2 amendments): the skin strip, laid out long "
+    "along y, is PRINTABLE, but the clearance base plate's F3.printed_connectivity FAILs "
+    "(infill islands at z 1.6 and 2.0 mm, not in a narrow gap between features; the "
+    "derived gap rule did not remove them); open for the controller and the owner"))
 def test_both_strips_are_printable_with_the_real_slicer(tmp_path):
     out = tmp_path / "strip"
     rec = ts.make_strips(out)
