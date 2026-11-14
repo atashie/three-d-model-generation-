@@ -227,6 +227,15 @@ def test_a_gap_that_leaves_a_leftover_is_refused():
     assert "1.9" in str(info.value)
 
 
+def test_a_gap_that_folds_every_piece_is_refused():
+    # At 4.5 mm the shrunk piece (1 mm a side) is below color.glue.min_piece_side_mm, so
+    # glue_geometry folds every pocket into the base: no pockets, no pieces, no leftover.
+    gaps = (0.1, 0.2, 0.3, 0.4, 0.5, 4.5)
+    with pytest.raises(StripError, match="color.glue.min_piece_side_mm") as info:
+        clearance_strip(gaps, rules=RULES)
+    assert "4.5" in str(info.value)
+
+
 def test_a_glue_call_with_a_pinch_fix_is_refused(monkeypatch):
     real = ts.glue_geometry
 

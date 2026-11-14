@@ -82,7 +82,10 @@ task.
        - **Amended in Task 1 review (2026-11-14):** this holds only when no call gives
          leftover to the base (at a large gap, the pocket's corners become base) and no
          rebuild joins a pinch. The code refuses any call with leftover or a pinch fix,
-         with that as the stated cause, before the identity check.
+         with that as the stated cause, before the identity check. It also refuses any
+         call that does not give exactly one piece in each of the six pockets (a gap so
+         large that the piece is below `color.glue.min_piece_side_mm` folds it, pocket
+         and all, into the base), naming that rule and the gap.
    - **Why squares:** a square has straight edges and sharp corners. Real pockets have
      both. Curved edges are not tested. This is a stated limit, not a claim.
    - **Gated by:** `F4.glue_fit` (the gap of each piece against its own pocket) and

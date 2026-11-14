@@ -345,6 +345,13 @@ def clearance_strip(gaps_mm, *, rules: dict,
             raise StripError(f"the glue geometry at gap {gap:g} mm was refused: {e}") \
                 from None
         _no_leftover(glue, gap)
+        if (len(glue.pockets) != GAP_COUNT
+                or sorted(p.pocket for p in glue.pieces) != [p.number for p in glue.pockets]):
+            raise StripError(
+                f"at gap {gap:g} mm the glue route gives {len(glue.pockets)} pockets and "
+                f"{len(glue.pieces)} pieces, not one piece in each of {GAP_COUNT} pockets: "
+                f"a piece below rule {MIN_SIDE_RULE} ({float(rules[MIN_SIDE_RULE].default):g}"
+                f" mm a side) is folded into the base with its pocket")
         if glues:
             _same_base(glues[0], glue, gap)
         slots = [_slot(p.polygon, layout.squares) for p in glue.pockets]
