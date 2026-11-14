@@ -175,7 +175,8 @@ run. It builds, gates and slices two strips with the owner's values (2026-11-14)
   loose") and one per patch ("dark shows", "slight shadow", "looks like full white").
 - **Exit codes:** 0 when no required check FAILed, except the owner-accepted
   `F3.printed_connectivity` failure of the clearance base plate (see the failure table);
-  1 for any other required FAIL; 2 for a setup error, with nothing written.
+  1 for any other required FAIL; 2 for an input or setup error, with nothing written, or
+  an I/O failure while writing (such a folder is incomplete; do not use it).
 
 **On this PC** (2026-11-14, pinned OrcaSlicer 2.5.0, app tree checked; numbers are the
 slicer's estimates): the skin strip is PRINTABLE (15 color changes, 2727 s, 10.29 g). The
@@ -223,7 +224,7 @@ source.
 | A color is missing from the glue version | All its regions are too small for a piece, so they were folded | A warning in the record and the command's output; `parts.png` lists the color as "no pieces (all folded)" | Print larger, or use the AMS version |
 | No glue version at all | The plan keeps a drawn outline | The command prints "glue: not built" with the reason | Make the plan with `outlines: drop` |
 | A glue piece does not drop in, or sits loose | The printer's error differs from `color.glue.clearance_mm` | `F4.glue_fit` checks the model only, not the print | Print the clearance strip (`tdmg strip`) and record each fit in `results-template.md`; the rule is then set from it (plan Decision 5) |
-| The clearance strip is NOT CERTIFIED | On the base plate, a piece of infill inside the part does not touch the other beads in the bead model (2 of 15 layers, measured 2026-11-14); the outer edge and the holes print as modelled | `F3.printed_connectivity` (required); the record's `known_failures` note gives this run's layers | Owner decision (2026-11-14): keep the FAIL and print it anyway. `tdmg strip` exits 0 for this failure alone; any other required FAIL exits 1 |
+| The clearance strip is NOT CERTIFIED | On the base plate, a piece of infill inside the part does not touch the other beads in the bead model (2 of 15 layers, measured 2026-11-14); the outer edge and the holes are sliced as modelled | `F3.printed_connectivity` (required); the record's `known_failures` note gives this run's layers | Owner decision (2026-11-14): keep the FAIL and print it anyway. `tdmg strip` exits 0 for this failure alone; any other required FAIL exits 1 |
 | A white patch shows the black below | The skin is too thin to hide a dark base | None in the model; the owner's eye on the skin strip | Print the skin strip and record each patch in `results-template.md` |
 | Thin outline lines missing in the print | A kept outline line is narrower than the slicer prints; the slicer skips it | That color's `F3.edge_coverage` in `tdmg slice` (a warning, not blocking) | Accept it (the outer band prints), make the plan with a wider `outline_width_mm`, or use `outlines: drop` |
 | A color on the wrong body, or the print turned | The slicer input or the tool order is wrong | `F6.tool_placement` and `F6.filaments_used` (required) | None needed: the face is NOT CERTIFIED |

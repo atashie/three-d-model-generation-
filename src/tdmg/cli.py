@@ -16,12 +16,14 @@ from tdmg import __version__
 from tdmg.calibration_strip import (
     BASE_STL,
     CLEARANCE_DIR,
-    KNOWN_FAILURE_SHORT,
+    KNOWN_FAILURE_DATE,
+    KNOWN_FAILURE_PLAIN,
     MODEL_3MF,
     PIECES_STL,
     SKIN_COLOR_NAMES,
     SKIN_DIR,
     TEMPLATE_NAME,
+    StripError,
     blocking_failures,
     make_strips,
 )
@@ -535,7 +537,26 @@ def slice_(
 
 
 def _time(seconds) -> str:
-    return "?" if seconds is None else f"{seconds:.0f} s ({seconds / 60:.0f} min)"
+    return "?" if seconds is None else f"{seconds / 60:.0f} min"
+
+
+def _accepted_lines(note: dict) -> list[str]:
+    """One plain line per part with the owner-accepted failure, from the note's this_run
+    (the full cause and this_run_text stay in strip.json; review P1)."""
+    checks = _count_words(len(note["checks"]), "check")
+    lines = []
+    for run in note["this_run"]:
+        zs = ", ".join(f"{m['z_mm']:g}" for m in run["mismatched"])
+        lines.append(f"the {run['part']} plate fails {checks}: {KNOWN_FAILURE_PLAIN}, on "
+                     f"{run['layers_mismatched']} of {run['layers']} layers (z {zs} mm); you "
+                     f"decided on {KNOWN_FAILURE_DATE} to print it anyway. Details: "
+                     f"{STRIP_RECORD}")
+    return lines
+
+
+def _count_words(n: int, noun: str) -> str:
+    word = {1: "one", 2: "two", 3: "three"}.get(n, str(n))
+    return f"{word} {noun}{'' if n == 1 else 's'}"
 
 
 def _strip_ok(section: dict) -> bool:
@@ -552,24 +573,19 @@ def _strip_output(rec: dict, out: Path) -> list[tuple[str, str]]:
         s = plate["summary"]
         layers = "?" if s["layer_count"] is None else str(s["layer_count"])
         typer.echo(f"  {name} plate: {plate['certification']} - {layers} layers, time "
-                   f"{_time(s['time_s'])}, filament {_number(s['weight_g'], 'g', 2)} "
-                   "(slicer estimates)")
+                   f"{_time(s['time_s'])}, filament {_number(s['weight_g'], 'g', 2)}")
     note = cl["known_failures"]
     if note is not None:
-        typer.echo(f"  accepted failure: {', '.join(note['checks'])} on the "
-                   f"{', '.join(note['parts'])} plate, by {KNOWN_FAILURE_SHORT}; "
-                   f"{note['source']}")
-        typer.echo(f"  {note['cause']}")
-        typer.echo(f"  {note['this_run_text']}")
-        typer.echo(f"  {note['note']}")
+        for line in _accepted_lines(note):
+            typer.echo(f"  {line}")
     typer.echo(f"skin strip: {sk['certification']}")
     s = sk["summary"]
     changes = "?" if s["changes"] is None else str(s["changes"])
     typer.echo(f"  face up: {changes} color changes, time {_time(s['time_s'])}, filament "
-               f"{_number(s['weight_g'], 'g', 2)} (slicer estimates)")
+               f"{_number(s['weight_g'], 'g', 2)}")
+    typer.echo("times and filament are the slicer's estimates")
     blocking = {"clearance": blocking_failures(cl), "skin": blocking_failures(sk)}
-    typer.echo("to print: open the files in Bambu Studio (each plate_1.gcode is for checking "
-               "only)")
+    typer.echo(f"to print, in {out}:")
     for strip, section in (("clearance", cl), ("skin", sk)):
         if blocking[strip]:
             failed = ", ".join(f"{part}: {check}" for part, check in blocking[strip])
@@ -578,23 +594,20 @@ def _strip_output(rec: dict, out: Path) -> list[tuple[str, str]]:
         elif not _strip_ok(section):
             typer.echo(f"  the {strip} strip is not certified: do not print it yet")
         elif strip == "clearance":
-            typer.echo(f"  clearance strip: print {out / CLEARANCE_DIR / BASE_STL} and "
-                       f"{out / CLEARANCE_DIR / PIECES_STL} as two plates, in the same "
-                       "filament (any one). pieces.stl has the six pieces in one row, piece "
-                       "1 at the "
-                       "left: check that the row runs left to right, and do not move, turn "
-                       "or arrange it")
+            typer.echo(f"  clearance strip: open {CLEARANCE_DIR}/{BASE_STL} and "
+                       f"{CLEARANCE_DIR}/{PIECES_STL} in Bambu Studio and print them as two "
+                       "plates in the same filament. Keep the pieces in their row, left to "
+                       "right")
         else:
             colors = ", ".join(
-                f"filament {f['filament']}: {SKIN_COLOR_NAMES[f['hex']]} {f['hex']} "
+                f"filament {f['filament']} {SKIN_COLOR_NAMES[f['hex']]} "
                 f"({'the base' if f['role'] == 'base' else 'the patches'})"
                 for f in sk["filament_map"])
-            typer.echo(f"  skin strip: print {out / SKIN_DIR / MODEL_3MF} on the AMS; "
-                       f"{colors}. Give each filament the AMS slot that holds that color")
-    typer.echo(f"after printing, fill in {out / TEMPLATE_NAME} (it says how to judge each "
-               "piece and patch)")
+            typer.echo(f"  skin strip: open {SKIN_DIR}/{MODEL_3MF} in Bambu Studio and print "
+                       f"it on the AMS: {colors}")
+    typer.echo(f"  after printing, fill in {TEMPLATE_NAME}; the record is {STRIP_RECORD}")
+    typer.echo(f"  the {GCODE_NAME} files are for checking only, not for printing")
     typer.echo(f"strip_id {rec['strip_id']}")
-    typer.echo(f"wrote {out / STRIP_RECORD}")
     return blocking["clearance"] + blocking["skin"]
 
 
@@ -622,7 +635,8 @@ def strip(
          clearance base plate (UNKNOWN checks and warnings allowed)
       1  files written, and another required check FAILed
       2  input or setup error (including a missing or unverified
-         slicer, or an OUT that is a file or a non-empty folder):
+         slicer, an OUT that is a file or a non-empty folder, or a
+         strip that cannot be built as asked):
          nothing is written; or an I/O failure while writing,
          which can leave a folder without strip.json: such a
          folder is incomplete and must not be used
@@ -631,7 +645,7 @@ def strip(
     """
     try:
         rec = make_strips(out, slicer_dir=slicer_dir, timeout_s=timeout_s)
-    except SlicerError as e:
+    except (SlicerError, StripError) as e:     # StripError: a strip that cannot be built
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
     except OSError as e:              # unwritable output, disk full ...

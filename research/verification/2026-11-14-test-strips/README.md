@@ -161,3 +161,49 @@ compared byte for byte.
   `gcode.sha256` and `outputs`). `strip_id` is the same
   (`8e853b952442cb17bdb01edc24ee1372ad8d56f65abc4ad6f97b9a2aede37039`).
 - No log file is written for a strip, so none was compared.
+
+## 4. The `tdmg strip` command (plan Task 3, 2026-11-14)
+
+The command was run on the owner's Windows PC with the pinned OrcaSlicer 2.5.0 (app tree
+checked) and the pinned A1 profiles, after the Task 3 review fixes:
+
+```
+uv run tdmg strip <scratch folder>\task3run --slicer-dir artifacts/tools/orcaslicer-2.5.0
+```
+
+- **Exit code:** 0.
+- **Verdicts:**
+  - skin strip PRINTABLE: 15 color changes, 2727 s (45 min), 10.29 g;
+  - clearance pieces plate PRINTABLE: 3 layers, 490 s (8 min), 0.47 g;
+  - clearance base plate NOT CERTIFIED, `F3.printed_connectivity` FAIL on 2 of 15
+    layers: z 1.6 and 2 mm, each with 2 printed parts for the model's 1 and 21 printed
+    holes for the model's 21. 1372 s (23 min), 6.12 g. The `known_failures` note is
+    given, so the command exits 0 (the owner's decision, section 2).
+  - The times and weights are the slicer's estimates.
+- **strip_id:** `8e853b952442cb17bdb01edc24ee1372ad8d56f65abc4ad6f97b9a2aede37039`, the
+  same as in section 3.
+- **The terminal output** (OUT shortened to `<OUT>`):
+
+  ```
+  clearance strip: NOT CERTIFIED: base: F3.printed_connectivity FAIL
+    base plate: NOT CERTIFIED: F3.printed_connectivity FAIL - 15 layers, time 23 min, filament 6.12 g
+    pieces plate: PRINTABLE - 3 layers, time 8 min, filament 0.47 g
+    the base plate fails one check: small loose bits of infill inside the part, on 2 of 15 layers (z 1.6, 2 mm); you decided on 2026-11-14 to print it anyway. Details: strip.json
+  skin strip: PRINTABLE
+    face up: 15 color changes, time 45 min, filament 10.29 g
+  times and filament are the slicer's estimates
+  to print, in <OUT>:
+    clearance strip: open clearance/base.stl and clearance/pieces.stl in Bambu Studio and print them as two plates in the same filament. Keep the pieces in their row, left to right
+    skin strip: open skin/model.3mf in Bambu Studio and print it on the AMS: filament 1 black (the base), filament 2 white (the patches)
+    after printing, fill in results-template.md; the record is strip.json
+    the plate_1.gcode files are for checking only, not for printing
+  strip_id 8e853b952442cb17bdb01edc24ee1372ad8d56f65abc4ad6f97b9a2aede37039
+  ```
+
+- **`results-template.md`:** written, six clearance rows (0.10 to 0.35 mm) and seven
+  skin rows. It was byte-identical to the form from the run before, made before the
+  review fix that builds the instructions' counts from the record (with the owner's
+  values the text is the same).
+- The same verdicts, numbers and `strip_id` came from two earlier runs of the command the
+  same day, before the review changed only the terminal wording.
+- Nothing was printed. Task 4 adds the full measured-run record and the Codex review.

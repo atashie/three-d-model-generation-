@@ -9,7 +9,7 @@ prints: subject selection (`tdmg select`), a flat STL with its gate (`tdmg flat`
 OrcaSlicer check (`tdmg slice`). For flat multicolor prints, a color plan (`tdmg colors`),
 its colored STL bodies and a multicolor `model.3mf` with their gate (`tdmg flat
 --colors`), and a multicolor slice check (`tdmg slice`) exist. `tdmg strip` makes two
-calibration test strips that set the glue clearance and the skin depth from a real print.
+calibration test strips for setting the glue clearance and the skin depth once printed.
 Nothing multicolor has been printed. Keychain loops and bases, and every other print type, are not built yet.
 See [current status](../STATUS.md) and [pipeline and gate](pipeline-and-gate.md).
 

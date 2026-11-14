@@ -1099,6 +1099,24 @@ def test_the_results_template_comes_from_the_strips_own_values():
                                geometry_id="g" * 64).decode("utf-8") == text
 
 
+def test_the_results_template_prose_counts_come_from_the_record():
+    # Review P5: the counts in the instructions too, not only the tables.
+    pockets = [{"pocket": k, "gap_mm": 0.1 * k, "holes": k} for k in range(1, 5)]
+    patches = [{"patch": 1, "holes": 0, "depth_mm": None, "role": "black only (reference)"},
+               *({"patch": k + 1, "holes": k, "depth_mm": 0.2 * k, "role": "white over black"}
+                 for k in range(1, 4)),
+               {"patch": 5, "holes": 0, "depth_mm": 3.0, "role": "full white (reference)"}]
+    flat = " ".join(ts.results_template(pockets, patches, strip_id="s", geometry_id="g")
+                    .decode("ascii").split())
+    assert "The base has four square pockets." in flat
+    assert "The four pieces look alike" in flat
+    assert "pocket 1 to 4 in the same order" in flat
+    assert "Patches 2 to 4 have 1 to 3 label holes" in flat
+    assert "Patch 1 (black only) and patch 5 (white all the way through)" in flat
+    for words in ("six", "Patches 2 to 6", "patch 7"):
+        assert words not in flat, words
+
+
 def test_the_results_template_is_byte_identical_on_repeat(orca, tmp_path):
     root = orca()
     ts.make_strips(tmp_path / "a", root)
@@ -1122,18 +1140,23 @@ def test_cli_strip_accepted_base_failure_exits_0(orca, tmp_path, monkeypatch):
     assert "skin strip: PRINTABLE" in lines
     text = _plain(r.stdout)
     note = rec["clearance"]["known_failures"]
-    assert note["this_run_text"] in text and note["cause"] in text
-    assert "Keep the FAIL, print anyway" in text
-    assert "z 1.6 mm: 2 printed parts for the model's 1" in text
-    # What to print, with which filament, and the form.
+    # Review P1: one plain line in the terminal; the long texts stay in strip.json.
+    assert ("  the base plate fails one check: small loose bits of infill inside the part, "
+            "on 2 of 3 layers (z 1.6, 2 mm); you decided on 2026-11-14 to print it anyway. "
+            "Details: strip.json") in lines
+    assert note["this_run_text"] not in text and note["cause"] not in text
+    assert "F3.printed_connectivity on the" not in text
+    # What to print, with which filament, and the form: OUT once, then relative names.
+    assert f"to print, in {out}:" in lines
+    assert text.count(str(out)) == 1
     for name in ("clearance/base.stl", "clearance/pieces.stl", "skin/model.3mf",
                  "results-template.md"):
-        assert str(out / name) in text, name
+        assert name in text, name
     assert "Bambu Studio" in text and "same filament" in text
-    assert "filament 1: black #000000 (the base)" in text
-    assert "filament 2: white #FFFFFF (the patches)" in text
+    assert "filament 1 black (the base), filament 2 white (the patches)" in text
     assert f"strip_id {rec['strip_id']}" in lines
     assert "do not print" not in text.lower()
+    assert max(len(line) for line in lines) <= 200
 
 
 def test_cli_strip_prints_time_and_filament_per_plate(orca, tmp_path, monkeypatch):
@@ -1146,9 +1169,20 @@ def test_cli_strip_prints_time_and_filament_per_plate(orca, tmp_path, monkeypatc
         line = next(line for line in lines if line.startswith(f"  {name} plate: "))
         assert plate["certification"] in line
         assert f"{plate['summary']['layer_count']} layers" in line
-        assert ", time " in line and ", filament " in line and "(slicer estimates)" in line
+        assert ", time " in line and ", filament " in line
     line = next(line for line in lines if line.startswith("  face up: "))
     assert "color changes" in line and ", time " in line and ", filament " in line
+    assert "times and filament are the slicer's estimates" in lines
+
+
+def test_cli_strip_refuses_a_strip_error_with_exit_2(orca, tmp_path, monkeypatch):
+    # Review P2: a strip that cannot be built is an input error, as tdmg slice's errors.
+    monkeypatch.setattr(ts, "OWNER_GAPS_MM", (0.2, 0.1, 0.15, 0.25, 0.3, 0.35))
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 2, r.output
+    assert r.stderr.startswith("error: ") and "strictly ascending" in _plain(r.stderr)
+    assert not out.exists() or _files(out) == set()
 
 
 @pytest.mark.parametrize("ids", [{"F3.edge_coverage"},

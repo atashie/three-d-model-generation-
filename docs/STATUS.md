@@ -447,8 +447,11 @@ The full list is in `docs/PLAN.md` section 13.
     - `skin/model.3mf` on the AMS: filament 1 black (base), filament 2 white (patches).
     Then fill in `results-template.md`, with a photo of each strip. Task 5 sets the two
     rules from it.
-  - **Local validation (2026-11-14, PC, Task 3):** `uv run pytest -q` 2556 passed, 8
-    skipped (the real-slicer tests); the strip real-slicer test passed on its own with
+  - **Task 3 review:** approved with five Minor findings (P1–P5), all fixed (plan
+    amendment "Task 3 review fixes"); the real CLI run is recorded in section 4 of
+    `research/verification/2026-11-14-test-strips/README.md`.
+  - **Local validation (2026-11-14, PC, after the review fixes):** `uv run pytest -q`
+    2558 passed, 8 skipped (the real-slicer tests); the strip real-slicer test passed on its own with
     `TDMG_ORCASLICER_DIR` set; `ruff check` and `gen_docs.py --check` passed. Not pushed;
     no CI run yet.
   - **Open:** how Bambu Studio places `pieces.stl` is not checked (the form says to check

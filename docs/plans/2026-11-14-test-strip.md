@@ -441,19 +441,22 @@ task.
       required check of the strip to PASS, so a second FAIL also leaves the accepted one
       uncovered.
     - **2:** as `tdmg slice`: a bad `--timeout-s`, an OUT that is a file or a non-empty
-      folder, or an OrcaSlicer that is missing or does not verify, with nothing written;
-      or an I/O failure while writing.
+      folder, an OrcaSlicer that is missing or does not verify, or a strip that cannot
+      be built (`StripError`, review P2), with nothing written; or an I/O failure while
+      writing.
     - **Unverified slicer tree:** the command has no `--skip-tree-check`, so the app tree
       is always checked, and a tree that does not verify is refused (exit 2), as in
       `tdmg slice`. Through `make_strips(check_tree=False)` the note is never given, so
       every required FAIL counts, as in `tdmg slice`.
   - **Slicer folder:** `--slicer-dir`, else `$TDMG_ORCASLICER_DIR`, as `tdmg slice`.
   - **What it prints:** each strip's verdict; per clearance plate its verdict, layers,
-    time and filament; the accepted failure with the dated cause and this run's own
-    measured layers; the skin face's color changes, time and filament; what to open in
-    Bambu Studio (the two clearance plates in one filament; `model.3mf` on the AMS, with
-    filament 1 black for the base and filament 2 white for the patches, from
-    `filament_map`); the path of `results-template.md`; `strip_id`. A strip with an
+    time and filament; one plain line for the accepted failure, built from `this_run`
+    (layer counts and z values; the dated `cause` and `this_run_text` stay in
+    `strip.json` only, review P1); the skin face's color changes, time and filament;
+    OUT once, then what to open in Bambu Studio by relative names (the two clearance
+    plates in one filament; `skin/model.3mf` on the AMS, with filament 1 black for the
+    base and filament 2 white for the patches, from `filament_map`);
+    `results-template.md`; `strip_id`. A strip with an
     uncovered FAIL is "do not print"; a strip that is NOT CERTIFIED without a FAIL (an
     UNKNOWN check) is "not certified: do not print it yet".
   - **`results-template.md`** (`calibration_strip.results_template`): written by
@@ -472,6 +475,12 @@ task.
   - **Limit, not checked:** how Bambu Studio places `pieces.stl` when it is opened. The
     form and the command tell the owner to check that the row runs left to right and not
     to move, turn or arrange it.
+  - **Task 3 review fixes (2026-11-14):** P1, the plain terminal line above; P2,
+    `StripError` exits 2; P3, three doc phrases corrected and the real CLI run recorded
+    in `research/verification/2026-11-14-test-strips/README.md`; P4, the guide's exit-2
+    summary covers the I/O failure; P5, the form's counts in its instructions ("six
+    square pockets", "Patches 2 to 6 have 1 to 5 label holes", the reference patch
+    numbers, the pocket range) come from the record too.
 
 ### Task 4: measured run and Codex review
 

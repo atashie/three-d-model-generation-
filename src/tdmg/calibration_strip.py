@@ -610,7 +610,11 @@ REVIEW = (
 # "Owner decision: keep the FAIL, print anyway"). The checks do not change and the verdict
 # stays NOT CERTIFIED; strip.json carries a note, only for exactly this failure.
 KNOWN_FAILURE_CHECK = "F3.printed_connectivity"
-KNOWN_FAILURE_SHORT = "the owner's decision of 2026-11-14 (\"Keep the FAIL, print anyway\")"
+KNOWN_FAILURE_DATE = "2026-11-14"
+KNOWN_FAILURE_SHORT = (f"the owner's decision of {KNOWN_FAILURE_DATE} (\"Keep the FAIL, "
+                       "print anyway\")")
+# tdmg strip's plain words for the accepted failure (the record keeps the full texts).
+KNOWN_FAILURE_PLAIN = "small loose bits of infill inside the part"
 KNOWN_FAILURE_DECISION = (
     f"{KNOWN_FAILURE_SHORT}: a strip whose "
     "only failing required check is F3.printed_connectivity, with every other required "
@@ -768,6 +772,15 @@ def _mm(value: float, digits: int) -> str:
     return text if float(text) == value else repr(float(value))
 
 
+_NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
+                 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+
+
+def _count(n: int, noun: str) -> str:
+    """'one label hole', 'two label holes'."""
+    return f"{_NUMBER_WORDS.get(n, str(n))} {noun}{'' if n == 1 else 's'}"
+
+
 def _row(cells) -> str:
     return "| " + " | ".join(cells) + " |"
 
@@ -779,7 +792,13 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
     pockets: the clearance section's pockets (pocket, gap_mm, holes), left to right.
     patches: the skin section's patches (patch, holes, depth_mm, role), front to back.
     Every number in the tables comes from them, so the form always matches the strip.
-    ASCII and LF only, so it is byte-identical on repeat."""
+    So do the counts in the instructions (review P5). ASCII and LF only, so it is
+    byte-identical on repeat."""
+    n_pockets = _NUMBER_WORDS.get(len(pockets), str(len(pockets)))
+    first, last = pockets[0], pockets[-1]
+    depth = [p for p in patches if p["holes"]]
+    black = next(p for p in patches if p["depth_mm"] is None)
+    full = next(p for p in patches if p["role"].startswith("full white"))
     choices = CLEARANCE_CHOICES
     lines = [
         "# Test strip results",
@@ -801,15 +820,19 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
         "",
         "## Clearance strip",
         "",
-        "The base has six square pockets. Pocket k is the one with k label holes below it.",
-        "The six pieces look alike, so keep them in order:",
+        (f"The base has {n_pockets} square pockets. Pocket k is the one with k label "
+         "holes below it."),
+        f"The {n_pockets} pieces look alike, so keep them in order:",
         "",
         "1. Take each piece off the pieces plate in order, left to right, one piece at a",
-        "   time. pieces.stl has them in one row along x, piece 1 at the left. Before",
+        (f"   time. pieces.stl has them in one row along x, piece {first['pocket']} at the "
+         "left. Before"),
         "   printing, check in Bambu Studio that the row runs left to right, and do not",
         "   move, turn or arrange it (how Bambu Studio places this file is not checked).",
-        "2. Try the pieces in pocket 1 to 6 in the same order: the first piece from the left",
-        "   in pocket 1 (one label hole), the next in pocket 2, and so on.",
+        (f"2. Try the pieces in pocket {first['pocket']} to {last['pocket']} in the same "
+         "order: the first piece from the left"),
+        (f"   in pocket {first['pocket']} ({_count(first['holes'], 'label hole')}), the "
+         f"next in pocket {first['pocket'] + 1}, and so on."),
         "3. Mark one box per row with an x. \"drops in, loose\" means it rattles, or falls",
         "   out when you turn the base over.",
         "",
@@ -824,8 +847,10 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
         "",
         "## Skin strip",
         "",
-        "Black base, white patches. Patches 2 to 6 have 1 to 5 label holes beside them.",
-        "Patch 1 (black only) and patch 7 (white all the way through) have none: they are",
+        (f"Black base, white patches. Patches {depth[0]['patch']} to {depth[-1]['patch']} "
+         f"have {depth[0]['holes']} to {depth[-1]['holes']} label holes beside them."),
+        (f"Patch {black['patch']} (black only) and patch {full['patch']} (white all the "
+         "way through) have none: they are"),
         "the two reference patches.",
         "",
         "Judge each patch under room light, next to the two reference patches. Mark one box",

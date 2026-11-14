@@ -537,15 +537,19 @@ only failing required check, the part's printed layers show the same holes as th
 and only extra printed parts, and the check's measured values name the layers. The note
 keeps the dated cause and gives this run's own layers (`this_run`).
 
-**Message:** each strip's verdict; per plate its layers, time and filament; the accepted
-failure with its measured layers; the skin face's color changes, time and filament; what
-to open in Bambu Studio (the two clearance plates in the same filament; `model.3mf` on the
-AMS with filament 1 black for the base and filament 2 white for the patches); and where
-the form is.
+**Message:** each strip's verdict; per plate its layers, time and filament; one plain line
+for the accepted failure (how many layers, which z values; the full texts stay in
+`strip.json`); the skin face's color changes, time and filament; then OUT once, and what
+to open in Bambu Studio by names relative to it (the two clearance plates in the same
+filament; `skin/model.3mf` on the AMS with filament 1 black for the base and filament 2
+white for the patches); and where the form is.
 
 **Exit codes:** 0 means the files are written and no required check FAILed, except the
 one the `known_failures` note covers. 1 means another required check FAILed (files
-written). 2 means an input or setup error, with nothing written. As for `tdmg slice`,
+written). 2 means an input or setup error (a bad option, an OUT that is a file or a
+non-empty folder, a missing or unverified slicer, or a strip that cannot be built), with
+nothing written; or an I/O failure while writing, which can leave a folder without
+`strip.json`: such a folder is incomplete and must not be used. As for `tdmg slice`,
 exit 0 does not mean a strip is certified.
 
 **On this PC** (2026-11-14, pinned OrcaSlicer 2.5.0, app tree checked): the skin strip is
