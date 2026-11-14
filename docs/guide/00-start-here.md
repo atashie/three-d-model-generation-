@@ -8,8 +8,9 @@ This section describes the planned pipeline. Part of it exists for flat single-c
 prints: subject selection (`tdmg select`), a flat STL with its gate (`tdmg flat`) and an
 OrcaSlicer check (`tdmg slice`). For flat multicolor prints, a color plan (`tdmg colors`),
 its colored STL bodies and a multicolor `model.3mf` with their gate (`tdmg flat
---colors`), and a multicolor slice check (`tdmg slice`) exist. Nothing multicolor has
-been printed. Keychain loops and bases, and every other print type, are not built yet.
+--colors`), and a multicolor slice check (`tdmg slice`) exist. `tdmg strip` makes two
+calibration test strips that set the glue clearance and the skin depth from a real print.
+Nothing multicolor has been printed. Keychain loops and bases, and every other print type, are not built yet.
 See [current status](../STATUS.md) and [pipeline and gate](pipeline-and-gate.md).
 
 You give it an image. It gives back a file your printer can print, plus a report. The report says which checks passed, which failed, which could not be measured, and where every threshold came from. The tool says **PRINTABLE** only when every check required for that kind of print passes.

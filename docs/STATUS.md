@@ -1,9 +1,9 @@
 # Project status
 
-**Last updated:** 2026-11-13 (R2 step 4, multicolor slicing, done: plan
-`docs/plans/2026-11-13-color-slicing.md`, all 8 tasks, Codex review 5 handled, CI passed).
-Phase 1 (R1, flat single-color) is under way, with three commands, and R2 (flat
-multicolor) has two, plus `tdmg slice` on a colored folder:
+**Last updated:** 2026-11-14 (R2 step 5 part 1, the test strips: Tasks 1–3 of
+`docs/plans/2026-11-14-test-strip.md` done; Task 4, the measured run record and the Codex
+review, is next). Phase 1 (R1, flat single-color) is under way, with three commands, and
+R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
 - **`tdmg flat`** (S2–S4, S8): makes a flat STL, smoothed by default (`--smooth-px 0`
@@ -41,6 +41,16 @@ multicolor) has two, plus `tdmg slice` on a colored folder:
     up, with warnings (the keep plans' thin interior outline lines are skipped by the
     slicer). To print: open `model.3mf` in Bambu Studio and assign the filaments listed.
   - **Not done yet:** nothing is printed (step 5).
+- **`tdmg strip OUT`** (R2 step 5, part 1): makes two calibration test strips, gates them
+  and slices them with the pinned OrcaSlicer, and writes `results-template.md`, the form
+  the owner fills in after printing.
+  - **Clearance strip** (for `color.glue.clearance_mm`): a base with six pockets and six
+    glue pieces, gaps 0.10 to 0.35 mm per side. `clearance/base.stl` and
+    `clearance/pieces.stl`, two plates in one filament.
+  - **Skin strip** (for `color.skin.depth_mm`): `skin/model.3mf`, white patches 0.2 to
+    1.0 mm deep over black, plus two reference patches. Printed on the AMS.
+  - **On the PC (2026-11-14):** skin PRINTABLE; clearance NOT CERTIFIED by the
+    owner-accepted base plate failure alone; exit 0. Not printed yet.
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -254,6 +264,11 @@ passed. These commits are pushed; for CI see above.
      as always run; flush position not checked), 1 Medium (a missing glue plate not
      noticed), 2 Low (warning wording; this STATUS). All held and were fixed (`07b445a`,
      `0c720f7`); record in `research/reviews/2026-11-13-color-slicing/README.md`.
+2c. **R2 step 5, part 1: the test strips** (`docs/plans/2026-11-14-test-strip.md`,
+   approved 2026-11-14, "build it"). Tasks 1–3 done (`tdmg strip`); next is Task 4 (the
+   measured run record and the Codex review), then the owner's print and Task 5 (the two
+   rules set from the results). Details in the handoff below. Part 2, the first AMS and
+   glue prints of an owner plan, comes after.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
@@ -390,7 +405,55 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest (2026-11-13): R2 step 4 done** (item 2b).
+- **Latest (2026-11-14): R2 step 5, part 1 (the test strips), Tasks 1–3 done.** Plan
+  `docs/plans/2026-11-14-test-strip.md` (approved by the owner: "build it").
+  - **Done:**
+    - Task 1: `tdmg.calibration_strip`, the two strip builders (`clearance_strip`,
+      `skin_strip`), checked against `fdm.wall.min_thickness` and `fdm.hole.min_diameter`.
+    - Task 2: `make_strips` (gating, files, slicing, `strip.json`, `known_failures`), with
+      its review fixes; the real-slicer evidence is in
+      `research/verification/2026-11-14-test-strips/README.md`.
+    - Task 3: the command `tdmg strip OUT [--slicer-dir DIR] [--timeout-s N]`,
+      `results-template.md`, review fix N1 (the note gives this run's own measured
+      layers beside the dated cause), docs.
+  - **Next: Task 4.** The measured run record (what was run, the numbers, the verdicts) in
+    `research/verification/2026-11-14-test-strips/`, and the Codex review in
+    `research/reviews/2026-11-14-test-strips/`.
+  - **Owner decisions (2026-11-14):**
+    - gaps 0.10 to 0.35 mm per side, by 0.05 (six pockets);
+    - skin depths 0.2 to 1.0 mm, by 0.2 (five patches);
+    - white over black, the worst case;
+    - judged by hand and eye, with a photo; no calipers;
+    - the clearance base plate stays NOT CERTIFIED and is printed anyway ("Keep the FAIL,
+      print anyway"); the checks and the layout do not change.
+  - **Controller decisions** (plan amendments): the skin strip runs long along y (the
+    pinned OrcaSlicer turns a part long along x on the A1); two clearance plates, the
+    pieces where their pockets are, told apart by plate order; `F6.portability` not run;
+    `tdmg strip` exits 1 only for a required FAIL the `known_failures` note does not
+    cover.
+  - **Real run (2026-11-14, this PC, pinned OrcaSlicer 2.5.0, app tree checked;
+    `uv run tdmg strip <scratch dir> --slicer-dir artifacts/tools/orcaslicer-2.5.0`,
+    exit 0; times and weights are the slicer's estimates):**
+    - skin strip PRINTABLE: 15 color changes, 2727 s, 10.29 g;
+    - clearance pieces plate PRINTABLE: 3 layers, 490 s, 0.47 g;
+    - clearance base plate NOT CERTIFIED, `F3.printed_connectivity` FAIL on 2 of 15
+      layers (z 1.6 and 2 mm: 2 printed parts for the model's 1, 21 holes for 21), with
+      the owner-accepted note; 15 layers, 1372 s, 6.12 g;
+    - `strip_id 8e853b95…37039`, the same as in Task 2's repeat run.
+  - **What the owner prints next:** from a fresh `tdmg strip OUT` folder, in Bambu
+    Studio:
+    - `clearance/base.stl` and `clearance/pieces.stl`, two plates, in the same filament;
+      keep the pieces in their row, left to right;
+    - `skin/model.3mf` on the AMS: filament 1 black (base), filament 2 white (patches).
+    Then fill in `results-template.md`, with a photo of each strip. Task 5 sets the two
+    rules from it.
+  - **Local validation (2026-11-14, PC, Task 3):** `uv run pytest -q` 2556 passed, 8
+    skipped (the real-slicer tests); the strip real-slicer test passed on its own with
+    `TDMG_ORCASLICER_DIR` set; `ruff check` and `gen_docs.py --check` passed. Not pushed;
+    no CI run yet.
+  - **Open:** how Bambu Studio places `pieces.stl` is not checked (the form says to check
+    the row before printing); nothing from `tdmg`'s G-code is printed.
+- **Earlier (2026-11-13): R2 step 4 done** (item 2b).
   - **CI:** passed on macOS 15, Ubuntu and Windows for `39a87ba` (run 43510419488,
     verified 2026-11-13). Full local suite: 2462 passed, 7 skipped (the real-slicer
     tests, which passed in the implementers' runs with both slicers set).

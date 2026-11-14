@@ -36,7 +36,11 @@ slices and writes both strips:
   F5.triangles and F2.export_3mf_matches_bodies, and the per-body R1 mesh checks;
   sliced face up by tdmg.color_slicing.slice_face (F2.orca_input_matches_bodies and the
   step 4 color checks) in skin/slice/;
+- results-template.md: the owner's form (plan Decision 5), from the strips' own gaps
+  and depths;
 - strip.json last (schema tdmg.strip/1, algorithm strip-2).
+tdmg strip (tdmg.cli) runs make_strips and exits 1 only for a required FAIL that the
+owner-accepted known_failures note does not cover (blocking_failures).
 The required sets (PLATE_REQUIRED; SKIN_INHERITED_REQUIRED and slice_face's own), and
 why each check that is not required is not (not_required_reasons), are in the plan's
 Task 2 amendments. PrusaSlicer is never run for a strip: F6.portability is UNKNOWN and
@@ -152,6 +156,7 @@ HOLE_SEGMENTS = 4 * QUAD_SEGS
 SKIN_BASE_INDEX = 0
 SKIN_WHITE_INDEX = 1
 SKIN_PALETTE = ((SKIN_BASE_INDEX, "#000000"), (SKIN_WHITE_INDEX, "#FFFFFF"))
+SKIN_COLOR_NAMES = {"#000000": "black", "#FFFFFF": "white"}   # for tdmg strip's output
 # The clearance strip is one color; the cells need a base label and an inlay label.
 CLEARANCE_BASE_INDEX = 0
 CLEARANCE_INLAY_INDEX = 1
@@ -598,15 +603,16 @@ REVIEW = (
     "G-code is not yet printed or compared with Bambu Studio's own slice). pieces.stl keeps "
     "each piece where its pocket is: piece k (k label holes on the base) is the k-th from "
     "the left; keep them in that order. A G-code kept as plate_1.gcode.failed had a "
-    "required check FAIL: do not print it.")
+    "required check FAIL: do not print it. After printing, fill in results-template.md.")
 
 
 # The owner's decision of 2026-11-14 on the clearance base plate (plan Task 2 amendment,
 # "Owner decision: keep the FAIL, print anyway"). The checks do not change and the verdict
 # stays NOT CERTIFIED; strip.json carries a note, only for exactly this failure.
 KNOWN_FAILURE_CHECK = "F3.printed_connectivity"
+KNOWN_FAILURE_SHORT = "the owner's decision of 2026-11-14 (\"Keep the FAIL, print anyway\")"
 KNOWN_FAILURE_DECISION = (
-    "the owner's decision of 2026-11-14 (\"Keep the FAIL, print anyway\"): a strip whose "
+    f"{KNOWN_FAILURE_SHORT}: a strip whose "
     "only failing required check is F3.printed_connectivity, with every other required "
     "check PASS, stays NOT CERTIFIED and is printed anyway; the checks do not change")
 KNOWN_FAILURE_CAUSE = (
@@ -647,6 +653,43 @@ def _extra_parts_only(printed) -> bool:
     return extra
 
 
+def _this_run(name: str, part: dict) -> dict | None:
+    """This run's own measured failure of KNOWN_FAILURE_CHECK on part (review N1): the
+    check's layer count and mismatched z values (its measured values), and each mismatched
+    layer's [model, printed] part and hole counts from the part's printed layers. None
+    when the measured values are missing or do not agree with the printed layers (a z the
+    printed record lacks, or a mismatch count that is not the number of z values)."""
+    check = next((c for c in part["checks"] if c["id"] == KNOWN_FAILURE_CHECK), None)
+    measured = check.get("measured") if check else None
+    if not isinstance(measured, dict):
+        return None
+    zs, total = measured.get("mismatched_z"), measured.get("layers")
+    if (not isinstance(zs, list) or not zs or not isinstance(total, int)
+            or measured.get("layers_mismatched") != len(zs)):
+        return None
+    by_z = {layer.get("z"): layer for layer in part["printed"]["layers"]}
+    rows = []
+    for z in zs:
+        layer = by_z.get(z)
+        if layer is None:
+            return None
+        rows.append({"z_mm": z, "parts": list(layer["parts"]), "holes": list(layer["holes"])})
+    return {"part": name, "layers": total, "layers_mismatched": len(zs), "mismatched": rows}
+
+
+def _this_run_text(run: dict) -> str:
+    """'this run, base: 2 of 15 layers differ; z 1.6 mm: 2 printed parts for the model's 1,
+    21 printed holes for its 21; z 2 mm: ...'"""
+    def layer(m: dict) -> str:
+        (model_parts, printed_parts), (model_holes, printed_holes) = m["parts"], m["holes"]
+        return (f"z {m['z_mm']:g} mm: {printed_parts} printed part"
+                f"{'' if printed_parts == 1 else 's'} for the model's {model_parts}, "
+                f"{printed_holes} printed hole{'' if printed_holes == 1 else 's'} for its "
+                f"{model_holes}")
+    return (f"this run, {run['part']}: {run['layers_mismatched']} of {run['layers']} layers "
+            f"differ; " + "; ".join(layer(m) for m in run["mismatched"]))
+
+
 def known_failures(parts: dict[str, dict]) -> dict | None:
     """The owner-accepted failure note for one strip, or None.
 
@@ -656,10 +699,15 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
     and each part's own certification is PRINTABLE or exactly "NOT CERTIFIED:
     <KNOWN_FAILURE_CHECK> FAIL" (so an unverified app tree, or anything else the record
     names, gets no note). Each failing part must also show the accepted kind of failure
-    in its printed layers (_extra_parts_only). It never changes a verdict.
+    in its printed layers (_extra_parts_only), and its check's measured values must name
+    the mismatched layers (_this_run). It never changes a verdict.
+
+    The note keeps the dated cause measured on 2026-11-14 (KNOWN_FAILURE_CAUSE) and gives
+    this run's own measured layers beside it: this_run (per failing part) and
+    this_run_text.
     """
     only = f"NOT CERTIFIED: {KNOWN_FAILURE_CHECK} FAIL"
-    failing = []
+    failing, runs = [], []
     for name, part in parts.items():
         required = set(part["required_checks"])
         checks = part["checks"]
@@ -674,12 +722,148 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
         if bad:
             if not _extra_parts_only(part.get("printed")):
                 return None
+            run = _this_run(name, part)
+            if run is None:
+                return None
             failing.append(name)
+            runs.append(run)
     if not failing:
         return None
     return {"checks": [KNOWN_FAILURE_CHECK], "parts": failing,
             "decision": KNOWN_FAILURE_DECISION, "source": SOURCE,
-            "cause": KNOWN_FAILURE_CAUSE, "note": KNOWN_FAILURE_NOTE}
+            "cause": KNOWN_FAILURE_CAUSE, "this_run": runs,
+            "this_run_text": "; ".join(_this_run_text(r) for r in runs),
+            "note": KNOWN_FAILURE_NOTE}
+
+
+def strip_parts(section: dict) -> dict[str, dict]:
+    """A strip section's parts (name -> record), as known_failures reads them: the
+    clearance strip's plates, or the skin strip's face (named by its folder)."""
+    if "plates" in section:
+        return section["plates"]
+    return {section["face"]["folder"]: section["face"]}
+
+
+def blocking_failures(section: dict) -> list[tuple[str, str]]:
+    """(part, check id) of every required check that FAILs in a strip section and is not
+    covered by its owner-accepted known_failures note, in part and check order. tdmg strip
+    exits 1 when any strip has one (plan Task 3 amendment)."""
+    note = section.get("known_failures")
+    covered = set() if not note else {(p, c) for p in note["parts"] for c in note["checks"]}
+    return [(name, c["id"]) for name, part in strip_parts(section).items()
+            for c in part["checks"]
+            if c["id"] in part["required_checks"] and c["status"] == "FAIL"
+            and (name, c["id"]) not in covered]
+
+
+TEMPLATE_NAME = "results-template.md"
+# Decision 5: the owner's choices for each piece and each patch.
+CLEARANCE_CHOICES = ("won't go in", "pressed in", "drops in, snug", "drops in, loose")
+SKIN_CHOICES = ("dark shows", "slight shadow", "looks like full white")
+
+
+def _mm(value: float, digits: int) -> str:
+    """value with digits decimals, or with as many as it needs when digits lose some."""
+    text = f"{value:.{digits}f}"
+    return text if float(text) == value else repr(float(value))
+
+
+def _row(cells) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
+                     geometry_id: str) -> bytes:
+    """results-template.md (plan Decision 5): the form the owner fills in after printing.
+
+    pockets: the clearance section's pockets (pocket, gap_mm, holes), left to right.
+    patches: the skin section's patches (patch, holes, depth_mm, role), front to back.
+    Every number in the tables comes from them, so the form always matches the strip.
+    ASCII and LF only, so it is byte-identical on repeat."""
+    choices = CLEARANCE_CHOICES
+    lines = [
+        "# Test strip results",
+        "",
+        "Fill this in after you print the two test strips. It records what you see, so that",
+        "the rules `color.glue.clearance_mm` and `color.skin.depth_mm` can be set from a",
+        f"real print (`{SOURCE}`, Decision 5).",
+        "",
+        f"- strip_id: `{strip_id}`",
+        f"- geometry_id: `{geometry_id}`",
+        "- Printed on (date):",
+        "- Printer: Bambu Lab A1",
+        "",
+        "## Filament",
+        "",
+        "- Clearance strip (both plates, the same filament): brand, type and color:",
+        "- Skin strip, white: brand, type and color:",
+        "- Skin strip, black: brand, type and color:",
+        "",
+        "## Clearance strip",
+        "",
+        "The base has six square pockets. Pocket k is the one with k label holes below it.",
+        "The six pieces look alike, so keep them in order:",
+        "",
+        "1. Take each piece off the pieces plate in order, left to right, one piece at a",
+        "   time. pieces.stl has them in one row along x, piece 1 at the left. Before",
+        "   printing, check in Bambu Studio that the row runs left to right, and do not",
+        "   move, turn or arrange it (how Bambu Studio places this file is not checked).",
+        "2. Try the pieces in pocket 1 to 6 in the same order: the first piece from the left",
+        "   in pocket 1 (one label hole), the next in pocket 2, and so on.",
+        "3. Mark one box per row with an x. \"drops in, loose\" means it rattles, or falls",
+        "   out when you turn the base over.",
+        "",
+        _row(["Pocket", "Label holes", "Gap per side (mm)", *choices, "Notes"]),
+        _row(["---"] * (len(choices) + 4)),
+    ]
+    for p in pockets:
+        lines.append(_row([str(p["pocket"]), str(p["holes"]), _mm(p["gap_mm"], 2),
+                           *["[ ]"] * len(choices), ""]).rstrip())
+    choices = SKIN_CHOICES
+    lines += [
+        "",
+        "## Skin strip",
+        "",
+        "Black base, white patches. Patches 2 to 6 have 1 to 5 label holes beside them.",
+        "Patch 1 (black only) and patch 7 (white all the way through) have none: they are",
+        "the two reference patches.",
+        "",
+        "Judge each patch under room light, next to the two reference patches. Mark one box",
+        "per row with an x.",
+        "",
+        _row(["Patch", "Label holes", "White depth (mm)", *choices, "Notes"]),
+        _row(["---"] * (len(choices) + 4)),
+    ]
+    for p in patches:
+        depth, role = p["depth_mm"], p["role"]
+        if depth is None:
+            name, depth_text, marks = f"{p['patch']}, black reference", "none (black only)", "-"
+        elif role.startswith("full white"):
+            name, depth_text, marks = (f"{p['patch']}, full white reference",
+                                       f"{_mm(depth, 1)} (full)", "-")
+        else:
+            name, depth_text, marks = str(p["patch"]), _mm(depth, 1), "[ ]"
+        lines.append(_row([name, str(p["holes"]), depth_text, *[marks] * len(choices),
+                           ""]).rstrip())
+    lines += [
+        "",
+        "## Photos",
+        "",
+        "One photo of each strip, in daylight or room light. File names:",
+        "",
+        "- Clearance strip (base with the pieces in their pockets):",
+        "- Skin strip (top face):",
+        "",
+        "## Notes",
+        "",
+        "Anything else you noticed (warping, stringing, a piece that broke, the first",
+        "layer):",
+        "",
+    ]
+    text = "\n".join(lines)
+    if not text.isascii():
+        raise StripError("the results template must be ASCII")
+    return text.encode("ascii")
 
 
 def _sha(data: bytes) -> str:
@@ -993,8 +1177,9 @@ def make_strips(out_dir, slicer_dir=None, timeout_s=None, check_tree: bool = Tru
     """Build, gate and slice both strips with the owner's values (OWNER_GAPS_MM,
     OWNER_DEPTHS_MM) and write, in out_dir: clearance/ (base.stl, pieces.stl, slice/base/
     and slice/pieces/ with each plate's G-code, statistics and log when written), skin/
-    (model.3mf, palette.json, slice/ with the filament profiles and face-up/) and
-    strip.json last. Returns the record as written.
+    (model.3mf, palette.json, slice/ with the filament profiles and face-up/),
+    results-template.md (the owner's form, results_template) and strip.json last. Returns
+    the record as written.
 
     Refused with SlicerError and nothing written, as tdmg slice refuses: a timeout_s that
     is not a number above 0; an out_dir that is a file or a non-empty folder; an OrcaSlicer
@@ -1039,9 +1224,14 @@ def make_strips(out_dir, slicer_dir=None, timeout_s=None, check_tree: bool = Tru
                 "f3": ctx.f3_identity(),
                 "plates": {n: p["slice_id"] for n, p in cl_section["plates"].items()},
                 "skin_face": sk_identity}
+    strip_id = _sha(canonical_json(identity))
+    # The owner's form (Decision 5), from the strips' own pockets and patches. It is made
+    # from the record, so it is not part of strip_id.
+    files[TEMPLATE_NAME] = results_template(cl_section["pockets"], sk_section["patches"],
+                                            strip_id=strip_id, geometry_id=geometry_id)
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__, "algorithm": ALGORITHM,
-        "strip_id": _sha(canonical_json(identity)),
+        "strip_id": strip_id,
         "source": SOURCE,
         "geometry_id": geometry_id, "geometry": geometry,
         "params": {"timeout_s": ctx.timeout, "check_tree": check_tree},

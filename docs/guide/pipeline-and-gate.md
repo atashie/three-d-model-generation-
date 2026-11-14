@@ -41,12 +41,16 @@ valid solid can still include an unwanted background.
   failed; 1 means a check failed (files written); 2 means an input or I/O error.
 - **`tdmg slice`** covers S9 (see below). It judges thin features from the G-code and
   replaces the placeholder F6 check with measured ones. It also slices a
-  `tdmg flat --colors` folder, each color on its own filament (the last section).
+  `tdmg flat --colors` folder, each color on its own filament (see "Slicing a colored
+  folder").
 - **`tdmg colors`** is the first half of S6 for flat multicolor (R2; see below). It
   writes a color plan for review.
 - **`tdmg flat --colors`** builds the plan's colored bodies as STL files, for an AMS
   print and for a glued print, and writes the AMS bodies as one multicolor `model.3mf`
-  (see below). `tdmg slice` slices them (see the last section).
+  (see below). `tdmg slice` slices them (see "Slicing a colored folder").
+- **`tdmg strip`** builds, gates and slices two calibration test strips, for the glue
+  clearance and the skin depth, and writes a form for the owner to fill in after printing
+  (the last section).
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 
@@ -484,3 +488,73 @@ Records: `research/verification/2026-11-13-color-slicing/` (`README.md`,
 **Not proven:** nothing multicolor has been printed. `tdmg`'s G-code has not been
 compared with Bambu Studio's slice. The flush amounts are OrcaSlicer's, measured and not
 tuned.
+
+## Test strips (`tdmg strip`, R2 step 5 part 1, 2026-11-14)
+
+```
+tdmg strip OUT [--slicer-dir ...] [--timeout-s ...]
+```
+
+Two small calibration prints, so that the owner can set two rules from a real print on
+the A1 (plan `docs/plans/2026-11-14-test-strip.md`). Both rules are untested hypotheses
+until then.
+- **Clearance strip,** for `color.glue.clearance_mm` (0.2 mm now): a base with six square
+  pockets, and six glue pieces with gaps of 0.10 to 0.35 mm per side, made by the same
+  glue code as `tdmg flat --colors`.
+- **Skin strip,** for `color.skin.depth_mm` (0.6 mm now): a black base with white patches
+  0.2 to 1.0 mm deep, a black-only patch and a full-white patch.
+
+The gaps and depths are the owner's choices. The layout numbers (square sizes, spacing,
+3 mm thickness, label holes) are the test object's size, not rules. Each layout is
+checked against `fdm.wall.min_thickness` and `fdm.hole.min_diameter` when it is built.
+
+**Slicer:** `--slicer-dir`, else `$TDMG_ORCASLICER_DIR`, as for `tdmg slice`. The app
+tree is always checked. PrusaSlicer is not run, so `F6.portability` is UNKNOWN and not
+required: the strips are printed once, from Bambu Studio, to set two rules.
+
+**Outputs, in `OUT`:**
+- `clearance/base.stl` and `clearance/pieces.stl`, each sliced as an R1 part in
+  `clearance/slice/base/` and `clearance/slice/pieces/`. They are two plates: each piece
+  lies where its pocket is, so the pieces cannot share a plate with the base.
+- `skin/model.3mf` (one shell per color) and `palette.json`, sliced face up in
+  `skin/slice/` as a colored folder's face is.
+- `results-template.md`: the owner's form, made from the strip's own gaps and depths.
+- `strip.json`, schema `tdmg.strip/1`, with `strip_id`, written last.
+
+**Checks:**
+- **Each clearance plate:** R1's required set less `F2.target_width` (the size is set by
+  the layout) and `F6.portability`, with `F4.body_count` (1 for the base, 6 for the
+  pieces) and the `F4.glue_fit` and `F4.glue_partition` checks of all six glue calls.
+- **The skin face:** the AMS checks, `F2.orca_input_matches_bodies` and the step 4 color
+  checks, gated "outer edge only", as for an owner plan's face.
+
+**The owner-accepted failure:** the clearance base plate FAILs `F3.printed_connectivity`
+with the pinned slicer: on 2 of its 15 layers a piece of infill inside the part does not
+touch the other beads in the bead model. The owner decided on 2026-11-14 to keep the FAIL
+and print it anyway. The verdict stays NOT CERTIFIED and the G-code stays quarantined.
+`strip.json` gives the strip a `known_failures` note only when that check is the strip's
+only failing required check, the part's printed layers show the same holes as the model
+and only extra printed parts, and the check's measured values name the layers. The note
+keeps the dated cause and gives this run's own layers (`this_run`).
+
+**Message:** each strip's verdict; per plate its layers, time and filament; the accepted
+failure with its measured layers; the skin face's color changes, time and filament; what
+to open in Bambu Studio (the two clearance plates in the same filament; `model.3mf` on the
+AMS with filament 1 black for the base and filament 2 white for the patches); and where
+the form is.
+
+**Exit codes:** 0 means the files are written and no required check FAILed, except the
+one the `known_failures` note covers. 1 means another required check FAILed (files
+written). 2 means an input or setup error, with nothing written. As for `tdmg slice`,
+exit 0 does not mean a strip is certified.
+
+**On this PC** (2026-11-14, pinned OrcaSlicer 2.5.0, app tree checked): the skin strip is
+PRINTABLE (15 layers, 15 color changes, 2727 s, 10.29 g). The clearance strip is NOT
+CERTIFIED by the accepted failure alone (base plate: z 1.6 and 2.0 mm, 2 printed parts for
+the model's 1, 21 holes for 21; 1372 s, 6.12 g; pieces plate PRINTABLE, 490 s, 0.47 g).
+Exit 0. The times and weights are the slicer's estimates. Record:
+`research/verification/2026-11-14-test-strips/`.
+
+**After printing:** the owner fills in `results-template.md` (fit of each piece, look of
+each patch, photos). With the owner's choice, the two rules then move to
+`validation: calibrated` (plan Decision 5).

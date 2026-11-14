@@ -429,6 +429,49 @@ task.
   - `README.md`;
   - `STATUS.md`.
 - **CLI tests:** as for `tdmg slice`.
+- **Amended in Task 3 (2026-11-14), what was built:**
+  - **Exit codes of `tdmg strip OUT [--slicer-dir DIR] [--timeout-s N]`:**
+    - **0:** the files are written, and no required check FAILed except the one the
+      strip's `known_failures` note covers (the owner's decision above: the clearance base
+      plate's `F3.printed_connectivity`). UNKNOWN checks and warnings are allowed, as in
+      `tdmg slice`.
+    - **1:** the files are written, and some other required check FAILed, on any plate or
+      on the skin face (`calibration_strip.blocking_failures`). A FAIL is covered only
+      when the note names both its part and its check. The note itself needs every other
+      required check of the strip to PASS, so a second FAIL also leaves the accepted one
+      uncovered.
+    - **2:** as `tdmg slice`: a bad `--timeout-s`, an OUT that is a file or a non-empty
+      folder, or an OrcaSlicer that is missing or does not verify, with nothing written;
+      or an I/O failure while writing.
+    - **Unverified slicer tree:** the command has no `--skip-tree-check`, so the app tree
+      is always checked, and a tree that does not verify is refused (exit 2), as in
+      `tdmg slice`. Through `make_strips(check_tree=False)` the note is never given, so
+      every required FAIL counts, as in `tdmg slice`.
+  - **Slicer folder:** `--slicer-dir`, else `$TDMG_ORCASLICER_DIR`, as `tdmg slice`.
+  - **What it prints:** each strip's verdict; per clearance plate its verdict, layers,
+    time and filament; the accepted failure with the dated cause and this run's own
+    measured layers; the skin face's color changes, time and filament; what to open in
+    Bambu Studio (the two clearance plates in one filament; `model.3mf` on the AMS, with
+    filament 1 black for the base and filament 2 white for the patches, from
+    `filament_map`); the path of `results-template.md`; `strip_id`. A strip with an
+    uncovered FAIL is "do not print"; a strip that is NOT CERTIFIED without a FAIL (an
+    UNKNOWN check) is "not certified: do not print it yet".
+  - **`results-template.md`** (`calibration_strip.results_template`): written by
+    `make_strips` into OUT and listed in `outputs` with its hash. It is made from the
+    record's `pockets` and `patches`, so its numbers are the strip's own. It holds
+    `strip_id` and `geometry_id`; it is not part of `strip_id` (it is made from the
+    record). ASCII with LF line ends, byte-identical on repeat. The algorithm label stays
+    `strip-2`: no verdict changes.
+  - **Review N1 (Task 2 review):** the note's `cause` stays the dated text of the
+    2026-11-14 run. Beside it, `this_run` gives, per failing part, the check's own layer
+    count and mismatched z values (its measured values), with each mismatched layer's
+    [model, printed] part and hole counts from the part's printed layers; `this_run_text`
+    says the same in words. A FAIL whose measured values are missing, whose mismatch
+    count is not the number of z values, or that names a z the printed layers do not
+    have, gets no note.
+  - **Limit, not checked:** how Bambu Studio places `pieces.stl` when it is opened. The
+    form and the command tell the owner to check that the row runs left to right and not
+    to move, turn or arrange it.
 
 ### Task 4: measured run and Codex review
 

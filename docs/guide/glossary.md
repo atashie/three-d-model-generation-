@@ -33,4 +33,5 @@
 | Slicer | Software that cuts a mesh into layers and makes G-code, for example Bambu Studio or OrcaSlicer |
 | STL | An old mesh format: triangles only, no units or color |
 | Support | Temporary structure the slicer adds under overhangs, removed after printing |
+| Test strip (calibration strip) | A small calibration print made by `tdmg strip`. The clearance strip tries six glue gaps; the skin strip tries five white depths over black. The owner records the results in `results-template.md` |
 | Watertight | A closed surface with no holes |

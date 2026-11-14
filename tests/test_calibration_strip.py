@@ -22,6 +22,8 @@ import shapely
 import test_slice
 import trimesh
 from shapely import affinity
+from test_cli import _plain
+from test_cli import runner as cli_runner
 
 import tdmg.calibration_strip as ts
 import tdmg.color_slicing as cs
@@ -38,6 +40,7 @@ from tdmg.calibration_strip import (
     skin_strip,
 )
 from tdmg.checks import merge_exact, topology_checks
+from tdmg.cli import app
 from tdmg.color_checks import (
     body_export_check,
     color_partition_check,
@@ -528,7 +531,7 @@ FILES = {
     "skin/model.3mf", "skin/palette.json",
     "skin/slice/filaments/filament-1.json", "skin/slice/filaments/filament-2.json",
     "skin/slice/face-up/orca-input.3mf", "skin/slice/face-up/plate_1.gcode",
-    "skin/slice/face-up/plate_1.statistics.json"}
+    "skin/slice/face-up/plate_1.statistics.json", "results-template.md"}
 GLUE_IDS = {"F4.glue_fit", "F4.glue_partition"}
 AMS_IDS = {"F1.finite", "F1.no_degenerate_faces", "F1.no_duplicate_faces",
            "F1.edge_manifold", "F1.consistent_orientation", "F1.vertex_manifold",
@@ -753,16 +756,27 @@ MISSING_PART = [ACCEPTED_LAYERS[0], {**ACCEPTED_LAYERS[1], "parts": [2, 1]},
                 ACCEPTED_LAYERS[2]]
 
 
+def _connectivity_measured(layers):
+    """F3.printed_connectivity's measured values for layers, as tdmg.printed gives them for
+    a FAIL (the counts, and the z of every layer with an unmatched shape)."""
+    bad = [m for m in layers if m["unmatched"]]
+    return {"layers": len(layers), "layers_mismatched": len(bad), "angle_deg": 90,
+            "mismatched_z": [m["z"] for m in bad]}
+
+
 def _fail_on_base(monkeypatch, ids, layers=ACCEPTED_LAYERS):
     """On top of _pass_required: the base plate's F3 checks in ids FAIL, and its printed
-    record holds layers."""
+    record holds layers (F3.printed_connectivity's measured values agree with them)."""
     _pass_required(monkeypatch)
     real = tdmg.slicing.f3_checks
 
     def base_fail(gcode, stl, setup, not_measured=None):
         checks, printed = real(gcode, stl, setup, not_measured)
         if _body_count(_stl(stl)) == 1:
-            checks = [replace(c, status="FAIL") if c.id in ids else c for c in checks]
+            checks = [replace(c, status="FAIL",
+                              measured=(_connectivity_measured(layers)
+                                        if c.id == "F3.printed_connectivity" else c.measured))
+                      if c.id in ids else c for c in checks]
             printed = {**printed, "layers": copy.deepcopy(layers)}
         return checks, printed
     monkeypatch.setattr(tdmg.slicing, "f3_checks", base_fail)
@@ -800,6 +814,43 @@ def test_the_owner_accepted_connectivity_fail_gets_a_note(orca, tmp_path, monkey
     assert (tmp_path / "strip/clearance/slice/base/plate_1.gcode.failed").is_file()
 
 
+def test_the_note_gives_this_runs_own_measured_layers(orca, tmp_path, monkeypatch):
+    # Review N1: the dated cause is fixed text from the 2026-11-14 run; the note also gives
+    # this run's mismatched z values and their part and hole counts, from the record.
+    layers = [ACCEPTED_LAYERS[0], {**ACCEPTED_LAYERS[1], "z": 1.4, "parts": [1, 3]},
+              {**ACCEPTED_LAYERS[0], "z": 1.8}]
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"}, layers)
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    note = rec["clearance"]["known_failures"]
+    assert note["cause"] == ts.KNOWN_FAILURE_CAUSE           # the dated cause is kept
+    base = rec["clearance"]["plates"]["base"]
+    check = next(c for c in base["checks"] if c["id"] == "F3.printed_connectivity")
+    assert note["this_run"] == [{
+        "part": "base", "layers": check["measured"]["layers"], "layers_mismatched": 1,
+        "mismatched": [{"z_mm": 1.4, "parts": [1, 3], "holes": [21, 21]}]}]
+    assert note["this_run_text"] == (
+        "this run, base: 1 of 3 layers differ; z 1.4 mm: 3 printed parts for the model's 1, "
+        "21 printed holes for its 21")
+
+
+def test_the_note_needs_the_checks_measured_layers():
+    # The note states this run's measured layers, so a FAIL whose measured values are
+    # missing, or name a layer the printed record does not have, gets no note.
+    ok = {"required_checks": ["F3.printed_connectivity"],
+          "certification": "NOT CERTIFIED: F3.printed_connectivity FAIL",
+          "checks": [{"id": "F3.printed_connectivity", "status": "FAIL",
+                      "measured": _connectivity_measured(ACCEPTED_LAYERS)}],
+          "printed": {"layers": ACCEPTED_LAYERS}}
+    assert ts.known_failures({"base": ok})["this_run"][0]["mismatched"] == [
+        {"z_mm": 1.6, "parts": [1, 2], "holes": [21, 21]},
+        {"z_mm": 2.0, "parts": [1, 2], "holes": [21, 21]}]
+    for measured in (None, {}, {**_connectivity_measured(ACCEPTED_LAYERS), "mismatched_z": []},
+                     {**_connectivity_measured(ACCEPTED_LAYERS), "mismatched_z": [1.6, 9.0]},
+                     {**_connectivity_measured(ACCEPTED_LAYERS), "layers_mismatched": 3}):
+        bad = {**ok, "checks": [{**ok["checks"][0], "measured": measured}]}
+        assert ts.known_failures({"base": bad}) is None, measured
+
+
 @pytest.mark.parametrize("ids", [
     {"F3.edge_coverage"},                                   # another check
     {"F3.printed_connectivity", "F3.edge_coverage"},        # more than the accepted one
@@ -821,8 +872,11 @@ def test_an_unverified_app_tree_gets_no_note(orca, tmp_path, monkeypatch):
 def test_known_failures_needs_every_other_required_check_to_pass():
     def part(statuses, cert, required=("F3.printed_connectivity", "F1.finite"),
              layers=ACCEPTED_LAYERS):
+        measured = _connectivity_measured(layers or [])
         return {"required_checks": list(required), "certification": cert,
-                "checks": [{"id": i, "status": s} for i, s in statuses],
+                "checks": [{"id": i, "status": s,
+                            "measured": measured if i == "F3.printed_connectivity" else None}
+                           for i, s in statuses],
                 "printed": {"layers": layers}}
     ok = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "PASS")],
               "NOT CERTIFIED: F3.printed_connectivity FAIL")
@@ -959,6 +1013,11 @@ def test_the_strips_with_the_real_slicer(tmp_path):
     assert cl["verdict"] == "NOT CERTIFIED"
     assert cl["known_failures"]["checks"] == ["F3.printed_connectivity"]
     assert cl["known_failures"]["parts"] == ["base"]
+    # Measured 2026-11-14: z 1.6 and 2.0 mm, one printed part more, holes 21 for 21.
+    [run] = cl["known_failures"]["this_run"]
+    assert [(m["z_mm"], m["parts"], m["holes"]) for m in run["mismatched"]] == [
+        (pytest.approx(1.6), [1, 2], [21, 21]), (pytest.approx(2.0), [1, 2], [21, 21])]
+    assert (out / "results-template.md").is_file()
     assert rec["skin"]["certification"] == "PRINTABLE", rec["skin"]["certification"]
     assert rec["skin"]["known_failures"] is None
     assert cl["plates"]["pieces"]["certification_note"] == ts.PART_PRINTABLE_MEANING
@@ -971,3 +1030,187 @@ def test_the_strips_with_the_real_slicer(tmp_path):
     face = rec["skin"]["face"]
     assert face["summary"]["changes"] is not None and face["summary"]["changes"] > 0
     assert rec["slicer"]["app_tree_verified"] is True
+
+
+# --- Task 3: results-template.md and tdmg strip --------------------------------------------
+
+CLEARANCE_CHOICES = ["won't go in", "pressed in", "drops in, snug", "drops in, loose"]
+SKIN_CHOICES = ["dark shows", "slight shadow", "looks like full white"]
+
+
+def _table(text: str, header: str) -> list[list[str]]:
+    """The rows (cells, stripped) of the Markdown table whose header row starts with
+    header, without the header and the separator."""
+    lines = text.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(header))
+    rows = []
+    for line in lines[start + 2:]:
+        if not line.startswith("|"):
+            break
+        rows.append([c.strip() for c in line.strip().strip("|").split("|")])
+    return rows
+
+
+def test_the_results_template_has_a_row_per_gap_and_patch(orca, tmp_path):
+    out = tmp_path / "strip"
+    rec = ts.make_strips(out, orca())
+    data = (out / "results-template.md").read_bytes()
+    assert rec["outputs"]["results-template.md"] == _sha(data)
+    text = data.decode("utf-8")
+    assert text.isascii() and "\r" not in text
+    assert rec["strip_id"] in text and rec["geometry_id"] in text
+    head = "| Pocket | Label holes | Gap per side (mm) | " + " | ".join(CLEARANCE_CHOICES)
+    rows = _table(text, head)
+    assert [r[:3] for r in rows] == [[str(k), str(k), f"{g:.2f}"]
+                                     for k, g in enumerate(OWNER_GAPS_MM, 1)]
+    assert all(r[3:7] == ["[ ]"] * 4 for r in rows)
+    head = "| Patch | Label holes | White depth (mm) | " + " | ".join(SKIN_CHOICES)
+    rows = _table(text, head)
+    assert len(rows) == 7
+    assert rows[0][:3] == ["1, black reference", "0", "none (black only)"]
+    assert rows[-1][:3] == ["7, full white reference", "0", f"{THICKNESS_MM:.1f} (full)"]
+    assert [r[:3] for r in rows[1:-1]] == [[str(k + 1), str(k), f"{d:.1f}"]
+                                           for k, d in enumerate(OWNER_DEPTHS_MM, 1)]
+    assert all(r[3:6] == ["[ ]"] * 3 for r in rows[1:-1])
+    # The instructions of the plan's Task 2 amendment and Decision 5.
+    flat = " ".join(text.split())
+    for words in ("left to right", "pocket 1 to 6 in the same order",
+                  "Pocket k is the one with k label holes", "room light",
+                  "two reference patches", "Photos", "brand", "Notes"):
+        assert words in flat, words
+
+
+def test_the_results_template_comes_from_the_strips_own_values():
+    # Not typed-in numbers: other gaps and depths give other rows.
+    pockets = [{"pocket": k, "gap_mm": g, "holes": k}
+               for k, g in enumerate((0.11, 0.16, 0.205, 0.26, 0.31, 0.36), 1)]
+    patches = [{"patch": 1, "holes": 0, "depth_mm": None, "role": "black only (reference)"},
+               *({"patch": k + 1, "holes": k, "depth_mm": d, "role": "white over black"}
+                 for k, d in enumerate((0.3, 0.5, 0.7, 0.9, 1.1), 1)),
+               {"patch": 7, "holes": 0, "depth_mm": 2.5, "role": "full white (reference)"}]
+    text = ts.results_template(pockets, patches, strip_id="s" * 64,
+                               geometry_id="g" * 64).decode("utf-8")
+    rows = _table(text, "| Pocket |")
+    assert [r[2] for r in rows] == ["0.11", "0.16", "0.205", "0.26", "0.31", "0.36"]
+    rows = _table(text, "| Patch |")
+    assert [r[2] for r in rows] == ["none (black only)", "0.3", "0.5", "0.7", "0.9", "1.1",
+                                    "2.5 (full)"]
+    assert ts.results_template(pockets, patches, strip_id="s" * 64,
+                               geometry_id="g" * 64).decode("utf-8") == text
+
+
+def test_the_results_template_is_byte_identical_on_repeat(orca, tmp_path):
+    root = orca()
+    ts.make_strips(tmp_path / "a", root)
+    ts.make_strips(tmp_path / "b", root)
+    assert ((tmp_path / "a/results-template.md").read_bytes()
+            == (tmp_path / "b/results-template.md").read_bytes())
+
+
+def _strip_cli(out, *extra):
+    return cli_runner.invoke(app, ["strip", str(out), *extra])
+
+
+def test_cli_strip_accepted_base_failure_exits_0(orca, tmp_path, monkeypatch):
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 0, r.output
+    rec = json.loads((out / "strip.json").read_bytes())
+    lines = r.stdout.splitlines()
+    assert "clearance strip: NOT CERTIFIED: base: F3.printed_connectivity FAIL" in lines
+    assert "skin strip: PRINTABLE" in lines
+    text = _plain(r.stdout)
+    note = rec["clearance"]["known_failures"]
+    assert note["this_run_text"] in text and note["cause"] in text
+    assert "Keep the FAIL, print anyway" in text
+    assert "z 1.6 mm: 2 printed parts for the model's 1" in text
+    # What to print, with which filament, and the form.
+    for name in ("clearance/base.stl", "clearance/pieces.stl", "skin/model.3mf",
+                 "results-template.md"):
+        assert str(out / name) in text, name
+    assert "Bambu Studio" in text and "same filament" in text
+    assert "filament 1: black #000000 (the base)" in text
+    assert "filament 2: white #FFFFFF (the patches)" in text
+    assert f"strip_id {rec['strip_id']}" in lines
+    assert "do not print" not in text.lower()
+
+
+def test_cli_strip_prints_time_and_filament_per_plate(orca, tmp_path, monkeypatch):
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    rec = json.loads((out / "strip.json").read_bytes())
+    lines = r.stdout.splitlines()
+    for name, plate in rec["clearance"]["plates"].items():
+        line = next(line for line in lines if line.startswith(f"  {name} plate: "))
+        assert plate["certification"] in line
+        assert f"{plate['summary']['layer_count']} layers" in line
+        assert ", time " in line and ", filament " in line and "(slicer estimates)" in line
+    line = next(line for line in lines if line.startswith("  face up: "))
+    assert "color changes" in line and ", time " in line and ", filament " in line
+
+
+@pytest.mark.parametrize("ids", [{"F3.edge_coverage"},
+                                 {"F3.printed_connectivity", "F3.edge_coverage"}])
+def test_cli_strip_any_other_required_fail_exits_1(orca, tmp_path, monkeypatch, ids):
+    _fail_on_base(monkeypatch, ids)
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 1, r.output
+    assert "do not print the clearance strip" in _plain(r.stdout)
+    assert (out / "strip.json").is_file() and (out / "results-template.md").is_file()
+
+
+def test_cli_strip_a_skin_fail_exits_1(orca, tmp_path, monkeypatch):
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    real = cs.color_slice_checks
+
+    def color(*a, **kw):
+        checks, record = real(*a, **kw)
+        return [replace(c, status="FAIL") if c.id == "F6.tool_placement" else c
+                for c in checks], record
+    monkeypatch.setattr(cs, "color_slice_checks", color)
+    r = _strip_cli(tmp_path / "strip", "--slicer-dir", str(orca()))
+    assert r.exit_code == 1, r.output
+    assert "do not print the skin strip" in _plain(r.stdout)
+
+
+def test_cli_strip_unknown_checks_exit_0_but_say_not_yet(orca, tmp_path):
+    # The fake's G-code cannot be measured: F3 UNKNOWN. As tdmg slice: exit 0, no PRINTABLE.
+    r = _strip_cli(tmp_path / "strip", "--slicer-dir", str(orca()))
+    assert r.exit_code == 0, r.output
+    text = _plain(r.stdout)
+    assert "the clearance strip is not certified: do not print it yet" in text
+    assert "the skin strip is not certified: do not print it yet" in text
+
+
+def test_cli_strip_uses_the_environment_variable(orca, tmp_path, monkeypatch):
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    monkeypatch.setenv("TDMG_ORCASLICER_DIR", str(orca()))
+    r = _strip_cli(tmp_path / "strip")
+    assert r.exit_code == 0, r.output
+
+
+def test_cli_strip_refuses_a_non_empty_out(orca, tmp_path):
+    out = tmp_path / "strip"
+    out.mkdir()
+    (out / "keep.txt").write_text("x")
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 2
+    assert r.stderr.startswith("error: ") and "not empty" in _plain(r.stderr)
+    assert _files(out) == {"keep.txt"}
+
+
+@pytest.mark.parametrize("extra", [["--timeout-s", "0"], ["--slicer-dir", "nowhere"]])
+def test_cli_strip_setup_errors_exit_2(orca, tmp_path, extra):
+    orca()
+    r = _strip_cli(tmp_path / "strip", *extra)
+    assert r.exit_code == 2 and r.stderr.startswith("error: ")
+    assert not (tmp_path / "strip").exists()
+
+
+def test_cli_strip_help_documents_exit_codes():
+    text = _plain(cli_runner.invoke(app, ["strip", "--help"], prog_name="tdmg").output)
+    assert "Exit codes:" in text and "results-template.md" in text
+    assert "--slicer-dir" in text and "--timeout-s" in text

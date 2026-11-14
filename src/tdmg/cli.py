@@ -2,7 +2,8 @@
 selection for review), `flat` (flat geometry from a selection, gated on the written
 STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checked for
 portability with the pinned PrusaSlicer). R2 adds `colors` (the color plan of a selection,
-for review); `make` and `check` follow."""
+for review) and `strip` (the two calibration strips, built, gated and sliced); `make` and
+`check` follow."""
 
 import inspect
 from pathlib import Path
@@ -12,6 +13,19 @@ import typer
 from pydantic import ValidationError
 
 from tdmg import __version__
+from tdmg.calibration_strip import (
+    BASE_STL,
+    CLEARANCE_DIR,
+    KNOWN_FAILURE_SHORT,
+    MODEL_3MF,
+    PIECES_STL,
+    SKIN_COLOR_NAMES,
+    SKIN_DIR,
+    TEMPLATE_NAME,
+    blocking_failures,
+    make_strips,
+)
+from tdmg.calibration_strip import RECORD_NAME as STRIP_RECORD
 from tdmg.color_outline import THIN_SHARE_RULE
 from tdmg.color_slicing import (
     COLOR_DO_NOT_PRINT,
@@ -40,7 +54,13 @@ from tdmg.selection import (
     write_selection,
 )
 from tdmg.slicer import GCODE_NAME, SlicerError
-from tdmg.slicing import DO_NOT_PRINT, PRINT_THIS, PRUSA_DO_NOT_PRINT, make_slice
+from tdmg.slicing import (
+    DO_NOT_PRINT,
+    FAILED_GCODE_NAME,
+    PRINT_THIS,
+    PRUSA_DO_NOT_PRINT,
+    make_slice,
+)
 
 # make_flat's default printer, shown in tdmg flat's help.
 FLAT_PRINTER = inspect.signature(make_flat).parameters["printer"].default
@@ -511,6 +531,113 @@ def slice_(
     if any(c["status"] == "FAIL" for c in rec["checks"]):
         prusa_written = PRUSA_FAILED_GCODE_NAME in rec["outputs"]
         typer.echo(DO_NOT_PRINT + (PRUSA_DO_NOT_PRINT if prusa_written else ""))
+        raise typer.Exit(1)
+
+
+def _time(seconds) -> str:
+    return "?" if seconds is None else f"{seconds:.0f} s ({seconds / 60:.0f} min)"
+
+
+def _strip_ok(section: dict) -> bool:
+    """A strip the owner can print: PRINTABLE, or NOT CERTIFIED by the owner-accepted
+    failure alone (its known_failures note)."""
+    return section["verdict"] == "PRINTABLE" or section["known_failures"] is not None
+
+
+def _strip_output(rec: dict, out: Path) -> list[tuple[str, str]]:
+    """tdmg strip's lines; returns the blocking failures of both strips."""
+    cl, sk = rec["clearance"], rec["skin"]
+    typer.echo(f"clearance strip: {cl['certification']}")
+    for name, plate in cl["plates"].items():
+        s = plate["summary"]
+        layers = "?" if s["layer_count"] is None else str(s["layer_count"])
+        typer.echo(f"  {name} plate: {plate['certification']} - {layers} layers, time "
+                   f"{_time(s['time_s'])}, filament {_number(s['weight_g'], 'g', 2)} "
+                   "(slicer estimates)")
+    note = cl["known_failures"]
+    if note is not None:
+        typer.echo(f"  accepted failure: {', '.join(note['checks'])} on the "
+                   f"{', '.join(note['parts'])} plate, by {KNOWN_FAILURE_SHORT}; "
+                   f"{note['source']}")
+        typer.echo(f"  {note['cause']}")
+        typer.echo(f"  {note['this_run_text']}")
+        typer.echo(f"  {note['note']}")
+    typer.echo(f"skin strip: {sk['certification']}")
+    s = sk["summary"]
+    changes = "?" if s["changes"] is None else str(s["changes"])
+    typer.echo(f"  face up: {changes} color changes, time {_time(s['time_s'])}, filament "
+               f"{_number(s['weight_g'], 'g', 2)} (slicer estimates)")
+    blocking = {"clearance": blocking_failures(cl), "skin": blocking_failures(sk)}
+    typer.echo("to print: open the files in Bambu Studio (each plate_1.gcode is for checking "
+               "only)")
+    for strip, section in (("clearance", cl), ("skin", sk)):
+        if blocking[strip]:
+            failed = ", ".join(f"{part}: {check}" for part, check in blocking[strip])
+            typer.echo(f"  do not print the {strip} strip: a required check FAILed "
+                       f"({failed}); its G-code is kept as {FAILED_GCODE_NAME}")
+        elif not _strip_ok(section):
+            typer.echo(f"  the {strip} strip is not certified: do not print it yet")
+        elif strip == "clearance":
+            typer.echo(f"  clearance strip: print {out / CLEARANCE_DIR / BASE_STL} and "
+                       f"{out / CLEARANCE_DIR / PIECES_STL} as two plates, in the same "
+                       "filament (any one). pieces.stl has the six pieces in one row, piece "
+                       "1 at the "
+                       "left: check that the row runs left to right, and do not move, turn "
+                       "or arrange it")
+        else:
+            colors = ", ".join(
+                f"filament {f['filament']}: {SKIN_COLOR_NAMES[f['hex']]} {f['hex']} "
+                f"({'the base' if f['role'] == 'base' else 'the patches'})"
+                for f in sk["filament_map"])
+            typer.echo(f"  skin strip: print {out / SKIN_DIR / MODEL_3MF} on the AMS; "
+                       f"{colors}. Give each filament the AMS slot that holds that color")
+    typer.echo(f"after printing, fill in {out / TEMPLATE_NAME} (it says how to judge each "
+               "piece and patch)")
+    typer.echo(f"strip_id {rec['strip_id']}")
+    typer.echo(f"wrote {out / STRIP_RECORD}")
+    return blocking["clearance"] + blocking["skin"]
+
+
+@app.command()
+def strip(
+    out: Annotated[Path, typer.Argument(metavar="OUT",
+                                        help="New or empty folder for the outputs.")],
+    slicer_dir: Annotated[Path | None, typer.Option(
+        "--slicer-dir", help="OrcaSlicer folder from scripts/setup_orcaslicer.py; default "
+                             "$TDMG_ORCASLICER_DIR")] = None,
+    timeout_s: Annotated[float | None, typer.Option(
+        "--timeout-s", help="Stop each slicer run after this many seconds; default from "
+                            "rule slicer.orca.timeout_s")] = None,
+) -> None:
+    """Make the two calibration strips: build, check and slice them.
+
+    The clearance strip (clearance/base.stl and pieces.stl) tests the
+    glue gap; the skin strip (skin/model.3mf) tests the white skin
+    depth over black. Writes strip.json and results-template.md, the
+    form to fill in after printing. PrusaSlicer is not run.
+
+    Exit codes:
+      0  files written, and no required check FAILed, except the
+         owner-accepted F3.printed_connectivity failure of the
+         clearance base plate (UNKNOWN checks and warnings allowed)
+      1  files written, and another required check FAILed
+      2  input or setup error (including a missing or unverified
+         slicer, or an OUT that is a file or a non-empty folder):
+         nothing is written; or an I/O failure while writing,
+         which can leave a folder without strip.json: such a
+         folder is incomplete and must not be used
+    Exit 0 does not mean a strip is certified; read verdicts in
+    strip.json.
+    """
+    try:
+        rec = make_strips(out, slicer_dir=slicer_dir, timeout_s=timeout_s)
+    except SlicerError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:              # unwritable output, disk full ...
+        _os_error(e)
+        raise typer.Exit(2) from None
+    if _strip_output(rec, out):
         raise typer.Exit(1)
 
 

@@ -13,7 +13,8 @@ The same color plan serves two routes:
 - **Glue:** the base has shallow pockets. Each color is printed separately and glued
   into its pocket.
 
-**Status (2026-11-13):** steps 1 to 4 are done; step 5 (prints) is next.
+**Status (2026-11-14):** steps 1 to 4 are done. Step 5 (prints) has begun: part 1, the
+two test strips, is built (`tdmg strip`) and waits for the owner to print it.
 - `tdmg colors` turns a selection into a reviewed color plan (step 1).
 - `tdmg flat --colors` turns a ready plan into gated STL bodies for both routes
   (step 2), and writes the AMS bodies as one multicolor `model.3mf` (step 3).
@@ -21,6 +22,9 @@ The same color plan serves two routes:
   filament, face up by default, and checks the G-code against the bodies. It also
   slices each glue plate (step 4; see the
   [pipeline guide](../../guide/pipeline-and-gate.md)).
+- `tdmg strip OUT` makes two calibration prints for two of this page's rules (step 5,
+  part 1; [the test strip plan](../../plans/2026-11-14-test-strip.md)). The first AMS and
+  glue prints of an owner plan (part 2) come after.
 
 On the owner's four plans, face up is PRINTABLE, with warnings. Nothing in this page is
 printed.
@@ -152,6 +156,35 @@ PRINTABLE, with warnings. Each has 9 color changes (the minimum) and a prime tow
   color plates FAIL F3 (Roadie drop: `glue-color-2`; Oddie merge blues: `glue-color-2`
   and `glue-color-3`).
 
+**Step 5, part 1, the test strips:** `tdmg strip OUT [--slicer-dir DIR] [--timeout-s N]`
+(design: [the test strip plan](../../plans/2026-11-14-test-strip.md)). The slicer folder
+is `--slicer-dir`, else `$TDMG_ORCASLICER_DIR`, as for `tdmg slice`. PrusaSlicer is not
+run. It builds, gates and slices two strips with the owner's values (2026-11-14):
+- **Clearance strip** (for `color.glue.clearance_mm`): a 3 mm base with six 10 mm square
+  pockets, 0.6 mm deep, and six pieces made by the real glue code with gaps of 0.10 to
+  0.35 mm per side. Pocket k has k label holes. `clearance/base.stl` and
+  `clearance/pieces.stl` are two plates, printed in the same filament. The pieces look
+  alike, so they are told apart by their order on the plate, left to right.
+- **Skin strip** (for `color.skin.depth_mm`): one two-color `skin/model.3mf`, black base
+  with white patches 0.2 to 1.0 mm deep, plus a black-only and a full-white reference.
+  It is laid out long along y, because the pinned OrcaSlicer turns a part long along x
+  on the A1. Print it on the AMS: filament 1 black (the base), filament 2 white.
+- **Outputs:** the files above, each strip's `slice/` folder, `strip.json` (schema
+  `tdmg.strip/1`, with `strip_id`) and `results-template.md`, the form to fill in after
+  printing: one row per gap ("won't go in", "pressed in", "drops in, snug", "drops in,
+  loose") and one per patch ("dark shows", "slight shadow", "looks like full white").
+- **Exit codes:** 0 when no required check FAILed, except the owner-accepted
+  `F3.printed_connectivity` failure of the clearance base plate (see the failure table);
+  1 for any other required FAIL; 2 for a setup error, with nothing written.
+
+**On this PC** (2026-11-14, pinned OrcaSlicer 2.5.0, app tree checked; numbers are the
+slicer's estimates): the skin strip is PRINTABLE (15 color changes, 2727 s, 10.29 g). The
+clearance strip is NOT CERTIFIED: its pieces plate is PRINTABLE (3 layers, 490 s,
+0.47 g), and its base plate FAILs `F3.printed_connectivity` on 2 of 15 layers (z 1.6 and
+2.0 mm, one printed part more than the model, 21 holes for 21; 1372 s, 6.12 g). The owner
+decided to keep the FAIL and print it anyway. The command exits 0. Nothing is printed
+yet. Record: `research/verification/2026-11-14-test-strips/README.md`.
+
 ## Parameters
 
 - `color.extract.default_count`: how many colors to extract before merges.
@@ -189,7 +222,9 @@ source.
 | The wrong filament in a slot | The file names colors, not slots | The palette in the preview and record; the file names and `top.png`'s legend | Assign spools in the slicer from the palette |
 | A color is missing from the glue version | All its regions are too small for a piece, so they were folded | A warning in the record and the command's output; `parts.png` lists the color as "no pieces (all folded)" | Print larger, or use the AMS version |
 | No glue version at all | The plan keeps a drawn outline | The command prints "glue: not built" with the reason | Make the plan with `outlines: drop` |
-| A glue piece does not drop in, or sits loose | The printer's error differs from `color.glue.clearance_mm` | `F4.glue_fit` checks the model only, not the print | The clearance test strip (step 5) |
+| A glue piece does not drop in, or sits loose | The printer's error differs from `color.glue.clearance_mm` | `F4.glue_fit` checks the model only, not the print | Print the clearance strip (`tdmg strip`) and record each fit in `results-template.md`; the rule is then set from it (plan Decision 5) |
+| The clearance strip is NOT CERTIFIED | On the base plate, a piece of infill inside the part does not touch the other beads in the bead model (2 of 15 layers, measured 2026-11-14); the outer edge and the holes print as modelled | `F3.printed_connectivity` (required); the record's `known_failures` note gives this run's layers | Owner decision (2026-11-14): keep the FAIL and print it anyway. `tdmg strip` exits 0 for this failure alone; any other required FAIL exits 1 |
+| A white patch shows the black below | The skin is too thin to hide a dark base | None in the model; the owner's eye on the skin strip | Print the skin strip and record each patch in `results-template.md` |
 | Thin outline lines missing in the print | A kept outline line is narrower than the slicer prints; the slicer skips it | That color's `F3.edge_coverage` in `tdmg slice` (a warning, not blocking) | Accept it (the outer band prints), make the plan with a wider `outline_width_mm`, or use `outlines: drop` |
 | A color on the wrong body, or the print turned | The slicer input or the tool order is wrong | `F6.tool_placement` and `F6.filaments_used` (required) | None needed: the face is NOT CERTIFIED |
 | More color changes than needed | OrcaSlicer orders each layer without looking ahead (face down) | `F6.color_changes` records the true minimum beside the count | Print face up (the default) |
@@ -255,7 +290,8 @@ source.
 - Whether OrcaSlicer's flush amounts give clean colors. They are the slicer's, measured
   and not tuned.
 
-Each needs a test print. None is done.
+Each needs a test print. None is done. The first two have test strips ready to print
+(`tdmg strip`, step 5, part 1).
 
 ## Evidence
 
@@ -280,6 +316,9 @@ Each needs a test print. None is done.
   prime tower, face up against face down), the owner-plan slices and the owner's review
   material: [the color slicing record](../../../research/verification/2026-11-13-color-slicing/README.md)
   (`owner-slices-task7.txt`, `owner-review.txt`).
+- The test strips (why the skin strip runs along y, the clearance base plate's infill
+  islands, the repeat run):
+  [the test strip record](../../../research/verification/2026-11-14-test-strips/README.md).
 - The AMS lite's 4 slots: `profiles/printers/bambu-a1.yaml`.
 
 ## Open gaps
