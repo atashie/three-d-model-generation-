@@ -582,6 +582,15 @@ STRIP_PRINTABLE_MEANING = (
     "G-code has been printed, and strength is not judged. The strip is itself the "
     "calibration print: what it shows is the owner's judgement after printing (plan "
     "Decision 5).")
+# A plate's or the face's own certification_note when it is PRINTABLE. The shared texts
+# (slicing.printable_meaning, color_slicing.COLOR_PRINTABLE_MEANING) say PrusaSlicer's
+# portability check passed, but PrusaSlicer is never run for a strip.
+PART_PRINTABLE_MEANING = (
+    "PRINTABLE means every required gate check passed for this plate or face with the "
+    "pinned OrcaSlicer 2.5.0 and the A1 profile. F6.portability was not run and is not "
+    "required for a strip. It is not a guarantee: the acceptance tolerance "
+    "(acceptance.dimension.tolerance) is still a hypothesis, no tdmg G-code has been "
+    "printed, and strength is not judged.")
 REVIEW = (
     "clearance/base.stl and clearance/pieces.stl are the clearance strip; skin/model.3mf "
     "(black base, white patches; palette.json lists the colors) is the skin strip. Print "
@@ -601,13 +610,41 @@ KNOWN_FAILURE_DECISION = (
     "only failing required check is F3.printed_connectivity, with every other required "
     "check PASS, stays NOT CERTIFIED and is printed anyway; the checks do not change")
 KNOWN_FAILURE_CAUSE = (
-    "the slicer's infill fragments inside the part: on a few layers a piece of sparse or "
-    "solid infill, clipped where two fill regions meet, does not touch the other beads in "
-    "the bead model, so the layer has one printed part more than the model section. The "
-    "outer shape, edge and hole checks pass (F3.edge_coverage, F3.edge_overprint, and the "
-    "same holes printed as modelled)")
+    "measured 2026-11-14 on the clearance base plate (pinned OrcaSlicer 2.5.0, A1 "
+    "profile; research/verification/2026-11-14-test-strips/README.md): on 2 of 15 layers "
+    "a piece of sparse or solid infill, clipped where two fill regions meet inside the "
+    "part, did not touch the other beads in the bead model, so the layer had one printed "
+    "part more than the model section. The outer shape, edge and hole checks passed. For "
+    "this run the note also requires, from the part's printed layers, the same hole count "
+    "as the model on every layer and more printed parts than model parts on every "
+    "mismatched layer")
 KNOWN_FAILURE_NOTE = ("The verdict stays NOT CERTIFIED and the G-code stays quarantined; "
                       "print from Bambu Studio as for every strip.")
+
+
+def _extra_parts_only(printed) -> bool:
+    """True when printed (a part record's "printed" entry, R1's F3 layers with "holes" and
+    "parts" as [model, printed]) shows only extra printed parts: at least one layer, the
+    hole counts equal on every layer, and on every layer that differs (part counts unequal
+    or any unmatched shape) more printed parts than model parts, on at least one layer."""
+    layers = printed.get("layers") if isinstance(printed, dict) else None
+    if not isinstance(layers, list) or not layers:
+        return False
+    extra = False
+    for layer in layers:
+        try:
+            (model_holes, printed_holes), (model_parts, printed_parts) = (
+                layer["holes"], layer["parts"])
+            unmatched = layer["unmatched"]
+        except (KeyError, TypeError, ValueError):
+            return False
+        if model_holes != printed_holes:
+            return False
+        if model_parts != printed_parts or unmatched:
+            if not printed_parts > model_parts:
+                return False
+            extra = True
+    return extra
 
 
 def known_failures(parts: dict[str, dict]) -> dict | None:
@@ -618,7 +655,8 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
     KNOWN_FAILURE_CHECK with status FAIL (at least once), every required check is present,
     and each part's own certification is PRINTABLE or exactly "NOT CERTIFIED:
     <KNOWN_FAILURE_CHECK> FAIL" (so an unverified app tree, or anything else the record
-    names, gets no note). It never changes a verdict.
+    names, gets no note). Each failing part must also show the accepted kind of failure
+    in its printed layers (_extra_parts_only). It never changes a verdict.
     """
     only = f"NOT CERTIFIED: {KNOWN_FAILURE_CHECK} FAIL"
     failing = []
@@ -634,6 +672,8 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
         if part["certification"] != ("PRINTABLE" if not bad else only):
             return None
         if bad:
+            if not _extra_parts_only(part.get("printed")):
+                return None
             failing.append(name)
     if not failing:
         return None
@@ -787,7 +827,16 @@ def _slice_plate(ctx, name: str, stl_name: str, stl: bytes, mesh: trimesh.Trimes
         "not_applicable": {TARGET_WIDTH: TARGET_WIDTH_NA},
         "summary": _plate_stats(rec["stats"]),
         "command": _slicing.COMMAND_TEMPLATE, **rec}
+    record["certification_note"] = _part_note(record["certification"])
+    # R1's portability note describes PrusaSlicer's G-code, which a strip never writes.
+    record["portability"] = {**record["portability"], "note": None}
     return {"record": record, "files": files}
+
+
+def _part_note(certification: str) -> str | None:
+    """A strip part's certification_note: PART_PRINTABLE_MEANING when PRINTABLE, else
+    None (replacing the shared texts, which name PrusaSlicer)."""
+    return PART_PRINTABLE_MEANING if certification == "PRINTABLE" else None
 
 
 def _clearance(ctx, strip: ClearanceStrip, printer: PrinterProfile, rules: dict,
@@ -898,6 +947,7 @@ def _skin(ctx, strip: SkinStrip, printer: PrinterProfile, rules: dict, geometry_
                              portability_required=False)
     prefix = f"{SKIN_DIR}/{SLICE_DIR}/"
     face = done["record"]
+    face["certification_note"] = _part_note(face["certification"])
     face["orca_input"] = {**face["orca_input"], "file": prefix + face["orca_input"]["file"]}
     if face["gcode"] is not None:
         face["gcode"] = {**face["gcode"], "file": prefix + face["gcode"]["file"]}

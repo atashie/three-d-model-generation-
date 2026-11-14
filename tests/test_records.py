@@ -177,3 +177,33 @@ def test_a_name_that_is_both_a_file_and_a_folder_is_refused(tmp_path):
         write_outputs(tmp_path / "a", {"x": b"1", "x/y": b"2"}, "rec.json", RECORD,
                       subfolders=True)
     assert not (tmp_path / "a").exists()
+
+
+# subfolders=n: up to n folder levels (tdmg.calibration_strip writes three).
+
+
+def test_subfolders_n_levels_deep_are_written_with_their_parents(tmp_path):
+    out = tmp_path / "a"
+    files = {"top.txt": b"t", "c/b.stl": b"b", "c/s/base/p.gcode": b"p",
+             "c/s/pieces/p.gcode": b"q"}
+    write_outputs(out, files, "rec.json", RECORD, subfolders=3)
+    assert {str(p.relative_to(out)).replace("\\", "/") for p in out.rglob("*")
+            if p.is_file()} == {*files, "rec.json"}
+    # Every parent folder was created, the deepest file holds its bytes.
+    assert (out / "c").is_dir() and (out / "c" / "s").is_dir()
+    assert (out / "c" / "s" / "pieces" / "p.gcode").read_bytes() == b"q"
+
+
+def test_subfolders_one_level_more_than_n_is_refused(tmp_path):
+    out = tmp_path / "a"
+    with pytest.raises(RecordError, match="not a plain file name"):
+        write_outputs(out, {"c/s/base/x/p.gcode": b"p"}, "rec.json", RECORD, subfolders=3)
+    assert not out.exists()
+
+
+def test_subfolders_n_a_name_that_is_both_a_file_and_a_folder_is_refused(tmp_path):
+    out = tmp_path / "a"
+    with pytest.raises(RecordError, match="both a file and a folder"):
+        write_outputs(out, {"c/s": b"1", "c/s/base/p.gcode": b"2"}, "rec.json", RECORD,
+                      subfolders=3)
+    assert not out.exists()

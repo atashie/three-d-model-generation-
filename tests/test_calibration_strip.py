@@ -50,7 +50,7 @@ from tdmg.color_gcode import f3_warning_ids, required_check_ids
 from tdmg.color_geometry import EPS, snap_move_mm, vertex_dist
 from tdmg.flat import _body_count, encode_stl
 from tdmg.rules import load_rules
-from tdmg.slicer import SlicerError
+from tdmg.slicer import SlicerError, load_pin
 from tdmg.slicing import SLICE_REQUIRED_CHECKS
 from tdmg.threemf import Shell
 
@@ -710,8 +710,52 @@ def test_a_required_fail_makes_its_strip_not_certified(orca, tmp_path, monkeypat
     assert not (out / "clearance/slice/pieces/plate_1.gcode").exists()
 
 
-def _fail_on_base(monkeypatch, ids):
-    """On top of _pass_required: the base plate's F3 checks in ids FAIL."""
+def _strings(x, path=""):
+    """Every string in a JSON value, with its path."""
+    if isinstance(x, dict):
+        for k, v in x.items():
+            yield from _strings(v, f"{path}.{k}")
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            yield from _strings(v, f"{path}[{i}]")
+    elif isinstance(x, str):
+        yield path, x
+
+
+def test_no_note_mentions_prusaslicer_but_portability_not_run(orca, tmp_path, monkeypatch):
+    # PrusaSlicer is never run for a strip: the shared PRINTABLE texts (which say its
+    # portability check passed) and R1's note on PrusaSlicer's G-code are not used.
+    _pass_required(monkeypatch)
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    parts = [*rec["clearance"]["plates"].values(), rec["skin"]["face"]]
+    assert [p["certification"] for p in parts] == ["PRINTABLE"] * 3
+    assert all(p["certification_note"] == ts.PART_PRINTABLE_MEANING for p in parts)
+    mentions = [(p, s) for p, s in _strings(rec) if "prusa" in s.lower()]
+    assert mentions                                       # the stated reason is there
+    assert [p for p, s in mentions if s != ts.PORTABILITY_NOT_REQUIRED] == []
+
+
+def test_the_printable_texts_name_the_pinned_slicer():
+    pin = load_pin()
+    for text in (ts.STRIP_PRINTABLE_MEANING, ts.PART_PRINTABLE_MEANING):
+        assert f"pinned {pin.name} {pin.version} and the A1 profile" in text
+        assert "PrusaSlicer" not in text
+
+
+# The base plate's printed layers as measured on 2026-11-14 (two layers with one extra
+# printed part, holes equal everywhere), and two variants that must get no note.
+ACCEPTED_LAYERS = [{"z": 0.2, "holes": [21, 21], "parts": [1, 1], "unmatched": 0},
+                   {"z": 1.6, "holes": [21, 21], "parts": [1, 2], "unmatched": 1},
+                   {"z": 2.0, "holes": [21, 21], "parts": [1, 2], "unmatched": 1}]
+HOLE_MISMATCH = [ACCEPTED_LAYERS[0], {**ACCEPTED_LAYERS[1], "holes": [21, 20]},
+                 ACCEPTED_LAYERS[2]]
+MISSING_PART = [ACCEPTED_LAYERS[0], {**ACCEPTED_LAYERS[1], "parts": [2, 1]},
+                ACCEPTED_LAYERS[2]]
+
+
+def _fail_on_base(monkeypatch, ids, layers=ACCEPTED_LAYERS):
+    """On top of _pass_required: the base plate's F3 checks in ids FAIL, and its printed
+    record holds layers."""
     _pass_required(monkeypatch)
     real = tdmg.slicing.f3_checks
 
@@ -719,8 +763,19 @@ def _fail_on_base(monkeypatch, ids):
         checks, printed = real(gcode, stl, setup, not_measured)
         if _body_count(_stl(stl)) == 1:
             checks = [replace(c, status="FAIL") if c.id in ids else c for c in checks]
+            printed = {**printed, "layers": copy.deepcopy(layers)}
         return checks, printed
     monkeypatch.setattr(tdmg.slicing, "f3_checks", base_fail)
+
+
+@pytest.mark.parametrize("layers", [HOLE_MISMATCH, MISSING_PART, []])
+def test_a_connectivity_fail_of_another_kind_gets_no_note(orca, tmp_path, monkeypatch,
+                                                          layers):
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"}, layers)
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    assert rec["clearance"]["certification"] == \
+        "NOT CERTIFIED: base: F3.printed_connectivity FAIL"
+    assert rec["clearance"]["known_failures"] is None
 
 
 def test_the_owner_accepted_connectivity_fail_gets_a_note(orca, tmp_path, monkeypatch):
@@ -738,6 +793,7 @@ def test_the_owner_accepted_connectivity_fail_gets_a_note(orca, tmp_path, monkey
     assert note["decision"] == ts.KNOWN_FAILURE_DECISION
     assert "Keep the FAIL, print anyway" in note["decision"]
     assert note["source"] == ts.SOURCE
+    assert note["cause"].startswith("measured 2026-11-14")
     assert "infill" in note["cause"] and "NOT CERTIFIED" in note["note"]
     assert rec["skin"]["known_failures"] is None
     # The G-code is still quarantined: the verdict is not changed.
@@ -763,14 +819,22 @@ def test_an_unverified_app_tree_gets_no_note(orca, tmp_path, monkeypatch):
 
 
 def test_known_failures_needs_every_other_required_check_to_pass():
-    def part(statuses, cert, required=("F3.printed_connectivity", "F1.finite")):
+    def part(statuses, cert, required=("F3.printed_connectivity", "F1.finite"),
+             layers=ACCEPTED_LAYERS):
         return {"required_checks": list(required), "certification": cert,
-                "checks": [{"id": i, "status": s} for i, s in statuses]}
+                "checks": [{"id": i, "status": s} for i, s in statuses],
+                "printed": {"layers": layers}}
     ok = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "PASS")],
               "NOT CERTIFIED: F3.printed_connectivity FAIL")
     good = part([("F3.printed_connectivity", "PASS"), ("F1.finite", "PASS")], "PRINTABLE")
     assert ts.known_failures({"a": ok, "b": good})["parts"] == ["a"]
     assert ts.known_failures({"a": good}) is None                       # nothing failed
+    # The printed layers must show only extra parts with equal holes.
+    for layers in (HOLE_MISMATCH, MISSING_PART, [], ACCEPTED_LAYERS[:1], None):
+        bad = {**ok, "printed": None if layers is None else {"layers": layers}}
+        assert ts.known_failures({"a": bad}) is None, layers
+    moved = [ACCEPTED_LAYERS[0], {**ACCEPTED_LAYERS[0], "z": 0.4, "unmatched": 1}]
+    assert ts.known_failures({"a": {**ok, "printed": {"layers": moved}}}) is None
     unknown = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "UNKNOWN")],
                    "NOT CERTIFIED: F3.printed_connectivity FAIL, F1.finite UNKNOWN")
     assert ts.known_failures({"a": unknown}) is None
@@ -897,6 +961,8 @@ def test_the_strips_with_the_real_slicer(tmp_path):
     assert cl["known_failures"]["parts"] == ["base"]
     assert rec["skin"]["certification"] == "PRINTABLE", rec["skin"]["certification"]
     assert rec["skin"]["known_failures"] is None
+    assert cl["plates"]["pieces"]["certification_note"] == ts.PART_PRINTABLE_MEANING
+    assert rec["skin"]["face"]["certification_note"] == ts.PART_PRINTABLE_MEANING
     for name, plate in cl["plates"].items():
         by = {c["id"]: c["status"] for c in plate["checks"]}
         assert by["F6.slicer_exit"] == by["F6.layer_count"] == by["F4.body_count"] == "PASS"
