@@ -63,6 +63,10 @@ task.
      - **Labels:** gap k (1 to 6) is marked by k round holes, 2.0 mm across
        (`fdm.hole.min_diameter`), in a row below its pocket. You can read the strip
        without labels or a font.
+       - **Amended in Task 1 (controller, 2026-11-14):** six 2 mm holes with 0.9 mm walls
+         need 17.4 mm, but the pocket pitch is 15 mm. So the holes go in rows of at most
+         3 (4 = 3 + 1, 5 = 3 + 2, 6 = 3 + 3), each row centred under its square. The
+         skin strip uses the same layout and the same 5 mm edge margin.
    - **How the pieces are made:** `glue_geometry` is called once per gap on the same
      cells. From call k, only pocket k's piece is kept.
      - **Pockets:** they do not depend on the gap. The task proves that the base and
