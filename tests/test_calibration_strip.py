@@ -1,4 +1,4 @@
-"""Tests for tdmg.test_strip: the clearance and skin calibration strips
+"""Tests for tdmg.calibration_strip: the clearance and skin calibration strips
 (docs/plans/2026-11-14-test-strip.md, Decisions 1 to 3 and Task 1)."""
 
 from __future__ import annotations
@@ -6,25 +6,19 @@ from __future__ import annotations
 import dataclasses
 import io
 import math
+import os
+import subprocess
+import sys
 from itertools import combinations
 
 import numpy as np
 import pytest
 import shapely
 import trimesh
+from shapely import affinity
 
-import tdmg.test_strip as ts
-from tdmg.checks import merge_exact, topology_checks
-from tdmg.color_checks import (
-    color_partition_check,
-    glue_fit_check,
-    glue_fit_margin,
-    glue_partition_check,
-)
-from tdmg.color_geometry import vertex_dist
-from tdmg.flat import encode_stl
-from tdmg.rules import load_rules
-from tdmg.test_strip import (
+import tdmg.calibration_strip as ts
+from tdmg.calibration_strip import (
     OWNER_DEPTHS_MM,
     OWNER_GAPS_MM,
     THICKNESS_MM,
@@ -35,6 +29,17 @@ from tdmg.test_strip import (
     skin_layout,
     skin_strip,
 )
+from tdmg.checks import merge_exact, topology_checks
+from tdmg.color_checks import (
+    body_export_check,
+    color_partition_check,
+    glue_fit_check,
+    glue_fit_margin,
+    glue_partition_check,
+)
+from tdmg.color_geometry import EPS, snap_move_mm, vertex_dist
+from tdmg.flat import encode_stl
+from tdmg.rules import load_rules
 
 RULES = load_rules()
 WALL = RULES["fdm.wall.min_thickness"].default
@@ -58,9 +63,15 @@ def stored(mesh):
 
 
 def assert_closed(body):
-    checks = topology_checks(stored(body.mesh))
+    """The stored mesh passes every F1 check and its own F2.export_matches_geometry (the
+    Body's bounds, z range, expected volume and per-slab occupancy, with the derived
+    float32-storage tolerances)."""
+    mesh = stored(body.mesh)
+    checks = topology_checks(mesh)
     assert [(c.id, c.measured) for c in checks if c.status != "PASS"] == [], body.name
     assert {c.id for c in checks} >= {"F1.edge_manifold", "F1.vertex_manifold"}
+    export = body_export_check(mesh, body)
+    assert export.status == "PASS", (body.name, export.measured)
 
 
 # --- the owner's values and the layout -------------------------------------------------
@@ -87,13 +98,14 @@ def test_the_hole_depth_is_inside_the_hole_rules_conditions():
 @pytest.mark.parametrize("make", [clearance_layout, skin_layout])
 def test_layout_walls_and_holes_meet_the_rules(make):
     layout = make(rules=RULES)
-    assert min_wall_mm(layout) >= WALL
+    # As the module checks it: each side of a wall can move by one grid snap.
+    assert min_wall_mm(layout) - 2 * snap_move_mm(layout.grid_mm) >= WALL
     for centres, holes in zip(layout.hole_centres, layout.holes, strict=True):
         for (x, y), hole in zip(centres, holes, strict=True):
             # The circle of the rule's diameter at the centre lies inside the hole.
             assert shapely.distance(shapely.Point(x, y), hole.exterior) >= HOLE / 2
     # Every square is EDGE_MARGIN_MM from the strip's left, right and top edges.
-    minx, _, maxx, maxy =shapely.union_all(layout.squares).bounds
+    minx, _, maxx, maxy = shapely.union_all(layout.squares).bounds
     assert (minx, maxx, maxy) == (ts.EDGE_MARGIN_MM, layout.width_mm - ts.EDGE_MARGIN_MM,
                                   layout.height_mm - ts.EDGE_MARGIN_MM)
 
@@ -121,6 +133,7 @@ def test_clearance_strip_shape(clearance):
 
 def test_each_piece_has_its_own_gap_to_its_pocket(clearance):
     grid = clearance.cells.grid_mm
+    snap = snap_move_mm(grid)
     for k, (gap, piece, pocket, square) in enumerate(zip(
             clearance.gaps_mm, clearance.pieces, clearance.pockets,
             clearance.layout.squares, strict=True)):
@@ -129,9 +142,17 @@ def test_each_piece_has_its_own_gap_to_its_pocket(clearance):
         glue = clearance.glues[k]
         margin = glue_fit_margin(grid, pinch_joined=bool(glue.cells.pinch_fixes),
                                  rounding_mm=3 * vertex_dist([glue.cells.silhouette]))
-        measured = shapely.distance(piece.parts[0], pocket.boundary)
-        assert shapely.contains_properly(pocket, piece.parts[0])
-        assert gap - margin["margin_mm"] <= measured <= gap + margin["margin_mm"], k
+        polygon = piece.parts[0]
+        measured = shapely.distance(polygon, pocket.boundary)
+        assert shapely.contains_properly(pocket, polygon)
+        # At least the gap less F4.glue_fit's margin; at most one snap above it.
+        assert gap - margin["margin_mm"] <= measured <= gap + snap, k
+        # Every side, not only the nearest: the piece's straight edges are its pocket's
+        # inset by the gap, each moved by at most one snap (the pocket is on the grid).
+        px0, py0, px1, py1 = pocket.bounds
+        inset = (px0 + gap, py0 + gap, px1 - gap, py1 - gap)
+        for side, (got, want) in enumerate(zip(polygon.bounds, inset, strict=True)):
+            assert abs(got - want) <= snap, (k, side, got, want)
     # Ascending gaps give strictly smaller pieces.
     areas = [p.parts[0].area for p in clearance.pieces]
     assert areas == sorted(areas, reverse=True) and len(set(areas)) == 6
@@ -151,26 +172,73 @@ def test_the_base_is_identical_across_the_glue_calls(clearance):
         assert glue.cells.labels == first.cells.labels
         assert np.array_equal(glue.bodies[0].mesh.vertices, first.bodies[0].mesh.vertices)
         assert np.array_equal(glue.bodies[0].mesh.faces, first.bodies[0].mesh.faces)
-    assert np.array_equal(clearance.base.mesh.faces, first.bodies[0].mesh.faces)
+    # The strip's base is the first call's glue base (the others equal it, above).
+    assert clearance.base is first.bodies[0]
 
 
-def test_a_base_that_differs_between_calls_is_refused(monkeypatch):
+def _cells_rotated(glue):
+    """The rebuilt cells in another order."""
+    rebuilt = glue.cells
+    return dataclasses.replace(glue, cells=dataclasses.replace(
+        rebuilt, cells=rebuilt.cells[1:] + rebuilt.cells[:1],
+        labels=rebuilt.labels[1:] + rebuilt.labels[:1]))
+
+
+def _pocket_moved(glue):
+    """Pocket 1's polygon moved by one grid step."""
+    first = glue.pockets[0]
+    moved = dataclasses.replace(first, polygon=affinity.translate(
+        first.polygon, glue.grid_mm, 0))
+    return dataclasses.replace(glue, pockets=(moved, *glue.pockets[1:]))
+
+
+def _base_vertices_moved(glue):
+    """The glue base mesh with every vertex moved by one grid step in x."""
+    base = glue.bodies[0]
+    mesh = trimesh.Trimesh(base.mesh.vertices + [glue.grid_mm, 0.0, 0.0], base.mesh.faces,
+                           process=False, validate=False)
+    return dataclasses.replace(glue, bodies=(dataclasses.replace(base, mesh=mesh),
+                                             *glue.bodies[1:]))
+
+
+@pytest.mark.parametrize("perturb", [_cells_rotated, _pocket_moved, _base_vertices_moved])
+def test_a_base_that_differs_between_calls_is_refused(monkeypatch, perturb):
     real = ts.glue_geometry
     calls = []
 
-    def shifted(cells, **kw):
+    def perturbed(cells, **kw):
         calls.append(kw["clearance_mm"])
         glue = real(cells, **kw)
-        if len(calls) == 3:  # swap one cell's order: the bases now differ
-            rebuilt = glue.cells
-            cells2 = rebuilt.cells[1:] + rebuilt.cells[:1]
-            labels2 = rebuilt.labels[1:] + rebuilt.labels[:1]
-            glue = dataclasses.replace(glue, cells=dataclasses.replace(
-                rebuilt, cells=cells2, labels=labels2))
-        return glue
+        return perturb(glue) if len(calls) == 3 else glue
 
-    monkeypatch.setattr(ts, "glue_geometry", shifted)
+    monkeypatch.setattr(ts, "glue_geometry", perturbed)
     with pytest.raises(StripError, match="differ"):
+        clearance_strip(OWNER_GAPS_MM, rules=RULES)
+    assert len(calls) == 3  # refused at the perturbed call
+
+
+def test_a_gap_that_leaves_a_leftover_is_refused():
+    # At 1.9 mm the kept piece's clearance band no longer reaches the pocket's corners
+    # (its rounded corners have radius r + c, so the cusps are wider than the opening):
+    # they become base, the pocket shrinks, and the pockets would depend on the gap.
+    gaps = (0.1, 0.15, 0.2, 0.25, 0.3, 1.9)
+    with pytest.raises(StripError, match="leftover") as info:
+        clearance_strip(gaps, rules=RULES)
+    assert "1.9" in str(info.value)
+
+
+def test_a_glue_call_with_a_pinch_fix_is_refused(monkeypatch):
+    real = ts.glue_geometry
+
+    def pinched(cells, **kw):
+        glue = real(cells, **kw)
+        fix = {"vertex": [0.0, 0.0], "label": 0, "losers": [1], "clipped": False,
+               "area_mm2": 0.0, "bound_mm2": 0.0}
+        return dataclasses.replace(glue, cells=dataclasses.replace(
+            glue.cells, pinch_fixes=(fix,)))
+
+    monkeypatch.setattr(ts, "glue_geometry", pinched)
+    with pytest.raises(StripError, match="pinch"):
         clearance_strip(OWNER_GAPS_MM, rules=RULES)
 
 
@@ -244,12 +312,19 @@ def test_skin_strip_bodies(skin):
     # Every white cell's top is at the thickness; the full patch is (0, T).
     assert all(z1 == THICKNESS_MM for _, _, z1 in skin.white.slabs)
     squares = skin.layout.squares
-    expected = 0.0
-    for depth, sq in zip(skin.depths_mm, squares[1:6], strict=True):
-        expected += sq.area * depth
-    expected += squares[6].area * THICKNESS_MM
-    assert skin.white.expected_volume_mm3 == pytest.approx(expected, rel=1e-12)
-    assert stored(skin.white.mesh).volume == pytest.approx(expected, rel=1e-9)
+    terms = [sq.area * depth for depth, sq in zip(skin.depths_mm, squares[1:6],
+                                                  strict=True)]
+    terms.append(squares[6].area * THICKNESS_MM)
+    expected = math.fsum(terms)
+    # Derived tolerance: _body takes each height as T - (T - d), not d. T - d is rounded
+    # once (at most EPS T / 2 off) and the outer subtraction once more (at most EPS T / 2),
+    # so each height is within EPS T of d, times the patch's area; each product and the
+    # body's running sum add at most EPS x the total per term.
+    tol = math.fsum(sq.area * EPS * THICKNESS_MM for sq in squares[1:7]) \
+        + len(terms) * EPS * expected
+    assert abs(skin.white.expected_volume_mm3 - expected) <= tol
+    # The stored mesh against the Body: bounds, z range, volume and occupancy.
+    assert_closed(skin.white)
 
 
 def test_skin_ranges_per_patch(skin):
@@ -298,6 +373,31 @@ def test_skin_bytes_repeat():
     b = skin_strip(OWNER_DEPTHS_MM, rules=RULES)
     assert encode_stl(a.base.mesh) == encode_stl(b.base.mesh)
     assert encode_stl(a.white.mesh) == encode_stl(b.white.mesh)
+
+
+CHILD = """
+import hashlib
+from tdmg.calibration_strip import (OWNER_DEPTHS_MM, OWNER_GAPS_MM, clearance_strip,
+                                    skin_strip)
+from tdmg.flat import encode_stl
+from tdmg.rules import load_rules
+rules = load_rules()
+c = clearance_strip(OWNER_GAPS_MM, rules=rules)
+s = skin_strip(OWNER_DEPTHS_MM, rules=rules)
+for body in (c.base, *c.pieces, s.base, s.white):
+    print(body.name, hashlib.sha256(encode_stl(body.mesh)).hexdigest())
+"""
+
+
+def test_two_fresh_processes_give_identical_stl_bytes():
+    outputs = []
+    for hash_seed in ("1", "2"):
+        env = {**os.environ, "PYTHONHASHSEED": hash_seed}
+        done = subprocess.run([sys.executable, "-c", CHILD], env=env, capture_output=True,
+                              text=True, check=True, timeout=300)
+        outputs.append(done.stdout.split())
+    assert len(outputs[0]) == 2 * (1 + 6 + 2)
+    assert outputs[0] == outputs[1]
 
 
 def test_the_pocket_depth_is_the_skin_rule(clearance):

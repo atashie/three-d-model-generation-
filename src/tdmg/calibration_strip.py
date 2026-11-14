@@ -178,7 +178,7 @@ def _layout(side: float, spacing: float, counts: tuple[int, ...], rules: dict) -
         mid = x0 + side / 2
         mine = []
         for row in range(LABEL_ROWS):
-            k = min(HOLES_PER_ROW, count - row * HOLES_PER_ROW)
+            k = max(0, min(HOLES_PER_ROW, count - row * HOLES_PER_ROW))
             y = y0 - LABEL_GAP_MM - r - row * HOLE_PITCH_MM
             mine += [(mid + (j - (k - 1) / 2) * HOLE_PITCH_MM, y) for j in range(k)]
         centres.append(tuple(mine))
@@ -238,13 +238,14 @@ def _values(name: str, values, count: int, below: float, what: str) -> tuple[flo
     return tuple(out)
 
 
-def _cells(layout: Layout, inlay: int, base: int) -> Cells:
-    """color_cells of the layout: the squares labelled inlay, the rest of the silhouette
-    base."""
-    rest = shapely.difference(layout.silhouette, shapely.union_all(layout.squares))
+def _cells(layout: Layout, squares, inlay: int, base: int) -> Cells:
+    """color_cells of the layout's silhouette: squares (some of the layout's) labelled
+    inlay, the rest of the silhouette base."""
+    squares = list(squares)
+    rest = shapely.difference(layout.silhouette, shapely.union_all(squares))
     base_top = [p for p in shapely.get_parts(rest) if p.area > 0]
     try:
-        cells = color_cells(ColorRegions({inlay: list(layout.squares)}, base_top, {}, []),
+        cells = color_cells(ColorRegions({inlay: squares}, base_top, {}, []),
                             layout.silhouette, base)
     except ColorGeometryError as e:
         raise StripError(f"the strip's cells were refused: {e}") from None
@@ -281,6 +282,20 @@ class ClearanceStrip:
     glues: tuple[Glue, ...]
 
 
+def _no_leftover(glue: Glue, gap: float) -> None:
+    """StripError if the glue call gave any pocket area to the base (a leftover) or
+    joined a pinch in its rebuild. Either changes the pocket with the gap, so the strip
+    would not test one pocket at six gaps (the plan's Decision 1 amendment)."""
+    leftover = float(glue.report["leftover_mm2"])
+    if leftover > 0:
+        raise StripError(f"at gap {gap:g} mm the glue route gives {leftover:.6g} mm^2 of "
+                         "leftover to the base, so the pockets would depend on the gap")
+    if glue.cells.pinch_fixes:
+        raise StripError(f"at gap {gap:g} mm the glue rebuild joined "
+                         f"{len(glue.cells.pinch_fixes)} pinch points, so the pockets "
+                         "would depend on the gap")
+
+
 def _same_base(first: Glue, glue: Glue, gap: float) -> None:
     """StripError unless glue's rebuilt cells, pockets and base mesh equal first's."""
     same = (glue.grid_mm == first.grid_mm
@@ -306,9 +321,10 @@ def clearance_strip(gaps_mm, *, rules: dict,
     glue_geometry is called once per gap on the same cells, with make_colored_flat's
     arguments: thickness THICKNESS_MM, skin and pocket depth color.skin.depth_mm,
     clearance the gap, color.glue.min_piece_side_mm, and cleaning_params' opening and
-    island area. From call k only pocket k's piece is kept; the base and the pockets
-    must be identical across the calls (StripError otherwise). Every call must give
-    exactly one piece per pocket.
+    island area. A call that gives leftover to the base or joins a pinch is refused
+    (StripError, _no_leftover): then the pockets depend on the gap. From call k only
+    pocket k's piece is kept; the base and the pockets must be identical across the
+    calls (StripError otherwise). Every call must give exactly one piece per pocket.
     """
     gaps = _values("gaps_mm", gaps_mm, GAP_COUNT, POCKET_SIDE_MM / 2,
                    "half the pocket side")
@@ -317,7 +333,7 @@ def clearance_strip(gaps_mm, *, rules: dict,
     side = float(rules[MIN_SIDE_RULE].default)
     opening_param, island_param = cleaning_params(rules, profile)
     layout = clearance_layout(rules=rules)
-    cells = _cells(layout, CLEARANCE_INLAY_INDEX, CLEARANCE_BASE_INDEX)
+    cells = _cells(layout, layout.squares, CLEARANCE_INLAY_INDEX, CLEARANCE_BASE_INDEX)
     glues, pieces, pockets = [], [], None
     for k, gap in enumerate(gaps):
         try:
@@ -328,6 +344,7 @@ def clearance_strip(gaps_mm, *, rules: dict,
         except ColorGeometryError as e:
             raise StripError(f"the glue geometry at gap {gap:g} mm was refused: {e}") \
                 from None
+        _no_leftover(glue, gap)
         if glues:
             _same_base(glues[0], glue, gap)
         slots = [_slot(p.polygon, layout.squares) for p in glue.pockets]
@@ -385,10 +402,7 @@ def skin_strip(depths_mm, *, rules: dict) -> SkinStrip:
     white_squares = tuple(sq for sq, k in zip(layout.squares, PATCH_HOLES, strict=True)
                           if k) + (layout.squares[FULL_PATCH - 1],)
     patch_numbers = [i + 1 for i, k in enumerate(PATCH_HOLES) if k] + [FULL_PATCH]
-    white_layout = Layout(layout.width_mm, layout.height_mm, white_squares,
-                          layout.hole_centres, layout.holes, layout.hole_apothem_mm,
-                          layout.silhouette, layout.grid_mm)
-    cells = _cells(white_layout, SKIN_WHITE_INDEX, SKIN_BASE_INDEX)
+    cells = _cells(layout, white_squares, SKIN_WHITE_INDEX, SKIN_BASE_INDEX)
     t = THICKNESS_MM
     tops = {n: t - d for n, d in zip(patch_numbers[:DEPTH_COUNT], depths, strict=True)}
     patches = []

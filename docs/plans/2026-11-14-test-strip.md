@@ -13,8 +13,10 @@ The first AMS print and the first glue print of an owner plan (step 5, part 2) c
 the strips. They are not in this plan.
 
 **Architecture:**
-- **Module and command:** a new module, `tdmg.test_strip`, builds both strips from fixed
-  rectangles. It uses the same geometry code as `tdmg flat --colors`:
+- **Module and command:** a new module, `tdmg.calibration_strip`, builds both strips
+  from fixed rectangles. (Amended in Task 1 review, 2026-11-14: first named
+  `tdmg.test_strip`; renamed because pytest or doctest can collect a module named
+  `test_*`.) It uses the same geometry code as `tdmg flat --colors`:
   - `color_cells` and `glue_geometry` for the clearance strip;
   - `_body` / `prism_mesh` with per-cell z ranges for the skin strip.
   A new command, `tdmg strip OUT`, writes both strips, gates them and slices them.
@@ -67,10 +69,20 @@ task.
          need 17.4 mm, but the pocket pitch is 15 mm. So the holes go in rows of at most
          3 (4 = 3 + 1, 5 = 3 + 2, 6 = 3 + 3), each row centred under its square. The
          skin strip uses the same layout and the same 5 mm edge margin.
+       - **Amended in Task 1 review (2026-11-14), the label numbers:** the hole centres
+         are `HOLE_PITCH_MM` 3.5 mm apart, in a row and between the two rows. The solid
+         between a square and the first row's holes is `LABEL_GAP_MM` 2.0 mm, and so is
+         the bottom solid, between the second row's holes and the strip's bottom edge.
+         So the strip extends 2.0 + 2.0 + 3.5 + 2.0 = 9.5 mm below the squares (the
+         hole diameter, 2.0 mm, counted once for the two rows' half-holes).
    - **How the pieces are made:** `glue_geometry` is called once per gap on the same
      cells. From call k, only pocket k's piece is kept.
      - **Pockets:** they do not depend on the gap. The task proves that the base and
        pockets are identical across the six calls, and fails otherwise.
+       - **Amended in Task 1 review (2026-11-14):** this holds only when no call gives
+         leftover to the base (at a large gap, the pocket's corners become base) and no
+         rebuild joins a pinch. The code refuses any call with leftover or a pinch fix,
+         with that as the stated cause, before the identity check.
    - **Why squares:** a square has straight edges and sharp corners. Real pockets have
      both. Curved edges are not tested. This is a stated limit, not a claim.
    - **Gated by:** `F4.glue_fit` (the gap of each piece against its own pocket) and
@@ -139,7 +151,7 @@ task.
 
 ## Tasks
 
-### Task 1: strip geometry (`src/tdmg/test_strip.py`, `tests/test_test_strip.py`)
+### Task 1: strip geometry (`src/tdmg/calibration_strip.py`, `tests/test_calibration_strip.py`)
 
 - **The layout constants and both builders:**
   - `clearance_strip(gaps_mm, *, rules)` returns the base Body, six piece Bodies and
@@ -165,7 +177,7 @@ task.
   - **Both strips:** each mesh is closed and vertex-manifold, and the output is
     byte-identical on repeat.
 
-### Task 2: gating, files and slicing (`tdmg.test_strip.make_strips`)
+### Task 2: gating, files and slicing (`tdmg.calibration_strip.make_strips`)
 
 - **What it writes:** the folder in Decision 4.
 - **What it runs:**
