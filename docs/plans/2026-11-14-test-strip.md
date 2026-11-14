@@ -193,6 +193,97 @@ task.
   PASSes. Each check that is not required is listed with its reason.
 - **Tests:** with the fake slicers (`tests/fake_orca.py`), and one `-m slicer` test with
   the pinned OrcaSlicer.
+- **Amended in Task 2 (2026-11-14), what was built:**
+  - **Two clearance plates, not one.** Decision 1's "one plate" cannot hold both: each
+    piece lies inside its pocket's outline, so the pieces cannot share a plate with the
+    base where they are. `base.stl` and `pieces.stl` are sliced each on its own, in
+    `clearance/slice/base/` and `clearance/slice/pieces/`.
+  - **Where the pieces are.** `pieces.stl` keeps each piece where `glue_geometry` made it,
+    in its pocket's place. So the pieces lie left to right in gap order, at the pocket
+    pitch `POCKET_SIDE_MM` + `POCKET_SPACING_MM` = 15 mm (5 mm plus two gaps between
+    two pieces). No new layout constant is needed, and no piece is moved, so the STL is
+    exactly the gated geometry. **Limit:** the pieces look alike (squares of 9.8 to
+    9.3 mm), so the owner must keep them in plate order. Task 3's form must say so.
+  - **Required checks of a clearance plate** (`PLATE_REQUIRED`): the `tdmg slice` set
+    less `F2.target_width` and `F6.portability`, plus `F4.glue_fit` and
+    `F4.glue_partition` of all six glue calls. Why each one applies to a part with holes
+    and pockets:
+    - the seven F1 checks: the STL must be a closed, oriented, vertex-manifold solid,
+      and the holes and pockets are part of its surface;
+    - `F2.export_matches_geometry`: the STL against its own Body. Its occupancy check
+      cuts every z interval, so it compares the pocket floors (T − d) and the holes;
+    - `F2.fits_build_volume` and `F5.triangles`: per plate, as for a glue plate;
+    - `F4.body_count`: 1 for the base and 6 for the pieces, the strip's own counts;
+    - `F4.glue_fit` and `F4.glue_partition`: Decision 1. Each plate carries all twelve
+      (six calls), as `tdmg.color_slicing` gives each glue plate the glue checks;
+    - `F3.printed_connectivity`: the holes are counted per layer, so the label holes
+      must print as holes and the base as one part;
+    - `F3.edge_coverage` and `F3.edge_overprint`: the hole and pocket walls are model
+      edges, as the outline is;
+    - `F6.slicer_exit`, `F6.gcode_present`, `F6.layer_count`, `F6.single_object`: as R1.
+    - **Not applicable:** `F2.target_width`. The strip's size is set by the layout
+      constants (Decision 3), not by a requested width.
+  - **Required checks of the skin strip:**
+    - the AMS route's gate checks, as for a plan's face: the F1 checks and
+      `F2.export_matches_geometry` per body, then `F2.export_3mf_matches_bodies`,
+      `F2.fits_build_volume`, `F4.color_partition`, `F4.filaments` and `F5.triangles`;
+    - `F2.orca_input_matches_bodies`;
+    - `color_gcode.required_check_ids(2)`: `F6.color_changes`, `F6.tool_placement`,
+      `F6.filaments_used`, the silhouette's `F3.edge_coverage` and `F3.edge_overprint`,
+      and each tool's `F3.edge_overprint`;
+    - R1's four slicer F6 checks.
+    - **Not required:** each tool's `F3.edge_coverage` and every connectivity check
+      (warnings, as for a plan's face); `F6.color_waste`, `F6.color_time` and
+      `F6.color_filament` (information); `F6.portability` (below).
+  - **`F6.portability` is not run.** PrusaSlicer is never run for a strip
+    (`slicing.prepare(..., portability=False)`), so the check is UNKNOWN and not
+    required. The strips are printed once, from Bambu Studio on the owner's A1, to set two
+    rules. Whether a second slicer reads the file does not bear on that. Also, Task 3's
+    command has no PrusaSlicer option.
+  - **`F3.thin_regions` is not made.** It is always UNKNOWN and information only, and
+    each layout is checked against `fdm.wall.min_thickness` when it is built.
+  - **The record:**
+    - `strip.json` holds the geometry identity (owner values, layout constants, rule
+      values, printer, grids) and its hash `geometry_id`;
+    - each plate's `slice_id`, the face record, the file hashes and `strip_id`;
+    - per strip: `required_checks`, `not_required` (each check id with its reason) and
+      the verdict. A check that is neither required nor given a reason stops the run
+      (StripError).
+    - `palette.json` carries `strip_geometry_id` in place of `colorflat_id`.
+  - **Repeat runs:** as for `tdmg slice`, a repeat run is byte-identical except the
+    G-code bytes and their sha256 (the slicer writes the time into its header). The
+    normalised hashes stay the same.
+  - **Shared code changes:** small, and each existing default is unchanged:
+    - `records.write_outputs(subfolders=n)`;
+    - `slicing.prepare(portability=False)` and `slicing.slice_stl(unconfigured=...)`;
+    - `color_slicing.slice_face(portability_required=False)` and
+      `color_slicing.glue_body_count_check(how=...)`;
+    - `threemf.palette_manifest(link=...)`.
+- **Measured with the real slicer (2026-11-14, on the PC; pinned OrcaSlicer 2.5.0, app
+  tree checked): both strips are NOT CERTIFIED.**
+  - **Clearance, pieces plate:** PRINTABLE (3 layers, 490 s, 0.47 g).
+  - **Clearance, base plate:** NOT CERTIFIED. `F3.printed_connectivity` FAILs on 2 of 15
+    layers:
+    - at z 1.6 mm, a printed island of 1.63 mm² (sparse infill), 0.003 mm from the rest
+      of the beads, at bed x 132.9 to 135.0 and y 93.7 to 95.8 mm;
+    - at z 2.0 mm, an island of 0.27 mm² (internal solid infill), 0.097 mm from the
+      rest.
+    - The holes match on every layer (21 printed, 21 in the model). `F3.edge_coverage`
+      PASSes (largest gap 0.21 mm), and so does `F3.edge_overprint`. R1's turn search
+      found the part turned 90°. 15 layers, 1372 s, 6.12 g.
+  - **Skin strip:** NOT CERTIFIED. These checks FAIL: `F6.tool_placement`, the
+    silhouette's `F3.edge_coverage` and `F3.edge_overprint`, and each tool's
+    `F3.edge_overprint`.
+    - The printed plastic spans bed y 69 to 187 mm and x 115 to 141 mm. So OrcaSlicer
+      turned the 118 × 26.5 mm strip a quarter turn, but the color checks place the
+      model unturned (`color_gcode.PLACEMENT_ANGLE`, by design).
+    - A diagnosis run (a scratch script, not kept) sliced the same shells turned a
+      quarter turn in the model, long along y. Every color check PASSed, warnings
+      included.
+    - 15 color changes, 2725 s, 10.29 g (G-code header: 8.51 g black and 1.78 g white),
+      flush 1125 mm³, prime tower 769 mm³.
+  - **Open, for the controller and the owner:** the real-slicer test asserts PRINTABLE.
+    It is marked `xfail(strict=True)` with this reason until the two causes are decided.
 
 ### Task 3: command, owner form, docs
 

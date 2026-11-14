@@ -1,23 +1,31 @@
 """Tests for tdmg.calibration_strip: the clearance and skin calibration strips
-(docs/plans/2026-11-14-test-strip.md, Decisions 1 to 3 and Task 1)."""
+(docs/plans/2026-11-14-test-strip.md, Decisions 1 to 4 and Tasks 1 and 2)."""
 
 from __future__ import annotations
 
+import copy
 import dataclasses
+import hashlib
 import io
+import json
 import math
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from itertools import combinations
+from pathlib import Path
 
 import numpy as np
 import pytest
 import shapely
+import test_slice
 import trimesh
 from shapely import affinity
 
 import tdmg.calibration_strip as ts
+import tdmg.color_slicing as cs
+import tdmg.slicing
 from tdmg.calibration_strip import (
     OWNER_DEPTHS_MM,
     OWNER_GAPS_MM,
@@ -33,13 +41,18 @@ from tdmg.checks import merge_exact, topology_checks
 from tdmg.color_checks import (
     body_export_check,
     color_partition_check,
+    export_3mf_check,
     glue_fit_check,
     glue_fit_margin,
     glue_partition_check,
 )
+from tdmg.color_gcode import f3_warning_ids, required_check_ids
 from tdmg.color_geometry import EPS, snap_move_mm, vertex_dist
-from tdmg.flat import encode_stl
+from tdmg.flat import _body_count, encode_stl
 from tdmg.rules import load_rules
+from tdmg.slicer import SlicerError
+from tdmg.slicing import SLICE_REQUIRED_CHECKS
+from tdmg.threemf import Shell
 
 RULES = load_rules()
 WALL = RULES["fdm.wall.min_thickness"].default
@@ -465,3 +478,316 @@ def test_bad_depths_are_refused(depths, message):
 
 def test_strip_error_is_a_value_error():
     assert issubclass(StripError, ValueError)
+
+
+# --- Task 2: make_strips (gating, files and slicing) ------------------------------------
+#
+# The fake OrcaSlicer is tests/test_slice.py's (fixture fake): its G-code has no layers, so
+# the F3 and color checks are UNKNOWN and the strips NOT CERTIFIED unless a test makes the
+# required ones pass. The real slicer runs in the test marked slicer.
+
+fake = test_slice.fake
+
+FILES = {
+    "clearance/base.stl", "clearance/pieces.stl",
+    "clearance/slice/base/plate_1.gcode", "clearance/slice/base/plate_1.statistics.json",
+    "clearance/slice/pieces/plate_1.gcode", "clearance/slice/pieces/plate_1.statistics.json",
+    "skin/model.3mf", "skin/palette.json",
+    "skin/slice/filaments/filament-1.json", "skin/slice/filaments/filament-2.json",
+    "skin/slice/face-up/orca-input.3mf", "skin/slice/face-up/plate_1.gcode",
+    "skin/slice/face-up/plate_1.statistics.json"}
+GLUE_IDS = {"F4.glue_fit", "F4.glue_partition"}
+AMS_IDS = {"F1.finite", "F1.no_degenerate_faces", "F1.no_duplicate_faces",
+           "F1.edge_manifold", "F1.consistent_orientation", "F1.vertex_manifold",
+           "F1.positive_volume", "F2.export_matches_geometry",
+           "F2.export_3mf_matches_bodies", "F2.fits_build_volume", "F4.color_partition",
+           "F4.filaments", "F5.triangles"}
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _files(out: Path) -> set[str]:
+    return {str(p.relative_to(out)).replace("\\", "/") for p in out.rglob("*") if p.is_file()}
+
+
+def _stl(data: bytes):
+    return merge_exact(trimesh.load(io.BytesIO(data), file_type="stl", process=False))
+
+
+def _pass_required(monkeypatch, warnings="FAIL"):
+    """Make every required F3 check of the plates, and every required color check of the
+    face, PASS (the fake's G-code cannot be measured); the face's warning checks get the
+    status warnings."""
+    real_f3 = tdmg.slicing.f3_checks
+
+    def f3(*a, **kw):
+        checks, printed = real_f3(*a, **kw)
+        return [replace(c, status="PASS") for c in checks], printed
+    monkeypatch.setattr(tdmg.slicing, "f3_checks", f3)
+    real_color = cs.color_slice_checks
+
+    def color(gcode, shells, setup, statistics=None, not_measured=None):
+        checks, record = real_color(gcode, shells, setup, statistics, not_measured)
+        n = len(list(shells))
+        req, warn = required_check_ids(n), set(f3_warning_ids(n))
+        return [replace(c, status="PASS") if c.id in req else
+                replace(c, status=warnings) if c.id in warn else c for c in checks], record
+    monkeypatch.setattr(cs, "color_slice_checks", color)
+
+
+@pytest.fixture
+def orca(fake):
+    """The fake OrcaSlicer, reporting each model's own layer count."""
+    return lambda **kw: fake(layers="auto", **kw)
+
+
+def test_make_strips_writes_the_folder_and_the_record(fake, orca, tmp_path):
+    out = tmp_path / "strip"
+    rec = ts.make_strips(out, orca())
+    assert _files(out) == FILES | {"strip.json"}
+    assert json.loads((out / "strip.json").read_bytes()) == rec
+    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-1")
+    assert rec["source"] == "docs/plans/2026-11-14-test-strip.md"
+    assert (Path(__file__).parents[1] / rec["source"]).is_file()
+    assert rec["outputs"] == {n: _sha((out / n).read_bytes()) for n in FILES}
+    assert str(tmp_path) not in (out / "strip.json").read_text(encoding="utf-8")
+    geometry = rec["geometry"]
+    assert rec["geometry_id"] == _sha(ts.canonical_json(geometry))
+    assert geometry["gaps_mm"] == list(OWNER_GAPS_MM)
+    assert geometry["depths_mm"] == list(OWNER_DEPTHS_MM)
+    assert geometry["source"] == rec["source"]
+    # The slicer identity and profile hashes, as tdmg slice records them.
+    assert rec["slicer"]["pin"] == "orcaslicer-2.5.0"
+    assert rec["slicer"]["exe_sha256"] == fake.pin.exe.sha256
+    assert set(rec["slicer"]["profiles"]) == {"machine", "process", "filament"}
+
+    # The clearance strip: base.stl is one body, pieces.stl the six pieces in gap order.
+    cl = rec["clearance"]
+    base = _stl((out / "clearance/base.stl").read_bytes())
+    pieces = _stl((out / "clearance/pieces.stl").read_bytes())
+    assert (_body_count(base), _body_count(pieces)) == (1, 6)
+    assert [p["gap_mm"] for p in cl["pockets"]] == list(OWNER_GAPS_MM)
+    assert [p["holes"] for p in cl["pockets"]] == [1, 2, 3, 4, 5, 6]
+    xs = [p["piece_bounds_mm"][0] for p in cl["pockets"]]
+    assert xs == sorted(xs)                                   # left to right, gap order
+    for p in cl["pockets"]:
+        assert p["gap_mm"] - 1e-5 <= p["measured_gap_mm"] <= p["gap_mm"] + 1e-5
+    assert cl["files"]["base"]["sha256"] == rec["outputs"]["clearance/base.stl"]
+    assert cl["files"]["pieces"]["bodies"] == 6
+    assert len(cl["glue"]) == 6 and [g["gap_mm"] for g in cl["glue"]] == list(OWNER_GAPS_MM)
+    want = sorted(SLICE_REQUIRED_CHECKS - {"F2.target_width", "F6.portability"} | GLUE_IDS)
+    for name, n in (("base", 1), ("pieces", 6)):
+        plate = cl["plates"][name]
+        assert plate["required_checks"] == want
+        assert "F2.target_width" in plate["not_applicable"]
+        assert set(plate["not_required"]) == {"F6.portability"}
+        by = [c for c in plate["checks"] if c["id"] == "F4.body_count"]
+        assert [(c["status"], c["measured"], c["threshold"]) for c in by] == [("PASS", n, n)]
+        assert [c["id"] for c in plate["checks"]].count("F4.glue_fit") == 6
+        assert [c["id"] for c in plate["checks"]].count("F4.glue_partition") == 6
+        assert all(c["status"] == "PASS" for c in plate["checks"]
+                   if c["id"].startswith(("F1.", "F2.", "F4.", "F5.")))
+        assert plate["gcode"]["file"] == f"clearance/slice/{name}/plate_1.gcode"
+        assert "missing" not in plate["certification"]
+        # The fake's G-code cannot be measured: F3 UNKNOWN, so NOT CERTIFIED.
+        assert plate["certification"].startswith("NOT CERTIFIED: F3.")
+    assert cl["verdict"] == "NOT CERTIFIED"
+
+    # The skin strip: model.3mf, one shell per color, read back as the gate reads it.
+    sk = rec["skin"]
+    palette = json.loads((out / "skin/palette.json").read_bytes())
+    assert palette["strip_geometry_id"] == rec["geometry_id"]
+    assert "colorflat_id" not in palette
+    assert [(s["index"], s["hex"]) for s in palette["shells"]] == [
+        (0, "#000000"), (1, "#FFFFFF")]
+    assert palette["model_3mf_sha256"] == rec["outputs"]["skin/model.3mf"]
+    assert sk["model_3mf"]["check"]["status"] == "PASS"
+    assert [d["depth_mm"] for d in sk["patches"]] == [None, *OWNER_DEPTHS_MM, THICKNESS_MM]
+    assert [d["holes"] for d in sk["patches"]] == [0, 1, 2, 3, 4, 5, 0]
+    face = sk["face"]
+    assert face["face"] == "up"
+    req = set(face["required_checks"])
+    assert req == (AMS_IDS | required_check_ids(2) | {
+        "F2.orca_input_matches_bodies", "F6.slicer_exit", "F6.gcode_present",
+        "F6.layer_count", "F6.single_object"})
+    assert "F6.portability" not in req
+    ids = {c["id"] for c in face["checks"]}
+    assert set(sk["not_required"]) == ids - req
+    assert set(sk["not_required"]) >= {"F6.portability", *f3_warning_ids(2)}
+    assert face["gcode"]["file"] == "skin/slice/face-up/plate_1.gcode"
+    assert face["orca_input"]["file"] == "skin/slice/face-up/orca-input.3mf"
+    assert [f["file"] for f in sk["filaments"]["profiles"]] == [
+        "skin/slice/filaments/filament-1.json", "skin/slice/filaments/filament-2.json"]
+    assert sk["verdict"] == "NOT CERTIFIED"
+    assert rec["verdicts"] == {"clearance": "NOT CERTIFIED", "skin": "NOT CERTIFIED"}
+
+
+def test_the_skin_shells_match_the_3mf(orca, tmp_path):
+    out = tmp_path / "strip"
+    ts.make_strips(out, orca())
+    rules = load_rules()
+    strip = skin_strip(OWNER_DEPTHS_MM, rules=rules)
+    shells = []
+    for body, (index, hex_code), role, name in zip(
+            (strip.base, strip.white), ts.SKIN_PALETTE, ("base", "inlay"),
+            ("skin-base", "skin-color-1-ffffff"), strict=True):
+        mesh = stored(body.mesh)
+        shells.append(Shell(name, role, index, hex_code, mesh.vertices, mesh.faces))
+    assert export_3mf_check((out / "skin/model.3mf").read_bytes(), shells).status == "PASS"
+
+
+def test_printable_when_every_required_check_passes_and_warnings_do_not_block(
+        orca, tmp_path, monkeypatch):
+    _pass_required(monkeypatch, warnings="FAIL")
+    out = tmp_path / "strip"
+    rec = ts.make_strips(out, orca())
+    assert rec["verdicts"] == {"clearance": "PRINTABLE", "skin": "PRINTABLE"}
+    for section in (rec["clearance"], rec["skin"]):
+        assert section["certification"] == "PRINTABLE"
+        assert section["certification_note"] == ts.STRIP_PRINTABLE_MEANING
+    face = rec["skin"]["face"]
+    assert face["gcode"]["quarantined"] is False
+    assert face["warnings"]                    # the warning FAILs are recorded
+    assert {c["status"] for c in face["checks"] if c["id"] in f3_warning_ids(2)} == {"FAIL"}
+    assert "skin/slice/face-up/plate_1.gcode" in rec["outputs"]
+
+
+def test_a_required_fail_makes_its_strip_not_certified(orca, tmp_path, monkeypatch):
+    _pass_required(monkeypatch)
+    real = tdmg.slicing.f3_checks          # already passing; FAIL one on the pieces plate
+
+    def pieces_fail(gcode, stl, setup, not_measured=None):
+        checks, printed = real(gcode, stl, setup, not_measured)
+        if _body_count(_stl(stl)) == 6:
+            checks = [replace(c, status="FAIL") if c.id == "F3.edge_coverage" else c
+                      for c in checks]
+        return checks, printed
+    monkeypatch.setattr(tdmg.slicing, "f3_checks", pieces_fail)
+    out = tmp_path / "strip"
+    rec = ts.make_strips(out, orca())
+    cl = rec["clearance"]
+    assert rec["verdicts"] == {"clearance": "NOT CERTIFIED", "skin": "PRINTABLE"}
+    assert cl["plates"]["base"]["verdict"] == "PRINTABLE"
+    assert cl["certification"] == "NOT CERTIFIED: pieces: F3.edge_coverage FAIL"
+    assert cl["certification_note"] is None
+    # The FAILed plate's G-code is quarantined, as tdmg slice does.
+    assert (out / "clearance/slice/pieces/plate_1.gcode.failed").is_file()
+    assert not (out / "clearance/slice/pieces/plate_1.gcode").exists()
+
+
+def test_a_failed_slice_fails_both_strips(orca, tmp_path):
+    rec = ts.make_strips(tmp_path / "strip", orca(exit=-50))
+    assert rec["verdicts"] == {"clearance": "NOT CERTIFIED", "skin": "NOT CERTIFIED"}
+    assert "F6.slicer_exit FAIL" in rec["clearance"]["certification"]
+    assert "F6.slicer_exit FAIL" in rec["skin"]["certification"]
+
+
+def test_strip_verdict():
+    assert ts.strip_verdict({"a": "PRINTABLE", "b": "PRINTABLE"}) == ("PRINTABLE",
+                                                                       "PRINTABLE")
+    assert ts.strip_verdict({"a": "PRINTABLE", "b": "NOT CERTIFIED: F6.x FAIL, F3.y UNKNOWN"}
+                            ) == ("NOT CERTIFIED", "NOT CERTIFIED: b: F6.x FAIL, F3.y UNKNOWN")
+    assert ts.strip_verdict({}) == ("NOT CERTIFIED", "NOT CERTIFIED: nothing was sliced")
+
+
+def test_every_check_that_is_not_required_has_a_reason():
+    from tdmg.checks import CheckResult
+    checks = [CheckResult(i, "UNKNOWN", None, None, None) for i in (
+        "F6.portability", "F6.color_waste", "F3.edge_coverage.T1", "F1.finite")]
+    reasons = ts.not_required_reasons(checks, {"F1.finite"})
+    assert set(reasons) == {"F6.portability", "F6.color_waste", "F3.edge_coverage.T1"}
+    assert all(isinstance(r, str) and r for r in reasons.values())
+    with pytest.raises(StripError, match="F9.new"):
+        ts.not_required_reasons([CheckResult("F9.new", "PASS", None, None, None)], set())
+
+
+def test_palette_manifest_takes_exactly_one_link():
+    from tdmg.threemf import ThreeMFError, palette_manifest, write_multishell_3mf
+    mesh = stored(skin_strip(OWNER_DEPTHS_MM, rules=RULES).white.mesh)
+    shells = [Shell("s", "base", 0, "#000000", mesh.vertices, mesh.faces)]
+    data = write_multishell_3mf(shells)
+    kw = {"top_area_mm2": [1.0], "volume_mm3": [1.0]}
+    a = json.loads(palette_manifest(shells, data, colorflat_id="x", **kw))
+    b = json.loads(palette_manifest(shells, data, link={"strip_geometry_id": "x"}, **kw))
+    assert a.pop("colorflat_id") == b.pop("strip_geometry_id") == "x" and a == b
+    for bad in ({}, {"colorflat_id": "x", "link": {"k": "x"}}, {"link": {"a": 1, "b": 2}}):
+        with pytest.raises(ThreeMFError, match="exactly one"):
+            palette_manifest(shells, data, **bad, **kw)
+
+
+def _comparable(rec):
+    """The record without what tdmg slice's records also let differ between runs: the
+    G-code bytes' hash (the fake, like the real slicer, writes a time into its header;
+    the normalised hash stays)."""
+    rec = copy.deepcopy(rec)
+    rec["outputs"] = {k: v for k, v in rec["outputs"].items() if "plate_1.gcode" not in k}
+    for part in [*rec["clearance"]["plates"].values(), rec["skin"]["face"]]:
+        if part["gcode"]:
+            del part["gcode"]["sha256"]
+    return rec
+
+
+def test_repeat_runs_give_the_same_record_and_files(orca, tmp_path):
+    root = orca()
+    a = ts.make_strips(tmp_path / "a", root)
+    b = ts.make_strips(tmp_path / "b", root)
+    assert _comparable(a) == _comparable(b)
+    assert a["strip_id"] == b["strip_id"]
+    for name in FILES:
+        if "plate_1.gcode" not in name:
+            assert ((tmp_path / "a" / name).read_bytes()
+                    == (tmp_path / "b" / name).read_bytes()), name
+
+
+@pytest.mark.parametrize("kind", ["non-empty", "file"])
+def test_a_bad_output_folder_is_refused_with_nothing_written(orca, tmp_path, kind):
+    out = tmp_path / "strip"
+    if kind == "file":
+        out.write_text("x")
+    else:
+        out.mkdir()
+        (out / "keep.txt").write_text("x")
+    with pytest.raises(SlicerError, match="choose a new one"):
+        ts.make_strips(out, orca())
+    if kind == "file":
+        assert out.read_text() == "x"
+    else:
+        assert _files(out) == {"keep.txt"}
+
+
+def test_a_bad_timeout_is_refused_first(orca, tmp_path):
+    with pytest.raises(SlicerError, match="timeout_s"):
+        ts.make_strips(tmp_path / "strip", orca(), timeout_s=-1)
+    assert not (tmp_path / "strip").exists()
+
+
+def test_a_missing_slicer_is_refused_with_nothing_written(tmp_path, monkeypatch):
+    monkeypatch.delenv("TDMG_ORCASLICER_DIR", raising=False)
+    monkeypatch.delenv("TDMG_PRUSASLICER_DIR", raising=False)
+    with pytest.raises(SlicerError):
+        ts.make_strips(tmp_path / "strip", tmp_path / "nowhere")
+    assert not (tmp_path / "strip").exists()
+
+
+@pytest.mark.slicer
+@pytest.mark.skipif(not os.environ.get("TDMG_ORCASLICER_DIR"),
+                    reason="TDMG_ORCASLICER_DIR is not set to a verified OrcaSlicer install")
+@pytest.mark.xfail(strict=True, reason=(
+    "measured 2026-11-14 on the PC (plan Task 2 amendment, 'Measured with the real "
+    "slicer'): the base plate's F3.printed_connectivity FAILs (an infill island at z 1.6 "
+    "and 2.0 mm), and OrcaSlicer turns the skin strip a quarter turn, so its fixed-placement "
+    "color checks FAIL; open for the controller and the owner"))
+def test_both_strips_are_printable_with_the_real_slicer(tmp_path):
+    out = tmp_path / "strip"
+    rec = ts.make_strips(out)
+    assert rec["clearance"]["certification"] == "PRINTABLE", rec["clearance"]["certification"]
+    assert rec["skin"]["certification"] == "PRINTABLE", rec["skin"]["certification"]
+    for plate in rec["clearance"]["plates"].values():
+        by = {c["id"]: c["status"] for c in plate["checks"]}
+        assert by["F6.slicer_exit"] == by["F6.layer_count"] == by["F4.body_count"] == "PASS"
+        assert plate["gcode"]["quarantined"] is False
+    face = rec["skin"]["face"]
+    assert face["summary"]["changes"] is not None and face["summary"]["changes"] > 0
+    assert rec["slicer"]["app_tree_verified"] is True

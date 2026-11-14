@@ -622,9 +622,12 @@ def _face_summary(checks: list[CheckResult]) -> dict:
 
 def slice_face(ctx: Context, face: str, shells: list[Shell], filaments: list[dict],
                inherited: list[CheckResult], inherited_required: frozenset[str],
-               portability: CheckResult, allowed) -> dict:
+               portability: CheckResult, allowed, *,
+               portability_required: bool = True) -> dict:
     """One face: orca-input.3mf, its gate check, the OrcaSlicer run and the checks.
-    Returns {"record", "files" (by path in the output folder), "identity"}."""
+    Returns {"record", "files" (by path in the output folder), "identity"}.
+    portability_required False leaves F6.portability out of the required set (it stays
+    in the checks): tdmg.calibration_strip's strips, whose plan does not require it."""
     folder = FACE_FOLDER[face]
     orca = write_orca_input(shells)
     f2 = orca_input_check(orca, shells)
@@ -675,7 +678,7 @@ def slice_face(ctx: Context, face: str, shells: list[Shell], filaments: list[dic
         log_bytes = log.read_bytes() if log.is_file() else None
     checks = [*inherited, f2, *color, *f6, portability]
     required = (inherited_required | {ORCA_CHECK} | required_check_ids(len(shells))
-                | SLICER_F6_IDS | {"F6.portability"})
+                | SLICER_F6_IDS | ({"F6.portability"} if portability_required else set()))
     quarantined = any(c.status == "FAIL" for c in checks if c.id in required)
     files = {f"{folder}/{ORCA_INPUT_NAME}": orca}
     gcode_name = None
@@ -757,14 +760,16 @@ def glue_piece_counts(record: dict) -> dict[str, int]:
     return out
 
 
-def glue_body_count_check(stl: bytes, expected: int) -> CheckResult:
+def glue_body_count_check(stl: bytes, expected: int, how: str | None = None) -> CheckResult:
     """F4.body_count for a glue plate: the bodies of its STL, read as the gate reads it
     (parsed back and merged exactly; tdmg.flat's count of connected bodies), must be the
-    plate's pieces in the glue report (1 for the base)."""
+    plate's pieces in the glue report (1 for the base). how: the note's text saying where
+    expected comes from (default: colored.json's glue report)."""
     mesh = merge_exact(trimesh.load(io.BytesIO(stl), file_type="stl", process=False))
     n = body_count(mesh)
-    how = ("bodies in the plate's STL against its pieces in colored.json's glue report "
-           "(1 for the glue base)")
+    if how is None:
+        how = ("bodies in the plate's STL against its pieces in colored.json's glue report "
+               "(1 for the glue base)")
     return CheckResult(BODY_COUNT, "PASS" if n == expected else "FAIL", n, expected, None,
                        how if n == expected else f"{how}: {n} bodies, not {expected}")
 

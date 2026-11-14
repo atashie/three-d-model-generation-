@@ -520,15 +520,19 @@ class Context:
                                  json.loads(self.profile_data["filament"]))
 
 
-def prepare(slicer_dir, timeout_s, check_tree: bool, prusaslicer_dir) -> Context:
+def prepare(slicer_dir, timeout_s, check_tree: bool, prusaslicer_dir, *,
+            portability: bool = True) -> Context:
     """Locate and verify both slicers and read the profiles (make_slice's setup steps, in
-    its order). SlicerError for anything refused."""
+    its order). SlicerError for anything refused. portability False does not look for
+    PrusaSlicer at all (neither prusaslicer_dir nor $TDMG_PRUSASLICER_DIR): the context
+    has no PrusaSlicer (tdmg.calibration_strip, whose strips do not run it)."""
     rules = load_rules()
     timeout = _timeout(timeout_s, rules)
     prusa_timeout = _timeout(timeout_s, rules, PRUSA_TIMEOUT_RULE)
     pin = load_pin()
     slicer = locate(slicer_dir, pin, full_tree=check_tree)
-    prusa = locate_prusaslicer(prusaslicer_dir, load_prusa_pin(), full_tree=check_tree)
+    prusa = (locate_prusaslicer(prusaslicer_dir, load_prusa_pin(), full_tree=check_tree)
+             if portability else None)
     profile_data = _profile_bytes(slicer)
     try:
         process = json.loads(profile_data["process"])
@@ -564,7 +568,7 @@ def expected_for_stl(stl: bytes, mesh: dict, allowed, process: dict) -> Expected
 
 def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict | None,
               required=SLICE_REQUIRED_CHECKS, model_name: str = "model.stl",
-              source: str = "flat.json") -> dict:
+              source: str = "flat.json", unconfigured: CheckResult | None = None) -> dict:
     """Slice one STL as R1 does and judge it: OrcaSlicer, F6, F3 from its G-code and, with
     PrusaSlicer, F6.portability. previous: the inherited checks; mesh: the record's mesh
     facts PrusaSlicer is compared with (read only when PrusaSlicer is configured).
@@ -574,7 +578,9 @@ def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict 
     certification_note, portability, gcode, stderr_tail, log_written), the files by name
     (plate_1.gcode or its .failed name, the statistics, the log, PrusaSlicer's G-code) and
     the identity sections that depend on the STL ("portability"). model_name and source
-    name the STL and its record in the notes (R1: model.stl and flat.json)."""
+    name the STL and its record in the notes (R1: model.stl and flat.json). unconfigured:
+    the F6.portability result without PrusaSlicer (default
+    tdmg.portability.not_configured_check(), which says how to configure it)."""
     z_min, z_max = stl_z_range(stl)
     allowed = allowed_layer_counts(stl, ctx.process)
     setup = ctx.setup(allowed)
@@ -604,7 +610,7 @@ def slice_stl(ctx: Context, stl: bytes, previous: list[CheckResult], mesh: dict 
         f6 = _cross_check_layers(f6, stats, printed)
         prusa_gcode, measurements = None, None
         if prusa is None:
-            portability = not_configured_check()
+            portability = unconfigured if unconfigured is not None else not_configured_check()
         else:
             (base / "prusa").mkdir()
             info_run, gcode_run, prusa_gcode = run_portability(

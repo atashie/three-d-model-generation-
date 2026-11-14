@@ -81,24 +81,28 @@ def _plain(name: str) -> bool:
 
 def write_outputs(out_dir: str | Path, files: dict[str, bytes], record_name: str,
                   record_bytes: bytes, *, create_folder: bool | None = None,
-                  subfolders: bool = False) -> None:
+                  subfolders: bool | int = False) -> None:
     """Write each file with an exclusive create, then the record through os.replace.
 
     Names are checked before anything touches the disk: each must be a plain file name,
-    or, with subfolders, "<folder>/<file>" with both parts plain (one level only). Each
-    such folder is created new (exclusively) before its files. The record's name is
-    always plain. create_folder is check_output_dir's result. A caller that runs
-    check_output_dir before its expensive encoding fails fast and passes the result here;
-    when None, the check runs here. create_folder=False for a folder that does not exist
-    fails at the first write.
+    or, with subfolders, "<folder>/<file>" with both parts plain (subfolders True: one
+    level only; an int n: up to n folder levels, "<a>/<b>/<file>" and so on, every part
+    plain). Each such folder is created new (exclusively) before its files, a parent
+    before its children. The record's name is always plain. create_folder is
+    check_output_dir's result. A caller that runs check_output_dir before its expensive
+    encoding fails fast and passes the result here; when None, the check runs here.
+    create_folder=False for a folder that does not exist fails at the first write.
     """
+    levels = 0 if not subfolders else 1 if subfolders is True else int(subfolders)
     folders = []
     for name in (*files, record_name):
-        parts = name.split("/") if subfolders and name != record_name else [name]
-        if len(parts) > 2 or not all(_plain(p) for p in parts):
+        parts = name.split("/") if levels and name != record_name else [name]
+        if len(parts) > levels + 1 or not all(_plain(p) for p in parts):
             raise RecordError(f"output name {name!r} is not a plain file name")
-        if len(parts) == 2 and parts[0] not in folders:
-            folders.append(parts[0])
+        for depth in range(1, len(parts)):
+            folder = "/".join(parts[:depth])
+            if folder not in folders:
+                folders.append(folder)
     if set(folders) & set(files):
         raise RecordError(f"output names {sorted(set(folders) & set(files))} are both a "
                           "file and a folder")

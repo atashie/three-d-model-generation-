@@ -261,8 +261,9 @@ def write_multishell_3mf(shells: Sequence[Shell]) -> bytes:
     return package(model_xml(shells))
 
 
-def palette_manifest(shells: Sequence[Shell], model_3mf: bytes, *, colorflat_id: str,
-                     top_area_mm2: Sequence[float], volume_mm3: Sequence[float]) -> bytes:
+def palette_manifest(shells: Sequence[Shell], model_3mf: bytes, *,
+                     colorflat_id: str | None = None, top_area_mm2: Sequence[float],
+                     volume_mm3: Sequence[float], link: dict | None = None) -> bytes:
     """palette.json (plan Decision 2): what each shell of model.3mf is, as record JSON
     (tdmg.records.record_text: indented, key-sorted, one trailing newline).
 
@@ -271,7 +272,13 @@ def palette_manifest(shells: Sequence[Shell], model_3mf: bytes, *, colorflat_id:
     (the area of the model's top in that color) and its volume, both as the caller
     measured them (colored.json's body rows). Also the colorflat_id and the 3MF's SHA-256.
     It names colors, never AMS slots (docs/PLAN.md section 2 point 7).
+    link: in place of colorflat_id, the id that names the model's source ({key: id}, one
+    key; tdmg.calibration_strip's strip_geometry_id). Exactly one of the two is given.
     """
+    if (colorflat_id is None) == (link is None) or (link is not None and len(link) != 1):
+        raise ThreeMFError("palette_manifest needs exactly one of colorflat_id and a "
+                           "one-key link")
+    link = {"colorflat_id": colorflat_id} if link is None else dict(link)
     check_shells(shells)
     if len(top_area_mm2) != len(shells) or len(volume_mm3) != len(shells):
         raise ThreeMFError("one top area and one volume per shell are needed")
@@ -282,7 +289,7 @@ def palette_manifest(shells: Sequence[Shell], model_3mf: bytes, *, colorflat_id:
                      "hex": s.hex, "color_3mf": color_3mf(s.hex), **r,
                      "top_area_mm2": float(area), "volume_mm3": float(vol)})
     manifest = {
-        "schema": PALETTE_SCHEMA, "colorflat_id": colorflat_id,
+        "schema": PALETTE_SCHEMA, **link,
         "model_3mf_sha256": hashlib.sha256(model_3mf).hexdigest(),
         "object_name": OBJECT_NAME, "unit": UNIT, "encoding": ENCODING,
         "shells": rows,
