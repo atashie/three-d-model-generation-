@@ -1,0 +1,96 @@
+Found **3 High and 4 Medium findings**. The owner-approved infill failure, along-y layout, and chosen gaps/depths are not themselves findings.
+
+1. **High — The accepted-failure exception also excuses the pieces plate.**  
+   [calibration_strip.py:715](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:715)
+
+   `known_failures()` accepts qualifying connectivity failures on **any** supplied part. It never requires the failing part to be `base`. Consequently, `blocking_failures()` suppresses a pieces-plate failure, including when **both plates fail**.
+
+   **Confirmed by running:** supplied complete required-check records with the pieces layer reporting six model parts, seven printed parts, and zero holes. Results:
+   ```
+   base PASS, pieces FAIL → accepted parts ['pieces']; CLI exit 0
+   base FAIL, pieces FAIL → accepted parts ['base', 'pieces']; CLI exit 0
+   ```
+   The CLI actually says the owner decided to print the **pieces plate** anyway. CLI execution used an injected in-memory record, without slicing or writing files.
+
+   Restrict the exception to the clearance base; require the pieces plate to pass. This contradicts the base-only exception documented in the Task 3 amendment.
+
+2. **High — “Extra parts” does not establish that the failure is the accepted infill-island failure.**  
+   [calibration_strip.py:635](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:635)
+
+   `_extra_parts_only()` examines counts, not the extra components’ sizes, locations, extrusion features, or whether the main plate has split. A substantial structural separation receives the same exception and “small loose bits of infill” description.
+
+   **Confirmed by running:** built the real clearance base, then generated synthetic G-code using `tests/gcode_fixtures.py`, removing this strip from every layer’s footprint:
+   ```python
+   crack = shapely.box(17.45, -1, 17.55, 26)
+   printed_section = model_section.difference(crack)
+   ```
+   This leaves a 0.1 mm crack between the first two pockets throughout the plate. The two bottom-layer regions are approximately **424 and 1,834 mm²**, not small infill fragments.
+
+   Actual `f3_checks()` returned:
+   ```
+   F3.printed_connectivity FAIL
+   F3.edge_coverage        PASS
+   F3.edge_overprint       PASS
+   ```
+   Hole counts remained `[21, 21]`; part counts were `[1, 2]`. `known_failures()` accepted it. The exception needs evidence identifying the accepted failure, rather than a net increase in component count.
+
+3. **High — An entire white calibration patch can be absent while every required skin print check passes.**  
+   [calibration_strip.py:1154](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:1154)
+
+   The skin inherits the picture-print policy that makes per-tool coverage and connectivity warnings. That permits missing calibration material inside the silhouette. Other white patches keep the white tool present, so filament-use and color-change checks do not detect the missing patch.
+
+   **Confirmed by running:** generated valid, 15-layer synthetic multicolor G-code from the actual skin bodies, first normally, then omitting `skin.layout.squares[1]` from every white footprint—the entire 0.2 mm patch. In both cases, every required color/G-code check passed. With the patch omitted, only these warnings failed:
+   ```
+   F3.printed_connectivity.T1 FAIL
+   F3.edge_coverage.T1        FAIL
+   ```
+   The required-check verdict remained `PRINTABLE`. The model geometry itself was unchanged and passed its topology/export checks.
+
+   This follows the plan’s adopted warning policy, but makes that policy unsuitable for this calibration: an absent patch could be recorded as inadequate opacity. Require coverage of the calibration patches. Also, [cli.py:581](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/cli.py:581) does not display these warnings.
+
+4. **Medium — Checking that the pieces form a horizontal row does not establish their gap order.**  
+   [calibration_strip.py:827](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:827)
+
+   A row turned 180° still satisfies “the row runs left to right,” but reverses every piece’s identity. The instructions then pair the 0.35 mm piece with the pocket recorded as 0.10 mm, and vice versa.
+
+   **Confirmed by running:** synthetic G-code printing the actual pieces at 180° passed all three R1 F3 checks; the detected angle was 180°. Physical left-to-right gap order became:
+   ```
+   0.35, 0.30, 0.25, 0.20, 0.15, 0.10
+   ```
+   I did **not** run Bambu Studio or establish that it performs this turn. The demonstrated defect is that the prescribed check cannot detect it if import, arrangement, or viewing orientation reverses the row. Establish which physical end contains piece 1 before removal; preserving a row alone is insufficient.
+
+5. **Medium — The calibration form does not preserve the actual print settings that determine the result.**  
+   [calibration_strip.py:812](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:812), [cli.py:606](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/cli.py:606)
+
+   The owner prints newly sliced STL/3MF files in Bambu Studio. The form records filament and date, but neither specifies nor records layer height, process preset, first-layer settings, elephant-foot compensation, or the saved Bambu project. `strip_id` identifies the Orca check, not that actual print recipe.
+
+   **Concrete scenario:** a different layer height collapses distinct nominal white depths into the same printed layer count. In-memory midpoint sampling of the actual white mesh gave:
+   ```
+   layer height 0.20 → 0.20, 0.40, 0.60, 0.80, 1.00 mm
+   layer height 0.30 → 0.30, 0.30, 0.60, 0.90, 0.90 mm
+   ```
+   **Evidence:** executed geometric sampling, not a Bambu Studio slice. The print-setting omission is confirmed by reading.
+
+   Clearance likewise depends on the pieces’ bed-facing first layers; their pockets begin at z=2.4 mm. Unrecorded first-layer compensation or squish can change the chosen gap. Specify and retain the actual recipe, and require full seating against the pocket floor before judging fit.
+
+6. **Medium — Falling out when inverted is not a reliable definition of excessive clearance.**  
+   [calibration_strip.py:836](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:836)
+
+   The form defines “drops in, loose” as rattling **or falling out when inverted**, while the plan selects the smallest gap that “drops in, snug.”
+
+   **Concrete scenario:** a piece drops fully into its pocket with little lateral play, then falls out under gravity when inverted. The form forces a “loose” classification even though it achieved the intended drop-in fit. Conversely, retention can come from a first-layer lip or incomplete seating.
+
+   **Reading/mechanical reasoning only; no physical print tested.** Judge insertion, complete seating, and lateral play separately; inversion tests retention, which is not the same measurement.
+
+7. **Medium — “Room light” leaves a confounding backlighting condition uncontrolled.**  
+   [calibration_strip.py:856](C:/Users/arikt/Documents/GitHub/three-d-model-generation-/src/tdmg/calibration_strip.py:856)
+
+   **Concrete scenario:** the owner holds the strip toward a window or lamp. For white filament that transmits light through the full-depth reference, that reference receives transmitted light while the test patches have black material behind them. A patch can therefore look darker for reasons other than insufficient hiding under front illumination.
+
+   The two references do not cancel this difference: the full-white reference uniquely lacks black backing.
+
+   **Reading/optical reasoning only; no optical measurement performed.** Specify front illumination, an opaque backing, and consistent viewing orientation; record those conditions with the photograph.
+
+Validation and limits: I read `CLAUDE.md`, ran the requested log and diff from the repository root, and reviewed HEAD `44ba27d`. **47 selected tests passed** using `.venv/Scripts/python.exe -B -m pytest -s -p no:cacheprovider`; default pytest capture initially failed because no writable temporary directory was available. I ran the in-memory reproductions above and confirmed the existing `palette_manifest(colorflat_id=...)` output was byte-identical to the baseline implementation for the tested input.
+
+I found no shared-default regression in the inspected changes. Additional required failures, missing checks, UNKNOWN checks, and unverified-tree certification text correctly prevented the exception in the exercised cases. I did not run the full file-writing suite, real slicer, Bambu Studio, or physical prints. **No files were modified.**
