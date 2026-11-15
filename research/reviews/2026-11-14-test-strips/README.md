@@ -29,7 +29,8 @@ default (`tdmg slice`, `tdmg flat`).
 
 Each finding was checked against the code before anything was changed (CLAUDE.md, Review
 practice). Each fix was written as a failing test first, and each test failed before the
-fix. The owner's decisions are kept: the base plate stays NOT CERTIFIED and is printed
+fix. All the fixes are in commit `33c1f31`; the prompt and `review.txt` are in `30dc746`.
+The owner's decisions are kept: the base plate stays NOT CERTIFIED and is printed
 anyway, the skin strip runs along y, and the gaps and depths are unchanged. No rule value
 changed.
 
