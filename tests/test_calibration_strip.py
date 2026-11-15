@@ -764,15 +764,23 @@ def _connectivity_measured(layers):
             "mismatched_z": [m["z"] for m in bad]}
 
 
-def _fail_on_base(monkeypatch, ids, layers=ACCEPTED_LAYERS):
-    """On top of _pass_required: the base plate's F3 checks in ids FAIL, and its printed
-    record holds layers (F3.printed_connectivity's measured values agree with them)."""
-    _pass_required(monkeypatch)
+# The pieces plate with one extra printed part on one layer (six pieces, no holes): the
+# accepted kind of failure, but on the wrong plate (Codex review 2026-11-14, finding 1).
+PIECES_EXTRA = [{"z": 0.2, "holes": [0, 0], "parts": [6, 6], "unmatched": 0},
+                {"z": 0.4, "holes": [0, 0], "parts": [6, 7], "unmatched": 1}]
+
+
+def _fail_on_base(monkeypatch, ids, layers=ACCEPTED_LAYERS, bodies=1, keep=True):
+    """On top of _pass_required (keep True): the F3 checks in ids FAIL on the plate with
+    this many bodies (1: the base, 6: the pieces), and its printed record holds layers
+    (F3.printed_connectivity's measured values agree with them)."""
+    if keep:
+        _pass_required(monkeypatch)
     real = tdmg.slicing.f3_checks
 
     def base_fail(gcode, stl, setup, not_measured=None):
         checks, printed = real(gcode, stl, setup, not_measured)
-        if _body_count(_stl(stl)) == 1:
+        if _body_count(_stl(stl)) == bodies:
             checks = [replace(c, status="FAIL",
                               measured=(_connectivity_measured(layers)
                                         if c.id == "F3.printed_connectivity" else c.measured))
@@ -881,25 +889,69 @@ def test_known_failures_needs_every_other_required_check_to_pass():
     ok = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "PASS")],
               "NOT CERTIFIED: F3.printed_connectivity FAIL")
     good = part([("F3.printed_connectivity", "PASS"), ("F1.finite", "PASS")], "PRINTABLE")
-    assert ts.known_failures({"a": ok, "b": good})["parts"] == ["a"]
-    assert ts.known_failures({"a": good}) is None                       # nothing failed
+    assert ts.known_failures({"base": ok, "pieces": good})["parts"] == ["base"]
+    assert ts.known_failures({"base": good}) is None                    # nothing failed
     # The printed layers must show only extra parts with equal holes.
     for layers in (HOLE_MISMATCH, MISSING_PART, [], ACCEPTED_LAYERS[:1], None):
         bad = {**ok, "printed": None if layers is None else {"layers": layers}}
-        assert ts.known_failures({"a": bad}) is None, layers
+        assert ts.known_failures({"base": bad}) is None, layers
     moved = [ACCEPTED_LAYERS[0], {**ACCEPTED_LAYERS[0], "z": 0.4, "unmatched": 1}]
-    assert ts.known_failures({"a": {**ok, "printed": {"layers": moved}}}) is None
+    assert ts.known_failures({"base": {**ok, "printed": {"layers": moved}}}) is None
     unknown = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "UNKNOWN")],
                    "NOT CERTIFIED: F3.printed_connectivity FAIL, F1.finite UNKNOWN")
-    assert ts.known_failures({"a": unknown}) is None
+    assert ts.known_failures({"base": unknown}) is None
     missing = part([("F3.printed_connectivity", "FAIL")],
                    "NOT CERTIFIED: F3.printed_connectivity FAIL, F1.finite missing")
-    assert ts.known_failures({"a": missing}) is None
+    assert ts.known_failures({"base": missing}) is None
     # The record's own certification must agree (an unverified tree is named there).
     tree = part([("F3.printed_connectivity", "FAIL"), ("F1.finite", "PASS")],
                 "NOT CERTIFIED: app tree not verified (--skip-tree-check), "
                 "F3.printed_connectivity FAIL")
-    assert ts.known_failures({"a": tree}) is None
+    assert ts.known_failures({"base": tree}) is None
+
+
+def test_the_note_covers_the_clearance_base_plate_only():
+    # Codex review 2026-11-14, finding 1: the owner accepted the base plate's failure, not
+    # the same failure on the pieces plate or the skin face.
+    ok = {"required_checks": ["F3.printed_connectivity"],
+          "certification": "NOT CERTIFIED: F3.printed_connectivity FAIL",
+          "checks": [{"id": "F3.printed_connectivity", "status": "FAIL",
+                      "measured": _connectivity_measured(ACCEPTED_LAYERS)}],
+          "printed": {"layers": ACCEPTED_LAYERS}}
+    good = {**ok, "certification": "PRINTABLE",
+            "checks": [{"id": "F3.printed_connectivity", "status": "PASS", "measured": None}]}
+    assert ts.known_failures({"base": ok, "pieces": good})["parts"] == ["base"]
+    assert ts.known_failures({"base": good, "pieces": ok}) is None
+    assert ts.known_failures({"base": ok, "pieces": ok}) is None
+    assert ts.known_failures({"face-up": ok}) is None
+    assert ts.KNOWN_FAILURE_PARTS == frozenset({"base"})
+
+
+@pytest.mark.parametrize("both", [False, True])
+def test_a_pieces_plate_connectivity_fail_is_not_covered(orca, tmp_path, monkeypatch, both):
+    # Finding 1, through the command: the pieces plate's FAIL exits 1, alone or with the
+    # base plate's accepted one.
+    if both:
+        _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"}, PIECES_EXTRA, bodies=6,
+                  keep=not both)
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 1, r.output
+    rec = json.loads((out / "strip.json").read_bytes())
+    assert rec["clearance"]["known_failures"] is None
+    assert "do not print the clearance strip" in _plain(r.stdout)
+    assert "pieces: F3.printed_connectivity" in _plain(r.stdout)
+
+
+def test_the_note_says_it_counts_parts_and_does_not_size_them(orca, tmp_path, monkeypatch):
+    # Codex review 2026-11-14, finding 2: a plate split in two by a crack also gives one
+    # printed part more with equal holes. The note cannot tell the two apart and says so.
+    _fail_on_base(monkeypatch, {"F3.printed_connectivity"})
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    note = rec["clearance"]["known_failures"]
+    assert note["limit"] == ts.KNOWN_FAILURE_LIMIT
+    assert "not sized" in ts.KNOWN_FAILURE_LIMIT and "split" in ts.KNOWN_FAILURE_LIMIT
 
 
 def test_a_failed_slice_fails_both_strips(orca, tmp_path):
@@ -1034,6 +1086,9 @@ def test_the_strips_with_the_real_slicer(tmp_path):
 
 # --- Task 3: results-template.md and tdmg strip --------------------------------------------
 
+# The pinned process profile's print settings, as strip.json records them.
+SETTINGS = {"source": "s", "process": "0.20mm Standard @BBL A1", "layer_height_mm": 0.2,
+            "first_layer_mm": 0.2, "elephant_foot_mm": 0.075}
 CLEARANCE_CHOICES = ["won't go in", "pressed in", "drops in, snug", "drops in, loose"]
 SKIN_CHOICES = ["dark shows", "slight shadow", "looks like full white"]
 
@@ -1089,14 +1144,14 @@ def test_the_results_template_comes_from_the_strips_own_values():
                  for k, d in enumerate((0.3, 0.5, 0.7, 0.9, 1.1), 1)),
                {"patch": 7, "holes": 0, "depth_mm": 2.5, "role": "full white (reference)"}]
     text = ts.results_template(pockets, patches, strip_id="s" * 64,
-                               geometry_id="g" * 64).decode("utf-8")
+                               geometry_id="g" * 64, settings=SETTINGS).decode("utf-8")
     rows = _table(text, "| Pocket |")
     assert [r[2] for r in rows] == ["0.11", "0.16", "0.205", "0.26", "0.31", "0.36"]
     rows = _table(text, "| Patch |")
     assert [r[2] for r in rows] == ["none (black only)", "0.3", "0.5", "0.7", "0.9", "1.1",
                                     "2.5 (full)"]
     assert ts.results_template(pockets, patches, strip_id="s" * 64,
-                               geometry_id="g" * 64).decode("utf-8") == text
+                               geometry_id="g" * 64, settings=SETTINGS).decode("utf-8") == text
 
 
 def test_the_results_template_prose_counts_come_from_the_record():
@@ -1106,7 +1161,8 @@ def test_the_results_template_prose_counts_come_from_the_record():
                *({"patch": k + 1, "holes": k, "depth_mm": 0.2 * k, "role": "white over black"}
                  for k in range(1, 4)),
                {"patch": 5, "holes": 0, "depth_mm": 3.0, "role": "full white (reference)"}]
-    flat = " ".join(ts.results_template(pockets, patches, strip_id="s", geometry_id="g")
+    flat = " ".join(ts.results_template(pockets, patches, strip_id="s", geometry_id="g",
+                                        settings=SETTINGS)
                     .decode("ascii").split())
     assert "The base has four square pockets." in flat
     assert "The four pieces look alike" in flat
@@ -1141,9 +1197,13 @@ def test_cli_strip_accepted_base_failure_exits_0(orca, tmp_path, monkeypatch):
     text = _plain(r.stdout)
     note = rec["clearance"]["known_failures"]
     # Review P1: one plain line in the terminal; the long texts stay in strip.json.
-    assert ("  the base plate fails one check: small loose bits of infill inside the part, "
-            "on 2 of 3 layers (z 1.6, 2 mm); you decided on 2026-11-14 to print it anyway. "
-            "Details: strip.json") in lines
+    # Codex review finding 2: the line says what this run measured (part counts), and
+    # gives the 2026-11-14 cause as that day's, not as this run's.
+    i = lines.index("  the base plate fails one check: more printed parts than in the model, on "
+                    "2 of 3 layers (z 1.6, 2 mm).")
+    assert lines[i + 1] == ("  On 2026-11-14 these were small loose bits of infill inside the "
+                            "part, and you decided to print it anyway. This run's parts are "
+                            "counted, not sized. Details: strip.json")
     assert note["this_run_text"] not in text and note["cause"] not in text
     assert "F3.printed_connectivity on the" not in text
     # What to print, with which filament, and the form: OUT once, then relative names.
@@ -1156,7 +1216,8 @@ def test_cli_strip_accepted_base_failure_exits_0(orca, tmp_path, monkeypatch):
     assert "filament 1 black (the base), filament 2 white (the patches)" in text
     assert f"strip_id {rec['strip_id']}" in lines
     assert "do not print" not in text.lower()
-    assert max(len(line) for line in lines) <= 200
+    # The face's warnings (failed by _pass_required here) are tdmg.color_slicing's texts.
+    assert max(len(line) for line in lines if not line.startswith("  warning: ")) <= 200
 
 
 def test_cli_strip_prints_time_and_filament_per_plate(orca, tmp_path, monkeypatch):
@@ -1173,6 +1234,81 @@ def test_cli_strip_prints_time_and_filament_per_plate(orca, tmp_path, monkeypatc
     line = next(line for line in lines if line.startswith("  face up: "))
     assert "color changes" in line and ", time " in line and ", filament " in line
     assert "times and filament are the slicer's estimates" in lines
+
+
+def test_cli_strip_shows_the_skin_faces_warnings(orca, tmp_path, monkeypatch):
+    # Codex review 2026-11-14, finding 3: a white patch left unprinted shows only as a
+    # warning (the "Outer edge only" policy), so the command prints the warnings.
+    _pass_required(monkeypatch, warnings="FAIL")
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 0, r.output
+    rec = json.loads((out / "strip.json").read_bytes())
+    warnings = rec["skin"]["face"]["warnings"]
+    assert warnings
+    lines = r.stdout.splitlines()
+    for w in warnings:
+        assert f"  warning: {w['text']}" in lines
+    assert ("  the skin strip has warnings: before printing, check in Bambu Studio's "
+            "preview that every white patch is printed") in lines
+
+
+def test_cli_strip_prints_no_skin_warning_line_without_warnings(orca, tmp_path, monkeypatch):
+    _pass_required(monkeypatch, warnings="PASS")
+    r = _strip_cli(tmp_path / "strip", "--slicer-dir", str(orca()))
+    assert r.exit_code == 0, r.output
+    assert "warning" not in _plain(r.stdout)
+
+
+def test_the_results_template_records_the_print_settings(orca, tmp_path):
+    # Codex review 2026-11-14, finding 5: the depths are whole layers only at the checked
+    # layer height, and the fit depends on the first layer; the form names the settings
+    # the strips were checked with and asks for the ones used.
+    out = tmp_path / "strip"
+    rec = ts.make_strips(out, orca())
+    settings = rec["print_settings"]
+    process = json.loads((Path(str(orca())) / "profiles-flat/process.json").read_bytes())
+    assert settings == {
+        "source": ts.PRINT_SETTINGS_SOURCE, "process": process.get("name"),
+        "layer_height_mm": float(process["layer_height"]),
+        "first_layer_mm": float(process["initial_layer_print_height"]),
+        "elephant_foot_mm": float(process["elefant_foot_compensation"])}
+    flat = " ".join((out / "results-template.md").read_text(encoding="ascii").split())
+    assert "## Print settings" in flat
+    # The fake's process profile has no name; the pinned one is "0.20mm Standard @BBL A1".
+    preset = ("the pinned process profile" if settings["process"] is None
+              else f"process preset {settings['process']}")
+    assert (f"checked with {preset} (layer height {settings['layer_height_mm']:g} mm, first "
+            f"layer {settings['first_layer_mm']:g} mm, elephant foot compensation "
+            f"{settings['elephant_foot_mm']:g} mm)") in flat
+    named = dict(settings, process="0.20mm Standard @BBL A1")
+    text = " ".join(ts.results_template(rec["clearance"]["pockets"], rec["skin"]["patches"],
+                                        strip_id="s", geometry_id="g", settings=named)
+                    .decode("ascii").split())
+    assert "checked with process preset 0.20mm Standard @BBL A1 (layer height 0.2 mm" in text
+    for words in ("Process preset used:", "Layer height used (mm):",
+                  "Elephant foot compensation used (mm):", "Bambu Studio project file:"):
+        assert words in flat, words
+
+
+def test_the_results_template_guards_the_piece_order_seating_and_light():
+    # Codex review 2026-11-14, findings 4, 5 and 7: a row turned half a turn still runs
+    # left to right; a piece is judged seated on the pocket floor, bed side down; the skin
+    # is judged lying flat, lit from the front.
+    pockets = [{"pocket": k, "gap_mm": 0.1 * k, "holes": k} for k in range(1, 7)]
+    patches = [{"patch": 1, "holes": 0, "depth_mm": None, "role": "black only (reference)"},
+               {"patch": 2, "holes": 1, "depth_mm": 0.2, "role": "white over black"},
+               {"patch": 3, "holes": 0, "depth_mm": 3.0, "role": "full white (reference)"}]
+    settings = {"source": "s", "process": "P", "layer_height_mm": 0.2,
+                "first_layer_mm": 0.2, "elephant_foot_mm": 0.075}
+    flat = " ".join(ts.results_template(pockets, patches, strip_id="s", geometry_id="g",
+                                        settings=settings).decode("ascii").split())
+    for words in ("turned half a turn", "mark piece 1",
+                  "the side that was on the build plate goes down into the pocket",
+                  "sits on the pocket floor",
+                  "Lay the strip flat", "light from the front or above",
+                  "not held up to a window or a lamp"):
+        assert words in flat, words
 
 
 def test_cli_strip_refuses_a_strip_error_with_exit_2(orca, tmp_path, monkeypatch):

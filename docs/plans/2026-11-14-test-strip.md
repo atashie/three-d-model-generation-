@@ -489,6 +489,32 @@ task.
   verdicts).
 - **Codex review:** in `research/reviews/2026-11-14-test-strips/`. Each finding is
   checked against the code and handled as in review practice.
+- **Done (2026-11-14).** The measured runs are in
+  `research/verification/2026-11-14-test-strips/README.md` (sections 1 to 5). Codex
+  reviewed `192ae40..44ba27d`: 3 High and 4 Medium findings
+  (`research/reviews/2026-11-14-test-strips/README.md`). Six held, one (6) is the owner's
+  Decision 5 wording. The changes, each test first:
+  - **The note covers the base plate only** (finding 1): `KNOWN_FAILURE_PARTS`
+    (`{"base"}`). The accepted kind of FAIL on the pieces plate or the skin face gets no
+    note, so `tdmg strip` exits 1. This narrows the "Owner decision" amendment's
+    conditions to the plate the owner decided on.
+  - **The note says what it measures** (finding 2): it counts parts and holes; the extra
+    parts are not sized, so a split plate gets the note too (`limit`,
+    `KNOWN_FAILURE_LIMIT`). The terminal gives this run's counts, then the 2026-11-14
+    cause as that day's. Sizing the parts is open (it needs data `tdmg.printed` does not
+    record and a new rule).
+  - **The skin warnings are printed** (finding 3), with a line to check every white patch
+    in Bambu Studio's preview. They stay warnings ("Outer edge only"); whether the strip
+    should require them is open.
+  - **The form** (findings 4, 5, 7): a "Print settings" section from the pinned process
+    profile (`print_settings` in `strip.json`: preset, layer height, first layer, elephant
+    foot compensation), with fields for the settings used and the Bambu Studio project;
+    the pieces not turned (a half turn reverses the order) and piece 1 marked before they
+    come off the plate; each piece bed side down and pressed onto the pocket floor before
+    judging; the skin lying flat, lit from the front or above, not held up to a light.
+    The command's clearance line points to the form.
+  - The algorithm label stays `strip-2`: no geometry or verdict changes for the same
+    slices.
 
 ### Task 5 (after the owner prints): results and rules
 

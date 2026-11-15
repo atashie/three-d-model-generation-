@@ -533,13 +533,17 @@ with the pinned slicer: on 2 of its 15 layers a piece of infill inside the part 
 touch the other beads in the bead model. The owner decided on 2026-11-14 to keep the FAIL
 and print it anyway. The verdict stays NOT CERTIFIED and the G-code stays quarantined.
 `strip.json` gives the strip a `known_failures` note only when that check is the strip's
-only failing required check, the part's printed layers show the same holes as the model
-and only extra printed parts, and the check's measured values name the layers. The note
-keeps the dated cause and gives this run's own layers (`this_run`).
+only failing required check, it fails on the base plate only (not on the pieces plate or
+the skin face), the part's printed layers show the same holes as the model and only extra
+printed parts, and the check's measured values name the layers. The note keeps the dated
+cause and gives this run's own layers (`this_run`). **Limit** (`limit` in the note): it
+counts parts and does not size them, so a plate split in two would get the note too.
 
-**Message:** each strip's verdict; per plate its layers, time and filament; one plain line
-for the accepted failure (how many layers, which z values; the full texts stay in
-`strip.json`); the skin face's color changes, time and filament; then OUT once, and what
+**Message:** each strip's verdict; per plate its layers, time and filament; two plain
+lines for the accepted failure (this run's extra parts, layers and z values, then the
+2026-11-14 cause as that day's; the full texts stay in `strip.json`); the skin face's
+color changes, time and filament, and its warnings, if any (a white patch left unprinted
+shows only as a warning); then OUT once, and what
 to open in Bambu Studio by names relative to it (the two clearance plates in the same
 filament; `skin/model.3mf` on the AMS with filament 1 black for the base and filament 2
 white for the patches); and where the form is.

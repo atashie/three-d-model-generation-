@@ -265,9 +265,9 @@ passed. These commits are pushed; for CI see above.
      noticed), 2 Low (warning wording; this STATUS). All held and were fixed (`07b445a`,
      `0c720f7`); record in `research/reviews/2026-11-13-color-slicing/README.md`.
 2c. **R2 step 5, part 1: the test strips** (`docs/plans/2026-11-14-test-strip.md`,
-   approved 2026-11-14, "build it"). Tasks 1–3 done (`tdmg strip`); next is Task 4 (the
-   measured run record and the Codex review), then the owner's print and Task 5 (the two
-   rules set from the results). Details in the handoff below. Part 2, the first AMS and
+   approved 2026-11-14, "build it"). Tasks 1–4 done (`tdmg strip`; the Codex review in
+   `research/reviews/2026-11-14-test-strips/`); next is the owner's print and Task 5 (the
+   two rules set from the results). Details in the handoff below. Part 2, the first AMS and
    glue prints of an owner plan, comes after.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
@@ -405,8 +405,31 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest (2026-11-14): R2 step 5, part 1 (the test strips), Tasks 1–3 done.** Plan
+- **Latest (2026-11-14): R2 step 5, part 1 (the test strips), Tasks 1–4 done.** Plan
   `docs/plans/2026-11-14-test-strip.md` (approved by the owner: "build it").
+  - **Task 4, the Codex review** (`research/reviews/2026-11-14-test-strips/`, commits
+    `192ae40..44ba27d`): 3 High, 4 Medium. Fixed, each test first:
+    - High 1: the `known_failures` note covered the pieces plate too; now the base plate
+      only (`KNOWN_FAILURE_PARTS`), so a pieces-plate FAIL exits 1;
+    - High 2: the note counts parts and does not size them, so a plate split in two gets
+      it too; the note (`limit`) and the terminal now say so (partly fixed);
+    - High 3: a whole white patch can be missing with only warnings; `tdmg strip` now
+      prints the skin warnings and says to check every patch in the preview (partly
+      fixed);
+    - Medium 4, 5, 7: the form now says not to turn the pieces (a half turn reverses the
+      order) and to mark piece 1 on the plate; gives the checked print settings
+      (`print_settings` in `strip.json`: 0.20mm Standard @BBL A1, 0.2 mm layers,
+      elephant foot 0.075 mm) and asks for the ones used; says to seat each piece bed
+      side down; says to judge the skin lying flat, lit from the front, not held up to a
+      light.
+    - Medium 6 ("falls out when turned over" as "loose") is the owner's Decision 5
+      wording: not changed, an owner question.
+    - After the fixes: the real-slicer strip test passed, and `tdmg strip` gave exit 0
+      with the same verdicts and `strip_id` (verification README, section 5).
+  - **Open, for the owner (from the review):** size the base plate's extra parts (needs
+    a new rule and data `tdmg.printed` does not record); require the white tool's
+    coverage for the skin strip (today a warning, "Outer edge only"; it PASSed in the
+    real run); a physical mark on each piece; the "loose" definition (finding 6).
   - **Done:**
     - Task 1: `tdmg.calibration_strip`, the two strip builders (`clearance_strip`,
       `skin_strip`), checked against `fdm.wall.min_thickness` and `fdm.hole.min_diameter`.
@@ -416,9 +439,7 @@ The full list is in `docs/PLAN.md` section 13.
     - Task 3: the command `tdmg strip OUT [--slicer-dir DIR] [--timeout-s N]`,
       `results-template.md`, review fix N1 (the note gives this run's own measured
       layers beside the dated cause), docs.
-  - **Next: Task 4.** The measured run record (what was run, the numbers, the verdicts) in
-    `research/verification/2026-11-14-test-strips/`, and the Codex review in
-    `research/reviews/2026-11-14-test-strips/`.
+  - **Next:** the owner prints the strips and fills in `results-template.md`; then Task 5.
   - **Owner decisions (2026-11-14):**
     - gaps 0.10 to 0.35 mm per side, by 0.05 (six pockets);
     - skin depths 0.2 to 1.0 mm, by 0.2 (five patches);
@@ -443,17 +464,18 @@ The full list is in `docs/PLAN.md` section 13.
   - **What the owner prints next:** from a fresh `tdmg strip OUT` folder, in Bambu
     Studio:
     - `clearance/base.stl` and `clearance/pieces.stl`, two plates, in the same filament;
-      keep the pieces in their row, left to right;
+      do not move, turn or arrange the pieces, and mark piece 1 before taking them off
+      (the form says how);
     - `skin/model.3mf` on the AMS: filament 1 black (base), filament 2 white (patches).
     Then fill in `results-template.md`, with a photo of each strip. Task 5 sets the two
     rules from it.
   - **Task 3 review:** approved with five Minor findings (P1–P5), all fixed (plan
     amendment "Task 3 review fixes"); the real CLI run is recorded in section 4 of
     `research/verification/2026-11-14-test-strips/README.md`.
-  - **Local validation (2026-11-14, PC, after the review fixes):** `uv run pytest -q`
-    2558 passed, 8 skipped (the real-slicer tests); the strip real-slicer test passed on its own with
-    `TDMG_ORCASLICER_DIR` set; `ruff check` and `gen_docs.py --check` passed. Not pushed;
-    no CI run yet.
+  - **Local validation (2026-11-14, PC, after the Codex review fixes):** `uv run pytest
+    -q` 2566 passed, 8 skipped (the real-slicer tests); the strip real-slicer test passed
+    on its own with `TDMG_ORCASLICER_DIR` set; `ruff check` and `gen_docs.py --check`
+    passed. Not pushed; no CI run yet.
   - **Open:** how Bambu Studio places `pieces.stl` is not checked (the form says to check
     the row before printing); nothing from `tdmg`'s G-code is printed.
 - **Earlier (2026-11-13): R2 step 4 done** (item 2b).

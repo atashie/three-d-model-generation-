@@ -17,6 +17,7 @@ from tdmg.calibration_strip import (
     BASE_STL,
     CLEARANCE_DIR,
     KNOWN_FAILURE_DATE,
+    KNOWN_FAILURE_MEASURED,
     KNOWN_FAILURE_PLAIN,
     MODEL_3MF,
     PIECES_STL,
@@ -547,10 +548,13 @@ def _accepted_lines(note: dict) -> list[str]:
     lines = []
     for run in note["this_run"]:
         zs = ", ".join(f"{m['z_mm']:g}" for m in run["mismatched"])
-        lines.append(f"the {run['part']} plate fails {checks}: {KNOWN_FAILURE_PLAIN}, on "
-                     f"{run['layers_mismatched']} of {run['layers']} layers (z {zs} mm); you "
-                     f"decided on {KNOWN_FAILURE_DATE} to print it anyway. Details: "
-                     f"{STRIP_RECORD}")
+        # Codex review 2026-11-14, finding 2: what this run measured (counts), then the
+        # cause as measured on KNOWN_FAILURE_DATE, not as this run's.
+        lines.append(f"the {run['part']} plate fails {checks}: {KNOWN_FAILURE_MEASURED}, on "
+                     f"{run['layers_mismatched']} of {run['layers']} layers (z {zs} mm).")
+        lines.append(f"On {KNOWN_FAILURE_DATE} these were {KNOWN_FAILURE_PLAIN}, and you "
+                     "decided to print it anyway. This run's parts are counted, not sized. "
+                     f"Details: {STRIP_RECORD}")
     return lines
 
 
@@ -583,6 +587,14 @@ def _strip_output(rec: dict, out: Path) -> list[tuple[str, str]]:
     changes = "?" if s["changes"] is None else str(s["changes"])
     typer.echo(f"  face up: {changes} color changes, time {_time(s['time_s'])}, filament "
                f"{_number(s['weight_g'], 'g', 2)}")
+    # Codex review 2026-11-14, finding 3: a white patch left unprinted shows only as a
+    # warning (each tool's coverage and connectivity, "Outer edge only").
+    warnings = sk["face"]["warnings"]
+    for w in warnings:
+        typer.echo(f"  warning: {w['text']}")
+    if warnings:
+        typer.echo("  the skin strip has warnings: before printing, check in Bambu Studio's "
+                   "preview that every white patch is printed")
     typer.echo("times and filament are the slicer's estimates")
     blocking = {"clearance": blocking_failures(cl), "skin": blocking_failures(sk)}
     typer.echo(f"to print, in {out}:")
@@ -596,8 +608,9 @@ def _strip_output(rec: dict, out: Path) -> list[tuple[str, str]]:
         elif strip == "clearance":
             typer.echo(f"  clearance strip: open {CLEARANCE_DIR}/{BASE_STL} and "
                        f"{CLEARANCE_DIR}/{PIECES_STL} in Bambu Studio and print them as two "
-                       "plates in the same filament. Keep the pieces in their row, left to "
-                       "right")
+                       "plates in the same filament")
+            typer.echo(f"    do not move, turn or arrange the pieces; {TEMPLATE_NAME} says "
+                       "how to keep them in order")
         else:
             colors = ", ".join(
                 f"filament {f['filament']} {SKIN_COLOR_NAMES[f['hex']]} "

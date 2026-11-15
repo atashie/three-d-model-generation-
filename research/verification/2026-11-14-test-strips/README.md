@@ -207,3 +207,42 @@ uv run tdmg strip <scratch folder>\task3run --slicer-dir artifacts/tools/orcasli
 - The same verdicts, numbers and `strip_id` came from two earlier runs of the command the
   same day, before the review changed only the terminal wording.
 - Nothing was printed. Task 4 adds the full measured-run record and the Codex review.
+
+## 5. After the Codex review fixes (plan Task 4, 2026-11-14)
+
+The Codex review (`research/reviews/2026-11-14-test-strips/`) changed the note's
+conditions (base plate only), the note's and the terminal's wording, the skin warnings in
+the terminal, `print_settings` in `strip.json` and the form. No geometry, slice or check
+changed. On the owner's Windows PC, with the pinned OrcaSlicer 2.5.0 (app tree checked):
+
+- `TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 uv run pytest -m slicer
+  tests/test_calibration_strip.py`: 1 passed.
+- `uv run tdmg strip <scratch folder>\task4run --slicer-dir
+  artifacts/tools/orcaslicer-2.5.0`: exit 0. The same verdicts and numbers as section 4,
+  and the same `strip_id` (`8e853b952442cb17bdb01edc24ee1372ad8d56f65abc4ad6f97b9a2aede37039`).
+  The skin face had no warnings. `print_settings`: process preset "0.20mm Standard @BBL
+  A1", layer height 0.2 mm, first layer 0.2 mm, elephant foot compensation 0.075 mm. The
+  terminal output (OUT shortened to `<OUT>`):
+
+  ```
+  clearance strip: NOT CERTIFIED: base: F3.printed_connectivity FAIL
+    base plate: NOT CERTIFIED: F3.printed_connectivity FAIL - 15 layers, time 23 min, filament 6.12 g
+    pieces plate: PRINTABLE - 3 layers, time 8 min, filament 0.47 g
+    the base plate fails one check: more printed parts than in the model, on 2 of 15 layers (z 1.6, 2 mm).
+    On 2026-11-14 these were small loose bits of infill inside the part, and you decided to print it anyway. This run's parts are counted, not sized. Details: strip.json
+  skin strip: PRINTABLE
+    face up: 15 color changes, time 45 min, filament 10.29 g
+  times and filament are the slicer's estimates
+  to print, in <OUT>:
+    clearance strip: open clearance/base.stl and clearance/pieces.stl in Bambu Studio and print them as two plates in the same filament
+      do not move, turn or arrange the pieces; results-template.md says how to keep them in order
+    skin strip: open skin/model.3mf in Bambu Studio and print it on the AMS: filament 1 black (the base), filament 2 white (the patches)
+    after printing, fill in results-template.md; the record is strip.json
+    the plate_1.gcode files are for checking only, not for printing
+  strip_id 8e853b952442cb17bdb01edc24ee1372ad8d56f65abc4ad6f97b9a2aede37039
+  ```
+
+- **Limit, not changed:** the note still counts parts and does not size them, so it
+  cannot tell these infill islands from a plate split in two (review finding 2). It says
+  so in `limit`.
+- Nothing was printed.

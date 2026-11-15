@@ -610,15 +610,25 @@ REVIEW = (
 # "Owner decision: keep the FAIL, print anyway"). The checks do not change and the verdict
 # stays NOT CERTIFIED; strip.json carries a note, only for exactly this failure.
 KNOWN_FAILURE_CHECK = "F3.printed_connectivity"
+# The parts the decision covers: the clearance base plate only (Codex review 2026-11-14,
+# finding 1). The same failure on the pieces plate or the skin face gets no note.
+KNOWN_FAILURE_PARTS = frozenset({"base"})
 KNOWN_FAILURE_DATE = "2026-11-14"
 KNOWN_FAILURE_SHORT = (f"the owner's decision of {KNOWN_FAILURE_DATE} (\"Keep the FAIL, "
                        "print anyway\")")
-# tdmg strip's plain words for the accepted failure (the record keeps the full texts).
+# tdmg strip's plain words for what this run measured, and for the 2026-11-14 cause (the
+# record keeps the full texts).
+KNOWN_FAILURE_MEASURED = "more printed parts than in the model"
 KNOWN_FAILURE_PLAIN = "small loose bits of infill inside the part"
 KNOWN_FAILURE_DECISION = (
-    f"{KNOWN_FAILURE_SHORT}: a strip whose "
+    f"{KNOWN_FAILURE_SHORT}: the clearance base plate, whose "
     "only failing required check is F3.printed_connectivity, with every other required "
     "check PASS, stays NOT CERTIFIED and is printed anyway; the checks do not change")
+# What the note cannot tell (Codex review 2026-11-14, finding 2).
+KNOWN_FAILURE_LIMIT = (
+    "the note counts parts and holes per layer; the extra printed parts are not sized or "
+    "placed, so a part split in two (for example by a crack through the plate) gives the "
+    "same counts as a loose bit of infill and also gets this note")
 KNOWN_FAILURE_CAUSE = (
     "measured 2026-11-14 on the clearance base plate (pinned OrcaSlicer 2.5.0, A1 "
     "profile; research/verification/2026-11-14-test-strips/README.md): on 2 of 15 layers "
@@ -702,9 +712,10 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
     KNOWN_FAILURE_CHECK with status FAIL (at least once), every required check is present,
     and each part's own certification is PRINTABLE or exactly "NOT CERTIFIED:
     <KNOWN_FAILURE_CHECK> FAIL" (so an unverified app tree, or anything else the record
-    names, gets no note). Each failing part must also show the accepted kind of failure
-    in its printed layers (_extra_parts_only), and its check's measured values must name
-    the mismatched layers (_this_run). It never changes a verdict.
+    names, gets no note). Only a part in KNOWN_FAILURE_PARTS (the clearance base plate)
+    may fail. Each failing part must also show the accepted kind of failure in its printed
+    layers (_extra_parts_only: counts only, KNOWN_FAILURE_LIMIT), and its check's measured
+    values must name the mismatched layers (_this_run). It never changes a verdict.
 
     The note keeps the dated cause measured on 2026-11-14 (KNOWN_FAILURE_CAUSE) and gives
     this run's own measured layers beside it: this_run (per failing part) and
@@ -724,6 +735,8 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
         if part["certification"] != ("PRINTABLE" if not bad else only):
             return None
         if bad:
+            if name not in KNOWN_FAILURE_PARTS:
+                return None
             if not _extra_parts_only(part.get("printed")):
                 return None
             run = _this_run(name, part)
@@ -737,7 +750,7 @@ def known_failures(parts: dict[str, dict]) -> dict | None:
             "decision": KNOWN_FAILURE_DECISION, "source": SOURCE,
             "cause": KNOWN_FAILURE_CAUSE, "this_run": runs,
             "this_run_text": "; ".join(_this_run_text(r) for r in runs),
-            "note": KNOWN_FAILURE_NOTE}
+            "limit": KNOWN_FAILURE_LIMIT, "note": KNOWN_FAILURE_NOTE}
 
 
 def strip_parts(section: dict) -> dict[str, dict]:
@@ -785,12 +798,29 @@ def _row(cells) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
+PRINT_SETTINGS_SOURCE = ("the pinned OrcaSlicer process profile the strips were sliced and "
+                         "checked with (profiles-flat/process.json)")
+
+
+def print_settings(process: dict) -> dict:
+    """The process settings the strips were checked with, for strip.json and the form
+    (Codex review 2026-11-14, finding 5): the preset's name (None if the profile has
+    none), the layer height, the first layer height and the elephant foot compensation.
+    The depths are whole layers only at this layer height, and the pieces' fit depends on
+    their first layer."""
+    return {"source": PRINT_SETTINGS_SOURCE, "process": process.get("name"),
+            "layer_height_mm": float(process["layer_height"]),
+            "first_layer_mm": float(process["initial_layer_print_height"]),
+            "elephant_foot_mm": float(process["elefant_foot_compensation"])}
+
+
 def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
-                     geometry_id: str) -> bytes:
+                     geometry_id: str, settings: dict) -> bytes:
     """results-template.md (plan Decision 5): the form the owner fills in after printing.
 
     pockets: the clearance section's pockets (pocket, gap_mm, holes), left to right.
     patches: the skin section's patches (patch, holes, depth_mm, role), front to back.
+    settings: print_settings of the pinned process profile.
     Every number in the tables comes from them, so the form always matches the strip.
     So do the counts in the instructions (review P5). ASCII and LF only, so it is
     byte-identical on repeat."""
@@ -799,6 +829,8 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
     depth = [p for p in patches if p["holes"]]
     black = next(p for p in patches if p["depth_mm"] is None)
     full = next(p for p in patches if p["role"].startswith("full white"))
+    preset = ("the pinned process profile" if settings["process"] is None
+              else f"process preset {settings['process']}")
     choices = CLEARANCE_CHOICES
     lines = [
         "# Test strip results",
@@ -818,22 +850,44 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
         "- Skin strip, white: brand, type and color:",
         "- Skin strip, black: brand, type and color:",
         "",
+        "## Print settings",
+        "",
+        (f"The strips were checked with {preset} (layer height "
+         f"{settings['layer_height_mm']:g} mm, first layer"),
+        (f"{settings['first_layer_mm']:g} mm, elephant foot compensation "
+         f"{settings['elephant_foot_mm']:g} mm). The white depths are whole layers at"),
+        "that layer height, and the pieces' fit depends on their first layer, so print",
+        "with the same settings, and write down what Bambu Studio used:",
+        "",
+        "- Process preset used:",
+        "- Layer height used (mm):",
+        "- First layer height used (mm):",
+        "- Elephant foot compensation used (mm):",
+        "- Bambu Studio project file: (save the project you printed from)",
+        "",
         "## Clearance strip",
         "",
         (f"The base has {n_pockets} square pockets. Pocket k is the one with k label "
          "holes below it."),
         f"The {n_pockets} pieces look alike, so keep them in order:",
         "",
-        "1. Take each piece off the pieces plate in order, left to right, one piece at a",
-        (f"   time. pieces.stl has them in one row along x, piece {first['pocket']} at the "
-         "left. Before"),
-        "   printing, check in Bambu Studio that the row runs left to right, and do not",
-        "   move, turn or arrange it (how Bambu Studio places this file is not checked).",
-        (f"2. Try the pieces in pocket {first['pocket']} to {last['pocket']} in the same "
-         "order: the first piece from the left"),
-        (f"   in pocket {first['pocket']} ({_count(first['holes'], 'label hole')}), the "
+        (f"1. pieces.stl has the pieces in one row along x, piece {first['pocket']} at the "
+         "left. In Bambu Studio,"),
+        "   do not move, turn or arrange it (how Bambu Studio places this file is not",
+        "   checked). A row turned half a turn still runs left to right, but in reverse",
+        "   order, so check that it is not turned at all.",
+        (f"2. Before you take the pieces off the build plate, mark piece {first['pocket']}: "
+         "the piece at the"),
+        "   end that was at the left in Bambu Studio. Then take the pieces off one at a",
+        "   time, in order.",
+        (f"3. Try the pieces in pocket {first['pocket']} to {last['pocket']} in the same "
+         "order: the marked piece in"),
+        (f"   pocket {first['pocket']} ({_count(first['holes'], 'label hole')}), the "
          f"next in pocket {first['pocket'] + 1}, and so on."),
-        "3. Mark one box per row with an x. \"drops in, loose\" means it rattles, or falls",
+        "4. Put each piece in as it was printed: the side that was on the build plate goes",
+        "   down into the pocket. Press it down until it sits on the pocket floor, then",
+        "   judge it.",
+        "5. Mark one box per row with an x. \"drops in, loose\" means it rattles, or falls",
         "   out when you turn the base over.",
         "",
         _row(["Pocket", "Label holes", "Gap per side (mm)", *choices, "Notes"]),
@@ -853,8 +907,11 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
          "way through) have none: they are"),
         "the two reference patches.",
         "",
-        "Judge each patch under room light, next to the two reference patches. Mark one box",
-        "per row with an x.",
+        "Lay the strip flat on a table, top face up, with the light from the front or",
+        "above. Judge each patch under room light, next to the two reference patches.",
+        "Judge it lying down, not held up to a window or a lamp: light through the full",
+        "white reference would make it look whiter than the patches over black.",
+        "Mark one box per row with an x.",
         "",
         _row(["Patch", "Label holes", "White depth (mm)", *choices, "Notes"]),
         _row(["---"] * (len(choices) + 4)),
@@ -1252,8 +1309,10 @@ def make_strips(out_dir, slicer_dir=None, timeout_s=None, check_tree: bool = Tru
     strip_id = _sha(canonical_json(identity))
     # The owner's form (Decision 5), from the strips' own pockets and patches. It is made
     # from the record, so it is not part of strip_id.
+    settings = print_settings(ctx.process)
     files[TEMPLATE_NAME] = results_template(cl_section["pockets"], sk_section["patches"],
-                                            strip_id=strip_id, geometry_id=geometry_id)
+                                            strip_id=strip_id, geometry_id=geometry_id,
+                                            settings=settings)
     record = {
         "schema": RECORD_SCHEMA, "tdmg_version": __version__, "algorithm": ALGORITHM,
         "strip_id": strip_id,
@@ -1262,6 +1321,7 @@ def make_strips(out_dir, slicer_dir=None, timeout_s=None, check_tree: bool = Tru
         "params": {"timeout_s": ctx.timeout, "check_tree": check_tree},
         "slicer": ctx.slicer_record(),
         "portability": {"run": False, "reason": PORTABILITY_NOT_REQUIRED},
+        "print_settings": settings,
         "clearance": cl_section,
         "skin": sk_section,
         "verdicts": {"clearance": cl_section["verdict"], "skin": sk_section["verdict"]},
