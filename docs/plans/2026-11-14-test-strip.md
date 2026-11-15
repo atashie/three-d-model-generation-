@@ -545,8 +545,9 @@ task.
   unchanged): every depth looked like full white. The owner kept 0.6 mm, so the value is
   unchanged and nothing is rebuilt; the rule became `kind: empirical`, since only an
   empirical rule can be calibrated, with `calibrated` evidence. Record:
-  `research/verification/2026-11-14-test-strips/README.md`, section 7. The clearance
-  strip is still to come.
+  `research/verification/2026-11-14-test-strips/README.md`, section 7.
+- **Clearance strip skipped (2026-11-15).** The owner's words (2026-11-15): "Let's skip further tests - the real tests will come when we begin printing actual figures that we are interested in". `color.glue.clearance_mm` is
+  unchanged and untested; Task 5 ends here.
 
 ## Out of scope
 

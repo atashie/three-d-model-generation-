@@ -316,4 +316,6 @@ printer), judged by the owner's eye, as Decision 5 planned.
   Studio, version not recorded) and profile (0.20mm Standard @BBL A1); other pairs are
   not covered. Not covered by this print: whether 0.6 mm glue pieces survive handling
   (the clearance strip, not yet reported).
-- **Not yet reported:** the clearance strip.
+- **The clearance strip: not printed, by the owner's choice (2026-11-15).** The owner's words (2026-11-15): "Let's skip further tests - the real tests will come when we begin printing actual figures that we are interested in".
+  `color.glue.clearance_mm` stays 0.2 mm, `hypothesis`, untested; the first glue print of
+  an owner figure is its first test.

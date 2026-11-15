@@ -1,8 +1,8 @@
 # Project status
 
 **Last updated:** 2026-11-15 (R2 step 5 part 1, the test strips: the owner printed the
-skin strip; `color.skin.depth_mm` is calibrated and kept at 0.6 mm. The clearance strip's
-results are next). Phase 1 (R1, flat single-color) is under way, with three commands, and
+skin strip; `color.skin.depth_mm` is calibrated and kept at 0.6 mm. The owner skipped
+the clearance strip; part 1 is closed and step 5 part 2, printing owner figures, is next). Phase 1 (R1, flat single-color) is under way, with three commands, and
 R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -51,9 +51,10 @@ R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
     1.0 mm deep over black, plus two reference patches. Printed on the AMS.
   - **On the PC (2026-11-14):** skin PRINTABLE; clearance NOT CERTIFIED by the
     owner-accepted base plate failure alone; exit 0.
-  - **Printed (2026-11-15):** the skin strip, eSUN PLA+ white over black: every depth
+  - **Printed (2026-11-15):** only the skin strip (the owner skipped the clearance strip), eSUN PLA+ white over black: every depth
     from 0.2 mm looked like full white. The owner kept 0.6 mm; the rule is now
-    calibrated (verification README, section 7). The clearance strip is not reported yet.
+    calibrated (verification README, section 7). `color.glue.clearance_mm` (0.2 mm) stays
+    untested until a real glue print.
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -271,7 +272,8 @@ passed. These commits are pushed; for CI see above.
    approved 2026-11-14, "build it"). Tasks 1–4 done (`tdmg strip`; the Codex review in
    `research/reviews/2026-11-14-test-strips/`, with the owner's decisions); the strips
    were printed. Task 5: the skin result is recorded and `color.skin.depth_mm` is
-   calibrated at 0.6 mm (2026-11-15); the clearance strip's results are next. Details in the handoff below. Part 2, the first AMS and
+   calibrated at 0.6 mm (2026-11-15). The owner skipped the clearance strip and further
+   tests (2026-11-15), so part 1 is closed. Details in the handoff below. Part 2, the first AMS and
    glue prints of an owner plan, comes after.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
@@ -415,10 +417,14 @@ The full list is in `docs/PLAN.md` section 13.
   owner's choice). The owner kept 0.6 mm ("Keep 0.6 mm (Recommended)"), so no model or
   owner plan changes. `color.skin.depth_mm` is now `kind: empirical` with `calibrated`
   evidence and a calibration block (`rules/color.yaml`; record:
-  `research/verification/2026-11-14-test-strips/README.md`, section 7). **Next:** the
-  clearance strip's results (form), then the owner's choice of
-  `color.glue.clearance_mm` (suggested: the smallest gap that drops in, sits flat, with
-  little play). Then step 5, part 2.
+  `research/verification/2026-11-14-test-strips/README.md`, section 7).
+  - **The owner skipped the clearance strip and further tests.** The owner's words (2026-11-15): "Let's skip further tests - the real tests will come when we begin printing actual figures that we are interested in". So
+    `color.glue.clearance_mm` (0.2 mm) stays `hypothesis`/untested, and whether 0.6 mm
+    glue pieces survive handling is untested. Part 1 is closed.
+  - **Next: step 5, part 2:** print owner figures. For an AMS print: `tdmg slice` the
+    colored folder, open `model.3mf` in Bambu Studio and assign the filaments listed.
+    The first glue print is also the first test of the 0.2 mm gap: record how the
+    pieces fit (goes in, sits flat, play) and the filament, as the strip form asked.
 - **Earlier (2026-11-14): R2 step 5, part 1 (the test strips), Tasks 1–4 done. The
   strips are ready to print.** Plan `docs/plans/2026-11-14-test-strip.md` (approved by
   the owner: "build it").
