@@ -587,14 +587,14 @@ def _strip_output(rec: dict, out: Path) -> list[tuple[str, str]]:
     changes = "?" if s["changes"] is None else str(s["changes"])
     typer.echo(f"  face up: {changes} color changes, time {_time(s['time_s'])}, filament "
                f"{_number(s['weight_g'], 'g', 2)}")
-    # Codex review 2026-11-14, finding 3: a white patch left unprinted shows only as a
-    # warning (each tool's coverage and connectivity, "Outer edge only").
+    # Codex review 2026-11-14, finding 3: the white tool's coverage and connectivity are
+    # required for the strip; the black tool's and the whole model's stay warnings.
     warnings = sk["face"]["warnings"]
     for w in warnings:
         typer.echo(f"  warning: {w['text']}")
     if warnings:
-        typer.echo("  the skin strip has warnings: before printing, check in Bambu Studio's "
-                   "preview that every white patch is printed")
+        typer.echo("  the skin strip has warnings: before printing, check it in Bambu "
+                   "Studio's preview")
     typer.echo("times and filament are the slicer's estimates")
     blocking = {"clearance": blocking_failures(cl), "skin": blocking_failures(sk)}
     typer.echo(f"to print, in {out}:")

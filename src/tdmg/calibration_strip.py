@@ -76,7 +76,7 @@ from tdmg.color_checks import (
     glue_partition_check,
 )
 from tdmg.color_config import palette_cap
-from tdmg.color_gcode import F3_WARNING_NOTE, INFO_CHECK_IDS, INFO_NOTE, f3_note
+from tdmg.color_gcode import F3_WARNING_NOTE, INFO_CHECK_IDS, INFO_NOTE, f3_note, per_tool_id
 from tdmg.color_geometry import (
     Body,
     Cells,
@@ -103,6 +103,7 @@ from tdmg.flat import (
     mesh_summary,
     triangle_check,
 )
+from tdmg.printed import CONNECTIVITY, COVERAGE
 from tdmg.profiles import PrinterProfile, load_printer
 from tdmg.records import (
     RecordError,
@@ -546,8 +547,10 @@ def skin_strip(depths_mm, *, rules: dict) -> SkinStrip:
 RECORD_SCHEMA = "tdmg.strip/1"
 # The version of what strip_id names (plan Decision 4), bumped whenever the verdict for
 # the same request can change. strip-1 (2026-11-14): plan Task 2. strip-2 (2026-11-14):
-# the skin strip laid out long along y (plan Task 2 amendment).
-ALGORITHM = "strip-2"
+# the skin strip laid out long along y (plan Task 2 amendment). strip-3 (2026-11-14): the
+# white tool's coverage and connectivity required for the skin strip (SKIN_WHITE_REQUIRED;
+# plan Task 4).
+ALGORITHM = "strip-3"
 SOURCE = "docs/plans/2026-11-14-test-strip.md"
 OWNER_SOURCE = "the owner's answers of 2026-11-14 (the plan's \"What is known\")"
 RECORD_NAME = "strip.json"
@@ -572,6 +575,17 @@ PLATE_REQUIRED = frozenset((_slicing.SLICE_REQUIRED_CHECKS - {TARGET_WIDTH, PORT
                            | GLUE_ONLY_CHECKS)
 SKIN_INHERITED_REQUIRED = frozenset(COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS
                                     - _color.INHERITED_DROPPED)
+# The owner's decision on Codex finding 3 (2026-11-14, "Require it for the strip"): for the
+# skin strip only, the white tool's per-tool F3.edge_coverage and F3.printed_connectivity
+# are required, so a white patch left unprinted blocks. Owner plans keep "Outer edge only"
+# (tdmg.color_gcode.required_check_ids is unchanged). The white body is the second shell
+# (_skin's bodies, base first), so it is printed by tool 1.
+SKIN_WHITE_TOOL = 1
+SKIN_WHITE_REQUIRED = frozenset(per_tool_id(c, SKIN_WHITE_TOOL)
+                                for c in (COVERAGE, CONNECTIVITY))
+SKIN_WHITE_NOTE = ("Required for the skin strip's PRINTABLE (the owner's decision of "
+                   "2026-11-14 on Codex review finding 3, \"Require it for the strip\"; "
+                   "research/reviews/2026-11-14-test-strips/README.md).")
 TARGET_WIDTH_NA = ("not applicable to a strip plate: the strip's size is set by the "
                    "layout constants (plan Decision 3), not by a requested width")
 PORTABILITY_NOT_REQUIRED = (
@@ -774,8 +788,17 @@ def blocking_failures(section: dict) -> list[tuple[str, str]]:
 
 
 TEMPLATE_NAME = "results-template.md"
-# Decision 5: the owner's choices for each piece and each patch.
-CLEARANCE_CHOICES = ("won't go in", "pressed in", "drops in, snug", "drops in, loose")
+# Decision 5: the owner's choices for each piece and each patch. Each piece is judged in
+# three steps (the owner's decision on Codex finding 6, 2026-11-14, "Judge it in three
+# steps"; plan Decision 5 amendment): (step, the question, its answers, column prefix).
+CLEARANCE_STEPS = (
+    ("a", "Goes in", ("won't go in", "pressed in", "drops in"), ""),
+    ("b", "Sits flat on the pocket floor", ("yes", "no"), "flat: "),
+    ("c", "Side-to-side play", ("none", "a little", "a lot"), "play: "),
+)
+CLEARANCE_COLUMNS = tuple(f"({step}) {prefix}{answer}"
+                          for step, _, answers, prefix in CLEARANCE_STEPS
+                          for answer in answers)
 SKIN_CHOICES = ("dark shows", "slight shadow", "looks like full white")
 
 
@@ -792,6 +815,11 @@ _NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
 def _count(n: int, noun: str) -> str:
     """'one label hole', 'two label holes'."""
     return f"{_NUMBER_WORDS.get(n, str(n))} {noun}{'' if n == 1 else 's'}"
+
+
+def _choices(answers) -> str:
+    """'none, a little or a lot'."""
+    return ", ".join(answers[:-1]) + f" or {answers[-1]}"
 
 
 def _row(cells) -> str:
@@ -831,7 +859,7 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
     full = next(p for p in patches if p["role"].startswith("full white"))
     preset = ("the pinned process profile" if settings["process"] is None
               else f"process preset {settings['process']}")
-    choices = CLEARANCE_CHOICES
+    choices = CLEARANCE_COLUMNS
     lines = [
         "# Test strip results",
         "",
@@ -885,10 +913,11 @@ def results_template(pockets: list[dict], patches: list[dict], *, strip_id: str,
         (f"   pocket {first['pocket']} ({_count(first['holes'], 'label hole')}), the "
          f"next in pocket {first['pocket'] + 1}, and so on."),
         "4. Put each piece in as it was printed: the side that was on the build plate goes",
-        "   down into the pocket. Press it down until it sits on the pocket floor, then",
-        "   judge it.",
-        "5. Mark one box per row with an x. \"drops in, loose\" means it rattles, or falls",
-        "   out when you turn the base over.",
+        "   down into the pocket. Press it down gently, then judge it in three steps:",
+        *(f"   ({step}) {question}: {_choices(answers)}."
+          for step, question, answers, _ in CLEARANCE_STEPS),
+        "5. Mark one box in each of (a), (b) and (c) with an x. If it won't go in, leave",
+        "   (b) and (c) empty.",
         "",
         _row(["Pocket", "Label holes", "Gap per side (mm)", *choices, "Notes"]),
         _row(["---"] * (len(choices) + 4)),
@@ -1206,14 +1235,25 @@ def _skin(ctx, strip: SkinStrip, printer: PrinterProfile, rules: dict, geometry_
     inherited = [c for r in rows for c in r["checks"]] + assembly
 
     fmap = _color.filament_map(shells)
+    if [f["index"] for f in fmap].index(SKIN_WHITE_INDEX) != SKIN_WHITE_TOOL:
+        raise StripError(f"the white body is not printed by tool {SKIN_WHITE_TOOL}, which "
+                         "SKIN_WHITE_REQUIRED names")
     filaments = _color.filament_profiles(ctx.profile_data["filament"], fmap)
     allowed = _color.allowed_counts(shells, ctx.process)
     done = _color.slice_face(ctx, SKIN_FACE, shells, filaments, inherited,
-                             SKIN_INHERITED_REQUIRED, unconfigured, allowed,
-                             portability_required=False)
+                             SKIN_INHERITED_REQUIRED | SKIN_WHITE_REQUIRED, unconfigured,
+                             allowed, portability_required=False)
     prefix = f"{SKIN_DIR}/{SLICE_DIR}/"
     face = done["record"]
     face["certification_note"] = _part_note(face["certification"])
+    # The white tool's checks are required here (SKIN_WHITE_REQUIRED): their notes say so,
+    # and they are not warnings. slice_face's own texts are those of an owner plan's face.
+    for c in face["checks"]:
+        if c["id"] in SKIN_WHITE_REQUIRED:
+            c["note"] = c["note"].replace(F3_WARNING_NOTE, SKIN_WHITE_NOTE)
+    face["warnings"] = _color.face_warnings(
+        [CheckResult(**c) for c in face["checks"] if c["id"] not in SKIN_WHITE_REQUIRED],
+        fmap)
     face["orca_input"] = {**face["orca_input"], "file": prefix + face["orca_input"]["file"]}
     if face["gcode"] is not None:
         face["gcode"] = {**face["gcode"], "file": prefix + face["gcode"]["file"]}

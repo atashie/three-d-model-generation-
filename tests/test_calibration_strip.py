@@ -49,7 +49,7 @@ from tdmg.color_checks import (
     glue_fit_margin,
     glue_partition_check,
 )
-from tdmg.color_gcode import f3_warning_ids, required_check_ids
+from tdmg.color_gcode import F3_WARNING_NOTE, f3_warning_ids, required_check_ids
 from tdmg.color_geometry import EPS, snap_move_mm, vertex_dist
 from tdmg.flat import _body_count, encode_stl
 from tdmg.rules import load_rules
@@ -567,7 +567,10 @@ def _pass_required(monkeypatch, warnings="FAIL"):
     def color(gcode, shells, setup, statistics=None, not_measured=None):
         checks, record = real_color(gcode, shells, setup, statistics, not_measured)
         n = len(list(shells))
-        req, warn = required_check_ids(n), set(f3_warning_ids(n))
+        # The skin strip also requires the white tool's coverage and connectivity (the
+        # owner's decision on Codex finding 3, 2026-11-14).
+        req = required_check_ids(n) | ts.SKIN_WHITE_REQUIRED
+        warn = set(f3_warning_ids(n)) - ts.SKIN_WHITE_REQUIRED
         return [replace(c, status="PASS") if c.id in req else
                 replace(c, status=warnings) if c.id in warn else c for c in checks], record
     monkeypatch.setattr(cs, "color_slice_checks", color)
@@ -584,7 +587,7 @@ def test_make_strips_writes_the_folder_and_the_record(fake, orca, tmp_path):
     rec = ts.make_strips(out, orca())
     assert _files(out) == FILES | {"strip.json"}
     assert json.loads((out / "strip.json").read_bytes()) == rec
-    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-2")
+    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-3")
     assert rec["source"] == "docs/plans/2026-11-14-test-strip.md"
     assert (Path(__file__).parents[1] / rec["source"]).is_file()
     assert rec["outputs"] == {n: _sha((out / n).read_bytes()) for n in FILES}
@@ -647,11 +650,14 @@ def test_make_strips_writes_the_folder_and_the_record(fake, orca, tmp_path):
     req = set(face["required_checks"])
     assert req == (AMS_IDS | required_check_ids(2) | {
         "F2.orca_input_matches_bodies", "F6.slicer_exit", "F6.gcode_present",
-        "F6.layer_count", "F6.single_object"})
+        "F6.layer_count", "F6.single_object",
+        "F3.edge_coverage.T1", "F3.printed_connectivity.T1"})
     assert "F6.portability" not in req
     ids = {c["id"] for c in face["checks"]}
     assert set(sk["not_required"]) == ids - req
-    assert set(sk["not_required"]) >= {"F6.portability", *f3_warning_ids(2)}
+    assert set(sk["not_required"]) == {"F6.portability", "F6.color_waste", "F6.color_time",
+                                       "F6.color_filament", "F3.printed_connectivity",
+                                       "F3.edge_coverage.T0", "F3.printed_connectivity.T0"}
     assert face["gcode"]["file"] == "skin/slice/face-up/plate_1.gcode"
     assert face["orca_input"]["file"] == "skin/slice/face-up/orca-input.3mf"
     assert [f["file"] for f in sk["filaments"]["profiles"]] == [
@@ -686,8 +692,67 @@ def test_printable_when_every_required_check_passes_and_warnings_do_not_block(
     face = rec["skin"]["face"]
     assert face["gcode"]["quarantined"] is False
     assert face["warnings"]                    # the warning FAILs are recorded
-    assert {c["status"] for c in face["checks"] if c["id"] in f3_warning_ids(2)} == {"FAIL"}
+    warn = set(f3_warning_ids(2)) - ts.SKIN_WHITE_REQUIRED
+    assert {c["status"] for c in face["checks"] if c["id"] in warn} == {"FAIL"}
     assert "skin/slice/face-up/plate_1.gcode" in rec["outputs"]
+
+
+def test_the_white_tools_coverage_and_connectivity_are_required_for_the_skin():
+    # The owner's decision on Codex finding 3 (2026-11-14, "Require it for the strip"): a
+    # missing white patch must not pass. The white body is the second shell, tool 1.
+    assert ts.SKIN_WHITE_TOOL == 1
+    assert ts.SKIN_WHITE_REQUIRED == frozenset({"F3.edge_coverage.T1",
+                                                "F3.printed_connectivity.T1"})
+    # Owner plans keep "Outer edge only": the shared required set is unchanged.
+    assert "F3.edge_coverage.T1" not in required_check_ids(2)
+    assert "F3.printed_connectivity.T1" not in required_check_ids(2)
+
+
+@pytest.mark.parametrize("check", ["F3.edge_coverage.T1", "F3.printed_connectivity.T1"])
+def test_a_white_tool_fail_blocks_the_skin_strip(orca, tmp_path, monkeypatch, check):
+    _pass_required(monkeypatch, warnings="PASS")
+    real = cs.color_slice_checks
+
+    def color(*a, **kw):
+        checks, record = real(*a, **kw)
+        return [replace(c, status="FAIL") if c.id == check else c for c in checks], record
+    monkeypatch.setattr(cs, "color_slice_checks", color)
+    out = tmp_path / "strip"
+    r = _strip_cli(out, "--slicer-dir", str(orca()))
+    assert r.exit_code == 1, r.output
+    rec = json.loads((out / "strip.json").read_bytes())
+    face = rec["skin"]["face"]
+    assert rec["skin"]["verdict"] == "NOT CERTIFIED"
+    assert f"{check} FAIL" in face["certification"]
+    assert check in face["required_checks"] and check not in rec["skin"]["not_required"]
+    assert face["gcode"]["quarantined"] is True
+    assert all(check not in w["ids"] for w in face["warnings"])   # required, not a warning
+    assert f"do not print the skin strip: a required check FAILed (face-up: {check})" in \
+        _plain(r.stdout)
+
+
+def test_the_white_tools_checks_say_they_are_required(orca, tmp_path, monkeypatch):
+    _pass_required(monkeypatch)
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    by = {c["id"]: c for c in rec["skin"]["face"]["checks"]}
+    for cid in ts.SKIN_WHITE_REQUIRED:
+        assert F3_WARNING_NOTE not in by[cid]["note"]
+        assert ts.SKIN_WHITE_NOTE in by[cid]["note"]
+    assert F3_WARNING_NOTE in by["F3.edge_coverage.T0"]["note"]       # black: a warning
+
+
+def test_a_black_tool_coverage_fail_stays_a_warning(orca, tmp_path, monkeypatch):
+    _pass_required(monkeypatch, warnings="PASS")
+    real = cs.color_slice_checks
+
+    def color(*a, **kw):
+        checks, record = real(*a, **kw)
+        return [replace(c, status="FAIL") if c.id == "F3.edge_coverage.T0" else c
+                for c in checks], record
+    monkeypatch.setattr(cs, "color_slice_checks", color)
+    rec = ts.make_strips(tmp_path / "strip", orca())
+    assert rec["skin"]["verdict"] == "PRINTABLE"
+    assert [w["ids"] for w in rec["skin"]["face"]["warnings"]] == [["F3.edge_coverage.T0"]]
 
 
 def test_a_required_fail_makes_its_strip_not_certified(orca, tmp_path, monkeypatch):
@@ -1081,6 +1146,11 @@ def test_the_strips_with_the_real_slicer(tmp_path):
         assert plate["gcode"]["quarantined"] is (name == "base")
     face = rec["skin"]["face"]
     assert face["summary"]["changes"] is not None and face["summary"]["changes"] > 0
+    # The owner's decision on finding 3: the white tool's checks are required, and pass.
+    by = {c["id"]: c["status"] for c in face["checks"]}
+    assert ts.SKIN_WHITE_REQUIRED <= set(face["required_checks"])
+    assert {by[i] for i in ts.SKIN_WHITE_REQUIRED} == {"PASS"}
+    assert rec["algorithm"] == "strip-3"
     assert rec["slicer"]["app_tree_verified"] is True
 
 
@@ -1089,7 +1159,11 @@ def test_the_strips_with_the_real_slicer(tmp_path):
 # The pinned process profile's print settings, as strip.json records them.
 SETTINGS = {"source": "s", "process": "0.20mm Standard @BBL A1", "layer_height_mm": 0.2,
             "first_layer_mm": 0.2, "elephant_foot_mm": 0.075}
-CLEARANCE_CHOICES = ["won't go in", "pressed in", "drops in, snug", "drops in, loose"]
+# The owner's decision on Codex finding 6 (2026-11-14, "Judge it in three steps"): (a) goes
+# in, (b) sits flat on the pocket floor, (c) side-to-side play; one column per answer.
+CLEARANCE_COLUMNS = ["(a) won't go in", "(a) pressed in", "(a) drops in",
+                     "(b) flat: yes", "(b) flat: no",
+                     "(c) play: none", "(c) play: a little", "(c) play: a lot"]
 SKIN_CHOICES = ["dark shows", "slight shadow", "looks like full white"]
 
 
@@ -1114,11 +1188,21 @@ def test_the_results_template_has_a_row_per_gap_and_patch(orca, tmp_path):
     text = data.decode("utf-8")
     assert text.isascii() and "\r" not in text
     assert rec["strip_id"] in text and rec["geometry_id"] in text
-    head = "| Pocket | Label holes | Gap per side (mm) | " + " | ".join(CLEARANCE_CHOICES)
+    head = ("| Pocket | Label holes | Gap per side (mm) | " + " | ".join(CLEARANCE_COLUMNS)
+            + " | Notes |")
     rows = _table(text, head)
     assert [r[:3] for r in rows] == [[str(k), str(k), f"{g:.2f}"]
                                      for k, g in enumerate(OWNER_GAPS_MM, 1)]
-    assert all(r[3:7] == ["[ ]"] * 4 for r in rows)
+    assert all(r[3:11] == ["[ ]"] * 8 for r in rows)
+    # Finding 6: retention ("falls out when turned over") is no longer the measure.
+    assert "turn the base over" not in text and "drops in, loose" not in text
+    flat = " ".join(text.split())
+    for words in ("(a) Goes in: won't go in, pressed in or drops in.",
+                  "(b) Sits flat on the pocket floor: yes or no.",
+                  "(c) Side-to-side play: none, a little or a lot.",
+                  "Mark one box in each of (a), (b) and (c)",
+                  "If it won't go in, leave (b) and (c) empty."):
+        assert words in flat, words
     head = "| Patch | Label holes | White depth (mm) | " + " | ".join(SKIN_CHOICES)
     rows = _table(text, head)
     assert len(rows) == 7
@@ -1237,8 +1321,8 @@ def test_cli_strip_prints_time_and_filament_per_plate(orca, tmp_path, monkeypatc
 
 
 def test_cli_strip_shows_the_skin_faces_warnings(orca, tmp_path, monkeypatch):
-    # Codex review 2026-11-14, finding 3: a white patch left unprinted shows only as a
-    # warning (the "Outer edge only" policy), so the command prints the warnings.
+    # Codex review 2026-11-14, finding 3: the black tool's coverage and the connectivity
+    # checks other than the white tool's stay warnings; the command prints them.
     _pass_required(monkeypatch, warnings="FAIL")
     out = tmp_path / "strip"
     r = _strip_cli(out, "--slicer-dir", str(orca()))
@@ -1249,8 +1333,9 @@ def test_cli_strip_shows_the_skin_faces_warnings(orca, tmp_path, monkeypatch):
     lines = r.stdout.splitlines()
     for w in warnings:
         assert f"  warning: {w['text']}" in lines
-    assert ("  the skin strip has warnings: before printing, check in Bambu Studio's "
-            "preview that every white patch is printed") in lines
+    assert ("  the skin strip has warnings: before printing, check it in Bambu Studio's "
+            "preview") in lines
+    assert all(i not in w["ids"] for w in warnings for i in ts.SKIN_WHITE_REQUIRED)
 
 
 def test_cli_strip_prints_no_skin_warning_line_without_warnings(orca, tmp_path, monkeypatch):
@@ -1305,7 +1390,7 @@ def test_the_results_template_guards_the_piece_order_seating_and_light():
                                         settings=settings).decode("ascii").split())
     for words in ("turned half a turn", "mark piece 1",
                   "the side that was on the build plate goes down into the pocket",
-                  "sits on the pocket floor",
+                  "Sits flat on the pocket floor",
                   "Lay the strip flat", "light from the front or above",
                   "not held up to a window or a lamp"):
         assert words in flat, words

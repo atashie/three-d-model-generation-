@@ -244,5 +244,30 @@ changed. On the owner's Windows PC, with the pinned OrcaSlicer 2.5.0 (app tree c
 
 - **Limit, not changed:** the note still counts parts and does not size them, so it
   cannot tell these infill islands from a plate split in two (review finding 2). It says
-  so in `limit`.
+  so in `limit`. The owner decided "Not now" (2026-11-14).
+- Nothing was printed.
+
+## 6. After the owner's decisions on the review (2026-11-14)
+
+The owner's decisions (review README, findings 2, 3, 4 and 6): the white tool's
+`F3.edge_coverage.T1` and `F3.printed_connectivity.T1` are required for the skin strip
+(algorithm `strip-3`), and the form judges each piece in three steps. On the owner's
+Windows PC, with the pinned OrcaSlicer 2.5.0 (app tree checked):
+
+- `TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 uv run pytest -m slicer
+  tests/test_calibration_strip.py`: 1 passed (it now asserts both white checks required
+  and PASS, and `strip-3`).
+- `uv run tdmg strip <scratch folder>\task4owner --slicer-dir
+  artifacts/tools/orcaslicer-2.5.0`: exit 0. The terminal output is as in section 5,
+  except the last line, `strip_id
+  3f5fc698678dc19b97edb55e03f7623a1ecbe5e87e06512fca0818ad2a67a197` (new: the algorithm
+  label changed).
+  - **Skin strip:** PRINTABLE, 15 color changes, 2727 s (45 min), 10.29 g. All nine F3
+    checks PASS: the silhouette's three and each tool's three, including
+    `F3.edge_coverage.T1` and `F3.printed_connectivity.T1`. No warnings.
+  - **Clearance strip:** as in section 5. The base plate NOT CERTIFIED by
+    `F3.printed_connectivity` alone (z 1.6 and 2 mm), with the note; the pieces plate
+    PRINTABLE.
+  - **The form:** one row per gap with eight boxes: (a) won't go in, pressed in, drops
+    in; (b) flat: yes, no; (c) play: none, a little, a lot.
 - Nothing was printed.

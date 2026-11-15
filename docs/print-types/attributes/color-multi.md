@@ -171,8 +171,14 @@ run. It builds, gates and slices two strips with the owner's values (2026-11-14)
   on the A1. Print it on the AMS: filament 1 black (the base), filament 2 white.
 - **Outputs:** the files above, each strip's `slice/` folder, `strip.json` (schema
   `tdmg.strip/1`, with `strip_id`) and `results-template.md`, the form to fill in after
-  printing: one row per gap ("won't go in", "pressed in", "drops in, snug", "drops in,
-  loose") and one per patch ("dark shows", "slight shadow", "looks like full white").
+  printing: one row per gap, judged in three steps (the owner's decision of 2026-11-14:
+  goes in: "won't go in", "pressed in" or "drops in"; sits flat on the pocket floor: yes
+  or no; side-to-side play: none, a little or a lot), and one per patch ("dark shows",
+  "slight shadow", "looks like full white"). It also gives the print settings the strips
+  were checked with and asks for the ones used.
+- **Skin strip gating:** "outer edge only", as for an owner plan's face, and in addition
+  the white tool's `F3.edge_coverage.T1` and `F3.printed_connectivity.T1` are required
+  (the owner's decision of 2026-11-14), so a white patch left unprinted blocks.
 - **Exit codes:** 0 when no required check FAILed, except the owner-accepted
   `F3.printed_connectivity` failure of the clearance base plate (see the failure table);
   1 for any other required FAIL; 2 for an input or setup error, with nothing written, or
@@ -225,10 +231,10 @@ source.
 | No glue version at all | The plan keeps a drawn outline | The command prints "glue: not built" with the reason | Make the plan with `outlines: drop` |
 | A glue piece does not drop in, or sits loose | The printer's error differs from `color.glue.clearance_mm` | `F4.glue_fit` checks the model only, not the print | Print the clearance strip (`tdmg strip`) and record each fit in `results-template.md`; the rule is then set from it (plan Decision 5) |
 | The clearance strip is NOT CERTIFIED | On the base plate, a piece of infill inside the part does not touch the other beads in the bead model (2 of 15 layers, measured 2026-11-14); the outer edge and the holes are sliced as modelled | `F3.printed_connectivity` (required); the record's `known_failures` note gives this run's layers | Owner decision (2026-11-14): keep the FAIL and print it anyway. `tdmg strip` exits 0 for this failure alone; any other required FAIL exits 1 |
-| The accepted base plate note hides a split plate | The `known_failures` note counts printed parts; it does not size them (Codex review 2026-11-14, finding 2) | None: the note's `limit` says so, and `tdmg strip` says this run's parts are counted, not sized | Open for the owner: see `research/reviews/2026-11-14-test-strips/README.md` |
+| The accepted base plate note hides a split plate | The `known_failures` note counts printed parts; it does not size them (Codex review 2026-11-14, finding 2) | None: the note's `limit` says so, and `tdmg strip` says this run's parts are counted, not sized | Owner decision (2026-11-14, "Not now"): no sizing; the limit stays stated |
 | A white patch shows the black below | The skin is too thin to hide a dark base | None in the model; the owner's eye on the skin strip | Print the skin strip and record each patch in `results-template.md` |
-| A white patch is not printed at all | The slicer leaves it out; the white tool still prints the other patches | Only the white tool's `F3.edge_coverage` and the connectivity checks, which are warnings ("Outer edge only"); `tdmg strip` prints them | Before printing, check in Bambu Studio's preview that every white patch is printed |
-| Pieces tried in the wrong pockets | The pieces look alike; a row turned half a turn still runs left to right | None (how Bambu Studio places `pieces.stl` is not checked) | The form: do not move, turn or arrange the pieces; mark piece 1 before taking them off the plate |
+| A white patch is not printed at all | The slicer leaves it out; the white tool still prints the other patches | The white tool's `F3.edge_coverage.T1` and `F3.printed_connectivity.T1`, required for the skin strip (owner decision, 2026-11-14) | None needed: the skin strip is NOT CERTIFIED and `tdmg strip` exits 1 |
+| Pieces tried in the wrong pockets | The pieces look alike; a row turned half a turn still runs left to right | None (how Bambu Studio places `pieces.stl` is not checked) | The form: do not move, turn or arrange the pieces; mark piece 1 with a pen before taking them off the plate (owner decision, 2026-11-14: "Pen mark is enough") |
 | A depth patch is not the depth in the form | Bambu Studio printed at another layer height | None; the form records the settings used | The form gives the checked settings (`print_settings` in `strip.json`); print with them |
 | Thin outline lines missing in the print | A kept outline line is narrower than the slicer prints; the slicer skips it | That color's `F3.edge_coverage` in `tdmg slice` (a warning, not blocking) | Accept it (the outer band prints), make the plan with a wider `outline_width_mm`, or use `outlines: drop` |
 | A color on the wrong body, or the print turned | The slicer input or the tool order is wrong | `F6.tool_placement` and `F6.filaments_used` (required) | None needed: the face is NOT CERTIFIED |

@@ -526,7 +526,9 @@ required: the strips are printed once, from Bambu Studio, to set two rules.
   the layout) and `F6.portability`, with `F4.body_count` (1 for the base, 6 for the
   pieces) and the `F4.glue_fit` and `F4.glue_partition` checks of all six glue calls.
 - **The skin face:** the AMS checks, `F2.orca_input_matches_bodies` and the step 4 color
-  checks, gated "outer edge only", as for an owner plan's face.
+  checks, gated "outer edge only", as for an owner plan's face, plus the white tool's
+  `F3.edge_coverage.T1` and `F3.printed_connectivity.T1` (the owner's decision of
+  2026-11-14, for the strip only), so a white patch left unprinted blocks.
 
 **The owner-accepted failure:** the clearance base plate FAILs `F3.printed_connectivity`
 with the pinned slicer: on 2 of its 15 layers a piece of infill inside the part does not
@@ -542,8 +544,8 @@ counts parts and does not size them, so a plate split in two would get the note 
 **Message:** each strip's verdict; per plate its layers, time and filament; two plain
 lines for the accepted failure (this run's extra parts, layers and z values, then the
 2026-11-14 cause as that day's; the full texts stay in `strip.json`); the skin face's
-color changes, time and filament, and its warnings, if any (a white patch left unprinted
-shows only as a warning); then OUT once, and what
+color changes, time and filament, and its warnings, if any (the black tool's coverage and
+the connectivity checks other than the white tool's); then OUT once, and what
 to open in Bambu Studio by names relative to it (the two clearance plates in the same
 filament; `skin/model.3mf` on the AMS with filament 1 black for the base and filament 2
 white for the patches); and where the form is.
@@ -563,6 +565,7 @@ the model's 1, 21 holes for 21; 1372 s, 6.12 g; pieces plate PRINTABLE, 490 s, 0
 Exit 0. The times and weights are the slicer's estimates. Record:
 `research/verification/2026-11-14-test-strips/`.
 
-**After printing:** the owner fills in `results-template.md` (fit of each piece, look of
-each patch, photos). With the owner's choice, the two rules then move to
+**After printing:** the owner fills in `results-template.md` (the print settings used;
+each piece in three steps: goes in, sits flat on the pocket floor, side-to-side play; the
+look of each patch; photos). With the owner's choice, the two rules then move to
 `validation: calibrated` (plan Decision 5).

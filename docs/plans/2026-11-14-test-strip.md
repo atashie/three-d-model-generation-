@@ -151,6 +151,14 @@ task.
        accepted "slight shadow".
      A rule's value changes only if the owner chooses a different one. Then
      `gen_docs.py` runs, and the four owner plans are rebuilt and re-sliced.
+   - **Amended by the owner (2026-11-14, Codex review finding 6, "Judge it in three
+     steps"):** the clearance form no longer uses "falls out when turned over". For each
+     piece it records:
+     - (a) goes in: "won't go in", "pressed in" or "drops in";
+     - (b) sits flat on the pocket floor: yes or no;
+     - (c) side-to-side play: none, a little or a lot.
+     So "drops in, snug" and "drops in, loose" are no longer boxes on the form. How the
+     clearance value is chosen from the three answers is the owner's choice at Task 5.
 
 ## Tasks
 
@@ -503,9 +511,9 @@ task.
     `KNOWN_FAILURE_LIMIT`). The terminal gives this run's counts, then the 2026-11-14
     cause as that day's. Sizing the parts is open (it needs data `tdmg.printed` does not
     record and a new rule).
-  - **The skin warnings are printed** (finding 3), with a line to check every white patch
-    in Bambu Studio's preview. They stay warnings ("Outer edge only"); whether the strip
-    should require them is open.
+  - **The skin warnings are printed** (finding 3), with a line to check the strip in
+    Bambu Studio's preview. (The white tool's checks were then made required by the
+    owner's decision below.)
   - **The form** (findings 4, 5, 7): a "Print settings" section from the pinned process
     profile (`print_settings` in `strip.json`: preset, layer height, first layer, elephant
     foot compensation), with fields for the settings used and the Bambu Studio project;
@@ -513,8 +521,21 @@ task.
     come off the plate; each piece bed side down and pressed onto the pocket floor before
     judging; the skin lying flat, lit from the front or above, not held up to a light.
     The command's clearance line points to the form.
-  - The algorithm label stays `strip-2`: no geometry or verdict changes for the same
-    slices.
+  - The algorithm label stays `strip-2` for these changes: no geometry or verdict changes
+    for the same slices.
+- **The owner's decisions on the open findings (2026-11-14):**
+  - **Finding 3, "Require it for the strip":** for the skin strip only, the white tool's
+    `F3.edge_coverage.T1` and `F3.printed_connectivity.T1` are required
+    (`SKIN_WHITE_REQUIRED`). The black tool's coverage and connectivity and the whole
+    model's connectivity stay warnings. Owner plans keep "Outer edge only": `tdmg slice`
+    does not change (`color_gcode.required_check_ids` is unchanged). The required set
+    changes, so the algorithm label is now `strip-3`. Real run (2026-11-14, pinned
+    OrcaSlicer 2.5.0, app tree checked): the skin strip is still PRINTABLE, both checks
+    PASS.
+  - **Finding 6, "Judge it in three steps":** the Decision 5 amendment above.
+  - **Finding 4, "Pen mark is enough":** no geometry mark on the pieces; the form's pen
+    mark on piece 1 stays.
+  - **Finding 2, "Not now":** the extra parts are not sized. The note's `limit` stays.
 
 ### Task 5 (after the owner prints): results and rules
 
