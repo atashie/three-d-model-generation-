@@ -541,6 +541,12 @@ task.
 
 - **Results:** the owner's filled form and photos go into the record.
 - **Rules:** the two rules change as in Decision 5.
+- **Done for the skin strip (2026-11-15):** the owner printed it (eSUN PLA+, settings
+  unchanged): every depth looked like full white. The owner kept 0.6 mm, so the value is
+  unchanged and nothing is rebuilt; the rule became `kind: empirical`, since only an
+  empirical rule can be calibrated, with `calibrated` evidence. Record:
+  `research/verification/2026-11-14-test-strips/README.md`, section 7. The clearance
+  strip is still to come.
 
 ## Out of scope
 

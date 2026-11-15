@@ -1,8 +1,8 @@
 # Project status
 
-**Last updated:** 2026-11-14 (R2 step 5 part 1, the test strips: Tasks 1–3 of
-`docs/plans/2026-11-14-test-strip.md` done; Task 4, the measured run record and the Codex
-review, is next). Phase 1 (R1, flat single-color) is under way, with three commands, and
+**Last updated:** 2026-11-15 (R2 step 5 part 1, the test strips: the owner printed the
+skin strip; `color.skin.depth_mm` is calibrated and kept at 0.6 mm. The clearance strip's
+results are next). Phase 1 (R1, flat single-color) is under way, with three commands, and
 R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -50,7 +50,10 @@ R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
   - **Skin strip** (for `color.skin.depth_mm`): `skin/model.3mf`, white patches 0.2 to
     1.0 mm deep over black, plus two reference patches. Printed on the AMS.
   - **On the PC (2026-11-14):** skin PRINTABLE; clearance NOT CERTIFIED by the
-    owner-accepted base plate failure alone; exit 0. Not printed yet.
+    owner-accepted base plate failure alone; exit 0.
+  - **Printed (2026-11-15):** the skin strip, eSUN PLA+ white over black: every depth
+    from 0.2 mm looked like full white. The owner kept 0.6 mm; the rule is now
+    calibrated (verification README, section 7). The clearance strip is not reported yet.
 
 The owner's Roadie and Oddie at 60 × 3 mm (smoothed) each give one valid body that slices
 to 15 layers (about 8 minutes, 2.3 g and 4.3 g). Both are now **PRINTABLE** (2026-11-11):
@@ -267,8 +270,8 @@ passed. These commits are pushed; for CI see above.
 2c. **R2 step 5, part 1: the test strips** (`docs/plans/2026-11-14-test-strip.md`,
    approved 2026-11-14, "build it"). Tasks 1–4 done (`tdmg strip`; the Codex review in
    `research/reviews/2026-11-14-test-strips/`, with the owner's decisions); the strips
-   are ready to print. Next is the owner's print and Task 5 (the two rules set from the
-   results). Details in the handoff below. Part 2, the first AMS and
+   were printed. Task 5: the skin result is recorded and `color.skin.depth_mm` is
+   calibrated at 0.6 mm (2026-11-15); the clearance strip's results are next. Details in the handoff below. Part 2, the first AMS and
    glue prints of an owner plan, comes after.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
@@ -406,7 +409,17 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest (2026-11-14): R2 step 5, part 1 (the test strips), Tasks 1–4 done. The
+- **Latest (2026-11-15): Task 5, the skin strip printed.** The owner printed
+  `skin/model.3mf` from Bambu Studio, settings unchanged, eSUN PLA+ white over black:
+  "every square is opaque" (0.2 to 1.0 mm all look like full white; no photo, the
+  owner's choice). The owner kept 0.6 mm ("Keep 0.6 mm (Recommended)"), so no model or
+  owner plan changes. `color.skin.depth_mm` is now `kind: empirical` with `calibrated`
+  evidence and a calibration block (`rules/color.yaml`; record:
+  `research/verification/2026-11-14-test-strips/README.md`, section 7). **Next:** the
+  clearance strip's results (form), then the owner's choice of
+  `color.glue.clearance_mm` (suggested: the smallest gap that drops in, sits flat, with
+  little play). Then step 5, part 2.
+- **Earlier (2026-11-14): R2 step 5, part 1 (the test strips), Tasks 1–4 done. The
   strips are ready to print.** Plan `docs/plans/2026-11-14-test-strip.md` (approved by
   the owner: "build it").
   - **Task 4, the Codex review** (`research/reviews/2026-11-14-test-strips/`, commits
@@ -443,7 +456,7 @@ The full list is in `docs/PLAN.md` section 13.
     - Task 3: the command `tdmg strip OUT [--slicer-dir DIR] [--timeout-s N]`,
       `results-template.md`, review fix N1 (the note gives this run's own measured
       layers beside the dated cause), docs.
-  - **Next:** the owner prints the strips and fills in `results-template.md`; then Task 5.
+  - **Next (then):** the owner prints the strips and fills in `results-template.md`; then Task 5.
   - **Owner decisions (2026-11-14):**
     - gaps 0.10 to 0.35 mm per side, by 0.05 (six pockets);
     - skin depths 0.2 to 1.0 mm, by 0.2 (five patches);

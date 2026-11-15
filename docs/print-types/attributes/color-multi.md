@@ -292,8 +292,10 @@ source.
 
 ## Calibration needed
 
-- The skin depth (`color.skin.depth_mm`, 0.6 mm to start): does it hide a dark base, and
-  do 0.6 mm glue pieces survive handling?
+- The skin depth (`color.skin.depth_mm`, 0.6 mm): **calibrated 2026-11-15** for hiding
+  black under white, eSUN PLA+ on our A1 only (every depth from 0.2 mm looked like full
+  white; the owner kept 0.6 mm). Still open: other filament pairs, and whether 0.6 mm
+  glue pieces survive handling.
 - The pocket clearance for the glue route (`color.glue.clearance_mm`).
 - The smallest piece a person can glue (`color.glue.min_piece_side_mm`).
 - Whether a 0.5 mm kept outline prints cleanly. The slicer already skips the thin

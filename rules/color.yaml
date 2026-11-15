@@ -148,7 +148,7 @@
 # The owner approved these three starting values on 2026-11-12. None has been printed:
 # the test strip in design step 5 sets them.
 - id: color.skin.depth_mm
-  kind: hypothesis
+  kind: empirical
   summary: Depth of the colored top skin. Colors other than the base sit only in the top this-many mm of a flat print, on a full-thickness base of the base color; for the glue route it is also the pocket depth and the piece thickness.
   unit: mm
   default: 0.6
@@ -165,7 +165,13 @@
       provenance: unverified
       validation: untested
       claim: The owner approved this value as the starting value for step 2.
-  notes: "In mm, not layers, so it does not change with the layer height; three layers at 0.2 mm. Untested: whether 0.6 mm of a light color hides a dark base (the test strip checks it), and whether 0.6 mm glue pieces survive handling."
+    - ref: research/verification/2026-11-14-test-strips/README.md
+      locator: "The result, in the owner's words:** \"every square is opaque.\""
+      provenance: primary
+      validation: calibrated
+      claim: "The skin strip printed on our A1 (2026-11-15), eSUN PLA+ white over black, 0.20mm Standard: white 0.2, 0.4, 0.6, 0.8 and 1.0 mm deep all looked like full white to the owner. So 0.6 mm hides black with margin (the limit is 0.2 mm or less); the owner kept 0.6 mm."
+  calibration: {test: "tdmg strip (skin strip, research/verification/2026-11-14-test-strips/ section 7)", bound_to: [printer, nozzle, material, slicer_build, profile_hash]}
+  notes: "In mm, not layers, so it does not change with the layer height; three layers at 0.2 mm. Calibrated (2026-11-15) for hiding black under white, eSUN PLA+ on our A1 only; other filament pairs are not tested. Untested: whether 0.6 mm glue pieces survive handling."
 
 - id: color.glue.clearance_mm
   kind: hypothesis

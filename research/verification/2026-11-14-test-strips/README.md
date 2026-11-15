@@ -271,3 +271,49 @@ Windows PC, with the pinned OrcaSlicer 2.5.0 (app tree checked):
   - **The form:** one row per gap with eight boxes: (a) won't go in, pressed in, drops
     in; (b) flat: yes, no; (c) play: none, a little, a lot.
 - Nothing was printed.
+
+## 7. The skin strip printed (plan Task 5, 2026-11-15)
+
+The owner printed the skin strip on their Bambu Lab A1 and reported the result in this
+session. This is the first print of this step: **calibrated** evidence (printed on our
+printer), judged by the owner's eye, as Decision 5 planned.
+
+- **What was printed:** `skin/model.3mf` from the `make_strips` run of section 6
+  (strip_id `3f5fc698678dc19b97edb55e03f7623a1ecbe5e87e06512fca0818ad2a67a197`), from
+  Bambu Studio. The owner's words on the settings: "I didn't change any settings". The
+  Bambu Studio version was not recorded.
+- **Filament:** eSUN PLA+, white over black. The owner's words: "esun pla+".
+- **What the owner saw:**
+  - top face (the face printed up): every patch with label holes was white;
+  - bottom face (the face on the plate): only the patch without holes at the white end
+    was white, as designed (the depth patches are white only in their top layers).
+- **The result, in the owner's words:** "every square is opaque."
+- **The form, from that answer:**
+
+| Patch | Label holes | White depth (mm) | Result |
+| --- | --- | --- | --- |
+| 1, black reference | 0 | none (black only) | - |
+| 2 | 1 | 0.2 | looks like full white |
+| 3 | 2 | 0.4 | looks like full white |
+| 4 | 3 | 0.6 | looks like full white |
+| 5 | 4 | 0.8 | looks like full white |
+| 6 | 5 | 1.0 | looks like full white |
+| 7, full white reference | 0 | 3.0 (full) | - |
+
+- **Photo:** none. The owner's words: "No, it is opaque, we don't need the picture."
+- **What it shows:** with eSUN PLA+ white over black, 0.2 mm of white (one layer at the
+  0.20mm Standard preset) already looks like full white. The thinnest patch passed, so
+  the strip gives only an upper bound: the smallest depth that hides black is 0.2 mm or
+  less. It says nothing about margin: another white, other settings or other light were
+  not tested.
+- **The owner's decision (2026-11-15):** keep `color.skin.depth_mm` at 0.6 mm, "Keep 0.6
+  mm (Recommended)". It is three times the thinnest depth that passed, and the value also
+  sets the glue pocket depth and piece thickness, so no model and no owner plan changes.
+- **What changed in `rules/color.yaml`:** `color.skin.depth_mm` is now `kind: empirical`
+  (the claim that 0.6 mm of white hides a black base is a physical printing rule and was
+  printed), with this record as `calibrated` evidence and a calibration block. The calibration holds for
+  this printer, nozzle (0.4 mm), material (eSUN PLA+ white over black), slicer (Bambu
+  Studio, version not recorded) and profile (0.20mm Standard @BBL A1); other pairs are
+  not covered. Not covered by this print: whether 0.6 mm glue pieces survive handling
+  (the clearance strip, not yet reported).
+- **Not yet reported:** the clearance strip.
