@@ -788,6 +788,25 @@ def test_auto_prints_face_down_when_it_is_printable(colored, orca, tmp_path, mon
     assert not any("is not chosen" in line for line in lines)    # face up is PRINTABLE
 
 
+def test_the_record_keeps_the_print_instructions(colored, orca, tmp_path, monkeypatch):
+    # Codex review 2026-11-16, finding 3: the record said only "open model.3mf ... and
+    # assign the filaments", which leaves the model face up when face down is chosen. The
+    # record now keeps the CLI's own instructions, and its notes point to them.
+    _all_pass(monkeypatch)
+    _, lines, rec = _auto(colored, orca, tmp_path / "s")
+    assert rec["print"] == cs.print_message(["down"]) and rec["print"] in lines
+    assert "Rotate (R), 180 degrees about X" in rec["print"]
+    for text in (rec["review"], rec["model_3mf"]["note"]):
+        assert "\"print\"" in text and "turn" in text
+
+
+def test_the_record_says_when_there_is_nothing_to_print(colored, orca, tmp_path):
+    _, lines, rec = _auto(colored, orca, tmp_path / "s")
+    assert rec["print"] == cs.NO_FACE_PRINTABLE and cs.NO_FACE_PRINTABLE in lines
+    _, lines, rec = _auto(colored, orca, tmp_path / "b", "--face", "both")
+    assert rec["print"] == cs.NO_FACE_PRINTABLE
+
+
 def test_auto_prints_face_up_when_face_down_fails(colored, orca, tmp_path, monkeypatch):
     # The outline-kept plans' case (plan amendment): face down FAILs F3, face up passes.
     # The FAIL on the face not chosen does not set exit 1.

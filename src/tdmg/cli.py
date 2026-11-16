@@ -38,7 +38,6 @@ from tdmg.color_slicing import (
     is_colored_folder,
     make_color_slice,
     not_chosen_line,
-    print_message,
 )
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
@@ -447,19 +446,11 @@ def _color_slice_output(rec: dict, out: Path) -> None:
         chosen = rec["preferred_face"]
         typer.echo(f"chosen: {'none' if chosen is None else f'face {chosen}'}: "
                    f"{rec['preferred_face_reason']}")
-        printable = [] if chosen is None else [chosen]
         for face in sliced:
             if chosen is not None and face != chosen \
                     and rec["faces"][face]["verdict"] != "PRINTABLE":
                 typer.echo(not_chosen_line(face, rec["faces"][face]))
-    else:
-        printable = [f for f in sliced if rec["faces"][f]["verdict"] == "PRINTABLE"]
-    message = print_message(printable)
-    if message:
-        typer.echo(message)
-    else:
-        typer.echo("no face is PRINTABLE: do not print yet; model.3mf is the file to print "
-                   "from once a face is, with the filaments above")
+    typer.echo(rec["print"])          # the record's own instructions (print_instructions)
     typer.echo(f"colorslice_id {rec['colorslice_id']}")
     for name in rec["outputs"]:
         evidence = Path(name).name in (PRUSA_GCODE_NAME, PRUSA_FAILED_GCODE_NAME)

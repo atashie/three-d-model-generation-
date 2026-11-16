@@ -171,7 +171,10 @@ COLOR_RECORD_SCHEMA = "tdmg.colorslice/1"
 # label, the default is "auto" (Decision 1a, amending Decision 1's face down): both faces
 # sliced, face down preferred when PRINTABLE, the record's preferred_face and its reason,
 # and under auto a FAIL on the face not chosen no longer sets exit 1. The identity adds
-# the face option ("face"), so auto and both, which slice the same faces, differ.
+# the face option ("face"), so auto and both, which slice the same faces, differ. Also
+# (Codex review 2026-11-16, finding 3): the record keeps the print instructions ("print",
+# the CLI's own text), and its review and model_3mf note say to turn model.3mf over for
+# face down.
 COLORSLICE_ALGORITHM = "colorslice-2"
 FACES = ("up", "down")
 FACE_FOLDER = {"up": "face-up", "down": "face-down"}
@@ -361,6 +364,23 @@ def print_message(printable_faces) -> str | None:
     return PRINT_FACE.get(faces)
 
 
+NO_FACE_PRINTABLE = ("no face is PRINTABLE: do not print yet; model.3mf is the file to print "
+                     "from once a face is, with the filaments above")
+
+
+def print_instructions(face: str, preferred: str | None, face_records: dict) -> str:
+    """What to print, as the record keeps it ("print") and the CLI prints it: under auto
+    the chosen face's instructions (preferred); with an explicit face, those of every
+    PRINTABLE face sliced; NO_FACE_PRINTABLE when there are none (Codex review
+    2026-11-16, finding 3: face down needs the turn in Bambu Studio)."""
+    if face == "auto":
+        printable = [] if preferred is None else [preferred]
+    else:
+        printable = [f for f in FACES
+                     if f in face_records and face_records[f]["verdict"] == "PRINTABLE"]
+    return print_message(printable) or NO_FACE_PRINTABLE
+
+
 def glue_route(plates: dict) -> dict:
     """The glue route as one print: printable only when every glue plate is PRINTABLE.
     blocking: the plates that are not, in plate order."""
@@ -395,7 +415,9 @@ COLOR_REVIEW = (
     "orca-input.3mf, each color on its own filament (filament_map). Open its plate_1.gcode "
     "in a G-code preview to check the "
     "colors, the layers and the prime tower; it is for checking only, not for printing. To "
-    "print, open model.3mf in Bambu Studio and assign the filaments as listed. Changes, "
+    "print, follow \"print\" in this record: open model.3mf in Bambu Studio, turn it over "
+    "there when the face to print is down (model.3mf is face up), and assign the filaments "
+    "as listed. Changes, "
     "flush, prime tower and time are information (F6.color_waste, F6.color_time), from the "
     "G-code; time is the slicer's estimate. F3 is gated outer edge only (the owner's "
     "decision, Task 7): the silhouette's edge coverage and overprint and each tool's "
@@ -1019,8 +1041,10 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
                                    for f in filaments]},
         "model_3mf": {"file": MODEL_3MF, "sha256": _sha(model_3mf),
                       "check": model_check.as_dict(),
-                      "note": "the file to print from: open it in Bambu Studio and give "
-                              "each color the filament in filament_map"},
+                      "note": "the file to print from, face up: open it in Bambu Studio, "
+                              "turn it over there when the face to print is down, and give "
+                              "each color the filament in filament_map; \"print\" gives "
+                              "the full instructions"},
         "inherited": {"required": sorted(inherited_required),
                       "note": "every AMS body's checks and the AMS assembly's from "
                               "colored.json, minus F6.slicer; F3.thin_regions is "
@@ -1032,6 +1056,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
         "verdicts": {**{FACE_FOLDER[f]: face_records[f]["verdict"] for f in sliced},
                      **{name: p["verdict"] for name, p in plates.items()}},
         "preferred_face": preferred, "preferred_face_reason": preferred_reason,
+        "print": print_instructions(face, preferred, face_records),
         "outputs": {name: _sha(data) for name, data in files.items()},
         "environment": {**environment(), "platform": platform.platform()},
         "review": COLOR_REVIEW,
