@@ -164,7 +164,7 @@ def test_a_numbered_review_name_counts_only_through_the_path_beside_it(tmp_path)
     assert ("src/tdmg/named.py", 1, "name") not in _how(inv, "research/reviews/2026-01-07-beta")
     # line 7 gives none: listed for reading by hand, tied to no record
     assert [u.reason for u in inv.unattributed if u.line == 7] == [
-        "review number 8 with no path beside it"]
+        "review number 8, which names no folder"]
     assert not any(r.line == 7 for refs in inv.refs.values() for r in refs
                    if r.file == "src/tdmg/named.py")
 
@@ -186,7 +186,7 @@ def test_a_date_shared_by_two_folders_is_ambiguous_not_guessed(tmp_path):
                                   "research/reviews/2026-01-07-gamma"))]
 
 
-def test_a_review_mention_with_no_date_or_number_is_listed(tmp_path):
+def test_a_review_mention_with_no_date_or_path_is_listed(tmp_path):
     inv = _scan(tmp_path)
     assert [(u.file, u.line) for u in inv.unattributed] == [("src/tdmg/named.py", 5),
                                                             ("src/tdmg/named.py", 7)]
@@ -305,6 +305,34 @@ def test_an_unattributed_name_on_a_line_that_names_the_review_by_path_is_dropped
         "# Codex finding 9 (research/reviews/2026-01-05-alpha/README.md)\n")})
     assert ("src/tdmg/both.py", 1, "path") in _how(inv, "research/reviews/2026-01-05-alpha")
     assert not [u for u in inv.unattributed if u.file == "src/tdmg/both.py"]
+
+
+def _listed(inv, rel):
+    return [(u.line, u.text) for u in inv.unattributed if u.file == rel]
+
+
+def test_a_path_beside_one_of_two_numbered_names_does_not_hide_the_other(tmp_path):
+    inv = _scan(tmp_path, {"src/tdmg/two.py": (
+        "# Codex review 3 and Codex review 4 (research/reviews/2026-01-05-alpha)\n")})
+    assert ("src/tdmg/two.py", 1, "path") in _how(inv, "research/reviews/2026-01-05-alpha")
+    listed = _listed(inv, "src/tdmg/two.py")
+    assert [line for line, _ in listed] == [1, 1]
+    assert any(text.startswith("Codex review 3") for _, text in listed)
+
+
+def test_one_name_beside_paths_to_two_reviews_is_listed(tmp_path):
+    inv = _scan(tmp_path, {"src/tdmg/paths.py": (
+        "# Codex review 3 (research/reviews/2026-01-05-alpha, "
+        "research/reviews/2026-01-07-beta)\n")})
+    assert [line for line, _ in _listed(inv, "src/tdmg/paths.py")] == [1]
+
+
+def test_a_numbered_name_with_its_path_on_the_next_line_is_listed_not_lost(tmp_path):
+    inv = _scan(tmp_path, {"src/tdmg/broken.py": (
+        "# fixed after Codex review 3\n"
+        "# (research/reviews/2026-01-05-alpha).\n")})
+    assert ("src/tdmg/broken.py", 2, "path") in _how(inv, "research/reviews/2026-01-05-alpha")
+    assert [line for line, _ in _listed(inv, "src/tdmg/broken.py")] == [1]
 
 
 def test_check_reports_a_stale_inventory(tmp_path):

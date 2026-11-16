@@ -308,7 +308,7 @@ def _names(lines: list[str], i: int, reviews: list[str]):
         snippet = text[m.start():m.start() + 40].strip()
         n = NUMBERED.match(text, m.start())
         if n:
-            yield "unattributed", f"review number {n.group(1)} with no path beside it", snippet
+            yield "unattributed", f"review number {n.group(1)}, which names no folder", snippet
             continue
         dates = DATE.findall(text[m.end():m.end() + DATE_AFTER]) or DATE.findall(
             text[max(0, m.start() - DATE_BEFORE):m.start()])[-1:]
@@ -339,11 +339,12 @@ def scan(root: Path, files: list[str]) -> Inventory:
             continue
         own, cat = unit_of(rel), category(rel)
         for i in range(len(lines)):
-            names_a_review = False   # by path, on this line
-            found = False            # any target at all, on this line
+            reviews_by_path = set()   # review records named by path on this line
+            found = False             # any target at all, on this line
             for kind, value, text in _targets(rel, lines, i, scanner):
                 found = True
-                names_a_review |= kind == "unit" and value.startswith("research/reviews/")
+                if kind == "unit" and value.startswith("research/reviews/"):
+                    reviews_by_path.add(value)
                 ref = Ref(rel, i + 1, cat)
                 if kind == "unit" and value != own:
                     inv.refs[value].add(ref)
@@ -369,6 +370,10 @@ def scan(root: Path, files: list[str]) -> Inventory:
             if not found and (m := MENTION.search(lines[i])):
                 inv.unparsed.append(Unresolved(rel, i + 1, lines[i][m.start():][:50].strip(),
                                                "a root word with no path this script reads"))
+            # A review mention the script cannot tie to a record is dropped only when the
+            # line gives exactly one review by path and names at most one Codex review, so
+            # that path is the mention's. Otherwise it is listed for reading by hand.
+            explained = len(reviews_by_path) == 1 and len(CODEX.findall(lines[i])) <= 1
             for kind, value, text in _names(lines, i, reviews):
                 if kind == "name" and value != own:
                     inv.refs[value].add(Ref(rel, i + 1, cat, "name"))
@@ -376,7 +381,7 @@ def scan(root: Path, files: list[str]) -> Inventory:
                     inv.ambiguous.append(Ambiguous(rel, i + 1, text, value))
                     for u in value:
                         inv.refs[u].add(Ref(rel, i + 1, cat, "ambiguous name"))
-                elif kind == "unattributed" and not names_a_review:
+                elif kind == "unattributed" and not explained:
                     inv.unattributed.append(Unresolved(rel, i + 1, text, value))
     inv.unresolved = sorted(set(inv.unresolved))
     inv.ambiguous = sorted(set(inv.ambiguous))
@@ -463,8 +468,8 @@ INTRO = (
     "`research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under "
     "`research_notes/`. A record is **cited** when a machine-read file (a rule, test, "
     "profile, code, script, CI or `.toml`/`.yaml` config file) refers to it by path, or by a "
-    "glob such as `2026-11-10-*`. It is **cited by name** when such a file names it without "
-    "a path, by date (\"Codex review 2026-11-14\"), and **possibly cited "
+    "glob such as `2026-11-10-*`. It is **cited by name** when such a file names it by date "
+    "without a path (\"Codex review 2026-11-14\"), and **possibly cited "
     "(ambiguous name)** when such a file names a review by a date that two or more review "
     "folders share; the script does not guess which. All three count as cited. It is "
     "**uncited** when only docs, `docs/STATUS.md`, other config files or other records "
