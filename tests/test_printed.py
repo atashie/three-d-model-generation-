@@ -1279,9 +1279,29 @@ def test_a_near_peak_on_a_sample_passes_only_with_the_tight_pair_bound():
 
 
 def test_the_refinement_floor_is_one_unit_of_the_g_codes_last_digit():
-    # XY_ROUND_MM is half a unit of the third decimal (a printed X or Y is within it of the
-    # slicer's own); the floor is one whole unit, the G-code's coordinate resolution.
+    # The stated reason for the stopping choice: XY_ROUND_MM is half a unit of the third
+    # decimal (a printed X or Y is within it of the slicer's own), and the floor is one
+    # whole unit, the step the G-code states coordinates in.
     assert EDGE_REFINE_MIN_MM == pytest.approx(2 * XY_ROUND_MM)
+
+
+def test_the_floor_is_a_stopping_choice_and_stays_conservative(monkeypatch):
+    # Codex review 2026-11-16, finding 4: a finer floor can settle a case 0.001 mm leaves
+    # open, so the floor is not a limit of what can be measured. At 0.001 mm the case stays
+    # UNKNOWN (never a PASS); at 0.0001 mm it PASSes.
+    section, alignment = shapely.box(0, 0, 9.9999, 10), Alignment(0, (5, 5), (5, 5))
+    printed = shapely.box(-1, -1, 9.8, 11)
+    edges = edge_gaps(section, printed, alignment)
+
+    def status():
+        r = tdmg.printed.refine_edge(section, printed, alignment, ALLOWANCE, edges)
+        return tdmg.printed._judged([dict(r, allowance_mm=ALLOWANCE)], "max_gap_mm",
+                                    COVERAGE_BOUND_MM, "pair_bound_max_mm")[0], r
+    got, r = status()
+    assert got == "UNKNOWN" and r["pair_bound_max_mm"] == pytest.approx(0.200290625)
+    monkeypatch.setattr(tdmg.printed, "EDGE_REFINE_MIN_MM", 0.0001)
+    got, r = status()
+    assert got == "PASS" and r["pair_bound_max_mm"] == pytest.approx(0.19999765625)
 
 
 coord = st.floats(-5, 5, allow_nan=False)

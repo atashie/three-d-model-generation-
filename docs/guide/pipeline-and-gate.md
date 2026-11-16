@@ -115,8 +115,10 @@ layer is compared with the model's section at that height:
     - two neighbouring samples on one straight piece of edge, gaps d_a and d_b, s apart,
       leave at most (d_a + d_b + s) / 2 between them;
     - each pair whose bound is over the allowance is split at its midpoint, which is
-      sampled, again and again, down to 0.001 mm (the G-code's coordinate resolution:
-      3 decimals);
+      sampled, again and again, down to 0.001 mm. This floor is a stopping choice: a
+      pair still open there leaves the layer UNKNOWN, so it cannot give a wrong verdict.
+      It matches the G-code's 0.001 mm coordinate step (3 decimals), but a finer floor
+      could settle some cases it leaves UNKNOWN;
     - a new sample over the allowance FAILs the layer; every pair's bound within it
       PASSes it; a pair still open at 0.001 mm leaves it UNKNOWN.
 

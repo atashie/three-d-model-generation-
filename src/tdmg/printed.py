@@ -61,11 +61,21 @@ ARC_STEP_MM = 0.05
 EDGE_SAMPLE_MM = 0.05
 # The finest spacing to which F3.edge_coverage halves edge samples on a layer the 0.05 mm
 # samples leave within the bound of the allowance (refine_edge; docs/plans/
-# 2026-11-16-face-down-default.md, Decision 2). A resolution, not a threshold: the
-# G-code gives coordinates to 3 decimals, 0.001 mm, so a finer spacing measures nothing
-# the G-code states: one unit of that last digit, 2 * XY_ROUND_MM. Evidence: OrcaSlicer
-# writes X and Y with at most 3 decimals (the format XY_ROUND_MM below rests on:
-# GCodeWriter.cpp at v2.5.0 and every model move of
+# 2026-11-16-face-down-default.md, Decision 2). A computational stopping choice, not a
+# threshold and not a limit of what can be measured:
+# - It is conservative: a pair still open at this spacing leaves the layer UNKNOWN, never
+#   PASS, so a coarser or finer floor can only settle more or fewer layers, never give a
+#   wrong verdict.
+# - It costs at most 6 halvings from EDGE_SAMPLE_MM (0.05 / 2^6 = 0.00078 mm).
+# - Why not finer: the G-code states its coordinates in steps of 0.001 mm (one unit of
+#   the third decimal, 2 * XY_ROUND_MM), so settling a gap closer to the allowance than
+#   that was not pursued. This is the reason for the choice, not a proof that finer
+#   sampling is meaningless: the footprint is continuous, and a finer floor can settle a
+#   case this one leaves UNKNOWN (Codex review 2026-11-16, finding 4: a 0.1999 mm gap
+#   with the edge at x = 9.9999 is UNKNOWN at 0.001 mm and PASSes at 0.0001 mm; an
+#   earlier comment here said a finer spacing "measures nothing", which was wrong).
+# Evidence for the 0.001 mm step: OrcaSlicer writes X and Y with at most 3 decimals (the
+# format XY_ROUND_MM below rests on: GCodeWriter.cpp at v2.5.0 and every model move of
 # the owner's G-code; the parser assumes it and does not refuse more);
 # research/verification/2026-11-11-prusaslicer-windows/README.md: "no X, Y or Z word has
 # more than 3 decimals" (PrusaSlicer 2.9.7's files). An A1 example (measured 2026-11-16,

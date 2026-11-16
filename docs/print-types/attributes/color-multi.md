@@ -163,7 +163,8 @@ the file's colors. Assign the filaments in the slicer, using `palette.json`.
   it, was UNKNOWN. Now its edge samples are refined by bisection: two neighbouring
   samples s apart, with gaps d_a and d_b, leave at most (d_a + d_b + s) / 2 between them;
   each pair whose bound is over the allowance is split, down to 0.001 mm. The result is
-  PASS, FAIL, or UNKNOWN when a pair is still open at 0.001 mm. It applies to the whole
+  PASS, FAIL, or UNKNOWN when a pair is still open at 0.001 mm (a stopping choice, which
+  can leave a case UNKNOWN but never gives a wrong verdict). It applies to the whole
   model's and each color's `F3.edge_coverage`; `F3.edge_overprint` is not refined. The
   tolerance does not change. Details:
   [the pipeline guide](../../guide/pipeline-and-gate.md).

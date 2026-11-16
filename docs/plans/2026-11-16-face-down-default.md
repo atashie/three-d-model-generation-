@@ -65,6 +65,14 @@ samples where it matters.
      `artifacts/slice-runs/color5-roadie-drop-v3-f64-down/face-down/plate_1.gcode`), so a
      finer spacing measures nothing real. Put the comment and the evidence beside the
      constant.
+     - **Amended after the Codex review (2026-11-16, finding 4):** "measures nothing
+       real" is wrong. The footprint is continuous, and a finer floor can settle a case
+       this one leaves UNKNOWN (a 0.1999 mm gap with the edge at x = 9.9999: UNKNOWN at
+       0.001 mm, PASS at 0.0001 mm). The value stays 0.001 mm as a computational
+       stopping choice. It is conservative, because a pair still open leaves the layer
+       UNKNOWN, and it costs at most 6 halvings from 0.05 mm. The G-code's 0.001 mm
+       coordinate step is why a finer floor is not pursued, not proof that it would be
+       meaningless.
    - **Pairs:**
      - Pairs must not join samples of different rings, or across a ring's closing
        duplicate.
