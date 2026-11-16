@@ -1,6 +1,6 @@
 """Prove the docs checks catch the problems they claim to (negative fixtures)."""
 
-from doclint import anchors, broken_links, missing_or_out_of_order, rule_refs, slug
+from doclint import anchors, broken_links, missing_or_out_of_order, rule_refs, slug, unlinked_pages
 
 T = ["What it is", "When to use", "Open gaps"]
 
@@ -41,3 +41,12 @@ def test_missing_anchor_and_titled_links_are_checked(tmp_path):
     page = tmp_path / "p.md"
     page.write_text('[ok](t.md#real-heading) [bad](t.md#nope) [titled](missing.md "a title")\n')
     assert broken_links(page) == ["t.md#nope", "missing.md"]
+
+
+def test_unlinked_pages_names_each_page_the_index_does_not_link(tmp_path):
+    index = tmp_path / "README.md"
+    index.write_text("[a](a.md) [b anchor](b.md#x) `c.md` <!-- [d](d.md) -->\n"
+                     "```\n[e](e.md)\n```\n", encoding="utf-8")
+    for name in "abcde":
+        (tmp_path / f"{name}.md").write_text("# x\n", encoding="utf-8")
+    assert unlinked_pages(index) == ["c.md", "d.md", "e.md"]

@@ -43,8 +43,13 @@ The owner read the evidence inventory and decided: "Remove 5, keep pc-stack
 (Recommended)" and "Leave them in place (Recommended)". So cited records stay at their
 paths under `research/`, which is the evidence folder; there is no `docs/evidence/`.
 Where sections 1, 6 and 8 below say `docs/evidence/`, read `research/` (records stay in
-place, not moved). Details: `docs/plans/2026-11-16-restructure.md`, "Owner decisions
-after Task 1".
+place, not moved). So, in section 6, no references are rewritten and the strip
+algorithm id is not bumped; CLAUDE.md rule 6 uses the wording in the plan's Task 3
+("kept intact where it is"), not the wording in section 6. The five uncited records were
+removed in commit `814a962723454efa7693b8ef8af715062368975a` (Task 3; listed in
+`research/README.md`), and their standing decisions are in `docs/design/`. Every done
+plan in `docs/plans/` is cited, so none left the tree. Details:
+`docs/plans/2026-11-16-restructure.md`, "Owner decisions after Task 1".
 
 ## 1. Zones
 

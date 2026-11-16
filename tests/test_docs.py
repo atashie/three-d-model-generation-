@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from doclint import broken_links, missing_or_out_of_order, rule_refs
+from doclint import broken_links, missing_or_out_of_order, rule_refs, unlinked_pages
 
 from tdmg.paths import DOCS_DIR, REPO_ROOT
 from tdmg.rules import load_rules
@@ -49,3 +49,8 @@ def test_rule_ids_named_in_docs_exist(page):
 def test_links_and_anchors_resolve(page):
     broken = broken_links(page)
     assert not broken, f"{page.relative_to(REPO_ROOT)} has broken links {broken}"
+
+
+def test_every_design_note_is_linked_from_the_design_index():
+    index = DOCS_DIR / "design" / "README.md"
+    assert not unlinked_pages(index), f"not linked from {index.name}: {unlinked_pages(index)}"

@@ -11,7 +11,7 @@ This repo turns an image into an FDM-printable 3MF/STL. The owner is a data scie
 3. **Keep three things separate** for each rule: `kind` (normative, tool_limit, empirical, hypothesis), `provenance` (primary, secondary, unverified), and `validation` (untested, measured = software behaviour measured without printing, source-tested = printed by the source, peer-reviewed, calibrated = printed on our printer). Never upgrade one without new evidence.
 4. **Never call something verified unless it was run.** Distinguish resolved, installed and imported, functionally tested, and runtime-validated.
 5. **Docs agree with code.** Generated tables come from the registries. After changing `rules/` or `src/tdmg/recipes.py`, run `uv run python scripts/gen_docs.py`. Attribute and recipe pages keep the template headings (see `docs/print-types/README.md`).
-6. **Research files are records.** Do not rewrite `research_notes/`. Correct `reports/` only with a revision-history entry, and keep the old version in git.
+6. **Records are evidence.** A record that a rule, test, profile, code or doc cites is kept intact where it is; it is never rewritten. Job working data is deleted only by `tdmg finish`. A record nothing cites may leave the working tree once its work is done, after its standing decisions are in `docs/design/`; git history keeps it. Do not rewrite `research_notes/`; correct `reports/` only with a revision-history entry.
 7. **Licences:** the repo is MIT. GPL and non-commercial tools may be optional extras or subprocess tools only. Never copy their code into the repo.
 
 ## Commands

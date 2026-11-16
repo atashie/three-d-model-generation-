@@ -53,10 +53,11 @@ and macOS arm64; see the status page for verification state.
 | `src/tdmg/` | The Python package and the `tdmg` command |
 | `rules/` | Design rules with evidence (YAML) |
 | `profiles/` | Printer and filament profiles |
-| `docs/` | Guide, print-type pages, generated reference |
+| `docs/` | Guide, print-type pages, generated reference, plans (`docs/plans/`) |
+| `docs/design/` | [Design notes](docs/design/README.md): the decisions in force per area, with links to the evidence |
 | `tests/` | Tests, including checks that docs and citations agree with code |
 | `research_notes/`, `reports/` | Landscape research, November 2026 |
-| `research/` | Local verification experiments and independent reviews |
+| `research/` | [The evidence](research/README.md): verification records, independent reviews and experiments that rules, tests, profiles, code and docs cite, kept intact |
 
 ## Licence
 

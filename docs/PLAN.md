@@ -159,6 +159,13 @@ A 1024 × 1024 heightfield alone has about 2.1 million top-surface triangles. So
 
 ## 5. Repository layout
 
+> **Note (2026-11-16):** the layout changed in the repository restructure
+> ([design](plans/2026-11-16-restructure-design.md), [plan](plans/2026-11-16-restructure.md)).
+> `research/` is now the evidence folder: records that rules, tests, profiles, code or docs
+> cite, kept intact where they are ([research/README.md](../research/README.md)). The
+> decisions in force per area are in `docs/design/` ([index](design/README.md)). The tree
+> below is the original plan; the code is the source of truth for what exists.
+
 ```text
 three-d-model-generation/
 ├── README.md                  # what it is, quickstart, status

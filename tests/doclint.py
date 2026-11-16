@@ -87,3 +87,12 @@ def broken_links(page: Path) -> list[str]:
                                  and frag not in anchors(dest.read_text(encoding="utf-8"))):
             broken.append(target)
     return broken
+
+
+def unlinked_pages(index: Path) -> list[str]:
+    """The other .md files in index's folder that index does not link to (prose links only)."""
+    text = "\n".join(prose_lines(index.read_text(encoding="utf-8")))
+    linked = {(index.parent / t.partition("#")[0].replace("%20", " ")).resolve()
+              for t in INLINE_LINK.findall(text) if "://" not in t and t.partition("#")[0]}
+    return sorted(p.name for p in index.parent.glob("*.md")
+                  if p != index and p.resolve() not in linked)
