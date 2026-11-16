@@ -100,54 +100,80 @@ result; do not act on it (Task 14 does).
 **Owner check:** show the owner the cited and uncited lists before Task 3 deletes
 anything.
 
-### Task 2: tag and move the cited records
+### Owner decisions after Task 1 (2026-11-16)
+
+The owner read the inventory (`docs/design/evidence-inventory.md`: 41 of 50 records
+cited, 9 uncited) and decided:
+- "Remove 5, keep pc-stack (Recommended)": remove `research/reviews/2026-11-10-flat`,
+  `-selection`, `-slicer`, `-smoothing` and `research/verification/2026-11-10-flat-geometry`;
+  keep `research/verification/2026-11-09-pc-stack` (README and
+  `docs/reference/dependencies.md` cite it).
+- "Leave them in place (Recommended)": cited records stay at their current paths under
+  `research/`, which becomes the evidence folder. There is no `docs/evidence/`, no
+  reference rewriting and no strip id change. Links inside kept records to removed
+  records stay as written, pointing at git history.
+
+Tasks 2 and 3 below replace the earlier text (which moved records to `docs/evidence/`).
+Later tasks that said `docs/evidence/` now mean `research/verification/`.
+
+### Task 2: tag, and paths beside name citations
 
 **Steps:**
 - Tag `pre-restructure` at the commit before this task, and push the tag.
-- Move each cited record folder with `git mv research/verification/<X>
-  docs/evidence/<X>` (and likewise for cited plans, reviews and experiments). The
-  contents are not changed.
-- Update every reference, using the inventory:
-  - rules `ref`s;
-  - profile `record`s;
-  - tests;
-  - scripts;
-  - docs links;
-  - CLAUDE.md.
+- Every review cited only by name in code or tests ("Codex review 3", "Codex review
+  2026-11-11, finding 1", "(Codex, 2026-11-09)", ...; the inventory's "cited by name"
+  and "possibly cited" lists) gets the record's path written beside it, e.g. "Codex
+  review 3 (research/reviews/2026-11-12-color-geometry)". Resolve the ambiguous dates
+  from the evidence the inventory gives (2026-11-09: the forum URL is only in
+  `2026-11-09-codex/phase0.md`; 2026-11-11: portability; 2026-11-16: face-down), each
+  checked by reading the record.
+- **Only comments, docstrings and test text that no record stores may change.** A
+  citation inside a string that goes into a record (check text, notes) is left as it
+  is and listed in the commit message; changing it would change record bytes.
+- Then remove `NAME_ALIASES` and its STATUS-based justifications from
+  `scripts/evidence_inventory.py` if no citation still depends on them (the regenerated
+  inventory must show the same records cited, now by path); otherwise keep the entries
+  still needed, with a justification in a durable file.
 
-  A helper may rewrite exact path prefixes. Review its diff by hand.
-- `calibration_strip.SOURCE` and `KNOWN_FAILURE_CAUSE` change path, so `strip.json`
-  changes. Bump the strip algorithm to `strip-5` with a dated comment, and update
-  `tests/test_calibration_strip.py`.
+**Checks:** the regenerated inventory has the same cited set; full suite, ruff,
+`gen_docs --check`, the inventory's `--check`; `scripts/repeat_runs.py --compare-only`
+is not needed (no code behaviour changes), but `git diff` must show only comments,
+docstrings and non-recorded test strings.
 
-**Checks:**
-- `test_rules.py` passes with the locators unchanged.
-- A new test fails if any tracked file references a moved path's old location.
-- The full suite, the real-slicer tests (`-m slicer`) and CI pass.
-
-### Task 3: design notes, remove uncited records, rule 6, STATUS
+### Task 3: design notes, remove five records, rule 6, STATUS
 
 **Steps:**
-- **Write the design notes.** Create `docs/design/selection.md`, `docs/design/flat.md`, `docs/design/color.md`,
+- **Write the design notes.** Create `docs/design/README.md` (index) and
+  `docs/design/selection.md`, `docs/design/flat.md`, `docs/design/color.md`,
   `docs/design/slicing.md` and `docs/design/calibration.md`. Each note holds:
   - the decisions still in force, with the owner's words and dates;
   - review findings that still constrain the code;
-  - links to `docs/evidence/`;
-  - for each record it replaces, the old path and the removing commit.
+  - links to the records in `research/` and the plans in `docs/plans/`;
+  - for each removed record, the old path and the removing commit.
 
-  Sources: the uncited plans, reviews and records, and STATUS's history.
+  Sources: the five records to remove, the plans and reviews, and STATUS's history.
 - **Check them.** A subagent reviews each note against the records it replaces,
   looking for a dropped decision or a changed meaning.
-- **Remove the uncited records:** `git rm` them, along with done plans not cited.
-  Active work stays where it is:
-  - this plan and the design;
-  - `research/reviews/2026-11-16-restructure-design/`.
-- **CLAUDE.md rule 6:** the design's text (section 6).
-- **STATUS.md:** current state only.
+- **Remove the five records** (`git rm`). Re-point any doc link to them (README, docs/,
+  STATUS) to the design note; links inside kept records stay as written.
+- **`research/README.md`:** what the folder is (the evidence: records that rules,
+  tests, profiles, code or docs cite, kept intact), that links inside records may name
+  removed paths (see tag `pre-restructure` and git history), and the five removed
+  records with their removing commit.
+- **CLAUDE.md rule 6:** "Records are evidence. A record that a rule, test, profile,
+  code or doc cites is kept intact where it is; it is never rewritten. Job working
+  data is deleted only by `tdmg finish`. A record nothing cites may leave the working
+  tree once its work is done, after its standing decisions are in `docs/design/`; git
+  history keeps it. Do not rewrite `research_notes/`; correct `reports/` only with a
+  revision-history entry."
+- **STATUS.md:** current state only; its history goes to the design notes.
 - **README:** the layout table.
 - **PLAN.md section 5:** a dated note that the layout changed, pointing to the design.
+- **Design:** an amendment note in `docs/plans/2026-11-16-restructure-design.md`
+  recording the two decisions above.
 - **Docs test:** `tests/test_docs.py` checks that every `docs/design/*.md` is linked
   from `docs/design/README.md`.
+- Regenerate the inventory.
 
 ### Task 4: the recipe registry
 

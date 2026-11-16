@@ -141,7 +141,10 @@ passed. These commits are pushed; for CI see above.
    (evidence moves intact; package split when figurines start; public per print; prove
    a rebuild before purging); draft 2 answers every finding. The owner approved draft 2
    ("proceed with draft 2"); plan `docs/plans/2026-11-16-restructure.md` (Tasks 0 to
-   15), executed with subagents, task by task.
+   15), executed with subagents, task by task. Done: Task 0 (repeat runs: 119 of 159
+   files identical, the rest differ only in G-code timestamp lines; the printed Roadie
+   `model.3mf` rebuilds identically), Task 1 (evidence inventory). Owner after Task 1:
+   "Remove 5, keep pc-stack", "Leave them in place" (no `docs/evidence/`). Next: Task 2.
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.

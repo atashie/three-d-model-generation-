@@ -37,6 +37,15 @@ to 10. This draft answers every finding (the table at the end).
 10. **Rebuild proof:** "Prove a rebuild first (Recommended)". A job is purged only
     after the print has been rebuilt from the library's own files and matched.
 
+## Amendment after Task 1 of the plan (2026-11-16)
+
+The owner read the evidence inventory and decided: "Remove 5, keep pc-stack
+(Recommended)" and "Leave them in place (Recommended)". So cited records stay at their
+paths under `research/`, which is the evidence folder; there is no `docs/evidence/`.
+Where sections 1, 6 and 8 below say `docs/evidence/`, read `research/` (records stay in
+place, not moved). Details: `docs/plans/2026-11-16-restructure.md`, "Owner decisions
+after Task 1".
+
 ## 1. Zones
 
 | Zone | Holds | Tracked | Lifetime |
