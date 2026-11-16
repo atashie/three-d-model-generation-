@@ -542,18 +542,27 @@ all four are **PRINTABLE**, with warnings. The numbers are the slicer's.
   outer outline band is.
 - **Face down** (measured in Tasks 2 and 6): the prime tower is about half (548–592 mm³),
   because it stops after the last change. The time is within 2 minutes of face up.
-  Roadie drop face down is NOT CERTIFIED (the whole model's edge coverage is UNKNOWN:
-  0.251 mm against 0.275 mm). That was before near-passes were refined (`slice-6`); it
-  has not been re-run since. On the keep plans, face down layer 1 skips most of the
+  Roadie drop face down was NOT CERTIFIED then (the whole model's edge coverage UNKNOWN:
+  0.251 mm against 0.275 mm). On the keep plans, face down layer 1 skips most of the
   outline color, and the whole model's edge coverage FAILs (1.179 and 0.637 mm).
+- **Re-run with refinement** (2026-11-16, `slice-6`/`colorslice-2`, both slicers;
+  `research/verification/2026-11-15-first-ams-print/README.md`, last two sections):
+  Roadie drop face down is **PRINTABLE**: its z 0.2 layer was refined (sampled largest
+  0.2506 mm, largest pair bound 0.257 mm against 0.275 mm). Oddie merge blues face down
+  is PRINTABLE too. The two keep plans still FAIL face down (no layer was refined: the
+  0.05 mm samples found the gaps) and are PRINTABLE face up, so the default chooses
+  face down for the drop plans and face up for the keep plans.
 - **The glue route** on the two drop plans is not printable: `glue-base` FAILs
   `F3.edge_coverage`, and one or two small color plates FAIL F3.
 
 Records: `research/verification/2026-11-13-color-slicing/` (`README.md`,
 `owner-slices-task7.txt`, `owner-review.txt`).
 
-**Not proven:** nothing multicolor has been printed. `tdmg`'s G-code has not been
-compared with Bambu Studio's slice. The flush amounts are OrcaSlicer's, measured and not
+**Not proven:** one multicolor plan has been printed, Roadie with the outline dropped,
+from Bambu Studio's own slice of `model.3mf`: smeared face up, good face down by the
+owner's eye, nothing measured (`research/verification/2026-11-15-first-ams-print/README.md`).
+Oddie has not been printed. `tdmg`'s G-code has not been printed or compared with Bambu
+Studio's slice. The flush amounts are OrcaSlicer's, measured and not
 tuned.
 
 ## Test strips (`tdmg strip`, R2 step 5 part 1, 2026-11-14)

@@ -27,8 +27,11 @@ two test strips, is built (`tdmg strip`) and waits for the owner to print it.
   part 1; [the test strip plan](../../plans/2026-11-14-test-strip.md)). The first AMS and
   glue prints of an owner plan (part 2) come after.
 
-On the owner's four plans, face up is PRINTABLE, with warnings. Nothing in this page is
-printed.
+On the owner's four plans, face up is PRINTABLE, with warnings. One owner plan has been
+printed on the AMS, from Bambu Studio's own slice: Roadie, outline dropped, smeared face
+up and good face down by the owner's eye (2026-11-15/16,
+`research/verification/2026-11-15-first-ams-print/README.md`; nothing measured). Oddie
+has not been printed.
 
 ## When to use / when not to
 
@@ -188,9 +191,15 @@ PRINTABLE, with warnings. Each has 9 color changes (the minimum) and a prime tow
   outline band prints. The outline color's largest edge gap is 4.99 mm (Roadie) and
   4.72 mm (Oddie), reported as a warning.
 - **Face down** was measured too: about half the prime tower (548–592 mm³), and the time
-  within 2 minutes. Roadie drop face down is NOT CERTIFIED (the whole model's edge
-  coverage is UNKNOWN), and on the keep plans layer 1 skips most of the outline color.
-  These are results from before near-passes were refined; they have not been re-run.
+  within 2 minutes. Roadie drop face down was NOT CERTIFIED then (the whole model's edge
+  coverage UNKNOWN), and on the keep plans layer 1 skips most of the outline color.
+- **Re-run with refinement** (2026-11-16;
+  `research/verification/2026-11-15-first-ams-print/README.md`, last two sections):
+  Roadie drop face down is PRINTABLE (its z 0.2 layer refined: largest pair bound
+  0.257 mm against 0.275 mm), and so is Oddie merge blues. The two keep plans FAIL face
+  down (part of the outer edge unprinted on the first layer: 1.179 and 0.637 mm) and are
+  PRINTABLE face up, so the default chooses face down for the drop plans and face up for
+  the keep plans.
 - **The glue route** is not printable on either drop plan: the glue base and some small
   color plates FAIL F3 (Roadie drop: `glue-color-2`; Oddie merge blues: `glue-color-2`
   and `glue-color-3`).
