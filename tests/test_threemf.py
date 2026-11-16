@@ -303,8 +303,9 @@ def test_an_edited_3mf_fails(edit, what):
 
 
 def test_a_tiny_scale_that_lib3mf_calls_no_transform_fails():
-    # Codex review 4, finding 1: lib3mf's HasObjectTransform treats a matrix this close to
-    # identity as none, but other readers apply it (trimesh: x max 20.002 on a 20 mm box).
+    # Codex review 4 (research/reviews/2026-11-12-color-3mf), finding 1: lib3mf's
+    # HasObjectTransform treats a matrix this close to identity as none, but other readers
+    # apply it (trimesh: x max 20.002 on a 20 mm box).
     shells = gated_shells("box")
     root = model_of(write_multishell_3mf(shells))
     root.find(f".//{Q}item").set("transform", "1.0001 0 0 0 1 0 0 0 1 0 0 0")
@@ -327,9 +328,9 @@ def _with_entries(data: bytes, entries) -> bytes:
 
 @pytest.mark.parametrize("alias", ["3D/3DMODEL.MODEL", "/3D/3dmodel.model", "3D/extra.xml"])
 def test_an_extra_or_aliased_package_part_fails(alias):
-    # Codex review 4, finding 2: a case or leading-slash alias of the model part, holding
-    # other geometry, is ignored by lib3mf but loaded by trimesh. Only the writer's three
-    # parts are allowed.
+    # Codex review 4 (research/reviews/2026-11-12-color-3mf), finding 2: a case or
+    # leading-slash alias of the model part, holding other geometry, is ignored by lib3mf
+    # but loaded by trimesh. Only the writer's three parts are allowed.
     shells = gated_shells("box")
     data = write_multishell_3mf(shells)
     root = model_of(data)
@@ -360,8 +361,9 @@ def _raw_names(data: bytes, names: dict) -> bytes:
 
 
 def test_a_backslash_model_part_name_fails_on_every_platform():
-    # Review of the Codex 4 fix: on Windows, zipfile turns "3D\\3dmodel.model" into
-    # "3D/3dmodel.model" in ZipInfo.filename; the raw name (orig_filename) is compared.
+    # Review of the Codex 4 fix (research/reviews/2026-11-12-color-3mf): on Windows,
+    # zipfile turns "3D\\3dmodel.model" into "3D/3dmodel.model" in ZipInfo.filename; the
+    # raw name (orig_filename) is compared.
     shells = gated_shells("box")
     bad = _raw_names(write_multishell_3mf(shells), {MODEL_PART: "3D\\3dmodel.model"})
     c = export_3mf_check(bad, shells)
@@ -370,8 +372,9 @@ def test_a_backslash_model_part_name_fails_on_every_platform():
 
 
 def test_a_zip_that_zipfile_cannot_open_is_a_fail_not_an_error():
-    # Review of the Codex 4 fix: a "version needed" above zipfile's support makes
-    # zipfile raise NotImplementedError; the check must still return FAIL.
+    # Review of the Codex 4 fix (research/reviews/2026-11-12-color-3mf): a "version
+    # needed" above zipfile's support makes zipfile raise NotImplementedError; the check
+    # must still return FAIL.
     shells = gated_shells("box")
     data = bytearray(write_multishell_3mf(shells))
     cd = data.index(b"PK\x01\x02")

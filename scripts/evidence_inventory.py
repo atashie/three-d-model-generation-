@@ -17,9 +17,10 @@ What counts as a reference (each is tested in tests/test_evidence_inventory.py):
   joined text names a record in the tree;
 - a glob (research/verification/2026-11-10-*), expanded to the records it matches;
 - in machine-read files only (rule, test, profile, code, script, CI, .toml/.yaml config):
-  a review named without a path,
-  "Codex review 3" (through NAME_ALIASES) or "Codex review 2026-11-14" (by date). A date
-  that several review folders share is listed as ambiguous and counts for all of them.
+  a review named by date without a path, "Codex review 2026-11-14". A date that several
+  review folders share is listed as ambiguous and counts for all of them. A numbered name
+  ("Codex review 3") is tied to a record only by a path on the same line; without one it
+  is listed for reading by hand.
 A built path that stops at a root folder, and a path that names no record in the tree,
 are listed as unresolved, not dropped. Binary files (with a NUL byte) are skipped; text
 that is not UTF-8 is listed. The output file, this script and its test are not scanned.
@@ -71,25 +72,11 @@ QUOTED_ROOT = re.compile(rf"[\"']((?:{_ROOT_ALT})/?)[\"']")
 CONTINUATION = re.compile(r"^\s*(?:#+|//+|\*|>|[\"'])?\s*")
 
 
-# Reviews cited by number ("Codex review 3"). Each number maps to the folder that a line
-# in the repo names beside it; tests/test_evidence_inventory.py checks that each locator
-# text is in its ref file. A dated name ("Codex review 2026-11-14") needs no alias when one
-# review folder has that date; when several do, it is listed as ambiguous, not guessed.
-# Temporary: the STATUS-line justifications stand in until Task 2 of
-# docs/plans/2026-11-16-restructure.md writes the record's path beside each numbered
-# citation in code and tests; then this table can go.
-NAME_ALIASES = {
-    "2": ("research/reviews/2026-11-11-color-palette",
-          "research/reviews/2026-11-11-color-palette/README.md",
-          "## Codex review 2: the fixes and the float64 change"),
-    "3": ("research/reviews/2026-11-12-color-geometry", "docs/STATUS.md",
-          ("Codex review 3: 4 findings, all handled "
-           "(`research/reviews/2026-11-12-color-geometry/`)")),
-    "4": ("research/reviews/2026-11-12-color-3mf", "docs/STATUS.md",
-          "Codex review 4 (`research/reviews/2026-11-12-color-3mf/`)"),
-    "5": ("research/reviews/2026-11-13-color-slicing", "docs/STATUS.md",
-          "Codex review 5 (`research/reviews/2026-11-13-color-slicing/`)"),
-}
+# Review names. A numbered name ("Codex review 3") says nothing about its folder, so it is
+# tied to a record only by a path written on the same line (Task 2 of
+# docs/plans/2026-11-16-restructure.md wrote one beside every numbered citation in code and
+# tests). A dated name ("Codex review 2026-11-14") maps to the one review folder of that
+# date; when several share it, it is listed as ambiguous, not guessed.
 CODEX = re.compile(r"\bCodex\b")
 NUMBERED = re.compile(r"Codex(?: review)? (\d+)(?![\d-])")
 DATE = re.compile(r"(?<![\w/-])(\d{4}-\d{2}-\d{2})(?![\w-])")   # not inside a path or name
@@ -307,7 +294,7 @@ def _targets(rel: str, lines: list[str], i: int, scanner: _Scanner):
             yield "root", m.group(1).rstrip("/"), m.group(0)
 
 
-def _names(lines: list[str], i: int, reviews: list[str], aliases: dict[str, str]):
+def _names(lines: list[str], i: int, reviews: list[str]):
     """Yield (kind, value, text) for each review named on line i: ("name", unit),
     ("ambiguous", candidates) or ("unattributed", reason). A name broken onto the next
     line is joined to it."""
@@ -321,11 +308,7 @@ def _names(lines: list[str], i: int, reviews: list[str], aliases: dict[str, str]
         snippet = text[m.start():m.start() + 40].strip()
         n = NUMBERED.match(text, m.start())
         if n:
-            if n.group(1) in aliases:
-                yield "name", aliases[n.group(1)], snippet
-            else:
-                yield "unattributed", f"review number {n.group(1)} is not in the alias table", \
-                    snippet
+            yield "unattributed", f"review number {n.group(1)} with no path beside it", snippet
             continue
         dates = DATE.findall(text[m.end():m.end() + DATE_AFTER]) or DATE.findall(
             text[max(0, m.start() - DATE_BEFORE):m.start()])[-1:]
@@ -343,13 +326,11 @@ def _names(lines: list[str], i: int, reviews: list[str], aliases: dict[str, str]
         yield "unattributed", "a named review with no record folder", line[m.start():][:40]
 
 
-def scan(root: Path, files: list[str], aliases: dict[str, str] | None = None) -> Inventory:
+def scan(root: Path, files: list[str]) -> Inventory:
     inv = Inventory()
     units = units_in(files)
     scanner = _Scanner(units)
     reviews = [u for u in units if u.startswith("research/reviews/")]
-    if aliases is None:
-        aliases = {n: unit for n, (unit, _, _) in NAME_ALIASES.items()}
     for rel in files:
         if rel in NOT_SCANNED:
             continue
@@ -388,7 +369,7 @@ def scan(root: Path, files: list[str], aliases: dict[str, str] | None = None) ->
             if not found and (m := MENTION.search(lines[i])):
                 inv.unparsed.append(Unresolved(rel, i + 1, lines[i][m.start():][:50].strip(),
                                                "a root word with no path this script reads"))
-            for kind, value, text in _names(lines, i, reviews, aliases):
+            for kind, value, text in _names(lines, i, reviews):
                 if kind == "name" and value != own:
                     inv.refs[value].add(Ref(rel, i + 1, cat, "name"))
                 elif kind == "ambiguous":
@@ -483,7 +464,7 @@ INTRO = (
     "`research_notes/`. A record is **cited** when a machine-read file (a rule, test, "
     "profile, code, script, CI or `.toml`/`.yaml` config file) refers to it by path, or by a "
     "glob such as `2026-11-10-*`. It is **cited by name** when such a file names it without "
-    "a path (\"Codex review 3\", \"Codex review 2026-11-14\"), and **possibly cited "
+    "a path, by date (\"Codex review 2026-11-14\"), and **possibly cited "
     "(ambiguous name)** when such a file names a review by a date that two or more review "
     "folders share; the script does not guess which. All three count as cited. It is "
     "**uncited** when only docs, `docs/STATUS.md`, other config files or other records "
@@ -499,8 +480,9 @@ INTRO = (
     "What is recognised: paths written from the repository root (`research/...`, with `/` or a "
     "backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built "
     "from string literals, globs, and review names found by a short pattern list "
-    "(\"Codex\" with a review number, or with a date beside it) plus a hand-kept alias table "
-    "for the numbers (`NAME_ALIASES` in the script). Names are looked for only in "
+    "(\"Codex\" with a date beside it). A numbered name (\"Codex review 3\") counts only "
+    "through a path written on the same line; without one it is listed under *Review "
+    "mentions not tied to a record*. Names are looked for only in "
     "machine-read files. Lines there that mention a root word but give no reference are "
     "listed under *Unparsed mentions*. Free prose (\"the research record\", \"the review\") "
     "can still be missed, so read the uncited list before anything is deleted.\n\n")
@@ -560,8 +542,8 @@ def render(inv: Inventory, units: list[str]) -> str:
     else:
         out.append("None.\n")
     out.append("\n## Review mentions not tied to a record\n\n"
-               "A machine-read file mentions a review with no number in the alias table and no "
-               "date, or a review that has no record folder. Read these by hand.\n\n")
+               "A machine-read file mentions a review with no date and no review path on the "
+               "same line, or a review that has no record folder. Read these by hand.\n\n")
     if inv.unattributed:
         out.append("| File | Line | Text | Why |\n|---|---|---|---|\n")
         out.extend(f"| `{_cell(u.file)}` | {u.line} | `{_cell(u.text)}` | {u.reason} |\n"

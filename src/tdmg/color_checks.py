@@ -329,11 +329,12 @@ def body_export_check(mesh: trimesh.Trimesh, body: Body) -> CheckResult:
       body.expected_volume_mm3, with tdmg.flat.export_match's float32-storage tolerances
       and the intended solid's surface area body.surface_mm2 (its tops, bottoms and the
       walls that prism_mesh builds);
-    - occupancy (Codex review 3: bounds and volume miss a component moved inside the
-      bounds): for every z interval between consecutive levels of the body's slabs, the
-      mesh's section at mid-height (mesh_section) against the body's footprint there
-      (the union of the cells covering the interval); measured["occupancy"] has one row
-      per interval with the symmetric-difference area and its tolerance.
+    - occupancy (Codex review 3, research/reviews/2026-11-12-color-geometry: bounds and
+      volume miss a component moved inside the bounds): for every z interval between
+      consecutive levels of the body's slabs, the mesh's section at mid-height
+      (mesh_section) against the body's footprint there (the union of the cells covering
+      the interval); measured["occupancy"] has one row per interval with the
+      symmetric-difference area and its tolerance.
     The occupancy tolerance (derived, not a rule): the cells' x, y are on the storage
     grid, which float32 holds exactly (tdmg.color_geometry.storage_grid_mm), so STL
     storage changes only z, and the mid-height cut, far from every float32-rounded level,
@@ -446,8 +447,9 @@ IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]
 
 def _identity(has_transform: bool, transform) -> tuple[bool, list]:
     """(exactly no transform, the matrix as lib3mf reads it): has_transform false AND the
-    float32 fields exactly the identity. lib3mf's Has*Transform alone calls a matrix
-    within its tolerance of the identity (a 1.0001 scale) no transform (Codex review 4)."""
+    float32 fields exactly the identity. lib3mf's Has*Transform alone calls a matrix within
+    its tolerance of the identity (a 1.0001 scale) no transform
+    (Codex review 4, research/reviews/2026-11-12-color-3mf)."""
     fields = [list(row) for row in transform.Fields]
     return (not has_transform and fields == IDENTITY), fields
 
@@ -530,7 +532,8 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
       turns a backslash into "/") are exactly tdmg.threemf.PART_NAMES, in order, and the
       content types and relationships parts are the writer's bytes (read with zipfile,
       not lib3mf: lib3mf ignores a case or leading-slash alias of the model part that
-      another reader, such as trimesh, may load instead; Codex review 4);
+      another reader, such as trimesh, may load instead;
+      Codex review 4, research/reviews/2026-11-12-color-3mf);
     - the model part is exactly the bytes tdmg.threemf.model_xml writes for these shells
       (model_equal). The writer is deterministic, so the file must be exactly what was
       gated: lib3mf reads attributes and elements it does not compare (slic3rpe
@@ -541,8 +544,8 @@ def export_3mf_check(data: bytes, shells: list[Shell]) -> CheckResult:
       tdmg.threemf.OBJECT_NAME; exactly one build item, on that object, with no
       transform: HasObjectTransform false and the matrix exactly the identity as lib3mf
       reads it (float32 fields; HasObjectTransform alone calls a matrix within lib3mf's
-      tolerance of identity, such as a 1.0001 scale, no transform; Codex review 4); one
-      color group;
+      tolerance of identity, such as a 1.0001 scale, no transform;
+      Codex review 4, research/reviews/2026-11-12-color-3mf); one color group;
     - the object's vertices and triangles split into the shells in order
       (tdmg.threemf.shell_ranges): shell i's vertices equal its gated mesh's vertices
       exactly, compared as float32 arrays in the same order (both sides are float32
@@ -868,7 +871,8 @@ def glue_fit_margin(grid_mm: float, *, pinch_joined: bool = False,
     shortfalls; the leftover is clipped to outside that buffer). So the margin has no
     chord-error term (an earlier version allowed c (1 - cos(pi / (4 QUAD_SEGS))) and the
     opening's r (1 - cos(pi / (4 QUAD_SEGS))), which GEOS does not guarantee: it draws a
-    shallow arc with one chord; Codex review 3). The bounds added:
+    shallow arc with one chord;
+    Codex review 3, research/reviews/2026-11-12-color-geometry). The bounds added:
     - Piece snap, snap_move_mm(G) = G sqrt(2)/2: shapely.set_precision moves each
       piece's boundary by at most this.
     - Pocket snap, snap_move_mm(G) again: the pockets are rebuilt by color_cells (one

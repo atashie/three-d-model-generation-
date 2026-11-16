@@ -1074,7 +1074,8 @@ def test_portability_passes_with_the_fake(flat_dir, fake, prusa, tmp_path):
     # An uneven Z sequence with the right count and top, and a missing ;Z: line.
     ({"z": {"5": "1.1"}}, "its ;Z: at layer 5 of 15 is 1.1 mm, not 1 mm"),
     ({"z": {"7": None}}, "the G-code has 14 ;Z: lines for 15 layers"),
-    # Codex review 2026-11-11, finding 1: markers alone must not pass.
+    # Codex review 2026-11-11 (research/reviews/2026-11-11-portability), finding 1:
+    # markers alone must not pass.
     ({"truncate": True}, "does not end with '; prusaslicer_config = end': it is incomplete"),
     ({"no_extrusion": [15]}, "layer 15 of 15 has no extruding move"),
     ({"no_extrusion": list(range(1, 16))}, "layer 1 of 15 has no extruding move"),

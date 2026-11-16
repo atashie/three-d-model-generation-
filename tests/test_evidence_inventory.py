@@ -47,12 +47,13 @@ TREE = {
     "research/reviews/2026-01-07-beta/README.md": "Beta.\n",
     "research/reviews/2026-01-07-gamma/README.md": "Gamma.\n",
     "src/tdmg/named.py": (
-        "# Codex review 7, finding 1: fixed.\n"
+        "# Codex review 7 (research/reviews/2026-01-07-beta), finding 1: fixed.\n"
         "# fixed after the (Codex review\n"
         "# 2026-01-05, finding 2).\n"
         "# Codex review 2026-01-07, finding 1.\n"
         "# Codex finding 4: no date, no number.\n"
-        "# The Codex review's cases (research/reviews/2026-01-07-beta/README.md).\n"),
+        "# The Codex review's cases (research/reviews/2026-01-07-beta/README.md).\n"
+        "# Codex review 8, finding 2: a number and no path.\n"),
     # a name citation in a doc does not decide anything, so it is not scanned
     "docs/guide/names.md": "Codex review 2026-01-05 said so.\n",
     "CLAUDE.md": "Reviews live in `research/reviews/`.\n",
@@ -65,7 +66,7 @@ def _scan(tmp_path, extra=None):
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(text if isinstance(text, bytes) else text.encode("utf-8"))
-    return ei.scan(tmp_path, sorted(tree), aliases={"7": "research/reviews/2026-01-07-beta"})
+    return ei.scan(tmp_path, sorted(tree))
 
 
 def _refs(inv, unit):
@@ -156,9 +157,16 @@ def _how(inv, unit):
     return sorted((r.file, r.line, r.how) for r in inv.refs[unit])
 
 
-def test_a_numbered_review_name_maps_through_the_alias_table(tmp_path):
+def test_a_numbered_review_name_counts_only_through_the_path_beside_it(tmp_path):
     inv = _scan(tmp_path)
-    assert ("src/tdmg/named.py", 1, "name") in _how(inv, "research/reviews/2026-01-07-beta")
+    # line 1 gives the path: a reference by path, and the number is not listed
+    assert ("src/tdmg/named.py", 1, "path") in _how(inv, "research/reviews/2026-01-07-beta")
+    assert ("src/tdmg/named.py", 1, "name") not in _how(inv, "research/reviews/2026-01-07-beta")
+    # line 7 gives none: listed for reading by hand, tied to no record
+    assert [u.reason for u in inv.unattributed if u.line == 7] == [
+        "review number 8 with no path beside it"]
+    assert not any(r.line == 7 for refs in inv.refs.values() for r in refs
+                   if r.file == "src/tdmg/named.py")
 
 
 def test_a_dated_review_name_maps_to_the_one_folder_of_that_date(tmp_path):
@@ -180,7 +188,8 @@ def test_a_date_shared_by_two_folders_is_ambiguous_not_guessed(tmp_path):
 
 def test_a_review_mention_with_no_date_or_number_is_listed(tmp_path):
     inv = _scan(tmp_path)
-    assert [(u.file, u.line) for u in inv.unattributed] == [("src/tdmg/named.py", 5)]
+    assert [(u.file, u.line) for u in inv.unattributed] == [("src/tdmg/named.py", 5),
+                                                            ("src/tdmg/named.py", 7)]
 
 
 def test_a_date_inside_a_path_is_not_a_name_citation(tmp_path):
@@ -212,14 +221,6 @@ def test_linked_from_docs(tmp_path):
     assert ei.linked_from_docs(f"{V}/2026-01-04-doc-only", inv) == "doc"
     assert ei.linked_from_docs("docs/plans/2026-01-01-plan.md", inv) == "status"
     assert ei.linked_from_docs(f"{V}/2026-01-05-nothing", inv) == ""
-
-
-def test_every_alias_is_justified_by_text_in_the_repo():
-    root = ei.Path(ei.__file__).resolve().parents[1]
-    for number, (unit, ref, locator) in ei.NAME_ALIASES.items():
-        assert (root / unit).is_dir(), number
-        text = " ".join((root / ref).read_text(encoding="utf-8").split())
-        assert " ".join(locator.split()) in text, (number, ref, locator)
 
 
 def test_binary_files_are_skipped_and_undecodable_files_reported(tmp_path):

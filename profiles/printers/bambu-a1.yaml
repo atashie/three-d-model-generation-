@@ -40,6 +40,7 @@ sources:
       - "p30: ideal PLA, PETG, TPU, PVA; not recommended ABS, ASA, PC, PA, PET, carbon/glass fiber reinforced polymer"
       - "p25: avoid using AMS lite for TPU, TPE, absorbent PVA, and fiber-reinforced materials; spools 40-68 mm wide, 53-58 mm bore"
   - url: https://forum.bambulab.com/t/a1-series-firmware-v01-06-10-33-now-in-public-beta/201055
+    # The review: research/reviews/2026-11-09-codex/phase0.md (the only record with this URL).
     access: cited by an independent review (Codex, 2026-11-09); not fetched by us
     accessed: "2026-11-09"
     facts:

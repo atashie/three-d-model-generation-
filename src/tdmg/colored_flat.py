@@ -94,9 +94,10 @@ from tdmg.threemf import Shell, ThreeMFError, palette_manifest, write_multishell
 
 RECORD_SCHEMA = "tdmg.colorflat/1"
 RECORD_NAME = "colored.json"
-# colorflat-2 (2026-11-12, Codex review 3): glue pieces are eroded until they clear their
-# region by the clearance, and pocket walls are grown to clear the pieces, so glue outputs
-# differ from colorflat-1 (never pushed with results; the owner-plan runs were re-made).
+# colorflat-2 (2026-11-12, Codex review 3, research/reviews/2026-11-12-color-geometry):
+# glue pieces are eroded until they clear their region by the clearance, and pocket walls
+# are grown to clear the pieces, so glue outputs differ from colorflat-1 (never pushed
+# with results; the owner-plan runs were re-made).
 # colorflat-3 (2026-11-12, R2 step 3): the AMS output adds model.3mf and palette.json, the
 # record a model_3mf section, and the AMS assembly F2.export_3mf_matches_bodies (a new
 # required check). The STL, PNG and glue bytes are those of colorflat-2.

@@ -905,7 +905,8 @@ def test_an_inlay_checked_against_another_body_fails():
 
 def moved_inside_bounds(mesh, box, dx=1.0):
     """The mesh with the vertices inside box (x0, y0, x1, y1) moved dx in x: one
-    component moved, bounds and volume unchanged (the Codex review 3 fault)."""
+    component moved, bounds and volume unchanged (the
+    Codex review 3 fault, research/reviews/2026-11-12-color-geometry)."""
     vertices = np.array(mesh.vertices)
     x0, y0, x1, y1 = box
     inside = ((vertices[:, 0] > x0) & (vertices[:, 0] < x1) & (vertices[:, 1] > y0)

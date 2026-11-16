@@ -328,15 +328,16 @@ def glue_geometry(cells: Cells, *, thickness_mm, skin_mm, clearance_mm, min_piec
     applied to each shrunk candidate. All finite, bools refused; GlueError names the bad
     argument. The steps are the module docstring's.
 
-    Shrinking and the clearance (Codex review 3 fixed an earlier version that relied on
-    GEOS's chord error): a piece comes from the candidate region R buffered by -c with
-    round joins. The exact inward offset is {x in R : dist(x, boundary of R) >= c}, but
-    GEOS draws each round join with chords whose ends lie on the circle, so a chord's
-    middle is closer to R's concave corner; and it draws a join of angle A with round(A
-    / (pi / (2 QUAD_SEGS))) chords, so one chord can span up to 1.5 pi / (2 QUAD_SEGS): a
-    shallow 16.8 degree concave notch is one chord, c (1 - cos(8.4 deg)) = 0.00215 mm
-    short at c = 0.2 mm. The opening that follows can also poke out by its own chord
-    error. So the gap is not assumed; it is measured and fixed by construction:
+    Shrinking and the clearance (Codex review 3, research/reviews/2026-11-12-color-geometry,
+    fixed an earlier version that relied on GEOS's chord error): a piece comes from the
+    candidate region R buffered by -c with round joins. The exact inward offset is
+    {x in R : dist(x, boundary of R) >= c}, but GEOS draws each round join with chords
+    whose ends lie on the circle, so a chord's middle is closer to R's concave corner; and
+    it draws a join of angle A with round(A / (pi / (2 QUAD_SEGS))) chords, so one chord
+    can span up to 1.5 pi / (2 QUAD_SEGS): a shallow 16.8 degree concave notch is one
+    chord, c (1 - cos(8.4 deg)) = 0.00215 mm short at c = 0.2 mm. The opening that follows
+    can also poke out by its own chord error. So the gap is not assumed; it is measured
+    and fixed by construction:
     - _clear_of: each part's distance to R's boundary (shapely.distance) is measured;
       a part short by s = c - g is eroded by s + DIST (DIST = vertex_dist of R, float64
       rounding) and measured again, at most CLEARANCE_ROUNDS times; parts that erode to

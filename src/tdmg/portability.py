@@ -436,16 +436,17 @@ def gcode_layers(data: bytes) -> dict:
     line 89): 6 significant digits, the precision z_tolerance assumes. Each ";Z:" must
     follow a ";LAYER_CHANGE", at most one per layer (a missing one is found by the count).
 
-    Motion, read as written by the measured runs (the research record; Codex review
-    2026-11-11, finding 1): G90 and M82 (absolute positions and extrusion), G92 E0 resets,
-    G28, and G0/G1 with X, Y, Z, E and F words. An extruding move is a G0/G1 whose E is
-    above the current E and whose X or Y changes the position; it must come after G90 and
-    M82, with X, Y, Z and E all known, and after the first ";LAYER_CHANGE". It belongs to
-    the layer of the last ";LAYER_CHANGE". X, Y and Z words have at most 3 decimals, as in
-    every measured file, so a commanded Z is within half of 1e-3 of the value meant.
-    Anything else that moves or extrudes is refused: G91, M83, arcs (G2/G3), firmware
-    retraction (G10/G11), G92 on any axis but E, any other G-code, a word that is not one
-    letter and a number, and a repeated word.
+    Motion, read as written by the measured runs (the research record;
+    Codex review 2026-11-11, research/reviews/2026-11-11-portability, finding 1): G90 and
+    M82 (absolute positions and extrusion), G92 E0 resets, G28, and G0/G1 with X, Y, Z, E
+    and F words. An extruding move is a G0/G1 whose E is above the current E and whose X
+    or Y changes the position; it must come after G90 and M82, with X, Y, Z and E all
+    known, and after the first ";LAYER_CHANGE". It belongs to the layer of the last
+    ";LAYER_CHANGE". X, Y and Z words have at most 3 decimals, as in every measured file,
+    so a commanded Z is within half of 1e-3 of the value meant. Anything else that moves
+    or extrudes is refused: G91, M83, arcs (G2/G3), firmware retraction (G10/G11), G92 on
+    any axis but E, any other G-code, a word that is not one letter and a number, and a
+    repeated word.
 
     Complete: every PrusaSlicer G-code written in the research and by tdmg slice (the
     owner models, the cube and the open cube; 14 files, 2026-11-11) ends with the
@@ -626,14 +627,15 @@ def volume_error_bound(stl: bytes) -> float:
     E_N = u sum_k (1 + u)^(N - k) r_k, r_k = |sum_{j<=k} t_j| + sum_{j<=k} |dt_j|.
     The bound is sum_k |dt_k| + E_N, evaluated here in double.
 
-    Zeroed normals (Codex review 2026-11-11, finding 2): admesh sets a normal shorter than
-    ADMESH_NORMAL_CUTOFF to zero, so that facet's computed term is exactly 0, not a
-    rounding of t. The computed cross product is within eta of C, so a facet with
-    |C| - eta < ADMESH_NORMAL_CUTOFF may be zeroed; its error is then |t| or the bound
-    above, and the bound uses their sum. The height uses the facet's stored normal, which
-    the import repair (stl_fix_normal_values, run before stl_calculate_volume in
-    trianglemesh_repair_on_import, src/libslic3r/TriangleMesh.cpp) sets to this same
-    recomputed one.
+    Zeroed normals
+    (Codex review 2026-11-11, research/reviews/2026-11-11-portability, finding 2): admesh
+    sets a normal shorter than ADMESH_NORMAL_CUTOFF to zero, so that facet's computed term
+    is exactly 0, not a rounding of t. The computed cross product is within eta of C, so a
+    facet with |C| - eta < ADMESH_NORMAL_CUTOFF may be zeroed; its error is then |t| or
+    the bound above, and the bound uses their sum. The height uses the facet's stored
+    normal, which the import repair (stl_fix_normal_values, run before
+    stl_calculate_volume in trianglemesh_repair_on_import, src/libslic3r/TriangleMesh.cpp)
+    sets to this same recomputed one.
 
     It assumes the facets keep their file order and vertex order, which holds unless the
     import repair changed the mesh; portability_check FAILs before the volume when --info

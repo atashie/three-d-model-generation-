@@ -789,9 +789,10 @@ def test_auto_prints_face_down_when_it_is_printable(colored, orca, tmp_path, mon
 
 
 def test_the_record_keeps_the_print_instructions(colored, orca, tmp_path, monkeypatch):
-    # Codex review 2026-11-16, finding 3: the record said only "open model.3mf ... and
-    # assign the filaments", which leaves the model face up when face down is chosen. The
-    # record now keeps the CLI's own instructions, and its notes point to them.
+    # Codex review 2026-11-16 (research/reviews/2026-11-16-face-down), finding 3: the
+    # record said only "open model.3mf ... and assign the filaments", which leaves the
+    # model face up when face down is chosen. The record now keeps the CLI's own
+    # instructions, and its notes point to them.
     _all_pass(monkeypatch)
     _, lines, rec = _auto(colored, orca, tmp_path / "s")
     assert rec["print"] == cs.print_message(["down"]) and rec["print"] in lines
@@ -1040,7 +1041,7 @@ def test_the_warning_texts_do_not_name_an_unmeasured_cause():
          "edge, see research/verification/2026-11-13-color-slicing/owner-review.txt")]
 
 
-# --- Codex review 5, findings 3 and 4 ---------------------------------------------------------
+# --- Codex review 5 (research/reviews/2026-11-13-color-slicing), findings 3 and 4 ----------------
 
 def test_a_glue_record_missing_its_piece_plates_is_refused(folder, tmp_path, orca):
     """Codex finding 3: both glue-piece rows deleted, the report intact."""

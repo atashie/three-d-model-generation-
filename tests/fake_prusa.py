@@ -25,7 +25,8 @@ Its behaviour comes from the JSON file in $TDMG_FAKE_PRUSA_CONTROL, if set:
     no_extrusion [layer numbers, from 1] written with travel only
     move_z       {"<layer number, from 1>": text of that layer's G1 Z word}
     truncate     cut the G-code just after the last layer's ";Z:" line (Codex review
-                 2026-11-11, finding 1), so no configuration block ends it
+                 2026-11-11, research/reviews/2026-11-11-portability, finding 1), so no
+                 configuration block ends it
     gcode_empty  write an empty G-code file
     stderr_cwd_pad  write the working folder's path to stderr, then this many "y"
     stdout       text printed to stdout by --export-gcode (default: "Slicing result exported

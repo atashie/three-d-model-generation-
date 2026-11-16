@@ -71,9 +71,11 @@ EDGE_SAMPLE_MM = 0.05
 #   the third decimal, 2 * XY_ROUND_MM), so settling a gap closer to the allowance than
 #   that was not pursued. This is the reason for the choice, not a proof that finer
 #   sampling is meaningless: the footprint is continuous, and a finer floor can settle a
-#   case this one leaves UNKNOWN (Codex review 2026-11-16, finding 4: a 0.1999 mm gap
-#   with the edge at x = 9.9999 is UNKNOWN at 0.001 mm and PASSes at 0.0001 mm; an
-#   earlier comment here said a finer spacing "measures nothing", which was wrong).
+#   case this one leaves UNKNOWN
+#   (Codex review 2026-11-16, research/reviews/2026-11-16-face-down, finding 4: a
+#   0.1999 mm gap with the edge at x = 9.9999 is UNKNOWN at 0.001 mm and PASSes at
+#   0.0001 mm; an earlier comment here said a finer spacing "measures nothing", which
+#   was wrong).
 # Evidence for the 0.001 mm step: OrcaSlicer writes X and Y with at most 3 decimals (the
 # format XY_ROUND_MM below rests on: GCodeWriter.cpp at v2.5.0 and every model move of
 # the owner's G-code; the parser assumes it and does not refuse more);
@@ -151,7 +153,8 @@ SKIPPABLE_END = "SKIPPABLE_END"
 #   FIRMWARE_G_COMMANDS are accepted as in Custom (the position is then unknown), and the
 #   dwell G4 (written as G4 S0, twice per change) with S or P words at least 0, in FEATURE
 #   "Prime tower" only; G4 does not move the head.
-# - Firmware conditional blocks (M622 ... M623; Codex review 5, finding 1): the firmware
+# - Firmware conditional blocks (M622 ... M623;
+#   Codex review 5, research/reviews/2026-11-13-color-slicing, finding 1): the firmware
 #   may skip one, so (with prime_tower only) a model or tower extrusion inside one is
 #   refused, the blocks must pair, and after M623 a mode (G90/G91, M82/M83) the block
 #   changed is unknown, so a later move or extrusion that needs it is refused. A mode set
@@ -1006,8 +1009,10 @@ def _edge_pairs(geometry, spacing: float = EDGE_SAMPLE_MM) -> np.ndarray:
 def _finite(d: np.ndarray, what: str) -> None:
     """Raise ValueError when a gap is not a finite number. NaN compares false with any
     bound, so it would stop a pair splitting and could drop out of a maximum, leaving a
-    false PASS (Codex review 2026-11-16, finding 2): a failed measurement, never a bound.
-    The callers turn the error into an UNKNOWN "analysis error"."""
+    false PASS
+    (Codex review 2026-11-16, research/reviews/2026-11-16-face-down, finding 2): a failed
+    measurement, never a bound. The callers turn the error into an UNKNOWN "analysis
+    error"."""
     if not np.isfinite(d).all():
         raise ValueError(f"{what} is not finite ({int((~np.isfinite(d)).sum())} of "
                          f"{len(d)} samples): the refinement cannot bound the gap")

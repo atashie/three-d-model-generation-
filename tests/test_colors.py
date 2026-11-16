@@ -1816,8 +1816,8 @@ def test_verify_colors_checks_the_form_of_the_settings_block(done, sel, tmp_path
 ], ids=["no version", "int version", "empty version", "no environment", "list environment",
         "missing library", "int library version", "extra library"])
 def test_verify_colors_checks_the_form_of_the_software_fields(done, sel, tmp_path, change):
-    # Codex review 2, finding 2: these are not rebuilt (they may name an older version),
-    # so their form is checked instead.
+    # Codex review 2 (research/reviews/2026-11-11-color-palette), finding 2: these are
+    # not rebuilt (they may name an older version), so their form is checked instead.
     d = _copy(done[1], tmp_path, "colors")
     _edit_record(d, change)
     with pytest.raises(ColorsError, match="tdmg_version must be a version string"):
@@ -1831,8 +1831,9 @@ def test_verify_colors_accepts_an_older_tdmg_version(done, sel, tmp_path):
 
 
 def test_verify_colors_refuses_a_png_pillow_will_not_decode(done, sel, tmp_path):
-    # Codex review 2, finding 1: a compressed text chunk over Pillow's MAX_TEXT_CHUNK made
-    # Image.open raise ValueError, which escaped as a raw ValueError.
+    # Codex review 2 (research/reviews/2026-11-11-color-palette), finding 1: a compressed
+    # text chunk over Pillow's MAX_TEXT_CHUNK made Image.open raise ValueError, which
+    # escaped as a raw ValueError.
     from PIL import PngImagePlugin
     d = _copy(done[1], tmp_path, "colors")
     labels = np.array(Image.open(d / "labels.png"))

@@ -172,9 +172,9 @@ COLOR_RECORD_SCHEMA = "tdmg.colorslice/1"
 # sliced, face down preferred when PRINTABLE, the record's preferred_face and its reason,
 # and under auto a FAIL on the face not chosen no longer sets exit 1. The identity adds
 # the face option ("face"), so auto and both, which slice the same faces, differ. Also
-# (Codex review 2026-11-16, finding 3): the record keeps the print instructions ("print",
-# the CLI's own text), and its review and model_3mf note say to turn model.3mf over for
-# face down.
+# (Codex review 2026-11-16, research/reviews/2026-11-16-face-down, finding 3): the record
+# keeps the print instructions ("print", the CLI's own text), and its review and
+# model_3mf note say to turn model.3mf over for face down.
 COLORSLICE_ALGORITHM = "colorslice-2"
 FACES = ("up", "down")
 FACE_FOLDER = {"up": "face-up", "down": "face-down"}
@@ -371,8 +371,9 @@ NO_FACE_PRINTABLE = ("no face is PRINTABLE: do not print yet; model.3mf is the f
 def print_instructions(face: str, preferred: str | None, face_records: dict) -> str:
     """What to print, as the record keeps it ("print") and the CLI prints it: under auto
     the chosen face's instructions (preferred); with an explicit face, those of every
-    PRINTABLE face sliced; NO_FACE_PRINTABLE when there are none (Codex review
-    2026-11-16, finding 3: face down needs the turn in Bambu Studio)."""
+    PRINTABLE face sliced; NO_FACE_PRINTABLE when there are none
+    (Codex review 2026-11-16, research/reviews/2026-11-16-face-down, finding 3: face
+    down needs the turn in Bambu Studio)."""
     if face == "auto":
         printable = [] if preferred is None else [preferred]
     else:

@@ -24,13 +24,13 @@ F6.portability runs PrusaSlicer 2.9.7 (tdmg.portability;
 docs/plans/2026-11-11-portability-check.md) when --prusaslicer-dir or
 $TDMG_PRUSASLICER_DIR gives its folder. The bed shape and height, nozzle diameter, layer
 and first-layer heights and filament diameter are passed explicitly from the hash-checked
-OrcaSlicer A1 profiles; every other setting is PrusaSlicer 2.9.7's default (Codex review
-2026-11-11, finding 3: for example 20% infill, no elephant-foot compensation and the
-Arachne perimeter generator, where the A1 profile has 15%, 0.075 mm and classic). Without
-it, F6.portability is UNKNOWN. For STL it shows that a second slicer accepts the model as
-modelled and slices its full height (tdmg.portability.PORTABILITY_MEANING); both slicers
-share the admesh STL reader, so a 3MF output must re-run portability with truly different
-readers. Its G-code is kept as
+OrcaSlicer A1 profiles; every other setting is PrusaSlicer 2.9.7's default
+(Codex review 2026-11-11, research/reviews/2026-11-11-portability, finding 3: for example
+20% infill, no elephant-foot compensation and the Arachne perimeter generator, where the
+A1 profile has 15%, 0.075 mm and classic). Without it, F6.portability is UNKNOWN. For STL
+it shows that a second slicer accepts the model as modelled and slices its full height
+(tdmg.portability.PORTABILITY_MEANING); both slicers share the admesh STL reader, so a
+3MF output must re-run portability with truly different readers. Its G-code is kept as
 prusaslicer.portability-only.gcode.txt, generic G-code that is evidence of portability
 only and never for the A1 (not a .gcode name, so no printer software offers it); a FAIL
 quarantines it as prusaslicer.portability-only.gcode.txt.failed, as for plate_1.gcode.
@@ -150,7 +150,8 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   and its commands; the record has "portability" and "certification_note". Revised
 #   before it was pushed: an unverified app tree caps the certification, each PrusaSlicer
 #   run has its own timeout rule, its G-code is a .gcode.txt file, every ";Z:" is checked
-#   and any open_edges line FAILs. After the Codex review (2026-11-11), still before the
+#   and any open_edges line FAILs. After the
+#   Codex review (2026-11-11, research/reviews/2026-11-11-portability), still before the
 #   push: PrusaSlicer's G-code must be complete and extrude on every layer at its height,
 #   and the volume bound covers admesh's zeroed normals.
 # slice-5 (2026-11-13): the pinned A1 machine profile now holds the A1's own start, end,
@@ -167,7 +168,8 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   by refining the edge samples (tdmg.printed.refine_edge, down to EDGE_REFINE_MIN_MM),
 #   so such a layer can now PASS or FAIL; its record adds refined_layers,
 #   pair_bound_max_mm and refine_min_mm. Plan docs/plans/2026-11-16-face-down-default.md,
-#   Decision 2. Under the same unpushed label (Codex review 2026-11-16, finding 1): turns
+#   Decision 2. Under the same unpushed label
+#   (Codex review 2026-11-16, research/reviews/2026-11-16-face-down, finding 1): turns
 #   that tie are resolved per check (tdmg.printed.judge_f3), so a check every tied turn
 #   agrees on keeps its status instead of all three being UNKNOWN.
 SLICE_ALGORITHM_VERSION = "slice-6"

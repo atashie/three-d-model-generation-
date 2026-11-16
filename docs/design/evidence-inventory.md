@@ -4,13 +4,13 @@
 
 Which research records the repository points at, and from where. It is a snapshot for the restructure (Task 1 of `docs/plans/2026-11-16-restructure.md`); line numbers move as files change, so regenerate it before you use it.
 
-A record is one folder under `research/verification/`, `research/reviews/` or `research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under `research_notes/`. A record is **cited** when a machine-read file (a rule, test, profile, code, script, CI or `.toml`/`.yaml` config file) refers to it by path, or by a glob such as `2026-11-10-*`. It is **cited by name** when such a file names it without a path ("Codex review 3", "Codex review 2026-11-14"), and **possibly cited (ambiguous name)** when such a file names a review by a date that two or more review folders share; the script does not guess which. All three count as cited. It is **uncited** when only docs, `docs/STATUS.md`, other config files or other records refer to it, or nothing does. References from other records, including kept ones, do not make a record cited; if an uncited record is removed, those links point at a path that exists only in git history. A record's references to itself are not counted.
+A record is one folder under `research/verification/`, `research/reviews/` or `research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under `research_notes/`. A record is **cited** when a machine-read file (a rule, test, profile, code, script, CI or `.toml`/`.yaml` config file) refers to it by path, or by a glob such as `2026-11-10-*`. It is **cited by name** when such a file names it without a path, by date ("Codex review 2026-11-14"), and **possibly cited (ambiguous name)** when such a file names a review by a date that two or more review folders share; the script does not guess which. All three count as cited. It is **uncited** when only docs, `docs/STATUS.md`, other config files or other records refer to it, or nothing does. References from other records, including kept ones, do not make a record cited; if an uncited record is removed, those links point at a path that exists only in git history. A record's references to itself are not counted.
 
 Each number in the summary's category columns is the number of lines in files of that category that refer to the record, by path, glob or name together. *Linked from docs* shows whether README, CLAUDE.md, `docs/` (not `docs/plans/`) or `docs/STATUS.md` still refer to it. *Linked from kept records* is the number of records that stay in the tree (counted as cited, kept in place or active work) whose files refer to it; the record's own section names them.
 
-What is recognised: paths written from the repository root (`research/...`, with `/` or a backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built from string literals, globs, and review names found by a short pattern list ("Codex" with a review number, or with a date beside it) plus a hand-kept alias table for the numbers (`NAME_ALIASES` in the script). Names are looked for only in machine-read files. Lines there that mention a root word but give no reference are listed under *Unparsed mentions*. Free prose ("the research record", "the review") can still be missed, so read the uncited list before anything is deleted.
+What is recognised: paths written from the repository root (`research/...`, with `/` or a backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built from string literals, globs, and review names found by a short pattern list ("Codex" with a date beside it). A numbered name ("Codex review 3") counts only through a path written on the same line; without one it is listed under *Review mentions not tied to a record*. Names are looked for only in machine-read files. Lines there that mention a root word but give no reference are listed under *Unparsed mentions*. Free prose ("the research record", "the review") can still be missed, so read the uncited list before anything is deleted.
 
-Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous name only). Uncited: 9. Uncited with no references: 0.
+Records: 50. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 9. Uncited with no references: 0.
 
 ## Summary
 
@@ -30,9 +30,15 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 | `docs/plans/2026-11-14-test-strip.md` | cited |  | doc, status | 4 |  | 3 |  | 2 |  |  |  | 3 | 2 | 7 |  |
 | `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc, status | 2 |  | 2 |  | 7 |  |  |  | 3 | 2 | 3 |  |
 | `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 3 | 4 |  |
+| `research/reviews/2026-11-09-codex` | cited |  | doc | 2 |  |  | 2 |  |  |  |  | 2 |  | 2 |  |
 | `research/reviews/2026-11-10-thin-walls` | cited |  | status | 2 |  | 1 |  |  |  |  |  |  | 1 | 2 |  |
 | `research/reviews/2026-11-11-color-palette` | cited |  | status | 2 |  | 8 |  | 8 |  |  |  |  | 3 | 3 |  |
+| `research/reviews/2026-11-11-portability` | cited |  | status | 2 |  | 6 |  | 8 |  |  |  |  | 1 | 2 |  |
+| `research/reviews/2026-11-12-color-3mf` | cited |  | status |  |  | 4 |  | 3 |  |  |  |  | 1 |  |  |
+| `research/reviews/2026-11-12-color-geometry` | cited |  | status | 2 |  | 3 |  | 4 |  |  |  |  | 1 | 2 |  |
+| `research/reviews/2026-11-13-color-slicing` | cited |  | status |  |  | 4 |  | 4 |  |  |  |  | 2 |  |  |
 | `research/reviews/2026-11-14-test-strips` | cited |  | status | 2 |  | 9 |  | 9 |  |  |  |  | 2 | 3 |  |
+| `research/reviews/2026-11-16-face-down` | cited |  | status | 1 |  | 8 |  | 10 |  |  |  |  | 1 | 1 |  |
 | `research/verification/2026-11-08-stack-smoke` | cited |  | doc, status | 2 | 1 | 1 |  |  |  |  | 1 | 4 | 1 | 23 |  |
 | `research/verification/2026-11-09-slicer-3mf-import` | cited |  | doc | 2 | 8 |  |  |  |  |  |  | 1 |  | 4 |  |
 | `research/verification/2026-11-10-orcaslicer-windows` | cited |  | doc, status | 5 | 2 | 1 | 3 | 2 | 1 |  |  | 4 | 2 | 53 |  |
@@ -49,13 +55,7 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 | `research/verification/2026-11-15-first-ams-print` | cited |  | doc, status | 3 |  | 1 |  | 1 |  |  |  | 7 | 2 | 5 |  |
 | `research/verification/2026-11-16-repeatability` | cited | active work, stays where it is |  | 1 |  |  |  |  | 1 |  |  |  |  | 1 |  |
 | `research_notes/Image to printable 3D model landscape` | cited | kept in place (design section 6) | doc | 1 | 28 |  |  |  |  |  |  | 4 |  | 2 |  |
-| `research/reviews/2026-11-12-color-3mf` | cited by name |  | status |  |  | 4 |  | 3 |  |  |  |  | 1 |  |  |
-| `research/reviews/2026-11-12-color-geometry` | cited by name |  | status | 2 |  | 3 |  | 4 |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-13-color-slicing` | cited by name |  | status |  |  | 4 |  | 4 |  |  |  |  | 2 |  |  |
-| `research/reviews/2026-11-09-codex` | possibly cited (ambiguous name) |  | doc | 2 |  |  | 1 |  |  |  |  | 2 |  | 2 |  |
 | `research/reviews/2026-11-09-pc` | possibly cited (ambiguous name) |  |  | 1 |  |  | 1 |  |  |  |  |  |  | 1 |  |
-| `research/reviews/2026-11-11-portability` | possibly cited (ambiguous name) |  | status | 2 |  | 3 |  | 4 |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-16-face-down` | possibly cited (ambiguous name) |  | status | 1 |  | 4 |  | 5 |  |  |  |  | 1 | 1 |  |
 | `research/reviews/2026-11-16-restructure-design` | possibly cited (ambiguous name) | active work, stays where it is | status | 1 |  | 4 |  | 5 |  |  |  |  | 1 | 1 |  |
 | `docs/plans/2026-11-16-restructure-design.md` | uncited | active work, stays where it is | status | 2 |  |  |  |  |  |  |  |  | 1 | 4 |  |
 | `docs/plans/2026-11-16-restructure.md` | uncited | active work, stays where it is | status | 2 |  |  |  |  |  |  |  |  | 1 | 3 |  |
@@ -175,8 +175,8 @@ Linked from kept records: `research/verification/2026-11-11-prusaslicer-windows`
 - `research/verification/2026-11-12-color-3mf/README.md` (record): lines 3
 - `research/verification/2026-11-12-color-3mf/measure_import.py` (record): lines 1
 - `research/verification/2026-11-12-color-3mf/measure_reimport.py` (record): lines 1
-- `src/tdmg/color_checks.py` (code): lines 14, 420
-- `src/tdmg/colored_flat.py` (code): lines 25, 107
+- `src/tdmg/color_checks.py` (code): lines 14, 421
+- `src/tdmg/colored_flat.py` (code): lines 25, 108
 - `src/tdmg/threemf.py` (code): lines 1
 - `tests/test_colored_flat.py` (test): lines 680
 - `tests/test_threemf.py` (test): lines 4
@@ -219,15 +219,15 @@ Linked from kept records: `docs/plans/2026-11-11-color-design.md`, `research/rev
 - `research/verification/2026-11-13-color-slicing/README.md` (record): lines 3
 - `research/verification/2026-11-13-color-slicing/measure_slicing.py` (record): lines 1
 - `research/verification/2026-11-13-color-slicing/raw/crosscheck-task5.json` (record): lines 241, 242, 243, 486, 487, 488, 731, 732, 733, 976, 977, 978, 1221, 1222, 1223, 1466, 1467, 1468, 1711, 1712, 1713, 1956, 1957, 1958
-- `src/tdmg/color_checks.py` (code): lines 17, 639, 718
-- `src/tdmg/color_gcode.py` (code): lines 1, 152, 154, 157
+- `src/tdmg/color_checks.py` (code): lines 17, 642, 721
+- `src/tdmg/color_gcode.py` (code): lines 1, 154, 156, 159
 - `src/tdmg/color_slicing.py` (code): lines 1, 167
 - `src/tdmg/orca_input.py` (code): lines 1
-- `src/tdmg/slicing.py` (code): lines 216
+- `src/tdmg/slicing.py` (code): lines 218
 - `tests/test_color_gcode.py` (test): lines 4
 - `tests/test_color_slice.py` (test): lines 2
 - `tests/test_orca_input.py` (test): lines 5
-- `tests/test_slice.py` (test): lines 1258
+- `tests/test_slice.py` (test): lines 1259
 
 Linked from kept records: `docs/plans/2026-11-11-color-design.md`, `research/reviews/2026-11-13-color-slicing`, `research/verification/2026-11-13-a1-profile-include`, `research/verification/2026-11-13-color-slicing`.
 
@@ -257,10 +257,10 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 - `research/verification/2026-11-15-first-ams-print/README.md` (record): lines 66
 - `src/tdmg/cli.py` (code): lines 403
 - `src/tdmg/color_slicing.py` (code): lines 170, 235
-- `src/tdmg/printed.py` (code): lines 20, 63, 1018
-- `src/tdmg/slicing.py` (code): lines 169
+- `src/tdmg/printed.py` (code): lines 20, 63, 1023
+- `src/tdmg/slicing.py` (code): lines 170
 - `tests/test_color_slice.py` (test): lines 725
-- `tests/test_printed.py` (test): lines 1087
+- `tests/test_printed.py` (test): lines 1088
 
 Linked from kept records: `research/reviews/2026-11-16-face-down`, `research/verification/2026-11-15-first-ams-print`.
 
@@ -275,6 +275,16 @@ Linked from kept records: `research/reviews/2026-11-16-face-down`, `research/ver
 - `src/tdmg/checks.py` (code): lines 64, 76
 
 Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `reports/Image to printable 3D model landscape.md`.
+
+### `research/reviews/2026-11-09-codex`
+
+- `docs/PLAN.md` (doc): lines 8, 429
+- `profiles/printers/bambu-a1.yaml` (profile, ambiguous name): lines 44
+- `profiles/printers/bambu-a1.yaml` (profile): lines 43
+- `reports/Image to printable 3D model landscape.md` (record): lines 348
+- `research/verification/2026-11-09-slicer-3mf-import/README.md` (record): lines 14
+
+Linked from kept records: `reports/Image to printable 3D model landscape.md`, `research/verification/2026-11-09-slicer-3mf-import`.
 
 ### `research/reviews/2026-11-10-thin-walls`
 
@@ -291,17 +301,62 @@ Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 563
 - `research/verification/2026-11-11-prusaslicer-windows/README.md` (record): lines 170, 179
 - `src/tdmg/flat.py` (code): lines 697
-- `src/tdmg/portability.py` (code, ambiguous name): lines 439, 629
-- `src/tdmg/slicing.py` (code, ambiguous name): lines 27, 153
+- `src/tdmg/portability.py` (code, ambiguous name): lines 440, 631
+- `src/tdmg/slicing.py` (code, ambiguous name): lines 28, 154
 - `src/tdmg/smoothing.py` (code): lines 16, 296, 328
 - `tests/fake_prusa.py` (test, ambiguous name): lines 27
-- `tests/test_colors.py` (test, name): lines 1819, 1834
+- `tests/test_colors.py` (test): lines 1819, 1834
 - `tests/test_portability.py` (test, ambiguous name): lines 475
-- `tests/test_selection.py` (test, name): lines 155
+- `tests/test_selection.py` (test): lines 155
 - `tests/test_slice.py` (test, ambiguous name): lines 1077
 - `tests/test_smooth_labels.py` (test): lines 203, 561
 
 Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `research/verification/2026-11-11-prusaslicer-windows`.
+
+### `research/reviews/2026-11-11-portability`
+
+- `docs/STATUS.md` (status): lines 361
+- `docs/plans/2026-11-11-portability-check.md` (record): lines 122
+- `research/verification/2026-11-11-prusaslicer-windows/README.md` (record): lines 145
+- `src/tdmg/portability.py` (code, ambiguous name): lines 440, 631
+- `src/tdmg/portability.py` (code): lines 440, 631
+- `src/tdmg/slicing.py` (code, ambiguous name): lines 28, 154
+- `src/tdmg/slicing.py` (code): lines 28, 154
+- `tests/fake_prusa.py` (test, ambiguous name): lines 27
+- `tests/fake_prusa.py` (test): lines 28
+- `tests/test_portability.py` (test, ambiguous name): lines 475
+- `tests/test_portability.py` (test): lines 475
+- `tests/test_slice.py` (test, ambiguous name): lines 1077
+- `tests/test_slice.py` (test): lines 1077
+
+Linked from kept records: `docs/plans/2026-11-11-portability-check.md`, `research/verification/2026-11-11-prusaslicer-windows`.
+
+### `research/reviews/2026-11-12-color-3mf`
+
+- `docs/STATUS.md` (status): lines 338
+- `src/tdmg/color_checks.py` (code): lines 452, 536, 548
+- `tests/test_threemf.py` (test): lines 306, 331, 364, 375
+
+### `research/reviews/2026-11-12-color-geometry`
+
+- `docs/STATUS.md` (status): lines 249
+- `docs/plans/2026-11-12-color-geometry.md` (record): lines 458
+- `docs/plans/2026-11-16-restructure.md` (record): lines 126
+- `src/tdmg/color_checks.py` (code): lines 332, 875
+- `src/tdmg/color_glue.py` (code): lines 331
+- `src/tdmg/colored_flat.py` (code): lines 97
+- `tests/test_color_checks.py` (test): lines 909
+- `tests/test_color_glue.py` (test): lines 188, 460
+
+Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `docs/plans/2026-11-16-restructure.md`.
+
+### `research/reviews/2026-11-13-color-slicing`
+
+- `docs/STATUS.md` (status): lines 310, 313
+- `src/tdmg/color_gcode.py` (code): lines 35, 70, 936
+- `src/tdmg/printed.py` (code): lines 157
+- `tests/test_color_gcode.py` (test): lines 575, 578, 623
+- `tests/test_color_slice.py` (test): lines 1044
 
 ### `research/reviews/2026-11-14-test-strips`
 
@@ -314,6 +369,23 @@ Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `research/ve
 - `tests/test_calibration_strip.py` (test, name): lines 571, 701, 833, 979, 1013, 1162, 1324, 1349, 1380
 
 Linked from kept records: `docs/plans/2026-11-14-test-strip.md`, `research/verification/2026-11-14-test-strips`.
+
+### `research/reviews/2026-11-16-face-down`
+
+- `docs/STATUS.md` (status): lines 466
+- `docs/plans/2026-11-16-face-down-default.md` (record): lines 145
+- `src/tdmg/color_slicing.py` (code, ambiguous name): lines 175, 375
+- `src/tdmg/color_slicing.py` (code): lines 175, 375
+- `src/tdmg/printed.py` (code, ambiguous name): lines 75, 1013
+- `src/tdmg/printed.py` (code): lines 75, 1013
+- `src/tdmg/slicing.py` (code, ambiguous name): lines 172
+- `src/tdmg/slicing.py` (code): lines 172
+- `tests/test_color_slice.py` (test, ambiguous name): lines 792
+- `tests/test_color_slice.py` (test): lines 792
+- `tests/test_printed.py` (test, ambiguous name): lines 703, 1216, 1290
+- `tests/test_printed.py` (test): lines 703, 1216, 1290
+
+Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`.
 
 ### `research/verification/2026-11-08-stack-smoke`
 
@@ -406,7 +478,7 @@ Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `docs/plans/
 - `docs/print-types/recipes/r1-flat-single.md` (doc): lines 74
 - `research/reviews/2026-11-10-thin-walls/README.md` (record): lines 49
 - `research/verification/2026-11-11-prusaslicer-windows/controls_portability.py` (record): lines 5
-- `src/tdmg/printed.py` (code): lines 3, 97
+- `src/tdmg/printed.py` (code): lines 3, 99
 - `tests/gcode_fixtures.py` (test): lines 4
 - `tests/test_slice.py` (test): lines 59
 
@@ -440,7 +512,7 @@ Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 20
 - `rules/tools.yaml` (rule): lines 41
 - `src/tdmg/portability.py` (code): lines 6
-- `src/tdmg/printed.py` (code): lines 80
+- `src/tdmg/printed.py` (code): lines 82
 - `tests/test_portability.py` (test): lines 3, 39, 76
 - `tests/test_rules.py` (test): lines 59
 
@@ -484,9 +556,9 @@ Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `research/r
 - `research/reviews/2026-11-13-color-slicing/prompt.md` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 19
 - `scripts/setup_orcaslicer.py` (script): lines 24, 153
-- `src/tdmg/printed.py` (code): lines 118, 130, 449
-- `src/tdmg/slicing.py` (code): lines 158
-- `tests/test_printed.py` (test): lines 811
+- `src/tdmg/printed.py` (code): lines 120, 132, 452
+- `src/tdmg/slicing.py` (code): lines 159
+- `tests/test_printed.py` (test): lines 812
 - `tests/test_setup_orcaslicer.py` (test): lines 247, 303
 - `tests/test_slicer.py` (test): lines 39
 
@@ -501,13 +573,13 @@ Linked from kept records: `docs/plans/2026-11-13-color-slicing.md`, `research/re
 - `docs/print-types/attributes/color-multi.md` (doc): lines 187, 381
 - `research/reviews/2026-11-13-color-slicing/prompt.md` (record): lines 3
 - `research/verification/2026-11-14-test-strips/README.md` (record): lines 127
-- `src/tdmg/color_checks.py` (code): lines 749
-- `src/tdmg/color_gcode.py` (code): lines 18, 83, 167, 938
+- `src/tdmg/color_checks.py` (code): lines 752
+- `src/tdmg/color_gcode.py` (code): lines 18, 85, 169, 941
 - `src/tdmg/color_slicing.py` (code): lines 320
-- `src/tdmg/printed.py` (code): lines 140, 161
+- `src/tdmg/printed.py` (code): lines 142, 164
 - `tests/test_color_gcode.py` (test): lines 6
-- `tests/test_color_slice.py` (test): lines 958, 1040
-- `tests/test_printed.py` (test): lines 1009
+- `tests/test_color_slice.py` (test): lines 959, 1041
+- `tests/test_printed.py` (test): lines 1010
 
 Linked from kept records: `docs/plans/2026-11-13-color-slicing.md`, `docs/plans/2026-11-14-test-strip.md`, `research/reviews/2026-11-13-color-slicing`, `research/verification/2026-11-14-test-strips`.
 
@@ -535,7 +607,7 @@ Linked from kept records: `docs/plans/2026-11-14-test-strip.md`, `research/revie
 - `docs/print-types/attributes/color-multi.md` (doc): lines 34, 142, 198
 - `research/reviews/2026-11-16-face-down/prompt.md` (record): lines 19
 - `src/tdmg/color_slicing.py` (code): lines 237
-- `tests/test_color_gcode.py` (test): lines 744
+- `tests/test_color_gcode.py` (test): lines 746
 
 Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`, `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-16-face-down`.
 
@@ -570,75 +642,16 @@ Linked from kept records: `research/reviews/2026-11-09-codex`.
 
 ## Records cited by name only
 
-### `research/reviews/2026-11-12-color-3mf`
-
-- `docs/STATUS.md` (status): lines 338
-- `src/tdmg/color_checks.py` (code, name): lines 450, 533, 544
-- `tests/test_threemf.py` (test, name): lines 306, 330, 363, 373
-
-### `research/reviews/2026-11-12-color-geometry`
-
-- `docs/STATUS.md` (status): lines 249
-- `docs/plans/2026-11-12-color-geometry.md` (record): lines 458
-- `docs/plans/2026-11-16-restructure.md` (record): lines 126
-- `src/tdmg/color_checks.py` (code, name): lines 332, 871
-- `src/tdmg/color_glue.py` (code, name): lines 331
-- `src/tdmg/colored_flat.py` (code, name): lines 97
-- `tests/test_color_checks.py` (test, name): lines 908
-- `tests/test_color_glue.py` (test, name): lines 188, 459
-
-Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `docs/plans/2026-11-16-restructure.md`.
-
-### `research/reviews/2026-11-13-color-slicing`
-
-- `docs/STATUS.md` (status): lines 310, 313
-- `src/tdmg/color_gcode.py` (code, name): lines 34, 68, 934
-- `src/tdmg/printed.py` (code, name): lines 154
-- `tests/test_color_gcode.py` (test, name): lines 575, 578, 622
-- `tests/test_color_slice.py` (test, name): lines 1043
+None.
 
 ## Records possibly cited by an ambiguous name
-
-### `research/reviews/2026-11-09-codex`
-
-- `docs/PLAN.md` (doc): lines 8, 429
-- `profiles/printers/bambu-a1.yaml` (profile, ambiguous name): lines 43
-- `reports/Image to printable 3D model landscape.md` (record): lines 348
-- `research/verification/2026-11-09-slicer-3mf-import/README.md` (record): lines 14
-
-Linked from kept records: `reports/Image to printable 3D model landscape.md`, `research/verification/2026-11-09-slicer-3mf-import`.
 
 ### `research/reviews/2026-11-09-pc`
 
 - `docs/plans/2026-11-10-subject-selection.md` (record): lines 1042
-- `profiles/printers/bambu-a1.yaml` (profile, ambiguous name): lines 43
+- `profiles/printers/bambu-a1.yaml` (profile, ambiguous name): lines 44
 
 Linked from kept records: `docs/plans/2026-11-10-subject-selection.md`.
-
-### `research/reviews/2026-11-11-portability`
-
-- `docs/STATUS.md` (status): lines 361
-- `docs/plans/2026-11-11-portability-check.md` (record): lines 122
-- `research/verification/2026-11-11-prusaslicer-windows/README.md` (record): lines 145
-- `src/tdmg/portability.py` (code, ambiguous name): lines 439, 629
-- `src/tdmg/slicing.py` (code, ambiguous name): lines 27, 153
-- `tests/fake_prusa.py` (test, ambiguous name): lines 27
-- `tests/test_portability.py` (test, ambiguous name): lines 475
-- `tests/test_slice.py` (test, ambiguous name): lines 1077
-
-Linked from kept records: `docs/plans/2026-11-11-portability-check.md`, `research/verification/2026-11-11-prusaslicer-windows`.
-
-### `research/reviews/2026-11-16-face-down`
-
-- `docs/STATUS.md` (status): lines 466
-- `docs/plans/2026-11-16-face-down-default.md` (record): lines 145
-- `src/tdmg/color_slicing.py` (code, ambiguous name): lines 175, 374
-- `src/tdmg/printed.py` (code, ambiguous name): lines 74, 1009
-- `src/tdmg/slicing.py` (code, ambiguous name): lines 170
-- `tests/test_color_slice.py` (test, ambiguous name): lines 792
-- `tests/test_printed.py` (test, ambiguous name): lines 703, 1215, 1289
-
-Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`.
 
 ### `research/reviews/2026-11-16-restructure-design`
 
@@ -646,11 +659,11 @@ Active work, stays where it is.
 
 - `docs/STATUS.md` (status): lines 139
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 5
-- `src/tdmg/color_slicing.py` (code, ambiguous name): lines 175, 374
-- `src/tdmg/printed.py` (code, ambiguous name): lines 74, 1009
-- `src/tdmg/slicing.py` (code, ambiguous name): lines 170
+- `src/tdmg/color_slicing.py` (code, ambiguous name): lines 175, 375
+- `src/tdmg/printed.py` (code, ambiguous name): lines 75, 1013
+- `src/tdmg/slicing.py` (code, ambiguous name): lines 172
 - `tests/test_color_slice.py` (test, ambiguous name): lines 792
-- `tests/test_printed.py` (test, ambiguous name): lines 703, 1215, 1289
+- `tests/test_printed.py` (test, ambiguous name): lines 703, 1216, 1290
 
 Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`.
 
@@ -813,57 +826,55 @@ A machine-read file names a review by a date that several review folders share. 
 
 | File | Line | Text | Candidates |
 |---|---|---|---|
-| `profiles/printers/bambu-a1.yaml` | 43 | `Codex, 2026-11-09); not fetched by us ac` | `research/reviews/2026-11-09-codex`, `research/reviews/2026-11-09-pc` |
-| `src/tdmg/color_slicing.py` | 175 | `Codex review 2026-11-16, finding 3): the` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `src/tdmg/color_slicing.py` | 374 | `Codex review 2026-11-16, finding 3: face` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `src/tdmg/portability.py` | 439 | `Codex review 2026-11-11, finding 1): G90` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
-| `src/tdmg/portability.py` | 629 | `Codex review 2026-11-11, finding 2): adm` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
-| `src/tdmg/printed.py` | 74 | `Codex review 2026-11-16, finding 4: a 0.` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `src/tdmg/printed.py` | 1009 | `Codex review 2026-11-16, finding 2): a f` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `src/tdmg/slicing.py` | 27 | `Codex review 2026-11-11, finding 3: for` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
-| `src/tdmg/slicing.py` | 153 | `Codex review (2026-11-11), still before` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
-| `src/tdmg/slicing.py` | 170 | `Codex review 2026-11-16, finding 1): tur` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `tests/fake_prusa.py` | 27 | `Codex review 2026-11-11, finding 1), so` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
-| `tests/test_color_slice.py` | 792 | `Codex review 2026-11-16, finding 3: the` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `tests/test_portability.py` | 475 | `Codex review 2026-11-11, finding 2: belo` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
-| `tests/test_printed.py` | 703 | `Codex review 2026-11-16, finding 1: a ne` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `tests/test_printed.py` | 1215 | `Codex review 2026-11-16, finding 2 (faul` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `tests/test_printed.py` | 1289 | `Codex review 2026-11-16, finding 4: a fi` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
-| `tests/test_slice.py` | 1077 | `Codex review 2026-11-11, finding 1: mark` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `profiles/printers/bambu-a1.yaml` | 44 | `Codex, 2026-11-09); not fetched by us ac` | `research/reviews/2026-11-09-codex`, `research/reviews/2026-11-09-pc` |
+| `src/tdmg/color_slicing.py` | 175 | `Codex review 2026-11-16, research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `src/tdmg/color_slicing.py` | 375 | `Codex review 2026-11-16, research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `src/tdmg/portability.py` | 440 | `Codex review 2026-11-11, research/review` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `src/tdmg/portability.py` | 631 | `Codex review 2026-11-11, research/review` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `src/tdmg/printed.py` | 75 | `Codex review 2026-11-16, research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `src/tdmg/printed.py` | 1013 | `Codex review 2026-11-16, research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `src/tdmg/slicing.py` | 28 | `Codex review 2026-11-11, research/review` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `src/tdmg/slicing.py` | 154 | `Codex review (2026-11-11, research/revie` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `src/tdmg/slicing.py` | 172 | `Codex review 2026-11-16, research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `tests/fake_prusa.py` | 27 | `Codex review 2026-11-11, research/review` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `tests/test_color_slice.py` | 792 | `Codex review 2026-11-16 (research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `tests/test_portability.py` | 475 | `Codex review 2026-11-11 (research/review` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
+| `tests/test_printed.py` | 703 | `Codex review 2026-11-16 (research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `tests/test_printed.py` | 1216 | `Codex review 2026-11-16 (research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `tests/test_printed.py` | 1290 | `Codex review 2026-11-16 (research/review` | `research/reviews/2026-11-16-face-down`, `research/reviews/2026-11-16-restructure-design` |
+| `tests/test_slice.py` | 1077 | `Codex review 2026-11-11 (research/review` | `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability` |
 
 ## Review mentions not tied to a record
 
-A machine-read file mentions a review with no number in the alias table and no date, or a review that has no record folder. Read these by hand.
+A machine-read file mentions a review with no date and no review path on the same line, or a review that has no record folder. Read these by hand.
 
 | File | Line | Text | Why |
 |---|---|---|---|
 | `src/tdmg/calibration_strip.py` | 687 | `review N1): the` | a named review with no record folder |
 | `src/tdmg/calibration_strip.py` | 855 | `review P5). ASCII and LF only, so it is` | a named review with no record folder |
 | `src/tdmg/cli.py` | 576 | `review P1)."""` | a named review with no record folder |
-| `src/tdmg/color_checks.py` | 538 | `review of R2 step 4 Tasks 3-4).` | a named review with no record folder |
-| `src/tdmg/printed.py` | 1300 | `Codex review of that day, finding 1, whe` | no review number or date |
-| `src/tdmg/printed.py` | 1300 | `review of that day, finding 1, where ref` | a named review with no record folder |
+| `src/tdmg/color_checks.py` | 541 | `review of R2 step 4 Tasks 3-4).` | a named review with no record folder |
+| `src/tdmg/printed.py` | 1305 | `Codex review of that day, finding 1, whe` | no review number or date |
+| `src/tdmg/printed.py` | 1305 | `review of that day, finding 1, where ref` | a named review with no record folder |
 | `tests/test_calibration_strip.py` | 891 | `Review N1: the dated cause is fixed text` | a named review with no record folder |
 | `tests/test_calibration_strip.py` | 1242 | `Review P5: the counts in the instruction` | a named review with no record folder |
 | `tests/test_calibration_strip.py` | 1283 | `Review P1: one plain line in the termina` | a named review with no record folder |
 | `tests/test_calibration_strip.py` | 1284 | `Codex review finding 2: the line says wh` | no review number or date |
 | `tests/test_calibration_strip.py` | 1400 | `Review P2: a strip that cannot be built ` | a named review with no record folder |
 | `tests/test_color_config.py` | 583 | `Codex review, Task 8). with pytest.raise` | no review number or date |
-| `tests/test_color_slice.py` | 1046 | `Codex finding 3: both glue-piece rows de` | no review number or date |
-| `tests/test_color_slice.py` | 1076 | `Codex finding 4: the 'dot inlay' case, a` | no review number or date |
-| `tests/test_color_slice.py` | 1095 | `Codex finding 4: an unsupported G4 X1 le` | no review number or date |
+| `tests/test_color_slice.py` | 1047 | `Codex finding 3: both glue-piece rows de` | no review number or date |
+| `tests/test_color_slice.py` | 1077 | `Codex finding 4: the 'dot inlay' case, a` | no review number or date |
+| `tests/test_color_slice.py` | 1096 | `Codex finding 4: an unsupported G4 X1 le` | no review number or date |
 | `tests/test_colors.py` | 1648 | `Codex review: what verify_colors must re` | no review number or date |
 | `tests/test_orca_input.py` | 585 | `review of Tasks 3-4, r34/holes.py). Each` | a named review with no record folder |
-| `tests/test_portability.py` | 486 | `Codex's case: a centred binary-STL cube` | no review number or date |
+| `tests/test_portability.py` | 487 | `Codex's case: a centred binary-STL cube` | no review number or date |
 | `tests/test_printed.py` | 671 | `Codex item 1).""" sq = square()` | no review number or date |
-| `tests/test_printed.py` | 736 | `Codex item 2: the model is 5 layers; the` | no review number or date |
-| `tests/test_printed.py` | 749 | `Codex item 3: five nominal layers, all c` | no review number or date |
-| `tests/test_printed.py` | 755 | `Codex item 4: hardly any plastic for ful` | no review number or date |
-| `tests/test_printed.py` | 796 | `Codex item 5: a 0.44 mm hole centred at` | no review number or date |
+| `tests/test_printed.py` | 737 | `Codex item 2: the model is 5 layers; the` | no review number or date |
+| `tests/test_printed.py` | 750 | `Codex item 3: five nominal layers, all c` | no review number or date |
+| `tests/test_printed.py` | 756 | `Codex item 4: hardly any plastic for ful` | no review number or date |
+| `tests/test_printed.py` | 797 | `Codex item 5: a 0.44 mm hole centred at` | no review number or date |
 | `tests/test_slice.py` | 753 | `Codex item 2: the G-code stops after 2 o` | no review number or date |
-| `tests/test_threemf.py` | 363 | `Review of the Codex 4 fix: on Windows, z` | a named review with no record folder |
-| `tests/test_threemf.py` | 373 | `Review of the Codex 4 fix: a "version ne` | a named review with no record folder |
-| `tests/test_threemf.py` | 562 | `review of R2 step 4 Tasks 3-4, r34/holes` | a named review with no record folder |
+| `tests/test_threemf.py` | 565 | `review of R2 step 4 Tasks 3-4, r34/holes` | a named review with no record folder |
 
 ## Unparsed mentions
 
@@ -873,9 +884,9 @@ A line in a machine-read file that puts a root word (research, reports, research
 |---|---|---|
 | `tests/conftest.py` | 22 | `RESEARCH / "results.txt").read_text(encoding="utf-` |
 | `tests/test_color_glue.py` | 42 | `plans' test thickness.` |
-| `tests/test_color_slice.py` | 811 | `plans' case (plan amendment): face down FAILs F3,` |
-| `tests/test_color_slice.py` | 1086 | `plans" in text` |
-| `tests/test_slice.py` | 1351 | `research"` |
+| `tests/test_color_slice.py` | 812 | `plans' case (plan amendment): face down FAILs F3,` |
+| `tests/test_color_slice.py` | 1087 | `plans" in text` |
+| `tests/test_slice.py` | 1352 | `research"` |
 
 ## Glob matches
 

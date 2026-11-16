@@ -31,7 +31,8 @@ The reader (read_multicolor) has two passes over the same text, and refuses
     and M621 in the forms M621 S<n>A and M621 S255; the pairs must match and not nest. A
     FLUSH block must lie inside a CP TOOLCHANGE block and hold no move but E-only G0/G1
     (with E and F words only, E > 0, relative E). Anything else of these is refused;
-  - firmware conditional blocks (M622 ... M623; Codex review 5, finding 1): the firmware
+  - firmware conditional blocks (M622 ... M623;
+    Codex review 5, research/reviews/2026-11-13-color-slicing, finding 1): the firmware
     may skip one, so a T command, an M620/M621, a FLUSH block, or (in the geometry pass)
     a model or tower extrusion inside one is refused; the blocks must pair; and after
     M623 a mode the block changed (G90/G91, M82/M83) is unknown. The owner's G-codes set
@@ -65,8 +66,9 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   each of its layers; no other tool prints model features; and the prime tower's beads
   reach into the silhouette by no more than the same allowance (_tower_depth); and the
   nozzle during each FLUSH block (an E-only purge: no bead, no segment) is off the
-  printable plate, the edge included (UNKNOWN when its position is unknown; Codex review
-  5, finding 2). The owner's G-codes flush at bed (267, 128), off the plate.
+  printable plate, the edge included (UNKNOWN when its position is unknown;
+  Codex review 5, research/reviews/2026-11-13-color-slicing, finding 2). The owner's
+  G-codes flush at bed (267, 128), off the plate.
 - F6.filaments_used (gated): the filaments loaded and the tools printing model features
   are exactly the plan's, one per body; the header's "; filament:" list is 1..n; the
   config's filament_colour is the plan's colors in filament order.
@@ -931,10 +933,11 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
                             f"{k + 1} (allowance {allowance:g} mm)")
         elif depth + OVERPRINT_BOUND_MM > allowance:
             near.append(f"prime tower layer {k + 1}: {depth:.3f} mm into the model")
-    # The flush (Codex review 5, finding 2): E-only, so it lays down no bead and no
-    # segment, and a purge of tens of mm of filament spreads by an amount this module does
-    # not model. So the nozzle must be off the printable plate (setup.plate, the edge
-    # included), where the owner's G-codes flush (bed (267, 128) at every FLUSH_START:
+    # The flush (Codex review 5, research/reviews/2026-11-13-color-slicing, finding 2):
+    # E-only, so it lays down no bead and no segment, and a purge of tens of mm of
+    # filament spreads by an amount this module does not model. So the nozzle must be off
+    # the printable plate (setup.plate, the edge included), where the owner's G-codes
+    # flush (bed (267, 128) at every FLUSH_START:
     # research/verification/2026-11-13-color-slicing/measure_conditionals.py).
     plate = setup.plate
     flushes, unknown = [], []

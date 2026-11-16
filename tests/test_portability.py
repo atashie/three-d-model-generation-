@@ -472,8 +472,9 @@ def test_the_volume_bound_holds_for_random_float32_meshes(seed):
 
 @pytest.mark.parametrize("side", [5e-7, 1e-6, 1.0001e-6, 1.5e-6, 3e-6, 1e-5])
 def test_the_volume_bound_covers_zeroed_normals(side):
-    # Codex review 2026-11-11, finding 2: below admesh's normal cutoff a facet's term is 0.
-    # A cube of side 1e-6 has |C| = 1e-12 per facet, so these straddle the cutoff.
+    # Codex review 2026-11-11 (research/reviews/2026-11-11-portability), finding 2: below
+    # admesh's normal cutoff a facet's term is 0. A cube of side 1e-6 has |C| = 1e-12 per
+    # facet, so these straddle the cutoff.
     stl = trimesh.creation.box((side, side, side)).apply_translation((side,) * 3).export(
         file_type="stl")
     tri = _tris(stl)

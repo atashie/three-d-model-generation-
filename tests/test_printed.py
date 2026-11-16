@@ -700,10 +700,11 @@ def test_ambiguous_placements_with_different_verdicts_are_unknown(monkeypatch):
 
 
 def test_ambiguity_is_resolved_per_check():
-    # Codex review 2026-11-16, finding 1: a nearly square section whose quarter turns tie.
-    # Refinement settles coverage differently between them, but connectivity FAILs (a cut
-    # through the section) and overprint PASSes on every tied turn: those stand, and only
-    # coverage, where the turns disagree, is UNKNOWN.
+    # Codex review 2026-11-16 (research/reviews/2026-11-16-face-down), finding 1: a nearly
+    # square section whose quarter turns tie. Refinement settles coverage differently
+    # between them, but connectivity FAILs (a cut through the section) and overprint
+    # PASSes on every tied turn: those stand, and only coverage, where the turns disagree,
+    # is UNKNOWN.
     section = shapely.box(0, 0, 10, 9.98)
     centre = (5, 4.99)
     printed = section.difference(shapely.Point(10.02, 5.01495).buffer(0.225, quad_segs=64)
@@ -1212,11 +1213,11 @@ def test_a_gap_hidden_on_a_rings_closing_piece_is_found(x, y):
 
 
 def test_a_non_finite_refined_gap_is_refused_not_passed(monkeypatch):
-    # Codex review 2026-11-16, finding 2 (fault injection): with every midpoint's gap NaN,
-    # NaN bounds stopped splitting and max() dropped them, so a notch 0.21 mm deep (over
-    # 0.2) PASSed with a bound of 0.185 mm. A gap that is not a number is a failed
-    # measurement: refine_edge raises, which f3_checks and tdmg.color_gcode turn into an
-    # UNKNOWN "analysis error".
+    # Codex review 2026-11-16 (research/reviews/2026-11-16-face-down), finding 2 (fault
+    # injection): with every midpoint's gap NaN, NaN bounds stopped splitting and max()
+    # dropped them, so a notch 0.21 mm deep (over 0.2) PASSed with a bound of 0.185 mm. A
+    # gap that is not a number is a failed measurement: refine_edge raises, which
+    # f3_checks and tdmg.color_gcode turn into an UNKNOWN "analysis error".
     section, alignment = square(), Alignment(0, (5, 5), PLATE.centre)
     printed = alignment.apply(notched(10, 5.025, 0.21))
     edges = edge_gaps(section, printed, alignment)
@@ -1286,9 +1287,10 @@ def test_the_refinement_floor_is_one_unit_of_the_g_codes_last_digit():
 
 
 def test_the_floor_is_a_stopping_choice_and_stays_conservative(monkeypatch):
-    # Codex review 2026-11-16, finding 4: a finer floor can settle a case 0.001 mm leaves
-    # open, so the floor is not a limit of what can be measured. At 0.001 mm the case stays
-    # UNKNOWN (never a PASS); at 0.0001 mm it PASSes.
+    # Codex review 2026-11-16 (research/reviews/2026-11-16-face-down), finding 4: a finer
+    # floor can settle a case 0.001 mm leaves open, so the floor is not a limit of what can
+    # be measured. At 0.001 mm the case stays UNKNOWN (never a PASS); at 0.0001 mm it
+    # PASSes.
     section, alignment = shapely.box(0, 0, 9.9999, 10), Alignment(0, (5, 5), (5, 5))
     printed = shapely.box(-1, -1, 9.8, 11)
     edges = edge_gaps(section, printed, alignment)

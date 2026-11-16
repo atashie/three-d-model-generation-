@@ -572,10 +572,11 @@ def test_a_manual_filament_change_or_pause_is_unknown(command):
     assert _all_unknown(checks) and command in record["reason"]
 
 
-# --- Codex review 5: firmware conditionals and the flush position -----------------------
+# --- Codex review 5 (research/reviews/2026-11-13-color-slicing): conditionals and the flush ------
 
 # What the firmware may skip (M622 J<n> ... M623) cannot be known to print. The three cases
-# Codex review 5 (finding 1) ran: each passed every required check before the fix.
+# Codex review 5 (research/reviews/2026-11-13-color-slicing, finding 1) ran: each passed
+# every required check before the fix.
 
 
 def test_an_inlay_inside_a_conditional_block_is_unknown():
@@ -619,7 +620,8 @@ def test_unpaired_conditionals_and_loads_inside_them_are_unknown(raw, reason):
 
 
 def test_a_flush_inside_the_model_fails_tool_placement():
-    # Codex review 5, finding 2: the flush moved to X128 Y128 Z0.4, inside the model.
+    # Codex review 5 (research/reviews/2026-11-13-color-slicing), finding 2: the flush
+    # moved to X128 Y128 Z0.4, inside the model.
     text = text_of(**GOOD).replace("G1 X267 F18000\n", "G1 X128 Z0.4 F18000\n")
     checks, _ = run(text)
     c = checks[TOOL_PLACEMENT]

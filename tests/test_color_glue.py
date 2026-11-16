@@ -185,10 +185,11 @@ def notch(degrees):
 
 @pytest.mark.parametrize("degrees", [3, 8, 11.25, 16, 16.8, 16.85, 20, 33, 60, 80])
 def test_a_shallow_concave_notch_keeps_the_clearance(degrees):
-    # Codex review 3: GEOS draws a round join of angle A with round(A / (pi / (2
-    # QUAD_SEGS))) chords, so a 16.8 degree arc is one chord, c (1 - cos(8.4 deg)) =
-    # 0.00215 mm short; that FAILed F4.glue_fit (gap 0.197855 mm). The clearance fix
-    # erodes the piece by its measured shortfall instead.
+    # Codex review 3 (research/reviews/2026-11-12-color-geometry): GEOS draws a round
+    # join of angle A with round(A / (pi / (2 QUAD_SEGS))) chords, so a 16.8 degree arc
+    # is one chord, c (1 - cos(8.4 deg)) = 0.00215 mm short; that FAILed F4.glue_fit
+    # (gap 0.197855 mm). The clearance fix erodes the piece by its measured shortfall
+    # instead.
     s24 = shapely.box(0, 0, 24, 24)
     glue = glue_of(cells_from({1: [notch(degrees)]}, s24))
     fit = glue_fit_check(glue)
@@ -456,8 +457,9 @@ def test_a_piece_moved_toward_its_wall_fails_glue_fit():
 
 
 def test_a_piece_moved_inside_the_bounds_fails_its_export_check():
-    # Codex review 3: three same-color squares; the middle piece's mesh moved 1 mm in x,
-    # past its pocket wall at x = 11. Bounds, volume and F1 stay as they were.
+    # Codex review 3 (research/reviews/2026-11-12-color-geometry): three same-color
+    # squares; the middle piece's mesh moved 1 mm in x, past its pocket wall at x = 11.
+    # Bounds, volume and F1 stay as they were.
     squares = [shapely.box(a, a, a + 3, a + 3) for a in (2, 8, 14)]
     glue = glue_of(cells_from({1: squares}, S20))
     assert len(glue.pieces) == 3

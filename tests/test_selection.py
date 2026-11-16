@@ -152,7 +152,8 @@ def _garbage(tmp_path):
 
 
 def _huge_text_png(tmp_path):
-    # Codex review 2 (2026-11-11), finding 1: Image.open raises ValueError for this.
+    # Codex review 2 (2026-11-11, research/reviews/2026-11-11-color-palette), finding 1:
+    # Image.open raises ValueError for this.
     from PIL import PngImagePlugin
     info = PngImagePlugin.PngInfo()
     info.add_text("k", "x" * (PngImagePlugin.MAX_TEXT_CHUNK + 1), zip=True)
