@@ -105,6 +105,24 @@ layer is compared with the model's section at that height:
 - **F3.edge_coverage:** every model-edge sample is within `acceptance.dimension.tolerance`
   (0.2 mm) of printed plastic; on the first layer the allowance adds the profile's
   elephant-foot compensation (0.075 mm, so 0.275 mm).
+  - **Sampling:** the edge is sampled every 0.05 mm. The distance to plastic changes by
+    at most the distance moved, so between samples the true gap is at most 0.025 mm more
+    than the largest sample.
+  - **Near-passes are settled** (`slice-6`, 2026-11-16, the owner's decision; plan
+    `docs/plans/2026-11-16-face-down-default.md`). A layer whose samples are all within
+    the allowance, but the largest within 0.025 mm of it, was UNKNOWN ("within sampling
+    uncertainty"). Now its samples are refined:
+    - two neighbouring samples on one straight piece of edge, gaps d_a and d_b, s apart,
+      leave at most (d_a + d_b + s) / 2 between them;
+    - each pair whose bound is over the allowance is split at its midpoint, which is
+      sampled, again and again, down to 0.001 mm (the G-code's coordinate resolution:
+      3 decimals);
+    - a new sample over the allowance FAILs the layer; every pair's bound within it
+      PASSes it; a pair still open at 0.001 mm leaves it UNKNOWN.
+
+    The record lists `refined_layers` and the largest pair bound, and the note says what
+    refinement settled. Other layers are judged as before. `F3.edge_overprint` is not
+    refined: its samples cover an area, which needs another method.
 - **F3.edge_overprint:** the reverse. No printed plastic lies farther than the same
   allowance outside the model.
 
@@ -344,7 +362,7 @@ as an R1 part. It prints nothing.
 - any listed file (STL, `model.3mf`, `palette.json`, PNG) missing or changed since
   `tdmg flat --colors`;
 - AMS STLs that, read back as the gate reads them, do not match `model.3mf`;
-- `--face` on a single-color folder;
+- `--face` on a single-color folder (any value, `--face down` included);
 - everything R1 refuses (output folder, slicers, profiles, timeout).
 
 The colored record's own checks are not a refusal: as with `DIR/flat.json`, they are
@@ -352,12 +370,16 @@ carried into each verdict, and a FAIL quarantines the G-code. As in R1, a file c
 together with its hash in `colored.json` is not detected; `colorslice_id` records the
 lineage (the hash of `colored.json`).
 
-**Faces:** face up by default (the owner's decision, plan Task 7: "Face up
-(Recommended)"). `--face down` or `--face both` on request. Only the faces sliced are in
-the record.
+**Faces:** face down by default (the owner's decision of 2026-11-16, "Face down, settle
+check (Recommended)"; plan `docs/plans/2026-11-16-face-down-default.md`). The first AMS
+print of Roadie face up came out smeared; the same `model.3mf` turned over in Bambu
+Studio printed well (`research/verification/2026-11-15-first-ams-print/README.md`).
+`--face up` or `--face both` on request. Only the faces sliced are in the record. Face
+up was the default from 2026-11-13 (plan Task 7: "Face up (Recommended)") to
+2026-11-16. `model.3mf` stays face up.
 
 **Outputs, in `OUT`:**
-- `face-up/` (and `face-down/` when sliced):
+- `face-down/` (and `face-up/` when sliced):
   - `orca-input.3mf`: the OrcaSlicer-only input. It holds the same gated meshes as
     `model.3mf`, one part per body, and a settings file that puts each part on its
     filament. The OrcaSlicer CLI prints `model.3mf` on one filament, so it needs this
@@ -451,8 +473,11 @@ Then the
 filament for each color, and what to print:
 - face up PRINTABLE: "to print face up: open model.3mf in Bambu Studio (it is face up)
   and give each color the filament listed; …";
-- only face down PRINTABLE: the message says to turn `model.3mf` over;
-- both PRINTABLE: it says that the owner's default is face up.
+- only face down PRINTABLE: the message says to turn `model.3mf` over in Bambu Studio:
+  "select the model, Rotate (R), 180 degrees about X: a rigid half turn, not a mirror;
+  the same face is on the bed as in face-down/ (tdmg turns it about y, so the plate
+  layout is turned 180 degrees)";
+- both PRINTABLE: it says that the owner's default is face down, and how to turn it.
 
 `tdmg`'s G-code is for checking only: it is not yet printed or compared with Bambu
 Studio's own slice.
@@ -477,7 +502,8 @@ all four are **PRINTABLE**, with warnings. The numbers are the slicer's.
 - **Face down** (measured in Tasks 2 and 6): the prime tower is about half (548–592 mm³),
   because it stops after the last change. The time is within 2 minutes of face up.
   Roadie drop face down is NOT CERTIFIED (the whole model's edge coverage is UNKNOWN:
-  0.251 mm against 0.275 mm). On the keep plans, face down layer 1 skips most of the
+  0.251 mm against 0.275 mm). That was before near-passes were refined (`slice-6`); it
+  has not been re-run since. On the keep plans, face down layer 1 skips most of the
   outline color, and the whole model's edge coverage FAILs (1.179 and 0.637 mm).
 - **The glue route** on the two drop plans is not printable: `glue-base` FAILs
   `F3.edge_coverage`, and one or two small color plates FAIL F3.

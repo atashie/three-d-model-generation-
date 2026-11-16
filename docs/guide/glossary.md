@@ -16,7 +16,7 @@
 | Flush | Plastic pushed out at a color change to clear the old color from the nozzle |
 | Footprint (printed) | The area a layer of G-code covers with plastic: the union of its beads |
 | FDM | Fused deposition modelling: melting filament and laying it down layer by layer |
-| Face up / face down | How a flat multicolor model lies on the bed: face up has its colors in the top layers; face down is turned 180° about the y axis, with the colors in the first layers, on the bed |
+| Face up / face down | How a flat multicolor model lies on the bed: face up has its colors in the top layers; face down is turned 180° about the y axis, with the colors in the first layers, on the bed. `tdmg slice` slices face down by default (since 2026-11-16) |
 | Flexi | A print-in-place articulated model whose segments move after printing |
 | G-code | The printer's instructions, made by the slicer |
 | Gap infill | Thin lines a slicer lays in spaces too narrow for a full wall, such as a tapered tip |

@@ -19,7 +19,8 @@ two test strips, is built (`tdmg strip`) and waits for the owner to print it.
 - `tdmg flat --colors` turns a ready plan into gated STL bodies for both routes
   (step 2), and writes the AMS bodies as one multicolor `model.3mf` (step 3).
 - `tdmg slice` slices the AMS version with the pinned OrcaSlicer, each color on its own
-  filament, face up by default, and checks the G-code against the bodies. It also
+  filament, face down by default (since 2026-11-16), and checks the G-code against the
+  bodies. It also
   slices each glue plate (step 4; see the
   [pipeline guide](../../guide/pipeline-and-gate.md)).
 - `tdmg strip OUT` makes two calibration prints for two of this page's rules (step 5,
@@ -129,9 +130,33 @@ the file's colors. Assign the filaments in the slicer, using `palette.json`.
   follow by palette index.
 - **The filament profiles:** the pinned filament profile with only `filament_colour` set
   to each color, because OrcaSlicer computes the flush and the tool order from it.
-- **Faces:** face up by default (owner decision, 2026-11-13). Face down is the model
-  turned 180° about the y axis; every coordinate stays an exact float32 number.
-- **Outputs:** `face-up/` (and `face-down/` on request) with `orca-input.3mf`,
+- **Faces:** face down by default (owner decision, 2026-11-16: "Face down, settle check
+  (Recommended)"; [the face-down plan](../../plans/2026-11-16-face-down-default.md)). The
+  first AMS print of Roadie face up came out smeared; the same `model.3mf` turned over
+  in Bambu Studio printed well
+  (`research/verification/2026-11-15-first-ams-print/README.md`). Face up was the
+  default from 2026-11-13 to 2026-11-16; `--face up` and `--face both` stay. Face down is
+  the model turned 180° about the y axis, a rotation and not a mirror; every coordinate
+  stays an exact float32 number. `model.3mf` stays face up, and so does the skin strip.
+  - **To print face down:** in Bambu Studio, select the model, Rotate (R), 180° about X.
+    The same face is on the bed as in `face-down/`; `tdmg` turns it about y, so the plate
+    layout is turned 180°.
+  - **Stale text in existing records:** `colored.json` records made by
+    `tdmg flat --colors` say "tdmg slice slices this folder (face up, face down and each
+    glue plate)" (`REVIEW_END` in `src/tdmg/colored_flat.py`). That has been wrong since
+    2026-11-13: one face is sliced by default, now face down. It is deliberately not
+    changed now: changing it needs a colorflat version bump and a rebuild of the owner's
+    plans.
+- **Edge coverage near-passes are settled** (2026-11-16, the same decision). A layer
+  whose largest sampled edge gap is within the allowance, but less than 0.025 mm under
+  it, was UNKNOWN. Now its edge samples are refined by bisection: two neighbouring
+  samples s apart, with gaps d_a and d_b, leave at most (d_a + d_b + s) / 2 between them;
+  each pair whose bound is over the allowance is split, down to 0.001 mm. The result is
+  PASS, FAIL, or UNKNOWN when a pair is still open at 0.001 mm. It applies to the whole
+  model's and each color's `F3.edge_coverage`; `F3.edge_overprint` is not refined. The
+  tolerance does not change. Details:
+  [the pipeline guide](../../guide/pipeline-and-gate.md).
+- **Outputs:** `face-down/` (and `face-up/` on request) with `orca-input.3mf`,
   `plate_1.gcode` (or `plate_1.gcode.failed`) and the slicer statistics; `filaments/`
   with the profiles; one folder per glue plate with R1's files; PrusaSlicer's
   `prusaslicer.portability-only.gcode.txt` from `model.3mf`; and the record `slice.json`
@@ -152,6 +177,7 @@ PRINTABLE, with warnings. Each has 9 color changes (the minimum) and a prime tow
 - **Face down** was measured too: about half the prime tower (548–592 mm³), and the time
   within 2 minutes. Roadie drop face down is NOT CERTIFIED (the whole model's edge
   coverage is UNKNOWN), and on the keep plans layer 1 skips most of the outline color.
+  These are results from before near-passes were refined; they have not been re-run.
 - **The glue route** is not printable on either drop plan: the glue base and some small
   color plates FAIL F3 (Roadie drop: `glue-color-2`; Oddie merge blues: `glue-color-2`
   and `glue-color-3`).
@@ -238,7 +264,7 @@ source.
 | A depth patch is not the depth in the form | Bambu Studio printed at another layer height | None; the form records the settings used | The form gives the checked settings (`print_settings` in `strip.json`); print with them |
 | Thin outline lines missing in the print | A kept outline line is narrower than the slicer prints; the slicer skips it | That color's `F3.edge_coverage` in `tdmg slice` (a warning, not blocking) | Accept it (the outer band prints), make the plan with a wider `outline_width_mm`, or use `outlines: drop` |
 | A color on the wrong body, or the print turned | The slicer input or the tool order is wrong | `F6.tool_placement` and `F6.filaments_used` (required) | None needed: the face is NOT CERTIFIED |
-| More color changes than needed | OrcaSlicer orders each layer without looking ahead (face down) | `F6.color_changes` records the true minimum beside the count | Print face up (the default) |
+| More color changes than needed | OrcaSlicer orders each layer without looking ahead (face down) | `F6.color_changes` records the true minimum beside the count | Accept it (one change more; face down is the default since 2026-11-16), or print face up (`--face up`) |
 | A connectivity warning on every plan | Two colors' beads meet edge to edge; the bead model leaves a hairline between them | `F3.printed_connectivity` (a warning) | None needed; the outer edge is still checked |
 
 ## Required checks
