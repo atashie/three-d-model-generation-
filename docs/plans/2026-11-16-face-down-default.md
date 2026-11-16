@@ -160,6 +160,9 @@ Run the real-slicer tests.
     makes no choice; it reports both faces.
   - **Versions:** `colorslice-2` is not pushed yet, so it covers this too. Its comment
     is updated.
+  - **The face option is part of `colorslice_id`** (the implementer's addition, accepted
+    at review): `auto` and `both` slice the same faces but differ in the record and the
+    exit rule. So `colorslice-2` ids made at 3bb2d6b do not reproduce.
 - **Task 2b:** implement Decision 1a, tests first: each preference branch, the exit
   codes, the record and the messages. Then the spec and quality reviews. Then re-run
   the four owner plans with the default.

@@ -31,12 +31,13 @@ from tdmg.calibration_strip import (
 from tdmg.calibration_strip import RECORD_NAME as STRIP_RECORD
 from tdmg.color_outline import THIN_SHARE_RULE
 from tdmg.color_slicing import (
-    COLOR_DO_NOT_PRINT,
     DEFAULT_FACE,
     FACE_FOLDER,
     FACES,
+    do_not_print,
     is_colored_folder,
     make_color_slice,
+    not_chosen_line,
     print_message,
 )
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
@@ -386,18 +387,27 @@ def _filament_line(fmap: list[dict]) -> str:
                      + f" {f['hex']}" for f in fmap)
 
 
+def _chosen(rec: dict) -> str | None:
+    """auto's chosen face (preferred_face), or None (none chosen, or an explicit --face)."""
+    return rec["preferred_face"] if rec["params"]["face"] == "auto" else None
+
+
+def _has_fail(part: dict) -> bool:
+    """A required check FAILed (a warning that FAILs is printed, never blocking)."""
+    return any(c["status"] == "FAIL" and c["id"] in part["required_checks"]
+               for c in part["checks"])
+
+
 def _color_failed(rec: dict) -> bool:
-    """Whether a colored slice exits 1: a required check FAILed (a warning that FAILs is
-    printed, never blocking), or F6.portability FAILed. Under auto with a chosen face
-    (preferred_face; Decision 1a of docs/plans/2026-11-16-face-down-default.md), only that
-    face counts: a FAIL on the other face does not, and the chosen face is PRINTABLE. With
-    no face chosen, or an explicit --face, every face counts. Glue plates always count."""
-    chosen = rec["preferred_face"] if rec["params"]["face"] == "auto" else None
+    """Whether a colored slice exits 1: a required check FAILed, or F6.portability FAILed.
+    Under auto with a chosen face (preferred_face; Decision 1a of
+    docs/plans/2026-11-16-face-down-default.md; a chosen face is always PRINTABLE), only
+    that face counts: a FAIL on the other face does not. With no face chosen, or an
+    explicit --face, every face counts. Glue plates always count."""
+    chosen = _chosen(rec)
     faces = [rec["faces"][chosen]] if chosen is not None else list(rec["faces"].values())
-    parts = [*faces, *rec["glue"]["plates"].values()]
-    failed = any(c["status"] == "FAIL" and c["id"] in p["required_checks"]
-                 for p in parts for c in p["checks"])
-    return failed or rec["portability"]["check"]["status"] == "FAIL"
+    return (any(_has_fail(p) for p in [*faces, *rec["glue"]["plates"].values()])
+            or rec["portability"]["check"]["status"] == "FAIL")
 
 
 def _color_slice_output(rec: dict, out: Path) -> None:
@@ -438,6 +448,10 @@ def _color_slice_output(rec: dict, out: Path) -> None:
         typer.echo(f"chosen: {'none' if chosen is None else f'face {chosen}'}: "
                    f"{rec['preferred_face_reason']}")
         printable = [] if chosen is None else [chosen]
+        for face in sliced:
+            if chosen is not None and face != chosen \
+                    and rec["faces"][face]["verdict"] != "PRINTABLE":
+                typer.echo(not_chosen_line(face, rec["faces"][face]))
     else:
         printable = [f for f in sliced if rec["faces"][f]["verdict"] == "PRINTABLE"]
     message = print_message(printable)
@@ -477,9 +491,10 @@ def slice_(
                                   "F6.portability; default $TDMG_PRUSASLICER_DIR; without "
                                   "either, F6.portability is UNKNOWN")] = None,
     face: Annotated[str | None, typer.Option(
-        "--face", help="For a tdmg flat --colors folder: the face(s) to slice, up, down or "
-                       "both (both reports the two and chooses none); default: both, "
-                       "preferring face down when it is PRINTABLE (the owner's default)",
+        "--face", help="For a tdmg flat --colors folder: the face(s) to slice, up, down, "
+                       "both or auto; default auto: both faces sliced, face down chosen "
+                       "when it is PRINTABLE, else face up (both: reports the two, chooses "
+                       "none)",
         show_default=False)] = None,
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
@@ -524,7 +539,8 @@ def slice_(
     if colored:
         _color_slice_output(rec, out)
         if _color_failed(rec):
-            typer.echo(COLOR_DO_NOT_PRINT)
+            failed = [n for n, p in rec["glue"]["plates"].items() if _has_fail(p)]
+            typer.echo(do_not_print(_chosen(rec), failed))
             raise typer.Exit(1)
         return
     typer.echo(rec["certification"])     # the verdict, with the checks that block it

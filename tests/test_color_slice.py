@@ -381,7 +381,7 @@ def test_the_print_message_names_the_printable_faces():
     assert "a rigid half turn, not a mirror" in down
     assert "the same face is on the bed as in face-down/" in down
     assert "the plate layout is turned 180 degrees" in down
-    assert both.startswith("both faces are PRINTABLE; the owner's default is face down")
+    assert both.startswith("both faces are PRINTABLE; the owner prefers face down")
     assert "not set" not in both and "for face down, turn it over" in both
     assert "Rotate (R), 180 degrees about X" in both
     for m in (down, both):            # no brackets inside brackets
@@ -743,7 +743,8 @@ def test_auto_is_the_default(colored, orca, tmp_path):
 
 def test_the_help_names_the_default():
     text = " ".join(_plain(runner.invoke(app, ["slice", "--help"]).output).split())
-    assert "default: both, preferring face down when it is PRINTABLE" in text
+    assert ("up, down, both or auto; default auto: both faces sliced, face down chosen when "
+            "it is PRINTABLE, else face up (both: reports the two, chooses none)") in text
 
 
 def _face(verdict, certification=None):
@@ -784,6 +785,7 @@ def test_auto_prints_face_down_when_it_is_printable(colored, orca, tmp_path, mon
     assert cs.print_message(["down"]) in lines
     assert cs.print_message(["up"]) not in lines and cs.print_message(["up", "down"]) \
         not in lines
+    assert not any("is not chosen" in line for line in lines)    # face up is PRINTABLE
 
 
 def test_auto_prints_face_up_when_face_down_fails(colored, orca, tmp_path, monkeypatch):
@@ -799,6 +801,8 @@ def test_auto_prints_face_up_when_face_down_fails(colored, orca, tmp_path, monke
     assert f"chosen: face up: {reason}" in lines
     assert any(line.startswith("face-down: NOT CERTIFIED") for line in lines)
     assert rec["faces"]["down"]["gcode"]["quarantined"] is True
+    assert ("face-down is not chosen (NOT CERTIFIED); its G-code is kept as "
+            "plate_1.gcode.failed (a required check FAILed)") in lines
     assert cs.print_message(["up"]) in lines
     assert cs.COLOR_DO_NOT_PRINT not in lines
 
@@ -828,13 +832,14 @@ def test_an_explicit_face_makes_no_choice(colored, orca, tmp_path, monkeypatch, 
         assert cs.print_message(["up"]) in lines and cs.COLOR_DO_NOT_PRINT in lines
 
 
-def _exit_record(face, preferred, down, up, glue="PASS"):
+def _exit_record(face, preferred, down, up, glue="PASS", portability="PASS"):
+    """A record with what _color_failed reads; down or up None: that face not sliced."""
     def part(status):
         return {"required_checks": ["X"], "checks": [{"id": "X", "status": status}]}
-    return {"params": {"face": face}, "preferred_face": preferred,
-            "faces": {"up": part(up), "down": part(down)},
+    faces = {f: part(s) for f, s in (("up", up), ("down", down)) if s is not None}
+    return {"params": {"face": face}, "preferred_face": preferred, "faces": faces,
             "glue": {"plates": {"glue-base": part(glue)}},
-            "portability": {"check": {"status": "PASS"}}}
+            "portability": {"check": {"status": portability}}}
 
 
 @pytest.mark.parametrize(("rec", "fails"), [
@@ -842,11 +847,27 @@ def _exit_record(face, preferred, down, up, glue="PASS"):
     (_exit_record("auto", "up", "FAIL", "PASS", glue="FAIL"), True),   # glue as before
     (_exit_record("auto", None, "FAIL", "UNKNOWN"), True),    # no choice: as before
     (_exit_record("auto", None, "UNKNOWN", "UNKNOWN"), False),
+    (_exit_record("auto", None, "UNKNOWN", "UNKNOWN", portability="FAIL"), True),
     (_exit_record("both", None, "FAIL", "PASS"), True),       # explicit: as before
+    (_exit_record("up", None, None, "FAIL"), True),
+    (_exit_record("up", None, None, "PASS"), False),
+    (_exit_record("down", None, "FAIL", None), True),
+    (_exit_record("down", None, "PASS", None, portability="FAIL"), True),
 ])
 def test_the_exit_code_rule(rec, fails):
     from tdmg.cli import _color_failed
     assert _color_failed(rec) is fails
+
+
+def test_the_last_line_names_the_glue_plates_that_fail_when_a_face_is_chosen():
+    # Not "a check FAILed: ... that face or plate", which would read as if the chosen
+    # face had failed.
+    line = cs.do_not_print("up", ["glue-base", "glue-color-2"])
+    assert line.startswith("a check FAILed on glue-base, glue-color-2: ")
+    assert "plate_1.gcode.failed" in line and "do not print" in line
+    assert "face up, the face chosen, is PRINTABLE" in line
+    assert cs.do_not_print(None, ["glue-base"]) == cs.COLOR_DO_NOT_PRINT
+    assert cs.do_not_print("up", []) == cs.COLOR_DO_NOT_PRINT
 
 
 @pytest.mark.parametrize("face", ["up", "down", "both"])

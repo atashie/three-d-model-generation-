@@ -122,7 +122,7 @@ OrcaSlicer and PrusaSlicer CLIs slice all four plans' `model.3mf` in place (exit
 OrcaSlicer prints everything with one filament: the CLI does not assign filaments from
 the file's colors. Assign the filaments in the slicer, using `palette.json`.
 
-**Step 4, slicing:** `tdmg slice COLORED_DIR --out DIR [--face up|down|both]` (design:
+**Step 4, slicing:** `tdmg slice COLORED_DIR --out DIR [--face up|down|both|auto]` (design:
 [the step 4 plan](../../plans/2026-11-13-color-slicing.md)).
 - **The input for OrcaSlicer:** `orca-input.3mf`, written from the same gated meshes as
   `model.3mf`, with one part per body and a settings file that puts each part on its own

@@ -336,7 +336,7 @@ no check FAILed on any of them.
 ## Slicing a colored folder (`tdmg slice`, R2 step 4, 2026-11-13)
 
 ```
-tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...] [--face up|down|both]
+tdmg slice DIR --out OUT [--slicer-dir ...] [--prusaslicer-dir ...] [--face up|down|both|auto]
 ```
 
 `DIR` is a `tdmg flat --colors` folder (plan `docs/plans/2026-11-13-color-slicing.md`).
@@ -380,10 +380,12 @@ plan `docs/plans/2026-11-16-face-down-default.md`, Decision 1a).
   `F3.edge_coverage` face down (on the first layer, part of the outer edge is
   unprinted: Roadie 1.18 mm, Oddie 0.64 mm against 0.275 mm) but pass face up (the
   same record, last section).
-- **The choice** (no `--face`): face down if it is PRINTABLE, else face up if it is,
-  else none. The record has `preferred_face` ("down", "up" or null) and
-  `preferred_face_reason`, for example "face down is NOT CERTIFIED (F3.edge_coverage
-  FAIL); face up is PRINTABLE".
+- **The choice** (no `--face`, or `--face auto`): face down if it is PRINTABLE, else
+  face up if it is, else none. The record has `preferred_face` ("down", "up" or null)
+  and `preferred_face_reason`, for example "face down is NOT CERTIFIED
+  (F3.edge_coverage FAIL); face up is PRINTABLE". Without PrusaSlicer configured,
+  `F6.portability` is UNKNOWN on both faces, so neither is PRINTABLE and no face is
+  chosen.
 - **Explicit faces:** `--face up` or `--face down` slices one face; `--face both`
   slices both and chooses none.
 
@@ -494,9 +496,12 @@ the print instructions are for the chosen face only:
   turned 180 degrees)";
 - none: "no face is PRINTABLE: do not print yet; …".
 
+When a face is chosen and the other is not PRINTABLE, one more line says so, for example
+"face-down is not chosen (NOT CERTIFIED); its G-code is kept as plate_1.gcode.failed (a
+required check FAILed)".
+
 With `--face both` there is no choice line, and the instructions cover every PRINTABLE
-face; when both are, the message says the owner's default is face down, and how to turn
-it.
+face; when both are, the message says the owner prefers face down, and how to turn it.
 
 `tdmg`'s G-code is for checking only: it is not yet printed or compared with Bambu
 Studio's own slice.
@@ -506,7 +511,10 @@ checks and warnings are allowed). 1 means a required check FAILed (files written
 means an input or setup error, with nothing written. A warning never sets exit code 1.
 By default (no `--face`), when a face is chosen, only that face's checks count: a FAIL
 on the other face does not set exit 1 (its G-code is still quarantined). With no face
-chosen, or with an explicit `--face`, every face counts. Glue plates always count.
+chosen, or with an explicit `--face`, every face counts. Glue plates always count: when
+a face is chosen and a glue plate FAILs, the last line names the plates, for example "a
+check FAILed on glue-base: its G-code is kept as plate_1.gcode.failed; do not print it
+(face up, the face chosen, is PRINTABLE)".
 
 **The owner's four plans** (60 × 3 mm, 4 colors each, face up, 2026-11-13, Windows PC):
 all four are **PRINTABLE**, with warnings. The numbers are the slicer's.

@@ -32,7 +32,7 @@ uv run tdmg flat SEL_DIR --width-mm W --thickness-mm T --out DIR   # flat solid 
                                           # (outline smoothed by default; --smooth-px 0 = exact)
 uv run python scripts/setup_orcaslicer.py --dest artifacts/tools/orcaslicer-2.5.0   # once, Windows x64
 uv run tdmg slice FLAT_DIR --out DIR --slicer-dir artifacts/tools/orcaslicer-2.5.0  # G-code + F3/F6
-                                          # (FLAT_DIR may be a tdmg flat --colors folder; --face up|down|both)
+                                          # (FLAT_DIR may be a tdmg flat --colors folder; --face up|down|both|auto)
 uv run tdmg strip OUT --slicer-dir artifacts/tools/orcaslicer-2.5.0     # the two calibration test strips
                                           # + results-template.md, the form to fill in after printing
 uv run python scripts/gen_docs.py         # regenerate the generated docs

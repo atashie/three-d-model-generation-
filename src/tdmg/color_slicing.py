@@ -253,8 +253,8 @@ PRINT_FACE = {
     ("down",): "to print face down: open model.3mf in Bambu Studio, which is face up, and "
                f"turn it over: {TURN_IN_STUDIO}. The inlays go on the bed. Then "
                + PRINT_TAIL,
-    ("up", "down"): "both faces are PRINTABLE; the owner's default is face down, the "
-                    "owner's decision of 2026-11-16: open model.3mf in Bambu Studio, which "
+    ("up", "down"): "both faces are PRINTABLE; the owner prefers face down, the owner's "
+                    "decision of 2026-11-16: open model.3mf in Bambu Studio, which "
                     f"is face up; for face down, turn it over: {TURN_IN_STUDIO}. Then "
                     + PRINT_TAIL}
 
@@ -368,6 +368,27 @@ def glue_route(plates: dict) -> dict:
     return {"printable": bool(plates) and not blocking, "blocking": blocking}
 COLOR_DO_NOT_PRINT = (f"a check FAILed: the G-code of that face or plate is kept as "
                       f"{FAILED_GCODE_NAME}; do not print it")
+
+
+def do_not_print(chosen: str | None, failed_plates: list[str]) -> str:
+    """The last line when a colored slice exits 1. With a chosen face (auto; it is always
+    PRINTABLE) only glue plates can have FAILed: name them, so the line does not read as
+    if the chosen face had. Otherwise COLOR_DO_NOT_PRINT."""
+    if chosen is None or not failed_plates:
+        return COLOR_DO_NOT_PRINT
+    return (f"a check FAILed on {', '.join(failed_plates)}: its G-code is kept as "
+            f"{FAILED_GCODE_NAME}; do not print it (face {chosen}, the face chosen, is "
+            "PRINTABLE)")
+
+
+def not_chosen_line(face: str, record: dict) -> str:
+    """Under auto with a chosen face: the line for the other face when it is not
+    PRINTABLE."""
+    line = f"{FACE_FOLDER[face]} is not chosen ({record['verdict']})"
+    gcode = record.get("gcode")                 # None when no G-code was written
+    if gcode is not None and gcode["quarantined"]:
+        line += f"; its G-code is kept as {FAILED_GCODE_NAME} (a required check FAILed)"
+    return line
 COLOR_REVIEW = (
     "Each face sliced (by default both, face down preferred when it is PRINTABLE: "
     "preferred_face; face-up/, face-down/) is sliced from "
