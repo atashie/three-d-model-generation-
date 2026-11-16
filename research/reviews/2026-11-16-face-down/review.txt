@@ -1,0 +1,108 @@
+Found **five issues**, none rated High. I did not demonstrate a false PASS with valid finite distance evaluations; the false PASS below requires an injected NaN.
+
+1. **Medium — Refinement can erase an independently established connectivity failure.**  
+   **Location:** [printed.py:1108](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:1108), interacting with [printed.py:1343](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:1343).  
+   **Confirmed by running HEAD and the actual `ec6e9ac` module in memory.**
+
+   A nearly square section has tied quarter-turn scores. Refinement settles coverage differently between those turns, causing `judge_f3` to replace **all three checks** with UNKNOWN—even when connectivity FAILs on every turn.
+
+   Reproduction:
+
+   ```python
+   import shapely
+   import tdmg.printed as p
+
+   section = shapely.box(0, 0, 10, 9.98)
+   centre = (5, 4.99)
+   footprint = section.difference(
+       shapely.Point(10.02, 5.01495).buffer(.225, quad_segs=64)
+   ).difference(shapely.box(4.95, -1, 5.05, 11))
+   footprint = p.Alignment(0, centre, (128, 128)).apply(footprint)
+   plate = p.Plate(0, 0, 256, 256)
+   analysis = p.analyse_sections(
+       [.2], [section], [footprint], .2, centre, .2, plate, .2, .2
+   )
+   checks, _ = p.judge_f3(
+       analysis, p.Setup(plate, None, .2, 0, frozenset({1}))
+   )
+   print([(c.id, c.status) for c in checks])
+   ```
+
+   | Check | `ec6e9ac` | HEAD |
+   |---|---|---|
+   | Connectivity | FAIL | UNKNOWN |
+   | Coverage | UNKNOWN | UNKNOWN |
+   | Overprint | PASS | UNKNOWN |
+
+   Scores, turn order, coarse shares and overprint measurements are unchanged. This introduces a regression outside coverage and can remove the FAIL that drives exit 1 when other required checks pass. Ambiguity should be resolved separately for each check.
+
+2. **Medium — NaN midpoint distances can disappear and produce a false PASS.**  
+   **Location:** [printed.py:1036](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:1036), especially the reduction at line 1044.  
+   **Confirmed by running fault injection; I did not find a valid production footprint that naturally makes `gaps` return NaN.**
+
+   `np.argmax(dm)` selects a NaN, its comparison against `best` is false, and NaN bounds stop splitting. Python’s outer `max()` can then discard the NaN batch after an earlier finite batch. `_judged` also lacks a finite-value guard.
+
+   ```python
+   import numpy as np
+   import shapely
+   from unittest.mock import patch
+   import tdmg.printed as p
+
+   section = shapely.box(0, 0, 10, 10)
+   alignment = p.Alignment(0, (5, 5), (128, 128))
+   footprint = alignment.apply(
+       shapely.box(-1, -1, 11, 11).difference(
+           shapely.Point(10, 5.025).buffer(.21, quad_segs=64)
+       )
+   )
+   edges = p.edge_gaps(section, footprint, alignment)
+   with patch.object(p, "gaps",
+                     side_effect=lambda pts, _: np.full(len(pts), np.nan)):
+       result = p.refine_edge(section, footprint, alignment, .2, edges)
+
+   print(p._judged(
+       [dict(result, allowance_mm=.2)],
+       "max_gap_mm", .025, "pair_bound_max_mm"
+   )[0])
+   ```
+
+   This prints **PASS**. The actual notch-centre gap is **0.209984 mm**, against **0.2 mm**; the reported bound is only **0.184988 mm**. A failed measurement must produce UNKNOWN or an explicit measurement error, never a certified bound.
+
+3. **Low — Persisted print instructions omit the rotation required by the chosen face.**  
+   **Location:** [color_slicing.py:398](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py:398), also line 1022.  
+   **Confirmed by reading code and the existing `fd7` Roadie-drop `slice.json`; no printing performed.**
+
+   That record chooses `"preferred_face": "down"`, but its `review` says:
+
+   > To print, open model.3mf in Bambu Studio and assign the filaments as listed.
+
+   Its `model_3mf.note` gives the same incomplete instructions. Following these steps leaves the model face up—the orientation the owner rejected. The CLI correctly supplies the rotation, but those instructions are absent from the saved record. Persist the chosen face’s complete instructions using the same logic as the CLI.
+
+4. **Low — The explanation for the 0.001 mm floor is mathematically unsupported.**  
+   **Location:** [printed.py:65](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:65); repeated in the plan’s Decision 2.  
+   **Confirmed by running an in-memory comparison.**
+
+   Three-decimal endpoint coordinates do not imply that finer sampling “measures nothing” stated by the G-code. Segments and their buffered footprints are continuous; model coordinates need not share the endpoint grid.
+
+   Using section `box(0, 0, 9.9999, 10)`, footprint `box(-1, -1, 9.800, 11)` and identity alignment:
+
+   | Refinement floor | Result | Final bound |
+   |---|---|---|
+   | 0.001 mm | UNKNOWN | 0.200290625 mm |
+   | 0.0001 mm | PASS | 0.19999765625 mm |
+
+   The footprint’s coordinates have at most three decimals. Finer sampling nevertheless establishes a useful bound. **The present floor remains conservative**, because unresolved pairs stay UNKNOWN; describe it as a computational stopping choice rather than a consequence of coordinate precision.
+
+5. **Low — Current documentation contradicts the rerun and physical-print evidence.**  
+   **Locations:** [pipeline-and-gate.md:536](C:/Users/arikt/documents/github/three-d-model-generation-/docs/guide/pipeline-and-gate.md:536), [color-multi.md:192](C:/Users/arikt/documents/github/three-d-model-generation-/docs/print-types/attributes/color-multi.md:192), [STATUS.md:43](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:43), [README.md:7](C:/Users/arikt/documents/github/three-d-model-generation-/README.md:7).  
+   **Confirmed by reading the documents, appended research record and existing `fd7` JSON files.**
+
+   The guide and attribute page explicitly say the refined results have **not been rerun**. The saved Roadie-drop record instead shows face down PRINTABLE, refined layer `[0.2]`, and bound **0.256954 mm**.
+
+   Physical-print claims also disagree: README says nothing multicolor has been printed, while STATUS says both outline-dropped plans “are printed that way.” The supplied evidence records Roadie’s print, not an Oddie print. These statements can mislead an owner deciding which results have software or physical evidence.
+
+I ran **283 geometry/G-code tests and 17 face-choice/message tests**, all passing, using `.venv/Scripts/python.exe -B` with in-memory capture and pytest caching disabled. Ordinary pytest capture initially failed because temporary files were unavailable. I did not run filesystem-based integration tests, the Hypothesis property test, or real slicers.
+
+Additional checks found no ring/MultiPolygon pairing defect across all four quarter turns. Four non-near cases matched baseline layer metrics exactly. Face selection carries shared required checks into both faces; the X/Y half-turn instructions describe the same physical face down. Exit 0 with only UNKNOWN checks is explicitly permitted by the amendment and is not reported as a defect.
+
+No files were modified.

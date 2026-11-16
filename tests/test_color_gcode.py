@@ -739,10 +739,12 @@ def test_the_real_slicer_passes_all_three_checks(face, tmp_path):
     # Under the owner's "Outer edge only" (Task 7, 2026-11-13) the silhouette's
     # connectivity is a warning: it still FAILs on every multicolor layer (neighbouring
     # bodies' beads meet edge to edge; research record, Task 5 addendum). The Roadie drop
-    # plan is PRINTABLE face up; face down its silhouette edge coverage is UNKNOWN (0.251
-    # against 0.275 mm, Task 5), so it is not. The synthetic plan: PRINTABLE both faces.
+    # plan is PRINTABLE on both faces: face down its silhouette edge coverage was UNKNOWN
+    # (0.251 against 0.275 mm, Task 5) until slice-6 refined that near layer to a PASS
+    # (pair bound 0.257 mm; research/verification/2026-11-15-first-ams-print/). The
+    # synthetic plan: PRINTABLE both faces.
     required = required_check_ids(len(shells))
-    want = "NOT CERTIFIED" if (kind, face) == ("owner", "down") else "PRINTABLE"
+    want = "PRINTABLE"
     assert verdict(checks, set(required)) == want, (
         kind, face, [(i, by[i].status) for i in sorted(required) if by[i].status != "PASS"])
     not_passing = [i for i in sorted(required) if by[i].status != "PASS"]

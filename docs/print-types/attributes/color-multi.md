@@ -237,8 +237,9 @@ slicer's estimates): the skin strip is PRINTABLE (15 color changes, 2727 s, 10.2
 clearance strip is NOT CERTIFIED: its pieces plate is PRINTABLE (3 layers, 490 s,
 0.47 g), and its base plate FAILs `F3.printed_connectivity` on 2 of 15 layers (z 1.6 and
 2.0 mm, one printed part more than the model, 21 holes for 21; 1372 s, 6.12 g). The owner
-decided to keep the FAIL and print it anyway. The command exits 0. Nothing is printed
-yet. Record: `research/verification/2026-11-14-test-strips/README.md`.
+decided to keep the FAIL and print it anyway. The command exits 0. The owner printed the
+skin strip on 2026-11-15 and skipped the clearance strip. Record:
+`research/verification/2026-11-14-test-strips/README.md`.
 
 ## Parameters
 

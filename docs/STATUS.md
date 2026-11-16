@@ -3,7 +3,8 @@
 **Last updated:** 2026-11-16 (R2 step 5 part 2 started: the first AMS print of Roadie
 smeared face up and looked great face down. `tdmg slice` on a colored folder now slices
 both faces and prefers face down; `F3.edge_coverage` settles near-passes by refinement.
-Plan `docs/plans/2026-11-16-face-down-default.md`; the Codex review is next). Phase 1 (R1, flat single-color) is under way, with three commands, and
+Plan `docs/plans/2026-11-16-face-down-default.md`; Codex review done, 5 findings fixed).
+Antigravity (`agy` 1.5.9, Gemini) is installed; it has no image generation tool. Phase 1 (R1, flat single-color) is under way, with three commands, and
 R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -40,8 +41,8 @@ R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
     up|down|both`), each color on its own filament, and gates the G-code (color
     changes, placement, filaments, the outer-edge F3 checks; per-color coverage and
     connectivity are warnings, owner decision). All four owner plans are PRINTABLE face
-    up; the two outline-dropped plans are also PRINTABLE face down, and are printed that
-    way. Warnings remain (the keep plans' thin interior outline lines are skipped by the
+    up; the two outline-dropped plans are also PRINTABLE face down (chosen by default).
+    Only Roadie (outline dropped) has been printed. Warnings remain (the keep plans' thin interior outline lines are skipped by the
     slicer). To print: open `model.3mf` in Bambu Studio and assign the filaments listed.
   - **Printed (2026-11-15/16):** Roadie, outline dropped: face up smeared, face down
     "look great" (`research/verification/2026-11-15-first-ams-print/`).
@@ -435,7 +436,19 @@ The full list is in `docs/PLAN.md` section 13.
   - **Re-run** (record, last two sections): outline-dropped plans choose face down
     (Roadie drop's face-down near-pass is now a measured PASS); outline-kept plans
     choose face up. R1 Roadie and Oddie PRINTABLE; strip unchanged.
-  - **Next:** Codex review (`research/reviews/2026-11-16-face-down/`), push, CI.
+  - **Codex review** (`research/reviews/2026-11-16-face-down/`): 2 Medium, 3 Low, all
+    held and fixed (per-check turn ambiguity; non-finite gaps never PASS; `print` field
+    in the record; the 0.001 mm floor is a stopping choice; docs). Re-run `fd8`: every
+    verdict as before.
+  - **Antigravity (2026-11-16):** `agy` 1.5.9 at `C:\Users\arikt\AppData\Local\agy\bin`
+    (a session started before the install needs a restart, or that dir on PATH; in Git
+    Bash set `MSYS_NO_PATHCONV=1` for `agy-doctor`). 18 models (Gemini 4 Hydrogen/Argon,
+    3.8 Flash, Claude, GPT-OSS); no image model and no image-generation tool, so Google
+    image generation would come from the Gemini app/AI Studio by hand or the Gemini API.
+    `agy-delegate` returned empty output twice here while `agy -p` worked. Idea, not
+    started: owner-generated "print-friendly" input art (flat colors, plain background),
+    recorded with prompt and model, run through the unchanged pipeline.
+  - **Next:** push and CI; then the owner's next prints.
     Open: why outline-kept plans fail face down; the glue route (still not printable);
     `colored_flat.py` REVIEW_END text (deliberately unchanged).
 - **Earlier (2026-11-15): Task 5, the skin strip printed.** The owner printed
