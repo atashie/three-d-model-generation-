@@ -10,13 +10,13 @@ Each number in the summary's category columns is the number of lines in files of
 
 What is recognised: paths written from the repository root (`research/...`, with `/` or a backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built from string literals, globs, and review names found by a short pattern list ("Codex" with a date beside it). A numbered name ("Codex review 3") counts only through a path written on the same line; without one it is listed under *Review mentions not tied to a record*. Names are looked for only in machine-read files. Lines there that mention a root word but give no reference are listed under *Unparsed mentions*. Free prose ("the research record", "the review") can still be missed, so read the uncited list before anything is deleted.
 
-Records: 50. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 9. Uncited with no references: 0.
+Records: 45. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 4. Uncited with no references: 0.
 
 ## Summary
 
 | Record | Status | Note | Linked from docs | Linked from kept records | rule | test | profile | code | script | CI | config-citing | doc | status | record | config |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/plans/2026-11-10-flat-geometry.md` | cited |  | status |  |  |  |  | 1 |  |  |  |  | 1 | 1 |  |
+| `docs/plans/2026-11-10-flat-geometry.md` | cited |  | status |  |  |  |  | 1 |  |  |  |  | 1 |  |  |
 | `docs/plans/2026-11-10-outline-smoothing.md` | cited |  | status |  |  | 2 |  | 1 |  |  |  |  | 1 |  |  |
 | `docs/plans/2026-11-10-slicer-check.md` | cited |  | status | 1 |  | 2 |  | 2 |  |  |  |  | 1 | 1 |  |
 | `docs/plans/2026-11-10-subject-selection.md` | cited |  | doc, status | 1 |  |  |  | 1 |  |  |  | 1 | 1 | 1 |  |
@@ -42,7 +42,7 @@ Records: 50. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous
 | `research/verification/2026-11-08-stack-smoke` | cited |  | doc, status | 2 | 1 | 1 |  |  |  |  | 1 | 4 | 1 | 23 |  |
 | `research/verification/2026-11-09-slicer-3mf-import` | cited |  | doc | 2 | 8 |  |  |  |  |  |  | 1 |  | 4 |  |
 | `research/verification/2026-11-10-orcaslicer-windows` | cited |  | doc, status | 5 | 2 | 1 | 3 | 2 | 1 |  |  | 4 | 2 | 53 |  |
-| `research/verification/2026-11-10-outline-smoothing` | cited |  | doc, status | 2 | 1 |  |  |  |  |  |  | 2 | 2 | 3 |  |
+| `research/verification/2026-11-10-outline-smoothing` | cited |  | doc, status | 2 | 1 |  |  |  |  |  |  | 2 | 2 | 2 |  |
 | `research/verification/2026-11-10-subject-selection` | cited |  | doc, status | 2 | 2 | 1 |  |  |  |  |  | 2 | 1 | 7 |  |
 | `research/verification/2026-11-10-thin-walls` | cited |  | doc, status | 3 |  | 2 |  | 2 |  |  |  | 3 | 2 | 4 |  |
 | `research/verification/2026-11-11-color-palette` | cited |  | doc | 4 | 12 | 3 |  | 1 |  |  |  | 1 |  | 6 |  |
@@ -60,19 +60,13 @@ Records: 50. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous
 | `docs/plans/2026-11-16-restructure-design.md` | uncited | active work, stays where it is | status | 2 |  |  |  |  |  |  |  |  | 1 | 4 |  |
 | `docs/plans/2026-11-16-restructure.md` | uncited | active work, stays where it is | status | 2 |  |  |  |  |  |  |  |  | 1 | 3 |  |
 | `reports/Image to printable 3D model landscape.md` | uncited | kept in place (design section 6) | doc | 1 |  |  |  |  |  |  |  | 4 |  | 32 |  |
-| `research/reviews/2026-11-10-flat` | uncited |  | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-10-selection` | uncited |  | status | 1 |  |  |  |  |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-10-slicer` | uncited |  | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-10-smoothing` | uncited |  | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
 | `research/verification/2026-11-09-pc-stack` | uncited |  | doc, status | 2 |  |  |  |  |  |  |  | 3 | 2 | 2 |  |
-| `research/verification/2026-11-10-flat-geometry` | uncited |  | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
 
 ## Cited records (by path)
 
 ### `docs/plans/2026-11-10-flat-geometry.md`
 
 - `docs/STATUS.md` (status): lines 385
-- `research/verification/2026-11-10-flat-geometry/README.md` (record): lines 3
 - `src/tdmg/flat.py` (code): lines 1
 
 ### `docs/plans/2026-11-10-outline-smoothing.md`
@@ -452,7 +446,6 @@ Linked from kept records: `docs/plans/2026-11-10-slicer-check.md`, `research/rev
 - `docs/plans/2026-11-10-outline-smoothing.md` (record): lines 11
 - `docs/print-types/recipes/r1-flat-single.md` (doc): lines 76
 - `docs/reference/dependencies.md` (doc): lines 35
-- `research/reviews/2026-11-10-smoothing/review.txt` (record): lines 5
 - `research/verification/2026-11-10-thin-walls/README.md` (record): lines 56
 - `rules/geometry-flat.yaml` (rule): lines 58
 
@@ -706,37 +699,6 @@ Kept in place (design section 6).
 
 Linked from kept records: `research/reviews/2026-11-09-codex`.
 
-### `research/reviews/2026-11-10-flat`
-
-- `docs/STATUS.md` (status): lines 387
-- `docs/plans/2026-11-10-flat-geometry.md` (record): lines 435
-- `docs/plans/2026-11-16-restructure.md` (record): lines 107
-
-Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `docs/plans/2026-11-16-restructure.md`.
-
-### `research/reviews/2026-11-10-selection`
-
-- `docs/STATUS.md` (status): lines 384
-- `docs/plans/2026-11-10-subject-selection.md` (record): lines 1035, 1091
-
-Linked from kept records: `docs/plans/2026-11-10-subject-selection.md`.
-
-### `research/reviews/2026-11-10-slicer`
-
-- `docs/STATUS.md` (status): lines 398
-- `docs/plans/2026-11-10-slicer-check.md` (record): lines 218
-- `research/verification/2026-11-10-orcaslicer-windows/README.md` (record): lines 175
-
-Linked from kept records: `docs/plans/2026-11-10-slicer-check.md`, `research/verification/2026-11-10-orcaslicer-windows`.
-
-### `research/reviews/2026-11-10-smoothing`
-
-- `docs/STATUS.md` (status): lines 393
-- `docs/plans/2026-11-10-outline-smoothing.md` (record): lines 178
-- `research/verification/2026-11-10-outline-smoothing/README.md` (record): lines 62
-
-Linked from kept records: `docs/plans/2026-11-10-outline-smoothing.md`, `research/verification/2026-11-10-outline-smoothing`.
-
 ### `research/verification/2026-11-09-pc-stack`
 
 - `README.md` (doc): lines 44
@@ -747,14 +709,6 @@ Linked from kept records: `docs/plans/2026-11-10-outline-smoothing.md`, `researc
 - `research/reviews/2026-11-09-pc/README.md` (record): lines 4
 
 Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-09-pc`.
-
-### `research/verification/2026-11-10-flat-geometry`
-
-- `docs/STATUS.md` (status, glob): lines 90
-- `docs/plans/2026-11-10-flat-geometry.md` (record): lines 432
-- `docs/plans/2026-11-16-restructure.md` (record): lines 108
-
-Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `docs/plans/2026-11-16-restructure.md`.
 
 ## Records nothing refers to
 
@@ -894,7 +848,7 @@ A path pattern with `*`, expanded to the records it matches. Each match is count
 
 | File | Line | Pattern | Matches |
 |---|---|---|---|
-| `docs/STATUS.md` | 90 | `research/verification/2026-11-10-*` | `research/verification/2026-11-10-flat-geometry`, `research/verification/2026-11-10-orcaslicer-windows`, `research/verification/2026-11-10-outline-smoothing`, `research/verification/2026-11-10-subject-selection`, `research/verification/2026-11-10-thin-walls` |
+| `docs/STATUS.md` | 90 | `research/verification/2026-11-10-*` | `research/verification/2026-11-10-orcaslicer-windows`, `research/verification/2026-11-10-outline-smoothing`, `research/verification/2026-11-10-subject-selection`, `research/verification/2026-11-10-thin-walls` |
 
 ## Unresolved references
 
@@ -902,11 +856,25 @@ References this script could not tie to one record: a built path that stops at a
 
 | File | Line | Text | Why |
 |---|---|---|---|
+| `docs/STATUS.md` | 384 | `research/reviews/2026-11-10-selection/` | names no record in the tree |
+| `docs/STATUS.md` | 387 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
+| `docs/STATUS.md` | 393 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
+| `docs/STATUS.md` | 398 | `research/reviews/2026-11-10-slicer/` | names no record in the tree |
+| `docs/plans/2026-11-10-flat-geometry.md` | 432 | `research/verification/2026-11-10-flat-geometry/README.md` | names no record in the tree |
+| `docs/plans/2026-11-10-flat-geometry.md` | 435 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
+| `docs/plans/2026-11-10-outline-smoothing.md` | 178 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
+| `docs/plans/2026-11-10-slicer-check.md` | 218 | `research/reviews/2026-11-10-slicer/` | names no record in the tree |
+| `docs/plans/2026-11-10-subject-selection.md` | 1035 | `research/reviews/2026-11-10-selection/` | names no record in the tree |
+| `docs/plans/2026-11-10-subject-selection.md` | 1091 | `research/reviews/2026-11-10-selection/` | names no record in the tree |
 | `docs/plans/2026-11-11-color-palette.md` | 157 | `research/verification/2026-11-1x-color-palette/` | names no record in the tree |
 | `docs/plans/2026-11-11-color-palette.md` | 228 | `research/reviews/2026-11-1x-color-palette/` | names no record in the tree |
 | `docs/plans/2026-11-12-color-geometry.md` | 235 | `research_notes/.../articulated_flexi_print_design.md` | names no record in the tree |
+| `docs/plans/2026-11-16-restructure.md` | 107 | `research/reviews/2026-11-10-flat` | names no record in the tree |
+| `docs/plans/2026-11-16-restructure.md` | 108 | `research/verification/2026-11-10-flat-geometry` | names no record in the tree |
 | `docs/plans/2026-11-16-restructure.md` | 159 | `research/README.md` | names no record in the tree |
 | `docs/plans/2026-11-16-restructure.md` | 400 | `research/reviews/2026-11-16-restructure/` | names no record in the tree |
+| `research/verification/2026-11-10-orcaslicer-windows/README.md` | 175 | `research/reviews/2026-11-10-slicer/` | names no record in the tree |
+| `research/verification/2026-11-10-outline-smoothing/README.md` | 62 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
 
 ## Files that are not UTF-8 text
 
