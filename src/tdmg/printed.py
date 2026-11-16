@@ -993,6 +993,16 @@ def _edge_pairs(geometry, spacing: float = EDGE_SAMPLE_MM) -> np.ndarray:
     return ring[:-1] == ring[1:]
 
 
+def _finite(d: np.ndarray, what: str) -> None:
+    """Raise ValueError when a gap is not a finite number. NaN compares false with any
+    bound, so it would stop a pair splitting and could drop out of a maximum, leaving a
+    false PASS (Codex review 2026-11-16, finding 2): a failed measurement, never a bound.
+    The callers turn the error into an UNKNOWN "analysis error"."""
+    if not np.isfinite(d).all():
+        raise ValueError(f"{what} is not finite ({int((~np.isfinite(d)).sum())} of "
+                         f"{len(d)} samples): the refinement cannot bound the gap")
+
+
 def refine_edge(section, printed, alignment: Alignment, allowance_mm: float, edges) -> dict:
     """Settle a layer whose largest sampled gap is within COVERAGE_BOUND_MM of the
     allowance (the plan docs/plans/2026-11-16-face-down-default.md, Decision 2).
@@ -1018,6 +1028,7 @@ def refine_edge(section, printed, alignment: Alignment, allowance_mm: float, edg
     joined = _edge_pairs(section)
     if len(joined) != len(d) - 1:
         raise ValueError("the edge pairs do not match the edge samples")
+    _finite(d, "a coarse edge gap")
     a, b = model_pts[:-1][joined], model_pts[1:][joined]
     da, db = d[:-1][joined], d[1:][joined]
     i = int(np.argmax(d))
@@ -1034,6 +1045,7 @@ def refine_edge(section, printed, alignment: Alignment, allowance_mm: float, edg
         mid = (a[split] + b[split]) / 2
         mid_bed = alignment.to_bed(mid)
         dm = gaps(mid_bed, printed)
+        _finite(dm, "a refined edge gap")
         j = int(np.argmax(dm))
         if dm[j] > best[0]:
             best = (float(dm[j]), mid_bed[j], mid[j])
@@ -1374,11 +1386,14 @@ def _judged(layers, key, bound, upper: str | None = None) -> tuple[str, list, li
     """(status, layers over the allowance, layers within the sampling bound of it).
 
     The true largest on a layer is at most m[key] + bound, or m[upper] when the layer has
-    that key (a refined layer's own bound, refine_edge)."""
+    that key (a refined layer's own bound, refine_edge). A PASS needs proof: a layer not
+    over the allowance is near unless its bound is shown within it, so a NaN value or
+    bound (false in every comparison) is UNKNOWN, never PASS."""
     def top(m):
         return m[upper] if upper is not None and upper in m else m[key] + bound
     over = [m for m in layers if m[key] > m["allowance_mm"]]
-    near = [m for m in layers if top(m) > m["allowance_mm"] >= m[key]]
+    near = [m for m in layers
+            if not m[key] > m["allowance_mm"] and not top(m) <= m["allowance_mm"]]
     return ("FAIL" if over else "UNKNOWN" if near else "PASS"), over, near
 
 

@@ -19,6 +19,7 @@ import tdmg.printed
 from tdmg.flat import extrude
 from tdmg.printed import (
     ARC_STEP_MM,
+    COVERAGE_BOUND_MM,
     EDGE_REFINE_MIN_MM,
     EDGE_SAMPLE_MM,
     MODEL_FEATURES,
@@ -1208,6 +1209,47 @@ def test_a_gap_hidden_on_a_rings_closing_piece_is_found(x, y):
     m, coverage = coverage_of(section, printed)
     assert coverage.status == "FAIL", coverage.note
     assert m["at_model_mm"] == [pytest.approx(x), pytest.approx(y)]
+
+
+def test_a_non_finite_refined_gap_is_refused_not_passed(monkeypatch):
+    # Codex review 2026-11-16, finding 2 (fault injection): with every midpoint's gap NaN,
+    # NaN bounds stopped splitting and max() dropped them, so a notch 0.21 mm deep (over
+    # 0.2) PASSed with a bound of 0.185 mm. A gap that is not a number is a failed
+    # measurement: refine_edge raises, which f3_checks and tdmg.color_gcode turn into an
+    # UNKNOWN "analysis error".
+    section, alignment = square(), Alignment(0, (5, 5), PLATE.centre)
+    printed = alignment.apply(notched(10, 5.025, 0.21))
+    edges = edge_gaps(section, printed, alignment)
+    monkeypatch.setattr(tdmg.printed, "gaps", lambda pts, _: np.full(len(pts), np.nan))
+    with pytest.raises(ValueError, match="not finite"):
+        tdmg.printed.refine_edge(section, printed, alignment, ALLOWANCE, edges)
+
+
+@pytest.mark.parametrize("bad", [math.nan, -math.inf])
+def test_a_non_finite_coarse_gap_on_a_near_layer_is_refused(bad):
+    section, alignment = square(), Alignment(0, (5, 5), PLATE.centre)
+    printed = alignment.apply(short_by(0.19))
+    model_pts, pts, d = edge_gaps(section, printed, alignment)
+    d = d.copy()
+    d[3] = bad
+    with pytest.raises(ValueError, match="not finite"):
+        tdmg.printed.refine_edge(section, printed, alignment, ALLOWANCE, (model_pts, pts, d))
+
+
+@pytest.mark.parametrize(("value", "bound", "status"), [
+    (math.nan, None, "UNKNOWN"),          # no sampled maximum: never a PASS
+    (0.1, math.nan, "UNKNOWN"),           # a refined layer with no bound: never a PASS
+    (math.inf, None, "FAIL"),             # an infinite gap is over any allowance
+    (0.1, 0.15, "PASS"),
+    (0.1, None, "PASS"),
+])
+def test_judged_passes_only_a_finite_layer_within_its_bound(value, bound, status):
+    layer = {"max_gap_mm": value, "allowance_mm": ALLOWANCE}
+    if bound is not None:
+        layer["pair_bound_max_mm"] = bound
+    got, _, _ = tdmg.printed._judged([layer], "max_gap_mm", COVERAGE_BOUND_MM,
+                                     "pair_bound_max_mm")
+    assert got == status
 
 
 def test_refinement_is_deterministic():
