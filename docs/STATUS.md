@@ -1,8 +1,9 @@
 # Project status
 
-**Last updated:** 2026-11-15 (R2 step 5 part 1, the test strips: the owner printed the
-skin strip; `color.skin.depth_mm` is calibrated and kept at 0.6 mm. The owner skipped
-the clearance strip; part 1 is closed and step 5 part 2, printing owner figures, is next). Phase 1 (R1, flat single-color) is under way, with three commands, and
+**Last updated:** 2026-11-16 (R2 step 5 part 2 started: the first AMS print of Roadie
+smeared face up and looked great face down. `tdmg slice` on a colored folder now slices
+both faces and prefers face down; `F3.edge_coverage` settles near-passes by refinement.
+Plan `docs/plans/2026-11-16-face-down-default.md`; the Codex review is next). Phase 1 (R1, flat single-color) is under way, with three commands, and
 R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
 
 - **`tdmg select`** (S0/S1): selects the subject. The owner confirmed the results.
@@ -34,13 +35,16 @@ R2 (flat multicolor) has three, plus `tdmg slice` on a colored folder:
     reads the 3MF back with lib3mf and compares every shell exactly
     (`F2.export_3mf_matches_bodies`). The owner opened one in Bambu Studio: in place,
     filaments assignable, it slices.
-  - **Slicing (step 4):** `tdmg slice COLORED_DIR` slices it face up by default
-    (`--face down|both`), each color on its own filament, and gates the G-code (color
+  - **Slicing (step 4):** `tdmg slice COLORED_DIR` slices both faces by default and
+    chooses face down when it is PRINTABLE, else face up (owner, 2026-11-16; `--face
+    up|down|both`), each color on its own filament, and gates the G-code (color
     changes, placement, filaments, the outer-edge F3 checks; per-color coverage and
     connectivity are warnings, owner decision). All four owner plans are PRINTABLE face
-    up, with warnings (the keep plans' thin interior outline lines are skipped by the
+    up; the two outline-dropped plans are also PRINTABLE face down, and are printed that
+    way. Warnings remain (the keep plans' thin interior outline lines are skipped by the
     slicer). To print: open `model.3mf` in Bambu Studio and assign the filaments listed.
-  - **Not done yet:** nothing is printed (step 5).
+  - **Printed (2026-11-15/16):** Roadie, outline dropped: face up smeared, face down
+    "look great" (`research/verification/2026-11-15-first-ams-print/`).
 - **`tdmg strip OUT`** (R2 step 5, part 1): makes two calibration test strips, gates them
   and slices them with the pinned OrcaSlicer, and writes `results-template.md`, the form
   the owner fills in after printing.
@@ -274,7 +278,8 @@ passed. These commits are pushed; for CI see above.
    were printed. Task 5: the skin result is recorded and `color.skin.depth_mm` is
    calibrated at 0.6 mm (2026-11-15). The owner skipped the clearance strip and further
    tests (2026-11-15), so part 1 is closed. Details in the handoff below. Part 2, the first AMS and
-   glue prints of an owner plan, comes after.
+   glue prints of an owner plan: the first AMS print is done (2026-11-15/16; face down
+   chosen by default since, see the handoff). No glue print yet.
 2a. **R2 design step 3: multicolor 3MF** (`model.3mf`, `palette.json`).
    - **Plan:** `docs/plans/2026-11-12-color-3mf.md`, approved by the owner on 2026-11-12.
    - **Task 1, import test** (`research/verification/2026-11-12-color-3mf/`): no
@@ -411,7 +416,29 @@ The full list is in `docs/PLAN.md` section 13.
 
 ## Compaction handoff
 
-- **Latest (2026-11-15): Task 5, the skin strip printed.** The owner printed
+- **Latest (2026-11-16): step 5 part 2, the first AMS print; face down by default.**
+  - **Prints** (record `research/verification/2026-11-15-first-ams-print/README.md`):
+    Roadie, outline dropped, from Bambu Studio. Face up: "smeared" (white pinkish,
+    borders blurred, strings; photo). Face down (turned in Bambu Studio, nothing else
+    changed): "the newly printed items look great". Cause of the smear not separated
+    (flush or drag).
+  - **Owner decisions:** "Face down, settle check (Recommended)", then, after the
+    re-slice showed both outline-kept plans FAIL face down (first-layer edge gaps 1.18
+    and 0.64 mm), "Slice both, prefer down (Recommended)".
+  - **Built** (plan `docs/plans/2026-11-16-face-down-default.md`, commits
+    `5b92b08..` on main):
+    - `F3.edge_coverage` refines near-pass layers (pair bound (d_a+d_b+s)/2, bisection
+      to 0.001 mm, the G-code's resolution); `slice-6`, `colorslice-2`, `strip-4`;
+    - `tdmg slice COLORED_DIR` default `auto`: both faces, prefer down, `preferred_face`
+      and reason in the record, exit judged on the chosen face (glue plates as before).
+    - Spec and quality reviews done for each task, fixes applied.
+  - **Re-run** (record, last two sections): outline-dropped plans choose face down
+    (Roadie drop's face-down near-pass is now a measured PASS); outline-kept plans
+    choose face up. R1 Roadie and Oddie PRINTABLE; strip unchanged.
+  - **Next:** Codex review (`research/reviews/2026-11-16-face-down/`), push, CI.
+    Open: why outline-kept plans fail face down; the glue route (still not printable);
+    `colored_flat.py` REVIEW_END text (deliberately unchanged).
+- **Earlier (2026-11-15): Task 5, the skin strip printed.** The owner printed
   `skin/model.3mf` from Bambu Studio, settings unchanged, eSUN PLA+ white over black:
   "every square is opaque" (0.2 to 1.0 mm all look like full white; no photo, the
   owner's choice). The owner kept 0.6 mm ("Keep 0.6 mm (Recommended)"), so no model or

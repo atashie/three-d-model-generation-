@@ -91,3 +91,19 @@ transcript per run beside each folder.
   `F3.printed_connectivity` alone, with the note; exit 0). The new strip_id is
   `59a147aa4ef6d57522da5e2d5593a7091da3e8b8b52659435aaed37c118b8857` (`strip-4`). The
   owner's printed skin strip came from the `strip-3` files; the geometry is unchanged.
+
+## Re-run with the default "both faces, prefer down" (2026-11-16)
+
+Plan amendment Decision 1a, code at `d1f1423`. Same machine, slicers and inputs as the
+section above; outputs in `artifacts/slice-runs/fd7/`. The face verdicts, color changes
+and times equal the section above for every face.
+
+| Plan | Chosen | Why (the CLI's line) | Exit |
+| --- | --- | --- | --- |
+| Roadie, outline dropped | face down | face down is PRINTABLE (the owner's preference) | 1 (glue plates, as before) |
+| Roadie, outline kept | face up | face down is NOT CERTIFIED (F3.edge_coverage FAIL); face up is PRINTABLE | 0 |
+| Oddie, blues merged | face down | face down is PRINTABLE (the owner's preference) | 1 (glue plates, as before) |
+| Oddie, outline kept | face up | face down is NOT CERTIFIED (F3.edge_coverage FAIL); face up is PRINTABLE | 0 |
+
+The exit 1 of the outline-dropped plans comes from their glue plates, which are judged
+as before (the glue route is not printable). Their AMS face is not the cause.
