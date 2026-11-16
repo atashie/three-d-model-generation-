@@ -137,8 +137,10 @@ passed. These commits are pushed; for CI see above.
    simple figurines and simple flexis later), with per-job data purged once the owner
    confirms a final file. Draft design `docs/plans/2026-11-16-restructure-design.md`;
    Codex and Antigravity reviewed it (`research/reviews/2026-11-16-restructure-design/`,
-   18 merged findings, all but one holding). Next: the owner's decisions on the
-   findings, then a redraft. No code changed yet.
+   18 merged findings, all holding in substance). The owner decided 4 more points
+   (evidence moves intact; package split when figurines start; public per print; prove
+   a rebuild before purging); draft 2 answers every finding. Next: the owner's approval
+   of draft 2. No code changed yet.
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.

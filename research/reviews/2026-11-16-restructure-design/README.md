@@ -102,5 +102,10 @@ C = Codex finding number, A = Antigravity finding number. Verdict: **holds** unl
 
 ## Handling
 
-Not handled yet: the design is redrafted with the owner's answers to the decisions
-these findings raise (`docs/STATUS.md`, handoff). Each handled finding will be noted here.
+The owner answered the four decisions the findings raised (2026-11-16): "Move, don't
+rewrite (Recommended)", "Split when figurines start (Recommended)", "Ask per print
+(Recommended)", "Prove a rebuild first (Recommended)". Draft 2 of the design answers
+each of the 18 merged findings; its last table maps each finding to the section that
+answers it. Finding 17 (over-design) is answered in part: four job commands over the
+same functions, with parameters in `job.yaml`, not a second option parser. Nothing is
+built, so no finding is "fixed" yet.
