@@ -9,6 +9,7 @@ the tests marked slicer.
 
 import copy
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -368,14 +369,22 @@ def test_the_print_message_names_the_printable_faces():
     assert up.startswith("to print face up: ") and "it is face up" in up
     assert "turn" not in up.split(";")[0]
     assert down.startswith("to print face down: ")
-    assert "turn it over" in down and "model.3mf is face up" in down
-    # How to turn it in Bambu Studio: a rigid half turn about X, the same face down as
-    # tdmg.orca_input.turn_over's half turn about y, not a mirror.
+    assert "turn it over" in down and "model.3mf in Bambu Studio, which is face up" in down
+    # How to turn it in Bambu Studio: a rigid half turn about X, not a mirror; the same
+    # face on the bed as tdmg.orca_input.turn_over's half turn about y, the plate layout
+    # turned 180 degrees (not the same layout).
     assert "select the model, Rotate (R), 180 degrees about X" in down
-    assert "the same face down as face-down/" in down and "not a mirror" in down
+    assert "a rigid half turn, not a mirror" in down
+    assert "the same face is on the bed as in face-down/" in down
+    assert "the plate layout is turned 180 degrees" in down
     assert both.startswith("both faces are PRINTABLE; the owner's default is face down")
-    assert "not set" not in both and "turn it over for face down" in both
+    assert "not set" not in both and "for face down, turn it over" in both
     assert "Rotate (R), 180 degrees about X" in both
+    for m in (down, both):            # no brackets inside brackets
+        depth = 0
+        for ch in m:
+            depth += {"(": 1, ")": -1}.get(ch, 0)
+            assert depth <= 1, m
 
 
 @pytest.mark.parametrize("faces", [("up",), ("down",), ("up", "down")])
@@ -711,7 +720,7 @@ def test_face_down_is_the_default(colored, orca, tmp_path):
     # The owner's decision of 2026-11-16 ("Face down, settle check (Recommended)"), after
     # the first AMS print (research/verification/2026-11-15-first-ams-print/README.md).
     assert cs.DEFAULT_FACE == "down"
-    assert cs.make_color_slice.__defaults__[-1] == "down"
+    assert inspect.signature(cs.make_color_slice).parameters["face"].default == "down"
     out = tmp_path / "s"
     r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
                             str(orca())])
@@ -730,15 +739,19 @@ def test_the_help_names_face_down_as_the_default():
     assert "default down (the owner's default)" in text
 
 
-@pytest.mark.parametrize("face", ["down", "both"])
+@pytest.mark.parametrize("face", ["up", "down", "both"])
 def test_the_face_option(colored, orca, tmp_path, face):
     rec = _run(colored, tmp_path / face, orca(), face=face)
-    assert list(rec["faces"]) == {"down": ["down"], "both": ["up", "down"]}[face]
-    up = _run(colored, tmp_path / "up", orca(), face="up")
-    assert up["colorslice_id"] != rec["colorslice_id"]          # the faces are in the id
-    if face == "both":
-        assert (rec["faces"]["up"]["orca_input"]["sha256"]
-                == up["faces"]["up"]["orca_input"]["sha256"])
+    assert list(rec["faces"]) == {"up": ["up"], "down": ["down"], "both": ["up", "down"]}[face]
+    assert rec["params"]["face"] == face
+    for single in ("up", "down"):
+        if single == face:
+            continue
+        other = _run(colored, tmp_path / single, orca(), face=single)
+        assert other["colorslice_id"] != rec["colorslice_id"]     # the faces are in the id
+        if face == "both":                    # each face is sliced as it is alone
+            assert (rec["faces"][single]["orca_input"]["sha256"]
+                    == other["faces"][single]["orca_input"]["sha256"])
 
 
 def test_a_bad_face_is_refused(colored, orca, tmp_path):

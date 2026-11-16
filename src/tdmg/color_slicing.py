@@ -230,20 +230,21 @@ PRINT_TAIL = (
 DEFAULT_FACE = "down"
 FACE_CHOICES = {"up": ("up",), "down": ("down",), "both": ("up", "down")}
 # How to turn model.3mf (face up) over in Bambu Studio. A half turn about X puts the same
-# face on the bed as turn_over's half turn about y: the two differ by a half turn in the
-# plate's plane. Both are rigid turns, not mirrors, so the face reads as designed when
-# the print is picked up and turned back.
+# face on the bed as turn_over's half turn about y; the two differ by a half turn in the
+# plate's plane, so the plate layout is turned 180 degrees. Both are rigid turns, not
+# mirrors, so the face reads as designed when the print is picked up and turned back.
 TURN_IN_STUDIO = ("select the model, Rotate (R), 180 degrees about X: a rigid half turn, "
-                  "the same face down as face-down/ (sliced turned about y), not a mirror")
+                  "not a mirror; the same face is on the bed as in face-down/ (tdmg turns "
+                  "it about y, so the plate layout is turned 180 degrees)")
 PRINT_FACE = {
     ("up",): "to print face up: open model.3mf in Bambu Studio (it is face up) and "
              + PRINT_TAIL,
-    ("down",): "to print face down: open model.3mf in Bambu Studio and turn it over "
-               f"(model.3mf is face up; {TURN_IN_STUDIO}; the inlays on the bed), then "
+    ("down",): "to print face down: open model.3mf in Bambu Studio, which is face up, and "
+               f"turn it over: {TURN_IN_STUDIO}. The inlays go on the bed. Then "
                + PRINT_TAIL,
-    ("up", "down"): "both faces are PRINTABLE; the owner's default is face down (the "
-                    "owner's decision of 2026-11-16): open model.3mf in Bambu Studio (it is "
-                    f"face up; turn it over for face down: {TURN_IN_STUDIO}) and "
+    ("up", "down"): "both faces are PRINTABLE; the owner's default is face down, the "
+                    "owner's decision of 2026-11-16: open model.3mf in Bambu Studio, which "
+                    f"is face up; for face down, turn it over: {TURN_IN_STUDIO}. Then "
                     + PRINT_TAIL}
 
 
