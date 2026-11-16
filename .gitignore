@@ -10,3 +10,10 @@ build/
 out/
 artifacts/
 .DS_Store
+# Restructure (docs/plans/2026-11-16-restructure-design.md): per-job working data,
+# and the private parts of the print library (source images, non-public printable
+# files, unfinished staging folders). Card, job.yaml, provenance and public files are tracked.
+jobs/
+prints/*/source/
+prints/*/private/
+prints/.staging-*/

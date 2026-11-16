@@ -29,7 +29,7 @@ Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous
 | `docs/plans/2026-11-13-color-slicing.md` | cited |  | doc | 4 |  | 4 |  | 11 |  |  |  | 5 |  | 30 |  |
 | `docs/plans/2026-11-14-test-strip.md` | cited |  | doc | 4 |  | 3 |  | 2 |  |  |  | 4 |  | 7 |  |
 | `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc | 2 |  | 2 |  | 7 |  |  |  | 4 |  | 3 |  |
-| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 1 |  |  |  | 2 | 1 | 4 |  |
+| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 1 |  |  |  | 2 | 1 | 4 | 1 |
 | `docs/plans/2026-11-16-restructure.md` | cited | active work, stays where it is | doc, status | 2 |  | 1 |  |  |  |  |  | 1 | 3 | 3 |  |
 | `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 1 | 4 |  |
 | `research/reviews/2026-11-09-codex` | cited |  | doc | 2 |  |  | 2 |  |  |  |  | 2 |  | 2 |  |
@@ -262,6 +262,7 @@ Linked from kept records: `research/reviews/2026-11-16-face-down`, `research/ver
 
 Active work, stays where it is.
 
+- `.gitignore` (config): lines 13
 - `docs/PLAN.md` (doc): lines 163
 - `docs/STATUS.md` (status): lines 99
 - `docs/design/README.md` (doc): lines 25
