@@ -135,7 +135,10 @@ passed. These commits are pushed; for CI see above.
 2. **Repository restructure (being designed, 2026-11-16).** The owner's goal: any image
    in, a confirmed printable file out, for several output classes (flat icons now;
    simple figurines and simple flexis later), with per-job data purged once the owner
-   confirms a final file. Design in progress with the owner; no code changed yet.
+   confirms a final file. Draft design `docs/plans/2026-11-16-restructure-design.md`;
+   Codex and Antigravity reviewed it (`research/reviews/2026-11-16-restructure-design/`,
+   18 merged findings, all but one holding). Next: the owner's decisions on the
+   findings, then a redraft. No code changed yet.
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.

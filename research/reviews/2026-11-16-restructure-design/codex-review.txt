@@ -1,0 +1,149 @@
+The draft needs changes before implementation, chiefly around evidence retention, replay after purge, and the conditions under which `finish` may delete data. This is a static review: I modified no files and ran no tests or slicers.
+
+1. **High — Keeping locator strings is not a sufficient evidence-retention contract.**  
+   **Design:** §6, including the replacement CLAUDE.md rule 6.
+
+   Concrete examples:
+   - `color.outline.keep_width` cites a table row without its column headings and a sentence ending in “becomes”: [rules/color.yaml:116](C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml:116). The surrounding record supplies the tested widths, the actual 0.5 mm decision, and a correction that the lines still have small breaks: [palette record:750](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-11-color-palette/README.md:750).
+   - The calibrated skin-depth locator is “every square is opaque.” The surrounding record establishes that this was visual judgment, for eSUN PLA+ white over black, with an unrecorded Bambu Studio version; 0.2 mm also passed, and glue-piece strength was not tested: [strip record:275](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-14-test-strips/README.md:275).
+   - Several slicer rules cite source code, not executed behavior. The original explicitly says no slicer was run: [import record:5](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-09-slicer-3mf-import/README.md:5).
+
+   **Failure scenario:** a condensed file retains every locator and a plausible summary, passes `test_rules.py`, but loses a qualification, correction, table heading, or the distinction between source reading and measurement. The draft’s manual reread helps, but it does not specify what must survive or leave a reviewable record of that decision.
+
+   **Suggested change:** require a rule-by-rule retention map covering the complete supporting passage, derivation, conditions, contrary observations, corrections, and original commit/path. Preserve `kind`, each evidence item’s `provenance` and `validation`, and calibration scope explicitly. Rewrite rule 6 to require this without weakening rules 2–4; preserve the stated exception for unchanged `research_notes/` and `reports/`.
+
+2. **High — The condensation plan deletes reusable evidence that code and tests directly consume.**  
+   **Design:** §§1, 6, 7.4; especially “rules/ profiles/ unchanged.”
+
+   [tests/test_slicer.py:60](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slicer.py:60) reads installation hashes, old and new profile hashes, source manifests, and include-chain logs. [tests/test_setup_orcaslicer.py:243](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_setup_orcaslicer.py:243) reconstructs the recorded manifest bytes. [tests/conftest.py:20](C:/Users/arikt/documents/github/three-d-model-generation-/tests/conftest.py:20) parses color-measurement `results.txt` before owner-image fixtures can skip. Slicer profiles also contain live `record` paths, for example [prusaslicer-2.9.7.yaml:21](C:/Users/arikt/documents/github/three-d-model-generation-/profiles/slicers/prusaslicer-2.9.7.yaml:21).
+
+   **Failure scenario:** replacing verification directories with topic Markdown breaks tests even on machines without owner images, leaves profile provenance dangling, or encourages replacing independent measured expectations with values copied from the implementation.
+
+   **Suggested change:** inventory dependencies beyond YAML `ref`s. Move reusable raw manifests, measurement tables, excerpts, and fixtures intact into an evidence/assets location; update consumers and profile references together. A git tag is an archive of tracked history, not a substitute for files current tests require. It also cannot recover git-ignored inputs or outputs.
+
+3. **High — “File + card + source + config” does not yet specify enough to regenerate the print.**  
+   **Design:** §§3–5.
+
+   Selection accepts a user-provided mask and records its hash, not a reconstructible description of its pixels: [selection.py:330](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/selection.py:330). `verify_colors` requires the selection folder, `colors.json`, labels, and preview files, then rebuilds the plan: [colors_verify.py:112](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py:112). The existing colored slicer likewise requires `colored.json` and its output set: [color_slicing.py:486](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py:486).
+
+   **Failure scenario:** the owner manually corrects a mask. `finish` retains the original image, choices, and hashes but deletes the mask and stage records. Neither those hashes nor the owner’s prose can recreate the approved selection. The library folder also cannot simply be passed to the current verification commands.
+
+   **Suggested change:** define a complete replay schema before purge. Store resolved selection controls, all effective parameters, and any irreducible input such as a corrected mask as part of the retained source/config. Require a successful rebuild from only the proposed library contents in an isolated directory before deleting the job. Define separately which historical verifications can still be rerun.
+
+4. **High — Version and algorithm IDs do not preserve the environment or historical verdict.**  
+   **Design:** §4.
+
+   The package version is currently `0.0.1`: [__init__.py:6](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/__init__.py:6). `verify_colors` rejects changed rule values and differing rebuilt records: [colors_verify.py:183](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py:183). STATUS explicitly records unverified cross-machine parity and even record changes without an algorithm bump: [STATUS.md:215](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:215), [STATUS.md:267](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:267).
+
+   **Failure scenario:** a later checkout has the same tdmg version and algorithm labels but different rules, record wording, dependencies, or geometry rounding. Rebuilding fails—or produces a new result while the card still presents the old PRINTABLE verdict without its underlying measurements.
+
+   **Suggested change:** retain the exact code commit, dirty-state status, lockfile identity, platform/library versions, effective rules and profile identities, and compact machine-readable check results within the card/config. Distinguish historical verification from a fresh verification under current rules. Record the checking slicers separately from the Bambu Studio settings actually used to print.
+
+5. **High — Confirmations are not bound to the artifact or revision the owner approved.**  
+   **Design:** §§3, 4, 5, 7.5–7.6.
+
+   The conditions check the current model against the current slice and look for dated confirmation text. They do not connect that confirmation to a particular model, face, configuration, or preview.
+
+   **Failure scenario:** Roadie is approved, then its size or colors change and it is rebuilt and re-sliced. The new model matches its new slice; the old “looks great” remains in `job.yaml`. All stated `finish` conditions can pass even though the owner never approved that print. Similarly, a preview approval or physical-print confirmation could be mistaken for purge authorization. Dry-run behavior exists only as a skill convention.
+
+   **Suggested change:** bind each confirmation to its subject, artifact hashes, job revision, and source conversation reference. Invalidate affected downstream confirmations when inputs change. Keep physical acceptance and purge authorization separate. For Roadie, import the already-given confirmation with its original scope and record the later computational checks separately; [the print record:45](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-15-first-ams-print/README.md:45) supports that distinction.
+
+6. **High — Purge containment and library completion are underspecified on the destination side.**  
+   **Design:** §§4–5.
+
+   “Only inside `jobs/`” does not require exactly one registered job directory, and no corresponding constraints are stated for `--print-name`, the library destination, existing entries, or source-copy paths. Re-reading hashes establishes byte integrity, not completeness of the required retained set. Existing output writing explicitly treats a directory without its final record as incomplete: [records.py:3](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/records.py:3).
+
+   **Failure scenario:** a destination resolves inside the job being deleted, an existing library name is overwritten, or a required file is omitted from the hash list. The listed files can hash correctly immediately before the only usable copy is deleted.
+
+   **Suggested change:** require validated single-component names, exact job identity, disjoint canonical job/library paths, checks on linked ancestors and Windows junctions, and refusal to overwrite another print. Define the required file set independently of the manifest. Stage and validate the whole entry, publish it atomically with a completion marker, then delete the exact job. Specify interruption recovery and idempotent retries.
+
+7. **High — “Every output byte-identical” is already contradicted by measured behavior.**  
+   **Design:** §7.1–7.2.
+
+   Repeat strip runs changed G-code timestamps and the hashes in `strip.json`: [strip record:147](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-14-test-strips/README.md:147). There is another migration-specific difference: serialized check text contains Python paths, such as `tdmg.color_config.palette_cap` in [color_checks.py:252](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_checks.py:252). Changing that text changes `colored.json`; its hash participates in slice identity: [color_slicing.py:1009](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py:1009).
+
+   **Failure scenario:** an otherwise correct move fails the migration gate forever, or developers broadly normalize records until a genuine regression disappears.
+
+   **Suggested change:** first measure unchanged-code repeatability. Define exact-byte comparisons for deterministic assets and narrowly specified comparisons for timestamp-bearing outputs and dependent hashes. Keep geometry, parameters, measured checks, and verdicts exact within a fixed environment. Decide explicitly whether serialized descriptive paths remain historical identifiers or change through a record migration.
+
+8. **Medium — Moving `paths.py` unchanged breaks checkout discovery; removing shims also requires a wider consumer migration.**  
+   **Design:** §§2, 7.2.
+
+   [paths.py:12](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/paths.py:12) derives the repository root from its current depth. Under `tdmg/core/`, the same expression points at `src/`; checkout detection fails and selects packaged `_data`, normally absent in the source tree. Conversely, the wheel still deliberately installs data under `tdmg/_data`. CI directly imports the old slicer module: [ci.yml:53](C:/Users/arikt/documents/github/three-d-model-generation-/.github/workflows/ci.yml:53). Tests also patch old module-level names: [test_cli.py:253](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_cli.py:253).
+
+   **Failure scenario:** imports work in one layout but fail in editable installs, installed-wheel smoke checks, setup scripts, or tests. Frozen research scripts also cease to run against the new package.
+
+   **Suggested change:** enumerate imports, string patch targets, resource lookup, CLI entry points, scripts, and historical replay consumers. Anchor resources to the top-level package. Test checkout and installed-wheel behavior outside the repository before purge. State whether historical scripts require their original checkout or retained compatibility imports.
+
+9. **Medium — The new purge cannot remove Roadie’s existing data as described.**  
+   **Design:** §§5, 7.5, 8.
+
+   Today’s data is distributed across `artifacts/selection-runs`, `colors-runs`, `colored-runs`, `slice-runs`, and review folders; some directories hold both Roadie and Oddie. STATUS also identifies shared configs and approved previews: [STATUS.md:211](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:211).
+
+   **Failure scenario:** copying a Roadie run into `jobs/roadie/` and deleting that job leaves the original data untouched. Extending deletion ad hoc to whole old directories risks Oddie’s data, shared selections/configs, or reusable tools.
+
+   **Suggested change:** produce an explicit legacy inventory assigning each path to Roadie, Oddie, reusable evidence, or shared resources. Migrate or retain shared dependencies first; use a separate reviewed allowlist for legacy deletion. Never infer ownership from a parent directory or a partial filename.
+
+10. **Medium — The package split preserves dependencies that contradict the claimed reusable boundaries.**  
+    **Design:** §2.
+
+    Concrete mismatches:
+    - Generic build-volume and triangle checks remain in `flat.py`, despite the table locating F2/F5 in core: [flat.py:442](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/flat.py:442), [flat.py:541](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/flat.py:541).
+    - `smoothing` imports color’s `OUTSIDE`, while color geometry imports flat/smoothing: [smoothing.py:60](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/smoothing.py:60).
+    - Color checks import `orca_input`, while color slicing imports color checks, creating dependencies in both directions between the proposed color and slicing packages.
+    - The proposed universal exporter requires a base followed by palette-indexed inlays: [threemf.py:141](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/threemf.py:141).
+
+    **Failure scenario:** a figurine or articulated chain must import flat-icon orchestration or pretend its bodies are base/inlays to use “shared” resources.
+
+    **Suggested change:** distinguish reusable primitives from R1/R2 adapters. Put mesh checks and storage helpers below recipe orchestration; isolate planar color construction and base/inlay packaging. A moves-only phase can preserve behavior, but it should not claim to have established these boundaries.
+
+11. **Medium — Shared slicing lacks an explicit boundary between measurement and recipe-specific certification.**  
+    **Design:** §2.
+
+    The existing F3 implementation examines **per-layer cross-sections**, not just one flat silhouette. Nevertheless, its assumptions remain specific: known centered placement, quarter-turn matching, and refusal of support extrusion are documented in [printed.py:95](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:95) and [printed.py:1168](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:1168). PLAN requires additional G3/A1 checks for stability, necks, supports, and joint clearances: [PLAN.md:130](C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md:130).
+
+    **Failure scenario:** a supported figurine is unreadable by the shared slicer checker, or a flexi passes inherited footprint checks without establishing functional joint clearance.
+
+    **Suggested change:** define slicing outputs as measurements with an explicit supported envelope. Recipes choose required checks; missing G3/A1 checks remain UNKNOWN. Do not inherit the flat-icon certification policy merely because a class uses the slicing package.
+
+12. **Medium — Classes duplicate recipe policy, while `finish` only supports the R2 output shape.**  
+    **Design:** §§2–4.
+
+    Classes would own stages, required checks, rules, and readiness, although PLAN assigns executable policy to recipes: [PLAN.md:126](C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md:126). One class also groups recipes with different stages and capabilities. Meanwhile, `finish` requires `model.3mf`, `palette.json`, and a face, although R1 currently produces an STL and still lacks 3MF output: [STATUS.md:91](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:91).
+
+    **Failure scenario:** marking `flat-icon` ready exposes unfinished variants; marking it “in progress” blocks the working route. A successfully printed R1 STL cannot enter the proposed library.
+
+    **Suggested change:** make classes owner-facing aliases/groupings. Resolve each job to a concrete recipe and supported options, with one authoritative stage/check declaration. Define the library’s required outputs by recipe: STL, colored 3MF plus palette, or a plate set. Defer placeholder packages and a generalized runner until another executable route needs them.
+
+13. **Medium — Documentation migration omits existing contracts and checks.**  
+    **Design:** §§1, 6, 7.4.
+
+    The new `docs/classes/` and `docs/modules/` have no defined relationship to the existing attribute/recipe pages. [tests/test_docs.py:16](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_docs.py:16) checks template headings only under `docs/print-types/`; it will not enforce equivalent coverage in new class pages. Existing pages link directly to records slated for deletion, for example [r1-flat-single.md:74](C:/Users/arikt/documents/github/three-d-model-generation-/docs/print-types/recipes/r1-flat-single.md:74). Rule tests also hard-code old evidence locations: [test_rules.py:58](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py:58), [test_rules.py:84](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py:84).
+
+    **Failure scenario:** generated tables are current while narrative docs, profile references, CLAUDE’s module references, and evidence links disagree. Moving pages may silently remove template coverage.
+
+    **Suggested change:** specify the retained documentation hierarchy and an old-to-new reference map. Include PLAN, guides, print-type pages, profiles, calibration text, and tests—not only README/STATUS/CLAUDE. Run the complete docs/rules/wheel checks after condensation and before Roadie purge.
+
+14. **Medium — The permanent library’s private source has no durability or machine-handoff policy.**  
+    **Design:** §§1, 3–4, 8.
+
+    The source being git-ignored is an owner decision; the unhandled risk is treating the resulting library as permanent. STATUS identifies two machines and says it is the memory that travels between them: [STATUS.md:81](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:81). Current [.gitignore](C:/Users/arikt/documents/github/three-d-model-generation-/.gitignore) contains neither `jobs/` nor library-source exclusions.
+
+    **Failure scenario:** after purge and a push, a fresh clone contains the print and card but no source. Disk loss makes regeneration impossible. During migration, creating files before installing ignore rules can expose the source through normal staging.
+
+    **Suggested change:** install and test ignore rules before copying inputs. Define a simple private backup/transfer procedure with hash checks, machine ownership for active jobs, and explicit “source unavailable” status. No synchronization service is necessary, but Git alone must not be described as preserving the whole library.
+
+15. **Medium — Text-to-image provenance is absent from the job intake contract.**  
+    **Design:** goal, §§3, 7.6.
+
+    `job new` records an image path/hash but no input origin. Existing STATUS already proposes recording generated input art with its prompt and model: [STATUS.md:461](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:461).
+
+    **Failure scenario:** generated and photographed inputs become indistinguishable after condensation; the prompt, generator/version, edits, and selected candidate are lost. Claude may also infer that image generation belongs inside the default deterministic pipeline.
+
+    **Suggested change:** add optional, explicitly unknown-capable source provenance: origin type, prompt, generator/version/settings, reference inputs, edits, and chosen-image hash. The skill should define generation/import as an intake step and preserve the approved bitmap as the reproducible starting point.
+
+The three most important changes are:
+
+1. **Define evidence retention by dependency and supporting context**, including raw files used by tests—not by locator strings alone.
+2. **Specify `finish` as a guarded transaction**, binding approvals to exact artifacts and validating a complete, disjoint library entry before deletion.
+3. **Prove replay from the retained library contents before purge**, with exact code/environment provenance and an honest distinction between historical verification and current re-verification.

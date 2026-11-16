@@ -1,0 +1,282 @@
+Here is the adversarial review of [2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md), checked against [CLAUDE.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/CLAUDE.md), [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md), [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md), and the repository tree.
+
+---
+
+## 1. Evidence Loss
+
+### Finding 1.1 — Deleting `research/verification/` and `docs/plans/` breaks test suites and slicer pins that read raw data files, not just rule locators
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L139-L152)) & §7 Phase 4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L170-L173))
+  * [conftest.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/conftest.py#L14-L38)
+  * [test_slicer.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slicer.py#L36-L40), [test_slicer.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slicer.py#L59-L133), [test_slicer.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slicer.py#L149-L158), [test_slicer.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slicer.py#L608-L621)
+  * [test_portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_portability.py#L39), [test_portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_portability.py#L76-L97), [test_portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_portability.py#L234-L236), [test_portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_portability.py#L278-L280), [test_portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_portability.py#L400-L404)
+  * [test_rules.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py#L58-L59), [test_rules.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py#L84-L86)
+  * [orcaslicer-2.5.0.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/profiles/slicers/orcaslicer-2.5.0.yaml#L21), [prusaslicer-2.9.7.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/profiles/slicers/prusaslicer-2.9.7.yaml#L21)
+* **Concrete failure scenario:**
+  Design §6 assumes the only automated consumers of `research/verification/` and `docs/plans/` are `rules/*.yaml` `ref`/`locator` entries checked by `tests/test_rules.py`. In reality:
+  1. [conftest.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/conftest.py#L15-L38) opens `research/verification/2026-11-11-color-palette/results.txt` and parses `kmeans_w` rows, SHA-256 digests, and palettes for `owner_selection` and [test_color.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_color.py#L54-L90).
+  2. [test_slicer.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slicer.py#L59-L133) opens and cross-checks `install-hashes.txt`, `flattened-hashes.txt`, `source-manifest.json`, `app-tree.txt`, `flatten.txt`, `flatten-output.txt`, and `source-excerpts.txt` across `research/verification/2026-11-10-orcaslicer-windows/` and `research/verification/2026-11-13-a1-profile-include/` to prove `profiles/slicers/orcaslicer-2.5.0.yaml` was not hand-edited away from the measured files.
+  3. [test_portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_portability.py#L76-L97) asserts `PIN.record == "research/verification/2026-11-11-prusaslicer-windows/README.md"`, asserts `(REPO_ROOT / PIN.record).is_file()`, and parses `install-hashes.txt` and `results.txt`.
+  4. [test_rules.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py#L58-L59) and [test_rules.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py#L84-L86) hard-code assertions that `e.ref` starts with `"research/verification/..."` or `"docs/plans/..."`.
+  Deleting `research/verification/` and `docs/plans/` in Phase 4 immediately breaks `pytest` with `FileNotFoundError` and `AssertionError` across all four test modules.
+* **Suggested change:**
+  Either retain the machine-parsed measurement manifests (`install-hashes.txt`, `flattened-hashes.txt`, `source-manifest.json`, `results.txt`, `source-excerpts.txt`) in `docs/evidence/` (or `tests/data/evidence/`) alongside the condensed markdown, and explicitly list updating `profiles/slicers/*.yaml` (`record:` field), `tests/conftest.py`, `tests/test_slicer.py`, `tests/test_portability.py`, and `tests/test_rules.py` in §6 and Phase 4—or keep the pin-verification tests backed by structured data files in `docs/evidence/`.
+
+### Finding 1.2 — Condensing to "every locator string + summary" strips negative evidence, counterexamples, and table context that justify `hypothesis` / `untested` status
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L140-L152))
+  * [CLAUDE.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/CLAUDE.md#L7-L11) (rules 2–4)
+  * [perception.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/perception.yaml#L8-L32)
+  * [color.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml#L25-L145), [color.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml#L166-L174)
+  * [geometry-flat.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/geometry-flat.yaml#L54-L66)
+  * [test_rules.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py#L46-L52)
+* **Concrete failure scenario:**
+  `tests/test_rules.py` only checks `assert e.locator in text` (substring presence). Many rules in `rules/*.yaml` rely on surrounding rows, negative controls, or trade-off tables around the locator to prove why a rule is `provenance: hypothesis, validation: untested` rather than `measured`:
+  * In [color.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml#L115-L124) (`color.outline.keep_area_width_ratio`), the locator is only Roadie's row (`"roadie: area=629004 (40.52% of mask), width p50=20.00 px, p90=72.20 px, max=116.16 px"`), while the `claim` explicitly depends on the adjacent un-cited rows: *"the next rows of the same table give Oddie's numbers"*.
+  * In [perception.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/perception.yaml#L9-L15) (`perception.alpha.min_opaque`), the locator is `"cutoffs 1, 64, 128, 192, 254 all give the exact same mask"`, and the surrounding table shows that the image has zero semi-transparent pixels—proving insensitivity rather than validation of `128`.
+  * In [color.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml#L35-L45) (`color.extract.default_count`), the locator cites the `K=6` row, while the `K=5` and `K=7..8` rows in the same table show why `K=6` splits Roadie's outline unless shade-merging runs (`Decision 2`).
+  * In [color.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml#L173), `calibration.test` contains an unchecked free-text citation to `"research/verification/2026-11-14-test-strips/ section 7"`, which `test_rules.py` does not inspect and which will become a dangling path once `research/verification/` is deleted.
+  If a condenser preserves only the literal `locator` strings plus a prose summary, `test_rules.py` still passes while the negative controls and counter-rows that prevent false promotion from `hypothesis`/`untested` to `measured` are lost from `HEAD`.
+* **Suggested change:**
+  Require `docs/evidence/<topic>.md` to preserve complete measurement tables (all tested parameter rows, all tested images, and negative controls) verbatim rather than prose summaries around isolated locator lines, and audit all free-text paths in `rules/*.yaml` (such as `calibration.test` in [color.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml#L173) and comments in `rules/*.yaml`).
+
+### Finding 1.3 — The `pre-restructure` git tag is not in-tree evidence and is absent in CI clones
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L140-L152))
+  * [ci.yml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/.github/workflows/ci.yml#L17)
+* **Concrete failure scenario:**
+  Design §6 relies on a git tag (`pre-restructure`) as the fallback record for deleted scripts, reviews, and full logs, and rewrites [CLAUDE.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/CLAUDE.md#L11) rule 6 so future jobs and features also condense and delete their scripts/runs once done (without even specifying tags for future jobs). In [ci.yml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/.github/workflows/ci.yml#L17), `actions/checkout@v4` performs a shallow (`fetch-depth: 1`) checkout without tags, and local worktrees or tarball downloads do not guarantee tags are fetched. Worse, `measure_*.py` scripts in `research/verification/` (e.g. `measure_palette.py`, `measure_conditionals.py`, `measure_coverage.py`) are the *only* record of how non-tdmg measurements were computed; deleting them means a future rule re-evaluation on a new image cannot re-run the measurement script on `HEAD`.
+* **Suggested change:**
+  Keep reusable measurement scripts (or a single `scripts/measure_*.py` / `docs/evidence/` appendix) in-tree whenever a `hypothesis` rule still awaits calibration or re-measurement on future prints, and require in-tree `docs/evidence/<topic>.md` to be self-contained so no rule in `rules/*.yaml` depends on git history to verify its claim.
+
+---
+
+## 2. Purge Safety
+
+### Finding 2.1 — `finish` only supports `model.3mf`, breaking R1 single-color (`model.stl`) and R2 glue-route (`glue-*.stl`) prints
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §1 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L71)) & §4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L115-L124))
+  * [flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/flat.py#L46-L49), [colored_flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colored_flat.py#L525-L553), [color_slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py#L194-L212)
+* **Concrete failure scenario:**
+  Design §4 specifies that `prints/<name>/` contains `model.3mf` (and `palette.json` for multicolor) and that `tdmg finish` checks "`model.3mf`'s hash equals the one that was sliced and judged".
+  1. **R1 (single-color flat icon)** never produces a `model.3mf`; [flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/flat.py#L47) writes `model.stl` and [slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/slicing.py#L318-L355) slices `model.stl`. An R1 job cannot be finished under §4.
+  2. **R2 AMS multicolor** ([color_slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py#L510-L526)) does **not** slice `model.3mf`! OrcaSlicer puts all shells of `model.3mf` on filament 1 ([orca_input.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/orca_input.py#L4-L10)), so `color_slicing.py` builds and slices a separate `orca-input.3mf` per face (`slice/ams/face-down/orca-input.3mf` and `slice/ams/face-up/orca-input.3mf`), where `face-up` even rotates the meshes 180° about Y (`turn_over`). Thus `model.3mf`'s SHA-256 *never* equals the file that OrcaSlicer sliced; `slice.json` links `model.3mf` via `colored.json`'s `outputs["model.3mf"].sha256`.
+  3. **R2 glue route** prints `glue-base.stl` and `glue-color-*.stl`, not `model.3mf`.
+* **Suggested change:**
+  Define `prints/<name>/` outputs per recipe/route: `model.stl` for R1, `model.3mf` + `palette.json` for R2 AMS, and `glue-base.stl` + `glue-color-*.stl` + `palette.json` for R2 glue. Specify that `finish` verifies the chain of hashes (`slice.json` `links` -> `colored.json` / `flat.json` `outputs`) rather than claiming `model.3mf` was directly sliced.
+
+### Finding 2.2 — User-supplied masks (`--mask FILE`) are permanently destroyed on purge, making the print un-regenerable
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §3 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L103-L113)) & §4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L115-L128))
+  * [selection.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/selection.py#L328-L355), [selection.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/selection.py#L448-L465)
+* **Concrete failure scenario:**
+  When `select` is run with `--mask FILE` (`method="user_mask"` in [selection.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/selection.py#L328-L355)), the mask cannot be derived from `source/<image>` and `job.yaml` settings alone—it comes from an external binary mask PNG. If the user's mask was placed in `jobs/<name>/` (or edited there) and `finish` purges `jobs/<name>/` while keeping only `source/<image>` and `job.yaml`, the mask is gone forever and the print can never be regenerated from `prints/<name>/`.
+* **Suggested change:**
+  When `selection` uses `--mask`, copy the user mask into `prints/<name>/source/user-mask.png` (and record its SHA-256 in `job.yaml` and `card.md`) before `finish` purges `jobs/<name>/`.
+
+### Finding 2.3 — Multiple variants of the same image (`roadie-drop` vs `roadie-keep`, R1 vs R2) collide or destroy shared work
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §3–§5 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L103-L137)) & §7 Phase 5 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L174-L176))
+  * [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L84-L125), [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L334-L361)
+* **Concrete failure scenario:**
+  Today the owner has multiple runs from the same Roadie selection (`artifacts/selection-runs/roadie`): R1 single-color (`artifacts/flat-runs/roadie`), R2 `roadie-drop`, and R2 `roadie-keep` ([STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L84-L115)). Phase 5 says: *"Roadie: make `jobs/roadie/` from the existing Roadie drop run, record the owner's confirmation already given ('the newly printed items look great'), `finish` it."*
+  1. Once `finish` deletes `jobs/roadie/` and Phase 5 deletes the old `artifacts/` run folders, `roadie-keep`, `oddie-merge-blues`, `oddie-keep`, and the R1 `roadie`/`oddie` runs in `artifacts/` are either deleted without a library entry or orphaned.
+  2. Notice `tests/conftest.py` ([conftest.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/conftest.py#L16), [conftest.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/conftest.py#L48-L59)): the test fixture `owner_selection` looks specifically at `artifacts/selection-runs/<name>/mask.png` and `cutout.png`! If Phase 5 removes `artifacts/selection-runs/` when moving to `jobs/` and `prints/`, all owner-image tests in `tests/test_color.py` and `tests/test_colors.py` silently `pytest.skip` on the owner's machine instead of running!
+* **Suggested change:**
+  Keep `artifacts/tools/` explicitly untouched by any job/clean command; decide explicitly in Phase 5 what happens to `artifacts/selection-runs/` (and update `tests/conftest.py` if owner fixtures move or stay); and clarify how multiple variants of one subject (`roadie-drop`, `roadie-keep`, `roadie-r1`) are named in `jobs/` and `prints/`.
+
+### Finding 2.4 — Confirmation gate and path/reparse-point checks on Windows have bypass holes
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §3 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L112-L113)), §4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L120-L124)), §5 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L130-L137))
+  * [records.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/records.py#L77-L113)
+* **Concrete failure scenario:**
+  1. **Confirmation forgery / stale confirmation:** Design §3 says *"That confirmation is recorded in `job.yaml`. Claude never records one the owner did not give."* If `job.yaml` just has a static field (e.g. `confirmed: "looks good"`) and the owner re-runs a stage with tweaked parameters after confirming an earlier run, the confirmation in `job.yaml` is now stale for the new `model.3mf`, yet `finish` only checks that "`job.yaml` holds the owner's confirmation". Furthermore, nothing in code prevents Claude from editing `job.yaml` directly or running `finish` in the same turn as `run` unless confirmation binds to the final `slice_id` / `model_sha256` and timestamp.
+  2. **Windows junctions & traversal in `NAME`:** On Windows (the target platform), `Path.is_symlink()` is `False` for NTFS directory junctions (`Path.is_junction()` in Python 3.12+ is required), and if `NAME` or `--print-name` is not validated with `_plain()` ([records.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/records.py#L77-L79)), `jobs/../artifacts/tools` resolves outside `jobs/`.
+* **Suggested change:**
+  Require `confirmation` in `job.yaml` to bind to the exact `slice_id` and `model_sha256` being finished (so any re-run invalidates prior confirmation); validate both `NAME` and `--print-name` with `_plain()` (rejecting `.`, `..`, `/`, `\`, `:`); and walk `jobs/<name>` checking both `is_symlink()` and `is_junction()` before deletion.
+
+---
+
+## 3. Reproducibility & Verification of Finished Prints
+
+### Finding 3.1 — Purging `jobs/<name>/` makes `verify_colors` impossible to run and drops rule values needed for future reproduction
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §3 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L105-L108)) & §4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L118-L128))
+  * [colors_verify.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py#L112-L206), [colors_verify.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py#L442-L450)
+  * [colored_flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colored_flat.py#L316-L335)
+* **Concrete failure scenario:**
+  1. `verify_colors(colors_dir, selection_dir)` ([colors_verify.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py#L112-L121)) requires `colors.json`, `labels.png`, `regions.png`, `selection.json`, `mask.png`, and `cutout.png`. Once `finish` deletes `jobs/<name>/`, none of those files exist in `prints/<name>/`, so `verify_colors` can never be run on a finished print.
+  2. Design §3 says `job.yaml` holds *"the output class, source image path and SHA-256, and every setting (size, thickness, color count, merges, outline choice, face)"*. It does **not** record the rule registry values (`rules/*.yaml` snapshot) or environment (`python`, `numpy`, `scipy`, `opencv-python-headless`, `shapely`, `trimesh`) that `selection.json`, `colors.json`, `colored.json`, and `slice.json` record. Several rules (`color.skin.depth_mm`, `color.glue.clearance_mm`, `color.extract.default_count`, `flat.smooth.sigma_px`, etc.) are currently `hypothesis` / `untested`. As soon as the owner calibrates a rule (e.g., changing `color.skin.depth_mm` in `rules/color.yaml` after printing the test strip), re-running a job from `prints/roadie/job.yaml` + `prints/roadie/source/roadie.png` will use the *new* rule default and produce a **different** `model.3mf`, while [colors_verify.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py#L449-L450) explicitly refuses any plan whose rule values differ from the current `rules/*.yaml`!
+* **Suggested change:**
+  Include the resolved `rules` snapshot (every rule id and value used by the job), the `slicer` pin hashes, the stage output SHA-256s (`mask.png`, `cutout.png`, `labels.png`, `model.3mf`), and the `environment` versions inside `prints/<name>/job.yaml` (or a single condensed `record.json` alongside `card.md`), so a finished print pins every parameter that produced its bytes even when `rules/*.yaml` defaults evolve later.
+
+### Finding 3.2 — Committing `prints/<name>/model.3mf` to the public repo while `.gitignore`-ing `prints/*/source/` leaks the same third-party IP the `.gitignore` was meant to protect
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design Owner Decisions #4–#5 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L22-L26)) & §1 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L71))
+  * [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L405), [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L334-L343) (§9b)
+* **Concrete failure scenario:**
+  [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L405) states: *"Owner images are not committed until their rights are confirmed; the tests use synthetic look-alikes."* [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L336-L339) §9b warns that a generated 3D model is a derivative work of the depicted character/artwork. In Design §1, `prints/*/source/` is git-ignored, but `prints/roadie/model.3mf` and `prints/roadie/palette.json` are committed to the public GitHub repository. A multicolor 3MF of Roadie contains the exact 2D vector contours and hex colors of every region of the source illustration—it is legally and visually a direct vectorization of the git-ignored source image.
+* **Suggested change:**
+  Record in `job.yaml` / `card.md` whether the source image's license/rights permit public redistribution of derivatives, or allow `prints/<name>/model.3mf` to be git-ignored per print unless rights are confirmed.
+
+---
+
+## 4. Modularity & Package Split (Section 2)
+
+### Finding 4.1 — The proposed package split creates two circular package dependencies (`tdmg.flat` <-> `tdmg.color` and `tdmg.color` <-> `tdmg.slicing`)
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §2 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L84-L98))
+  * [smoothing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/smoothing.py#L61) (`from tdmg.color import OUTSIDE`)
+  * [colors.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py#L58), [colors.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py#L79), [color_geometry.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_geometry.py#L48), [color_glue.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_glue.py#L64), [colored_flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colored_flat.py#L68) (all import `tdmg.flat` / `tdmg.smoothing`)
+  * [color_checks.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_checks.py#L51-L60) (`from tdmg.orca_input import ...`)
+  * [color_slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py#L87-L110) (`from tdmg.color_checks import ...`, `from tdmg.colored_flat import ...`, `from tdmg.flat import ...`)
+  * [slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/slicing.py#L73-L79) (`from tdmg.colored_flat import RECORD_NAME`, `from tdmg.flat import ...`)
+  * [portability.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/portability.py#L53) (`from tdmg.flat import STL_COORD_RTOL`)
+* **Concrete failure scenario:**
+  Checking the real imports against the table in Design §2:
+  1. **`tdmg.flat` <-> `tdmg.color` cycle:** Design §2 places `smoothing.py` in `tdmg.flat` and `color.py` in `tdmg.color`. But [smoothing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/smoothing.py#L61) imports `OUTSIDE` from `color.py` (because `smoothing.py` contains `smooth_labels`, the multicolor label-map smoother), while `colors.py`, `color_geometry.py`, `color_glue.py`, and `colored_flat.py` in `tdmg.color` import `tdmg.flat` and `tdmg.smoothing`. Even single-color R1 (`tdmg.flat`) is forced to import `tdmg.color`.
+  2. **`tdmg.color` <-> `tdmg.slicing` cycle:** Design §2 places `color_checks.py` and `colored_flat.py` in `tdmg.color`, and `orca_input.py` and `color_slicing.py` in `tdmg.slicing`. But [color_checks.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_checks.py#L51-L60) imports `orca_input` (to run `F2.orca_input_matches_bodies`), while [color_slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py#L87-L108) imports `color_checks` and `colored_flat`!
+  3. **`tdmg.slicing` ("Used by: all") imports `tdmg.flat` and `tdmg.color`:** `slicing.py`, `portability.py`, and `color_slicing.py` all import from `flat.py` and `colored_flat.py`.
+* **Suggested change:**
+  Fix the module boundaries so the dependency graph is a strict DAG:
+  * Move `OUTSIDE` to `tdmg.core._masks` (or move `smooth_labels` into `tdmg.color`) so `tdmg.flat` has zero imports from `tdmg.color`.
+  * Move `STL_COORD_RTOL` and `_body_count` to `tdmg.core.checks` so `tdmg.slicing.portability` does not import `tdmg.flat`.
+  * Keep `orca_input_check` in `tdmg.slicing` (where `orca_input` and `color_slicing` live) instead of `tdmg.color.color_checks`, breaking the `tdmg.color` <-> `tdmg.slicing` cycle.
+
+### Finding 4.2 — `tdmg.slicing` and `tdmg.export` claim "Used by: all", but bake flat-icon (G1) and AMS-inlay assumptions into their core functions
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §2 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L84-L98))
+  * [threemf.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/threemf.py#L81), [threemf.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/threemf.py#L141-L161)
+  * [printed.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py#L94-L105), [printed.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py#L648-L678)
+  * [slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/slicing.py#L179-L181), [slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/slicing.py#L318-L373)
+  * [orca_input.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/orca_input.py#L113-L156)
+* **Concrete failure scenario:**
+  Design §2 claims `tdmg.export` (`threemf`) and `tdmg.slicing` (`slicer, slicing, orca_input, printed, portability, color_gcode, color_slicing`) are shared by **all** output classes (flat icon, figurine, flexi). In reality:
+  1. **`threemf.py` rejects any non-inlay 3MF:** [threemf.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/threemf.py#L148-L156) hard-codes `ROLES = ("base", "inlay")` and raises `ThreeMFError("shells must be (base, inlay, ...)")` if there are fewer than 2 shells or if shells `1..n` are not `"inlay"`. A single-color 3MF (R1/R4/R6/R8), a multi-body articulated flexi chain where bodies are links, or a figurine cannot use `threemf.py`.
+  2. **`printed.py` rejects supports, brims, and rafts:** [printed.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py#L98-L100) defines `MODEL_FEATURES` as wall/infill/surface only and raises `UnsupportedGcode` if the G-code extrudes any support, brim, skirt, or raft. Figurines (G3, R4/R7) require supports and overhang/bed-contact checks ([PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L132)).
+  3. **`slicing.py` and `color_slicing.py` are hard-wired to `tdmg.flat/1` and `tdmg.colorflat/1`:** [slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/slicing.py#L326-L373) requires `flat.json` (`schema: "tdmg.flat/1"`), recomputes `flat_identity` from `selection.json`, and drops `F3.thin_regions`. `orca_input.py` (`turn_over`) and `color_slicing.py` assume a flat slab of thickness $T$ with top-skin inlays of depth $d$ flipped onto $z \in [0, d]$.
+  4. **`color_geometry.py`, `color_glue.py`, and `colored_flat.py` in `tdmg.color` are strictly 2.5D flat-icon geometry:** Putting `color_geometry`, `color_glue`, and `colored_flat` inside `tdmg.color` mixes 2D image palette extraction (`color`, `color_outline`, `color_plan`, `colors`) with G1 flat-slab extrusion (`colored_flat`).
+* **Suggested change:**
+  Separate 2D color planning from G1 flat-slab meshing: keep 2D palette/region modules (`color`, `color_outline`, `color_plan`, `color_config`, `colors`, `colors_verify`) in `tdmg.color`, and put flat-slab geometry (`flat`, `color_geometry`, `color_glue`, `colored_flat`) in `tdmg.flat` (or `tdmg.flat` + `tdmg.color_flat`). In `tdmg.slicing`, distinguish shared slicer runners (`slicer`, `portability`, low-level `slice_stl` / G-code parser) from flat-slab slice workflows (`slicing.make_slice`, `color_slicing.make_color_slice`).
+
+### Finding 4.3 — "Output class" (`tdmg.classes`) conflicts with `tdmg.recipes` and groups incompatible pipelines together
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §2 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L100-L101))
+  * [recipes.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/recipes.py#L1-L162), [gen_docs.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/scripts/gen_docs.py#L1-L93)
+  * [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L137-L202) (§4–§6)
+* **Concrete failure scenario:**
+  Design §2 states: *"An output class is a small declaration: its recipes (attribute combinations from today's registry: flat icon = R1/R2, figurine = R4/R7, flexi = R6/R8), its stages in order, its required checks and rule files, and a readiness status (`ready`, `in progress`, `planned`)."*
+  1. **Within `flat_icon` (R1 vs R2):** R1 and R2 do **not** share stages in order (`select -> flat -> slice` vs `select -> colors -> flat --colors -> slice`), do **not** share required checks (`FLAT_REQUIRED_CHECKS` vs `COLORED_REQUIRED_CHECKS` + `AMS_SLICE_REQUIRED_CHECKS`), and do **not** share rule files (`rules/color.yaml` is C2-only).
+  2. **Within `flexi` (R6 vs R8):** Grouping R6 (`G1·A1·C1/C2`, a 2.5D extruded flat silhouette cut by planar pin-in-loop hinges, Tier 1) with R8 (`G3·A2·C1`, a 3D generative mesh rigged with 3D ball-and-socket joints, Tier 2 research track) into a single declaration with "its stages in order, its required checks and rule files" is impossible—they share neither geometry (`G1` vs `G3`), nor articulation (`A1` vs `A2`), nor stages (`S1->S2->S5->S6` vs `S1->S3->S4->S5->S6`), nor readiness status!
+  3. **Redundancy with `tdmg.recipes`:** [recipes.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/recipes.py#L63-L162) already defines the attribute-combination recipes (`R1`–`R8`) with their `tier`, `status`, `stages`, and `summary`, and [gen_docs.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/scripts/gen_docs.py#L1-L93) generates `docs/print-types/recipes.md` from `tdmg.recipes`. Adding a second abstraction (`tdmg.classes`) that duplicates stages/checks/rules at a coarser level creates two competing registries.
+* **Suggested change:**
+  Drop `tdmg.classes` and attach required checks, rule files, and CLI class aliases (`flat-icon` + `--colors` -> R1/R2, `figurine` -> R4/R7, `flexi-flat` -> R6, `flexi-3d` -> R8) directly to the `Recipe` objects in `tdmg.recipes`, as [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L168-L202) §5–§6 already designed.
+
+---
+
+## 5. Migration Risk ("Moves Only, Byte-Identical Outputs")
+
+### Finding 5.1 — Moving modules without compatibility re-exports breaks tests, monkeypatches, and `scripts/gen_docs.py`
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §2 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L80-L101)) & §7 Phase 1 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L160-L162))
+  * [test_cli.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_cli.py#L255), [test_make_flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_make_flat.py#L355)
+  * [color_slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py#L85), [calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/calibration_strip.py#L67-L68)
+  * [pyproject.toml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/pyproject.toml#L49-L56)
+* **Concrete failure scenario:**
+  1. Across the 29 test files in `tests/`, every test imports flat module paths (`from tdmg.flat import ...`, `import tdmg.slicing`, `from tdmg.color_checks import ...`) and uses string-based or module-object monkeypatching (`monkeypatch.setattr("tdmg.flat.load_rules", ...)` at [test_cli.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_cli.py#L255) and [test_make_flat.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_make_flat.py#L355); `monkeypatch.setattr(tdmg.slicing, "slicer_command", ...)` in [test_slice.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_slice.py#L121-L122) and [test_color_slice.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_color_slice.py#L569-L609), which works only because [color_slicing.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_slicing.py#L85) does `from tdmg import slicing as _slicing`). If `flat.py` becomes `tdmg/flat/flat.py` (so `tdmg.flat` is a package, not the module where `load_rules` is bound!), `monkeypatch.setattr("tdmg.flat.load_rules", ...)` patches the package `__init__.py` while `tdmg.flat.flat.make_flat()` still calls the unpatched `load_rules` in `tdmg.flat.flat`!
+  2. In [paths.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/paths.py#L10-L22), moving `paths.py` into `src/tdmg/core/paths.py` changes `Path(__file__).resolve().parent` from `src/tdmg` to `src/tdmg/core` and `parents[1]` from `src/` to `src/tdmg/`! Unless `_PACKAGE_DATA` (`_PACKAGE_ROOT / "_data"`) and `REPO_ROOT` (`_PACKAGE_ROOT.parents[1]`) are adjusted for the extra directory depth, both editable installs (`REPO_ROOT`) and built wheels (`tdmg/_data` in [pyproject.toml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/pyproject.toml#L54-L56)) will fail to find `rules/` and `profiles/`, breaking the wheel smoke job in [ci.yml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/.github/workflows/ci.yml#L34-L56).
+* **Suggested change:**
+  Explicitly note in Phase 1 that:
+  1. Moving `paths.py` to `src/tdmg/core/paths.py` requires updating `_PACKAGE_ROOT` to `Path(__file__).resolve().parents[1]` (or keeping `_data` resolution anchored to `tdmg.__file__`).
+  2. Naming both the package `tdmg.flat` and a submodule `tdmg.flat.flat` shadows the module with the package and breaks `monkeypatch.setattr("tdmg.flat.load_rules", ...)`.
+  3. Phase 1 should record SHA-256 digests of stage outputs (`selection.json`, `colors.json`, `colored.json`, `model.3mf`, `slice.json`, `strip.json`) *before* moving files and assert byte equality *after* Phase 1.
+
+### Finding 5.2 — `strip.json` embeds a hard-coded reference to `docs/plans/2026-11-14-test-strip.md` and `research/verification/2026-11-14-test-strips/README.md`
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L139-L152)) & §7 Phase 1/4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L160-L173))
+  * [calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/calibration_strip.py#L583), [calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/calibration_strip.py#L648-L656), [calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/calibration_strip.py#L766)
+  * [test_calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_calibration_strip.py#L591)
+* **Concrete failure scenario:**
+  [calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/calibration_strip.py#L583) sets `SOURCE = "docs/plans/2026-11-14-test-strip.md"` and `KNOWN_FAILURE_CAUSE` cites `"research/verification/2026-11-14-test-strips/README.md"`. Both strings are written into `strip.json`, and [test_calibration_strip.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_calibration_strip.py#L591) asserts `rec["source"] == "docs/plans/2026-11-14-test-strip.md"`. After Phase 4 deletes `docs/plans/` and `research/verification/`, `strip.json` either points to deleted files or, if updated to `docs/evidence/calibration-strips.md`, changes `strip.json` bytes and breaks `test_calibration_strip.py`.
+* **Suggested change:**
+  Update `SOURCE` and `KNOWN_FAILURE_CAUSE` in `calibration_strip.py` (and `test_calibration_strip.py`) in Phase 4 when `docs/evidence/calibration-strips.md` is created, rather than treating Phase 4 as a docs-only change.
+
+---
+
+## 6. Docs and Rules Consistency
+
+### Finding 6.1 — Deleting `research/` and `docs/plans/` breaks `tests/test_docs.py` across `docs/`, `README.md`, and `docs/PLAN.md`
+* **Severity:** High
+* **Design section & repo `file:line`:**
+  * Design §1 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L28-L78)), §6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L139-L152)), §7 Phase 4 & Phase 6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L170-L181))
+  * [test_docs.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_docs.py#L48-L55), [doclint.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/doclint.py#L22-L67)
+  * [acceptance.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/acceptance.yaml#L9)
+  * [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L64), [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L168-L195)
+  * [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L7-L388), [README.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/README.md#L19-L140), [r1-flat-single.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/print-types/recipes/r1-flat-single.md#L27-L60), [color-multi.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/print-types/attributes/color-multi.md#L23-L43), [dependencies.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/reference/dependencies.md#L5-L38)
+* **Concrete failure scenario:**
+  [test_docs.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_docs.py#L48-L50) checks **every relative markdown link and `#anchor`** in `README.md`, `CLAUDE.md`, and every `.md` file under `docs/`.
+  1. `README.md`, `docs/STATUS.md`, `docs/PLAN.md`, `docs/guide/*.md`, `docs/print-types/**/*.md`, and `docs/reference/dependencies.md` contain over 70 relative markdown links to `research/verification/...`, `research/reviews/...`, `research/experiments/...`, and `docs/plans/...`. Deleting those directories in Phase 4 causes `test_links_and_anchors_resolve` to fail immediately—you cannot wait until Phase 6 to update docs if Phase 4 expects `pytest` to pass.
+  2. The design never states what happens to [docs/PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md)! It is missing from the directory tree in Design §1 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L48-L55)), yet [acceptance.yaml](file:///C:/Users/arikt/documents/github/three-d-model-generation-/rules/acceptance.yaml#L9) cites `ref: docs/PLAN.md`, and `docs/PLAN.md` §5 ([PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L168-L195)) documents a different package layout (`tdmg/intake/`, `tdmg/perception/`, `tdmg/geometry/`, `tdmg/articulation/`, `tdmg/color/`, `tdmg/recipes/`, `tdmg/gate/`, `tdmg/export/`, `research/`).
+* **Suggested change:**
+  State explicitly whether `docs/PLAN.md` is kept and updated (since `rules/acceptance.yaml` cites it) or condensed into `docs/evidence/` + `docs/guide/`; and combine link updates in `docs/` and `README.md` with Phase 4 so `tests/test_docs.py` never breaks between phases.
+
+### Finding 6.2 — Rewritten `CLAUDE.md` Rule 6 contradicts Rules 2–4 for ongoing work
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design §6 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L150-L152))
+  * [CLAUDE.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/CLAUDE.md#L7-L11)
+* **Concrete failure scenario:**
+  Rewritten rule 6 says: *"Keep evidence, purge intermediates. Rules and pins cite `docs/evidence/*.md`; finished prints keep `card.md`, `job.yaml` and the source image in `prints/<name>/`. Everything produced along the way (job folders, scratch scripts, exploratory runs) is condensed into those records and deleted once the job or feature is done."*
+  Meanwhile, Rule 3 says *"Keep kind, provenance, and validation separate"* (`hypothesis` + `untested` until calibrated on real prints) and Rule 4 says *"Never call something verified unless it was run."* If a feature's measurement scripts and exploratory runs are deleted *"once the feature is done"*, but the feature's rules are still `provenance: hypothesis, validation: untested` awaiting physical calibration prints (as R2's rules are right now!), deleting the measurement scripts and raw data before physical calibration completes destroys the scripts needed to re-evaluate the rule when calibration data arrives.
+* **Suggested change:**
+  Distinguish **print jobs** (`jobs/<name>/`, purged on `tdmg finish` once the owner confirms the physical print) from **rule/pin evidence** (whose measurement scripts and full tables must remain in `docs/evidence/` until the rule is calibrated and `validation: calibrated` / `provenance: measured`).
+
+---
+
+## 7. Missing Pieces and Over-Design (YAGNI)
+
+### Finding 7.1 — Missing: Text-to-image intake, multiple color variants per subject, and calibration strip workflow
+* **Severity:** Medium
+* **Design section & repo `file:line`:**
+  * Design Goal & §1–§4 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L10-L128))
+  * [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L131-L137), [PLAN.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/PLAN.md#L97-L98)
+* **Concrete failure scenario:**
+  1. **Text-to-image provenance:** The owner's goal states *"Takes an image (either provided by the user, or generated from text through AI)"*. When an image is generated from a text prompt (e.g. via Claude Code or an image generator), `job.yaml` and `card.md` need fields for the generation prompt, generator/model id, and seed/parameters, not just a file path and SHA-256. Moreover, if the AI-generated image is written directly into `jobs/<name>/` and `jobs/<name>/` is cleaned or abandoned before `finish`, the generated source image is deleted.
+  2. **Calibration strips (`tdmg strip`):** [STATUS.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md#L131-L137) shows `tdmg strip` (`artifacts/strip-runs/2026-11-14/`) is already built and awaiting the owner's physical print results (`results-template.md`). Design §1–§7 never mentions where `tdmg strip` writes its output once `artifacts/` only holds `artifacts/tools/`, or where completed strip results live.
+* **Suggested change:**
+  Add optional `source_generation` metadata (`prompt`, `generator`, `created_at`) to `job.yaml`, store new source images in a persistent git-ignored intake folder (or `prints/<name>/source/` immediately) so `jobs/<name>/` never holds the sole copy of an image, and specify where `tdmg strip` outputs live (e.g. `jobs/strip-<date>/` or `artifacts/strip-runs/`).
+
+### Finding 7.2 — Over-design (YAGNI): A 4-subcommand `tdmg job` state machine on top of existing stage commands for a single owner using Claude Code
+* **Severity:** Low
+* **Design section & repo `file:line`:**
+  * Design §3 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L103-L113)) & §7 Phase 2–3 ([2026-11-16-restructure-design.md](file:///C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-16-restructure-design.md#L163-L169))
+  * [cli.py](file:///C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/cli.py#L1-L450)
+* **Concrete failure scenario:**
+  The owner is a single user driving `tdmg` through Claude Code (`make-print` skill). Adding four new subcommands (`tdmg job new`, `tdmg job run`, `tdmg job status`, `tdmg finish`) *while also keeping* `tdmg select`, `tdmg colors`, `tdmg flat`, `tdmg slice`, and `tdmg strip` means maintaining two parallel CLI layers with duplicated option parsing (`--size-mm`, `--thickness-mm`, `--colors`, `--merge`, `--outline`, `--face`, `--orcaslicer-dir`, `--prusaslicer-dir`). Worse, `tdmg job run NAME [--from STAGE]` has to re-parse all stage flags or require editing `job.yaml` by hand between stages.
+* **Suggested change:**
+  Keep `job.yaml` as the declarative job spec in `jobs/<name>/job.yaml`, and have just two job commands: `tdmg run jobs/<name>/job.yaml` (idempotently runs any stage whose inputs/settings in `job.yaml` changed and prints the status summary) and `tdmg finish jobs/<name>/job.yaml` (verifies hashes + owner confirmation, writes `prints/<name>/`, and deletes `jobs/<name>/`).
+
+---
+
+## Top 3 Most Important Changes
+
+1. **Fix the broken package dependency graph and flat-icon coupling in Section 2 before moving any files (Findings 4.1, 4.2, 4.3, 5.1):**
+   Break the `tdmg.flat` <-> `tdmg.color` and `tdmg.color` <-> `tdmg.slicing` circular imports; keep 2D palette logic (`tdmg.color`) separate from 2.5D slab geometry (`tdmg.flat`); do not claim `threemf.py` (which enforces `base` + `inlay` shells) or `printed.py` (which rejects supports) are ready for figurines/flexis; and extend `tdmg.recipes` instead of introducing a conflicting `tdmg.classes` layer.
+2. **Audit and preserve all machine-verified evidence files and doc links before deleting `research/verification/` and `docs/plans/` (Findings 1.1, 1.2, 5.2, 6.1):**
+   `tests/conftest.py`, `tests/test_slicer.py`, `tests/test_portability.py`, `tests/test_rules.py`, `tests/test_calibration_strip.py`, `profiles/slicers/*.yaml`, and `tests/test_docs.py` directly read or assert paths inside `research/verification/` and `docs/plans/`. Preserve full measurement tables and hash manifests in `docs/evidence/` (not just isolated locator lines) and update those test suites, pins, and markdown links in the same phase so `pytest` stays green and negative evidence is not lost.
+3. **Make `prints/<name>/` genuinely reproducible and safe across all recipes before purging `jobs/<name>/` (Findings 2.1, 2.2, 2.4, 3.1):**
+   Support R1 (`model.stl`), R2 AMS (`model.3mf`, verified via `colored.json` since OrcaSlicer slices `orca-input.3mf`), and R2 glue (`glue-*.stl`); preserve any user-supplied `--mask` inside `prints/<name>/source/`; bind the owner's confirmation in `job.yaml` to the exact `slice_id` and model SHA-256; and record the resolved `rules` snapshot and stage hashes in `prints/<name>/job.yaml` so future rule calibrations do not silently invalidate finished prints.
