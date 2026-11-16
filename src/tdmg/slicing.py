@@ -167,7 +167,9 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   by refining the edge samples (tdmg.printed.refine_edge, down to EDGE_REFINE_MIN_MM),
 #   so such a layer can now PASS or FAIL; its record adds refined_layers,
 #   pair_bound_max_mm and refine_min_mm. Plan docs/plans/2026-11-16-face-down-default.md,
-#   Decision 2.
+#   Decision 2. Under the same unpushed label (Codex review 2026-11-16, finding 1): turns
+#   that tie are resolved per check (tdmg.printed.judge_f3), so a check every tied turn
+#   agrees on keeps its status instead of all three being UNKNOWN.
 SLICE_ALGORITHM_VERSION = "slice-6"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"

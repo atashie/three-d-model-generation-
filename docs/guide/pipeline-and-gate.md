@@ -126,6 +126,15 @@ layer is compared with the model's section at that height:
 - **F3.edge_overprint:** the reverse. No printed plastic lies farther than the same
   allowance outside the model.
 
+**The placement:** the model is measured where OrcaSlicer puts it, centred on the plate.
+R1 does not know the quarter turn, so every turn is scored and the best is used. Turns
+whose scores are too close to tell apart (within the scores' sampling bound) are all
+possible placements, and each check is resolved on its own: a check on which they all
+agree keeps that status; a check on which they differ is UNKNOWN ("placement
+ambiguous"). Before 2026-11-16 one disagreeing check made all three UNKNOWN; the Codex
+review of that day (finding 1) showed this could erase a connectivity FAIL that held on
+every turn.
+
 G-code the analysis does not understand gives UNKNOWN, never PASS. These checks hold
 only for the pinned OrcaSlicer 2.5.0 A1 profile, do not judge strength, and keep sharp
 corners strict (a corner sharper than about 62° can fail coverage). `F3.thin_regions`

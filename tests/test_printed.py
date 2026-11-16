@@ -34,6 +34,7 @@ from tdmg.printed import (
     f3_checks,
     footprint,
     gaps,
+    judge_f3,
     model_section,
     pair_bound,
     parse_gcode,
@@ -685,12 +686,42 @@ def test_an_off_centre_hole_printed_correctly_passes():
 
 def test_ambiguous_placements_with_different_verdicts_are_unknown(monkeypatch):
     # Two turns scoring within the bound but judged differently: the placement cannot be
-    # chosen, so the verdict is not given. Forced by widening the score bound.
+    # chosen, so the checks they disagree on are not given (connectivity and overprint);
+    # coverage, on which every tied turn agrees, keeps its PASS. Forced by widening the
+    # score bound.
     monkeypatch.setattr(tdmg.printed, "SCORE_BOUND_MM", 10.0)
     model = hole_square()
     checks, record = checks_for(model, model)
-    assert [c.status for c in checks] == ["UNKNOWN"] * 3
+    assert [c.status for c in checks] == ["UNKNOWN", "PASS", "UNKNOWN"]
     assert "placement ambiguous" in record["reason"]
+    assert all("placement ambiguous" in c.note for c in (checks[0], checks[2]))
+    assert "F3.edge_coverage" not in record["reason"]     # it names the split checks only
+
+
+def test_ambiguity_is_resolved_per_check():
+    # Codex review 2026-11-16, finding 1: a nearly square section whose quarter turns tie.
+    # Refinement settles coverage differently between them, but connectivity FAILs (a cut
+    # through the section) and overprint PASSes on every tied turn: those stand, and only
+    # coverage, where the turns disagree, is UNKNOWN.
+    section = shapely.box(0, 0, 10, 9.98)
+    centre = (5, 4.99)
+    printed = section.difference(shapely.Point(10.02, 5.01495).buffer(0.225, quad_segs=64)
+                                 ).difference(shapely.box(4.95, -1, 5.05, 11))
+    printed = Alignment(0, centre, PLATE.centre).apply(printed)
+    analysis = analyse_sections([0.2], [section], [printed], 0.2, centre, 0.2, PLATE, 0.2, 0.2)
+    checks, record = judge_f3(analysis, Setup(PLATE, None, 0.2, 0, frozenset({1})))
+    tied = record["alignment"]["tied_angles_deg"]
+    assert len(tied) > 1
+    connectivity, coverage, overprint = checks
+    assert connectivity.status == "FAIL" and overprint.status == "PASS"
+    by_turn = [tdmg.printed._coverage(t.layers, t.alignment, {
+        "first_layer_mm": 0.2, "other_layers_mm": 0.2}).status
+        for t in analysis.turns if t.alignment.angle in tied]
+    if len(set(by_turn)) > 1:
+        assert coverage.status == "UNKNOWN" and "placement ambiguous" in coverage.note
+        assert "placement ambiguous" in record["reason"]
+    else:
+        assert coverage.status == by_turn[0]
 
 
 def test_ambiguous_placements_that_agree_keep_their_verdict():

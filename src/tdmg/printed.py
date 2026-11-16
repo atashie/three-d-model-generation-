@@ -1269,10 +1269,15 @@ def f3_checks(gcode: bytes | None, stl: bytes, setup: Setup,
     allowance on every layer, FAIL when the sampled largest exceeds it on any layer, and
     UNKNOWN in between ("within sampling uncertainty").
 
-    The turn with the lowest score is used (analyse). When another complete turn scores
-    within 2 * SCORE_BOUND_MM of it and gives a different status for any of the three
-    checks, the placement is ambiguous and all three are UNKNOWN; when such turns agree,
-    the best one's results stand. The record lists every turn's score.
+    The turn with the lowest score is used (analyse). The complete turns scoring within
+    2 * SCORE_BOUND_MM of it (the tied turns, itself included) cannot be told apart, so
+    the placement is resolved per check: a check on which every tied turn gives the same
+    status keeps the best turn's result; a check on which they differ is UNKNOWN
+    ("placement ambiguous", naming each turn's status for it). A status every possible
+    placement gives holds whichever is the true one. (Before 2026-11-16 one disagreeing
+    check made all three UNKNOWN: Codex review of that day, finding 1, where refinement
+    made the turns disagree on coverage and so erased a connectivity FAIL that held on
+    every turn.) The record lists every turn's score.
 
     All three are UNKNOWN, with the reason, when not_measured is given (the slicer
     failed), when there is no G-code, when the G-code is unsupported, or when the analysis
@@ -1332,15 +1337,17 @@ def judge_f3(analysis: Analysis, setup: Setup,
                            "holes": [m["holes_model"], m["holes_printed"]],
                            "max_over_mm": m["max_over_mm"],
                            "unmatched": len(m["unmatched"])} for m in best.layers])
-    statuses = {tuple(c.status for c in j) for j in judged}
-    if len(statuses) > 1:
+    split = [k for k in range(len(checks)) if len({j[k].status for j in judged}) > 1]
+    if split:
         detail = "; ".join(f"turn {t.alignment.angle} (score {t.score:.4f}): "
-                           + ", ".join(f"{c.id} {c.status}" for c in j)
+                           + ", ".join(f"{j[k].id} {j[k].status}" for k in split)
                            for t, j in zip(tied, judged, strict=True))
         reason = ("placement ambiguous: these turns score within the scores' sampling bound "
                   f"({2 * SCORE_BOUND_MM:.3f} mm) but give different verdicts: {detail}")
         record["reason"] = reason
-        return _unknown_all(reason, threshold), record
+        unknown = _unknown_all(reason, threshold)
+        for k in split:
+            checks[k] = unknown[k]
     short = _truncation(analysis, setup.allowed_layers, threshold) if truncation else None
     if short is not None:
         checks[1] = short
