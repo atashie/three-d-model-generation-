@@ -163,7 +163,12 @@ RECORD_SCHEMA = "tdmg.slice/1"
 #   making the position unknown, and a stricter set stays refused. slice-5 was never
 #   pushed, so the label covers both changes; the local runs made before the reader
 #   change (same slice_id, NOT CERTIFIED) are superseded.
-SLICE_ALGORITHM_VERSION = "slice-5"
+# slice-6 (2026-11-16): F3.edge_coverage settles a layer left within its sampling bound
+#   by refining the edge samples (tdmg.printed.refine_edge, down to EDGE_REFINE_MIN_MM),
+#   so such a layer can now PASS or FAIL; its record adds refined_layers,
+#   pair_bound_max_mm and refine_min_mm. Plan docs/plans/2026-11-16-face-down-default.md,
+#   Decision 2.
+SLICE_ALGORITHM_VERSION = "slice-6"
 RECORD_NAME = "slice.json"
 LOG_NAME = "slicer.log"
 FAILED_GCODE_NAME = GCODE_NAME + ".failed"   # G-code from a run with a FAILed check

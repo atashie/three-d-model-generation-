@@ -162,7 +162,10 @@ from tdmg.threemf import Shell
 COLOR_RECORD_SCHEMA = "tdmg.colorslice/1"
 # The version of what colorslice_id names, bumped whenever the verdict for the same request
 # can change. colorslice-1 (2026-11-13): plan docs/plans/2026-11-13-color-slicing.md, Task 6.
-COLORSLICE_ALGORITHM = "colorslice-1"
+# colorslice-2 (2026-11-16): F3.edge_coverage of the silhouette and of each tool settles a
+# layer left within its sampling bound by refining the edge samples (slice-6;
+# docs/plans/2026-11-16-face-down-default.md, Decision 2).
+COLORSLICE_ALGORITHM = "colorslice-2"
 FACES = ("up", "down")
 FACE_FOLDER = {"up": "face-up", "down": "face-down"}
 FILAMENT_FOLDER = "filaments"

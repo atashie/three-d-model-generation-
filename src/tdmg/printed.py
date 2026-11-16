@@ -56,6 +56,14 @@ ARC_STEP_MM = 0.05
 # plus EDGE_SAMPLE_MM / 2 (0.025 mm): a sampled gap within that of the allowance could
 # hide a true gap just over it. The rule is stated on the samples (the plan, Decision 2).
 EDGE_SAMPLE_MM = 0.05
+# The finest spacing to which F3.edge_coverage halves edge samples on a layer the 0.05 mm
+# samples leave within the bound of the allowance (refine_edge; docs/plans/
+# 2026-11-16-face-down-default.md, Decision 2). A resolution, not a threshold: the A1
+# G-code gives coordinates to 3 decimals, 0.001 mm (measured 2026-11-16: line 1410 of
+# artifacts/slice-runs/color5-roadie-drop-v3-f64-down/face-down/plate_1.gcode is
+# "G1 X123.156 Y141.322 F42000"; artifacts/ is not committed), so a finer spacing
+# measures nothing the G-code states.
+EDGE_REFINE_MIN_MM = 0.001
 # Bead ends and joins are polygons with this many segments per quarter circle (the
 # research record's value). Their vertices lie on the circle, so the polygon is inside the
 # true bead: plastic is under-counted by at most r (1 - cos(pi / 8)), 0.016 mm for a
@@ -956,6 +964,75 @@ def edge_gaps(section, printed, alignment: Alignment):
     return model_pts, pts, gaps(pts, printed)
 
 
+def pair_bound(d_a, d_b, s):
+    """The largest gap anywhere on a straight piece of edge between two samples a distance
+    s apart whose gaps are d_a and d_b. Distance to the footprint is 1-Lipschitz, so a
+    point t from a has a gap of at most min(d_a + t, d_b + s - t), largest where the two
+    meet: (d_a + d_b + s) / 2. Never more than the larger gap plus s / 2."""
+    return (d_a + d_b + s) / 2
+
+
+def _edge_pairs(geometry, spacing: float = EDGE_SAMPLE_MM) -> np.ndarray:
+    """For each pair of consecutive _edge_points of geometry, whether both lie on one ring.
+
+    The boundary's rings are segmentized one by one, so consecutive points of one ring lie
+    on one straight piece of it, its closing piece (the last point repeats the first)
+    included. The last point of one ring and the first of the next are not on one piece.
+    """
+    rings = shapely.get_parts(shapely.segmentize(geometry.boundary, spacing))
+    _, ring = shapely.get_coordinates(rings, return_index=True)
+    return ring[:-1] == ring[1:]
+
+
+def refine_edge(section, printed, alignment: Alignment, allowance_mm: float, edges) -> dict:
+    """Settle a layer whose largest sampled gap is within COVERAGE_BOUND_MM of the
+    allowance (the plan docs/plans/2026-11-16-face-down-default.md, Decision 2).
+
+    edges is edge_gaps' result. Each pair of consecutive samples on one ring (_edge_pairs)
+    has the bound pair_bound on the true gap between them. A pair is open while its bound
+    exceeds allowance_mm and neither sample does; an open pair longer than
+    EDGE_REFINE_MIN_MM is split at its midpoint, which is sampled (in model mm, then
+    turned to bed mm; a rigid motion keeps midpoints and lengths). All open pairs of a
+    round are split together, in a fixed order (no randomness), so the result is the same
+    on every run. It stops when no pair is open or every open pair is EDGE_REFINE_MIN_MM or
+    shorter.
+
+    Returns max_gap_mm, at_bed_mm and at_model_mm, the largest gap over every sample, the
+    new ones included (a new one replaces a coarse one only when strictly larger), and
+    pair_bound_max_mm, the largest bound over the final pairs. The true largest gap on
+    the edge is at most pair_bound_max_mm: over allowance_mm with no sample over it means
+    a pair is still open at the resolution.
+    """
+    model_pts, pts, d = edges
+    joined = _edge_pairs(section)
+    if len(joined) != len(d) - 1:
+        raise ValueError("the edge pairs do not match the edge samples")
+    a, b = model_pts[:-1][joined], model_pts[1:][joined]
+    da, db = d[:-1][joined], d[1:][joined]
+    i = int(np.argmax(d))
+    best = (float(d[i]), pts[i], model_pts[i])
+    final = []
+    while True:
+        s = np.hypot(*(b - a).T)
+        bound = pair_bound(da, db, s)
+        split = (bound > allowance_mm) & (da <= allowance_mm) & (db <= allowance_mm) & (
+            s > EDGE_REFINE_MIN_MM)
+        final.append(bound[~split])
+        if not split.any():
+            break
+        mid = (a[split] + b[split]) / 2
+        mid_bed = alignment.to_bed(mid)
+        dm = gaps(mid_bed, printed)
+        j = int(np.argmax(dm))
+        if dm[j] > best[0]:
+            best = (float(dm[j]), mid_bed[j], mid[j])
+        a, b = np.concatenate([a[split], mid]), np.concatenate([mid, b[split]])
+        da, db = np.concatenate([da[split], dm]), np.concatenate([dm, db[split]])
+    return {"max_gap_mm": best[0], "at_bed_mm": [float(v) for v in best[1]],
+            "at_model_mm": [float(v) for v in best[2]],
+            "pair_bound_max_mm": float(max(f.max(initial=-math.inf) for f in final))}
+
+
 def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float,
                   edges=None) -> dict:
     """One layer: the largest model-edge-to-plastic gap, where it is, and parts and holes.
@@ -971,6 +1048,12 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float,
     is printed_without_model, and the overprint entries are then None. score is the mean
     gap plus the mean overprint over their samples (0 for none), for choosing the turn.
     edges is edge_gaps' result for this layer and alignment, when already computed.
+
+    A layer whose largest gap is within COVERAGE_BOUND_MM of allowance_mm, but not over it,
+    is refined (refine_edge): max_gap_mm and where it is then come from every sample, the
+    refined ones included, and pair_bound_max_mm is added. Only that key is new, and only
+    on such a layer; share_over_allowance and score stay those of the EDGE_SAMPLE_MM
+    samples, so the turn is chosen as before.
     """
     model_bed = alignment.apply(section)
     model_parts, printed_parts = _polygons(model_bed), _polygons(printed)
@@ -997,12 +1080,15 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float,
             out["max_over_mm"] = 0.0
     if model_bed.is_empty or printed.is_empty:
         return out
-    model_pts, pts, d = edges if edges is not None else edge_gaps(section, printed, alignment)
+    edges = edges if edges is not None else edge_gaps(section, printed, alignment)
+    model_pts, pts, d = edges
     i = int(np.argmax(d))
     out.update(max_gap_mm=float(d[i]), at_bed_mm=[float(v) for v in pts[i]],
                share_over_allowance=float((d > allowance_mm).mean()),
                at_model_mm=[float(v) for v in model_pts[i]])
     out["score"] += float(d.mean())
+    if out["max_gap_mm"] + COVERAGE_BOUND_MM > allowance_mm >= out["max_gap_mm"]:
+        out.update(refine_edge(section, printed, alignment, allowance_mm, edges))
     return out
 
 
@@ -1261,10 +1347,15 @@ def _truncation(analysis: Analysis, allowed: frozenset[int],
                        "; ".join(why) + ": the print stops short of the model. " + SCOPE)
 
 
-def _judged(layers, key, bound) -> tuple[str, list, list]:
-    """(status, layers over the allowance, layers within the sampling bound of it)."""
+def _judged(layers, key, bound, upper: str | None = None) -> tuple[str, list, list]:
+    """(status, layers over the allowance, layers within the sampling bound of it).
+
+    The true largest on a layer is at most m[key] + bound, or m[upper] when the layer has
+    that key (a refined layer's own bound, refine_edge)."""
+    def top(m):
+        return m[upper] if upper is not None and upper in m else m[key] + bound
     over = [m for m in layers if m[key] > m["allowance_mm"]]
-    near = [m for m in layers if m[key] + bound > m["allowance_mm"] >= m[key]]
+    near = [m for m in layers if top(m) > m["allowance_mm"] >= m[key]]
     return ("FAIL" if over else "UNKNOWN" if near else "PASS"), over, near
 
 
@@ -1310,13 +1401,21 @@ def _coverage(layers: list[dict], alignment: Alignment, threshold: dict) -> Chec
         return CheckResult(COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
                            "not measured: the model has no section at any printed layer")
     worst = max(measured_layers, key=lambda m: m["max_gap_mm"] - m["allowance_mm"])
-    status, over, near = _judged(measured_layers, "max_gap_mm", COVERAGE_BOUND_MM)
+    status, over, near = _judged(measured_layers, "max_gap_mm", COVERAGE_BOUND_MM,
+                                 "pair_bound_max_mm")
+    refined = [m for m in measured_layers if "pair_bound_max_mm" in m]
+    worst_refined = max(refined, key=lambda m: m["pair_bound_max_mm"] - m["allowance_mm"],
+                        default=None)
     measured = {"worst_z": worst["z"], "max_gap_mm": worst["max_gap_mm"],
                 "allowance_mm": worst["allowance_mm"], "at_bed_mm": worst["at_bed_mm"],
                 "at_model_mm": worst["at_model_mm"],
                 "share_over_allowance": worst["share_over_allowance"],
                 "layers_over": len(over), "layers_within_sampling_bound": len(near),
-                "sampling_bound_mm": COVERAGE_BOUND_MM, "angle_deg": alignment.angle}
+                "sampling_bound_mm": COVERAGE_BOUND_MM, "angle_deg": alignment.angle,
+                "refined_layers": [m["z"] for m in refined],
+                "pair_bound_max_mm": (None if worst_refined is None
+                                      else worst_refined["pair_bound_max_mm"]),
+                "refine_min_mm": EDGE_REFINE_MIN_MM}
     how = (f"The largest distance from a model-edge sample (every {EDGE_SAMPLE_MM:g} mm; the "
            f"true largest is at most {COVERAGE_BOUND_MM:g} mm more) to printed plastic, "
            "with the model's bounding box centred on the plate as the slicer places it, "
@@ -1329,7 +1428,23 @@ def _coverage(layers: list[dict], alignment: Alignment, threshold: dict) -> Chec
                   f"; within sampling uncertainty on {len(near)} layer(s). " if near
                   else ". "))
     return CheckResult(COVERAGE, status, measured, threshold, TOLERANCE_RULE,
-                       how + summary + SCOPE)
+                       how + summary + _refined_note(refined, worst_refined) + SCOPE)
+
+
+def _refined_note(refined: list[dict], worst: dict | None) -> str:
+    """What refinement settled, for F3.edge_coverage's note ("" when it did not run)."""
+    if not refined:
+        return ""
+    fail = sum(m["max_gap_mm"] > m["allowance_mm"] for m in refined)
+    still = sum(m["pair_bound_max_mm"] > m["allowance_mm"] >= m["max_gap_mm"] for m in refined)
+    zs = ", ".join(f"{m['z']:g}" for m in refined)
+    return (f"{len(refined)} layer(s) within the sampling bound (z = {zs} mm) were refined: "
+            "samples halved, down to "
+            f"{EDGE_REFINE_MIN_MM:g} mm, between any two whose bound on the gap between them, "
+            "(d_a + d_b + spacing) / 2, exceeded the allowance; "
+            f"{len(refined) - fail - still} settled within it, {fail} over it, {still} still "
+            f"within sampling uncertainty (largest pair bound {worst['pair_bound_max_mm']:.4f} "
+            f"mm at z = {worst['z']:g} mm). ")
 
 
 def _overprint(layers: list[dict], alignment: Alignment, threshold: dict) -> CheckResult:

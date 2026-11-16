@@ -549,8 +549,10 @@ RECORD_SCHEMA = "tdmg.strip/1"
 # the same request can change. strip-1 (2026-11-14): plan Task 2. strip-2 (2026-11-14):
 # the skin strip laid out long along y (plan Task 2 amendment). strip-3 (2026-11-14): the
 # white tool's coverage and connectivity required for the skin strip (SKIN_WHITE_REQUIRED;
-# plan Task 4).
-ALGORITHM = "strip-3"
+# plan Task 4). strip-4 (2026-11-16): F3.edge_coverage refines near-passes (slice-6,
+# colorslice-2). The clearance plates' slice_ids carry the slice version, but the skin
+# strip's identity does not, and its F3 checks can change: hence the bump.
+ALGORITHM = "strip-4"
 SOURCE = "docs/plans/2026-11-14-test-strip.md"
 OWNER_SOURCE = "the owner's answers of 2026-11-14 (the plan's \"What is known\")"
 RECORD_NAME = "strip.json"

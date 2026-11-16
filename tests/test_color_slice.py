@@ -91,7 +91,7 @@ def test_record_and_files_with_the_fake(colored, orca, tmp_path):
     out = tmp_path / "slice"
     rec = _run(colored, out, root)
     src = _record(colored)
-    assert (rec["schema"], rec["algorithm"]) == ("tdmg.colorslice/1", "colorslice-1")
+    assert (rec["schema"], rec["algorithm"]) == ("tdmg.colorslice/1", "colorslice-2")
     assert re.fullmatch(r"[0-9a-f]{64}", rec["colorslice_id"])
     assert rec["links"]["colorflat_id"] == src["colorflat_id"]
     assert rec["links"]["colored_record_sha256"] == _sha((colored / "colored.json").read_bytes())
@@ -156,7 +156,7 @@ def test_record_and_files_with_the_fake(colored, orca, tmp_path):
     report = src["glue"]["report"]
     for name, plate in rec["glue"]["plates"].items():
         row = next(b for b in glue if b["file"] == f"{name}.stl")
-        assert plate["algorithm"] == "slice-5"
+        assert plate["algorithm"] == "slice-6"
         assert plate["required_checks"] == sorted(
             SLICE_REQUIRED_CHECKS - {"F2.target_width"} | {"F4.glue_fit", "F4.glue_partition"})
         assert "F2.target_width" in plate["not_applicable"]
@@ -205,7 +205,7 @@ def test_the_id_is_the_hash_of_its_inputs(colored, orca, tmp_path):
     root = orca()
     rec = _run(colored, tmp_path / "a", root)
     identity = {
-        "algorithm": "colorslice-1", "colorflat_id": rec["links"]["colorflat_id"],
+        "algorithm": "colorslice-2", "colorflat_id": rec["links"]["colorflat_id"],
         "colored_record_sha256": rec["links"]["colored_record_sha256"],
         "faces": {f: {"orca_input_sha256": rec["faces"][f]["orca_input"]["sha256"]}
                   for f in ("up", "down")},

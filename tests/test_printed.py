@@ -12,11 +12,15 @@ import numpy as np
 import pytest
 import shapely
 from gcode_fixtures import FLOW, START, WIDTH, e_for, fill, gcode, layer, path_moves, solid, walls
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 import tdmg.printed
 from tdmg.flat import extrude
 from tdmg.printed import (
     ARC_STEP_MM,
+    COVERAGE_BOUND_MM,
+    EDGE_REFINE_MIN_MM,
     EDGE_SAMPLE_MM,
     MODEL_FEATURES,
     QUARTER_TURNS,
@@ -25,10 +29,13 @@ from tdmg.printed import (
     Setup,
     UnsupportedGcode,
     analyse,
+    analyse_sections,
+    edge_gaps,
     f3_checks,
     footprint,
     gaps,
     model_section,
+    pair_bound,
     parse_gcode,
     plate_from_profile,
 )
@@ -1043,3 +1050,158 @@ def test_a_dwell_outside_a_tool_change_is_still_refused():
 def test_other_features_stay_refused_with_prime_tower():
     with pytest.raises(UnsupportedGcode, match="'Brim'"):
         tparse(gcode([layer(0.2, GOOD + path_moves([(90, 90), (95, 90)], feature="Brim"))]))
+
+
+# --- Settling near-passes of F3.edge_coverage (docs/plans/2026-11-16-face-down-default.md,
+# Decision 2). Synthetic footprints with known gaps along the edge of a 10 mm square; the
+# square's edge samples are 0.05 mm apart, at y = 0, 0.05, ... on the side x = 10.
+
+ALLOWANCE = 0.2
+
+
+def coverage_of(section, printed_model, angle=0, allowance=ALLOWANCE):
+    """(the layer's metrics, F3.edge_coverage) for one layer: the model's section and the
+    footprint, both in model mm, the footprint placed as the slicer places the model."""
+    x0, y0, x1, y1 = section.bounds
+    centre = ((x0 + x1) / 2, (y0 + y1) / 2)
+    alignment = Alignment(angle, centre, PLATE.centre)
+    an = analyse_sections([0.2], [section], [alignment.apply(printed_model)], 0.2, centre,
+                          0.2, PLATE, allowance, allowance, angles=(angle,))
+    turn = an.turns[0]
+    threshold = {"first_layer_mm": allowance, "other_layers_mm": allowance}
+    return turn.layers[0], tdmg.printed._coverage(turn.layers, turn.alignment, threshold)
+
+
+def short_by(gap):
+    """A footprint covering the square except a strip gap wide along its side x = 10."""
+    return shapely.box(-1, -1, 10 - gap, 11)
+
+
+def notched(x, y, r):
+    """A footprint covering the square except a disc of radius r about (x, y): along an
+    edge through its centre the gap is a tent, r at the centre, falling at slope 1."""
+    return shapely.box(-1, -1, 11, 11).difference(shapely.Point(x, y).buffer(r, quad_segs=64))
+
+
+def test_a_near_pass_whose_true_gap_is_within_the_allowance_passes():
+    # A uniform 0.19 mm gap: sampled 0.19 + 0.025 is over 0.2 (near), but the pair bound
+    # (0.19 + 0.19 + s) / 2 is within it once s <= 0.02 mm.
+    m, coverage = coverage_of(square(), short_by(0.19))
+    assert coverage.status == "PASS", coverage.note
+    assert m["max_gap_mm"] == pytest.approx(0.19)
+    assert m["pair_bound_max_mm"] == pytest.approx(0.19 + EDGE_SAMPLE_MM / 8)
+    assert coverage.measured["refined_layers"] == [0.2]
+    assert coverage.measured["pair_bound_max_mm"] == pytest.approx(0.19 + EDGE_SAMPLE_MM / 8)
+    assert coverage.measured["refine_min_mm"] == EDGE_REFINE_MIN_MM
+    assert coverage.measured["layers_within_sampling_bound"] == 0
+    assert "refined" in coverage.note
+
+
+@pytest.mark.parametrize("angle", [0, 90])
+def test_a_gap_hidden_between_two_samples_fails(angle):
+    # A 0.21 mm notch centred midway between the samples at y = 5 and 5.05: they see
+    # 0.185 mm (near: 0.185 + 0.025 > 0.2); the midpoint sample sees 0.21 mm.
+    m, coverage = coverage_of(square(), notched(10, 5.025, 0.21), angle)
+    assert coverage.status == "FAIL", coverage.note
+    peak = shapely.distance(shapely.Point(10, 5.025), notched(10, 5.025, 0.21))
+    assert m["max_gap_mm"] == pytest.approx(peak) and m["max_gap_mm"] > ALLOWANCE
+    # Reported where the largest sample is, the refined one, in model and bed mm.
+    assert m["at_model_mm"] == [pytest.approx(10), pytest.approx(5.025)]
+    bed = Alignment(angle, (5, 5), PLATE.centre).to_bed(np.array([[10, 5.025]]))[0]
+    assert m["at_bed_mm"] == [pytest.approx(bed[0]), pytest.approx(bed[1])]
+    assert coverage.measured["max_gap_mm"] == m["max_gap_mm"]
+    assert coverage.measured["at_model_mm"] == m["at_model_mm"]
+    assert coverage.measured["refined_layers"] == [0.2]
+
+
+def test_a_pair_still_open_at_the_resolution_stays_unknown():
+    # A uniform 0.1999 mm gap: the pair bound 0.1999 + s / 2 is over 0.2 down to s = 0.0002
+    # mm, finer than EDGE_REFINE_MIN_MM, so the layer stays within sampling uncertainty.
+    m, coverage = coverage_of(square(), short_by(0.1999))
+    assert coverage.status == "UNKNOWN", coverage.note
+    assert ALLOWANCE < m["pair_bound_max_mm"] <= 0.1999 + EDGE_REFINE_MIN_MM / 2
+    assert m["max_gap_mm"] == pytest.approx(0.1999)
+    assert coverage.measured["layers_within_sampling_bound"] == 1
+    assert "within sampling uncertainty" in coverage.note
+
+
+@pytest.mark.parametrize("gap", [0.0, 0.1, 0.17, 0.3])
+def test_layers_not_near_are_not_refined(gap, monkeypatch):
+    # Clearly within (0, 0.1, 0.17 + 0.025 <= 0.2) or clearly over (0.3): the coarse result
+    # stands, refinement is not run and the metrics are those of the coarse samples.
+    def never(*args, **kwargs):
+        raise AssertionError("refined a layer that is not near")
+    monkeypatch.setattr(tdmg.printed, "refine_edge", never)
+    section, printed = square(), short_by(gap)
+    m, coverage = coverage_of(section, printed)
+    assert "pair_bound_max_mm" not in m
+    alignment = Alignment(0, (5, 5), PLATE.centre)
+    model_pts, pts, d = edge_gaps(section, alignment.apply(printed), alignment)
+    i = int(np.argmax(d))
+    assert (m["max_gap_mm"], m["at_bed_mm"], m["at_model_mm"]) == (
+        float(d[i]), [float(v) for v in pts[i]], [float(v) for v in model_pts[i]])
+    assert coverage.status == ("FAIL" if gap > ALLOWANCE else "PASS")
+    assert coverage.measured["refined_layers"] == []
+    assert coverage.measured["pair_bound_max_mm"] is None
+    assert "refined" not in coverage.note
+
+
+def holed():
+    """The square with a hole; its exterior ring runs (0, 0), (10, 0), (10, 10), (0, 10)
+    and closes at (0, 0), then the hole's ring starts at (4, 4)."""
+    return shapely.Polygon([(0, 0), (10, 0), (10, 10), (0, 10)],
+                           [[(4, 4), (4, 6), (6, 6), (6, 4)]])
+
+
+def test_no_pair_joins_two_rings():
+    # The layer is near (a 0.19 mm gap on x = 10). The exterior ends at (0, 0) and the hole
+    # starts at (4, 4); between them lies an infill void, unprinted but inside the model. A
+    # pair across the seam would bisect into the void and FAIL; the edge itself is within.
+    section = holed()
+    printed = (short_by(0.19).difference(shapely.box(4, 4, 6, 6))
+               .difference(shapely.Point(2, 2).buffer(1.0)))
+    assert section.exterior.coords[-1] == (0, 0) and section.interiors[0].coords[0] == (4, 4)
+    m, coverage = coverage_of(section, printed)
+    assert coverage.status == "PASS", coverage.note
+    assert m["max_gap_mm"] == pytest.approx(0.19)
+
+
+@pytest.mark.parametrize(("x", "y"), [(0, 0.025), (4.025, 4)])
+def test_a_gap_hidden_on_a_rings_closing_piece_is_found(x, y):
+    # Each ring's closing piece, (0, 0.05) to (0, 0) of the exterior and (4.05, 4) to
+    # (4, 4) of the hole, is paired like any other: a hidden 0.21 mm notch on it is found.
+    section = holed()
+    printed = notched(x, y, 0.21).difference(shapely.box(4, 4, 6, 6))
+    m, coverage = coverage_of(section, printed)
+    assert coverage.status == "FAIL", coverage.note
+    assert m["at_model_mm"] == [pytest.approx(x), pytest.approx(y)]
+
+
+def test_refinement_is_deterministic():
+    first = coverage_of(square(), notched(10, 5.0125, 0.2))
+    again = coverage_of(square(), notched(10, 5.0125, 0.2))
+    assert json.dumps([first[0], first[1].measured, first[1].note]) == json.dumps(
+        [again[0], again[1].measured, again[1].note])
+
+
+def test_the_refinement_floor_is_the_g_code_resolution():
+    # Three decimals in the A1 G-code's coordinates; the bound is half the sample spacing.
+    assert EDGE_REFINE_MIN_MM == 0.001
+    assert COVERAGE_BOUND_MM == EDGE_SAMPLE_MM / 2
+
+
+coord = st.floats(-5, 5, allow_nan=False)
+
+
+@settings(max_examples=200, deadline=None)
+@given(ax=coord, ay=coord, bx=coord, by=coord, cx=coord, cy=coord,
+       w=st.floats(0.1, 4), h=st.floats(0.1, 4), r=st.floats(0, 3),
+       t=st.floats(0, 1))
+def test_the_pair_bound_is_never_below_the_true_distance(ax, ay, bx, by, cx, cy, w, h, r, t):
+    # Distance to a footprint is 1-Lipschitz, so any point of the segment a-b is within
+    # (d_a + d_b + s) / 2 of it.
+    printed = shapely.box(cx, cy, cx + w, cy + h).buffer(r)
+    a, b = np.array([ax, ay]), np.array([bx, by])
+    p = a + t * (b - a)
+    da, db, dp = gaps(np.array([a, b, p]), printed)
+    assert dp <= pair_bound(da, db, float(np.hypot(*(b - a)))) + 1e-9

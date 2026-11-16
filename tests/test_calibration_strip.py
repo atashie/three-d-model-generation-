@@ -587,7 +587,7 @@ def test_make_strips_writes_the_folder_and_the_record(fake, orca, tmp_path):
     rec = ts.make_strips(out, orca())
     assert _files(out) == FILES | {"strip.json"}
     assert json.loads((out / "strip.json").read_bytes()) == rec
-    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-3")
+    assert (rec["schema"], rec["algorithm"]) == ("tdmg.strip/1", "strip-4")
     assert rec["source"] == "docs/plans/2026-11-14-test-strip.md"
     assert (Path(__file__).parents[1] / rec["source"]).is_file()
     assert rec["outputs"] == {n: _sha((out / n).read_bytes()) for n in FILES}
@@ -1150,7 +1150,7 @@ def test_the_strips_with_the_real_slicer(tmp_path):
     by = {c["id"]: c["status"] for c in face["checks"]}
     assert ts.SKIN_WHITE_REQUIRED <= set(face["required_checks"])
     assert {by[i] for i in ts.SKIN_WHITE_REQUIRED} == {"PASS"}
-    assert rec["algorithm"] == "strip-3"
+    assert rec["algorithm"] == "strip-4"
     assert rec["slicer"]["app_tree_verified"] is True
 
 
