@@ -1,9 +1,9 @@
 # Repository restructure: design (DRAFT 2, after review)
 
-**State:** draft 2, 2026-11-16. Draft 1 was reviewed by Codex and Antigravity
+**State:** draft 2, **approved by the owner on 2026-11-16** ("proceed with draft 2");
+implementation plan: `docs/plans/2026-11-16-restructure.md`. Written 2026-11-16. Draft 1 was reviewed by Codex and Antigravity
 (`research/reviews/2026-11-16-restructure-design/`); the owner then made decisions 7
-to 10. This draft answers every finding (the table at the end). It is not approved and
-nothing is built.
+to 10. This draft answers every finding (the table at the end).
 
 ## Goal (the owner's words, 2026-11-16)
 
