@@ -14,7 +14,11 @@ What counts as a reference (each is tested in tests/test_evidence_inventory.py):
 - a Markdown link, resolved against the linking file's folder;
 - a Python path built from string literals (ROOT / "research" / "verification" / "x");
 - a path broken over two lines (the second line's comment marker is skipped), when the
-  joined text names a record in the tree.
+  joined text names a record in the tree;
+- a glob (research/verification/2026-11-10-*), expanded to the records it matches;
+- in rule, test, profile, code, script and CI files only: a review named without a path,
+  "Codex review 3" (through NAME_ALIASES) or "Codex review 2026-11-14" (by date). A date
+  that several review folders share is listed as ambiguous and counts for all of them.
 A built path that stops at a root folder, and a path that names no record in the tree,
 are listed as unresolved, not dropped. Binary files (with a NUL byte) are skipped; text
 that is not UTF-8 is listed. The output file, this script and its test are not scanned.
@@ -28,6 +32,7 @@ import subprocess
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -65,11 +70,35 @@ QUOTED_ROOT = re.compile(rf"[\"']((?:{_ROOT_ALT})/?)[\"']")
 CONTINUATION = re.compile(r"^\s*(?:#+|//+|\*|>|[\"'])?\s*")
 
 
+# Reviews cited by number ("Codex review 3"). Each number maps to the folder that a line
+# in the repo names beside it; tests/test_evidence_inventory.py checks that each locator
+# text is in its ref file. A dated name ("Codex review 2026-11-14") needs no alias when one
+# review folder has that date; when several do, it is listed as ambiguous, not guessed.
+NAME_ALIASES = {
+    "2": ("research/reviews/2026-11-11-color-palette",
+          "research/reviews/2026-11-11-color-palette/README.md",
+          "## Codex review 2: the fixes and the float64 change"),
+    "3": ("research/reviews/2026-11-12-color-geometry", "docs/STATUS.md",
+          ("Codex review 3: 4 findings, all handled "
+           "(`research/reviews/2026-11-12-color-geometry/`)")),
+    "4": ("research/reviews/2026-11-12-color-3mf", "docs/STATUS.md",
+          "Codex review 4 (`research/reviews/2026-11-12-color-3mf/`)"),
+    "5": ("research/reviews/2026-11-13-color-slicing", "docs/STATUS.md",
+          "Codex review 5 (`research/reviews/2026-11-13-color-slicing/`)"),
+}
+CODEX = re.compile(r"\bCodex\b")
+NUMBERED = re.compile(r"Codex(?: review)? (\d+)(?![\d-])")
+DATE = re.compile(r"(?<![\w/-])(\d{4}-\d{2}-\d{2})(?![\w-])")   # not inside a path or name
+DATE_AFTER, DATE_BEFORE = 60, 40   # characters searched for a date beside "Codex"
+OTHER_REVIEW = re.compile(r"\b[Rr]eview (?:[NP]\d+|of )")   # named reviews with no folder
+
+
 @dataclass(frozen=True, order=True)
 class Ref:
     file: str
     line: int
     category: str
+    how: str = "path"   # path, glob, name or ambiguous name
 
 
 @dataclass(frozen=True, order=True)
@@ -80,11 +109,22 @@ class Unresolved:
     reason: str
 
 
+@dataclass(frozen=True, order=True)
+class Ambiguous:
+    file: str
+    line: int
+    text: str
+    candidates: tuple[str, ...]
+
+
 @dataclass
 class Inventory:
     refs: dict[str, set[Ref]] = field(default_factory=lambda: defaultdict(set))
     root_refs: dict[str, set[Ref]] = field(default_factory=lambda: defaultdict(set))
     unresolved: list[Unresolved] = field(default_factory=list)
+    ambiguous: list[Ambiguous] = field(default_factory=list)
+    unattributed: list[Unresolved] = field(default_factory=list)
+    globs: list[Ambiguous] = field(default_factory=list)
     undecodable: list[str] = field(default_factory=list)
 
 
@@ -157,6 +197,11 @@ class _Scanner:
                 if rest[1:].startswith(name) and (after == "" or not re.match(r"[\w-]", after)):
                     return "unit", f"{root}/{name}"
         token = (root + PATH_CHARS.match(rest).group(0)).rstrip(".,;:")
+        if "*" in token:
+            pattern = unit_of(token) or token
+            matches = tuple(u for u in sorted(self.units) if fnmatchcase(u, pattern))
+            if matches:
+                return "glob", (token, matches)
         if root_of(token) or root_of(token.rstrip("/")):
             return "root", token.rstrip("/")
         # research/<x> where x is not verification, reviews or experiments, or a missing record
@@ -190,7 +235,7 @@ def _targets(rel: str, lines: list[str], i: int, scanner: _Scanner):
             if not any(resolved.startswith(r) for r in ROOTS):
                 continue
             kind, value = scanner.match(resolved)
-        yield kind, value, value if kind == "missing" else line[m.start():token_end]
+        yield kind, value, value if kind == "missing" else line[m.start():token_end].strip()
     if rel.endswith(".md"):
         for target in MD_LINK.findall(lines[i]) + MD_REFDEF.findall(lines[i]):
             target = _norm(unquote(target.strip("<>"))).split("#")[0]
@@ -214,9 +259,49 @@ def _targets(rel: str, lines: list[str], i: int, scanner: _Scanner):
             yield "root", m.group(1).rstrip("/"), m.group(0)
 
 
-def scan(root: Path, files: list[str]) -> Inventory:
+def _names(lines: list[str], i: int, reviews: list[str], aliases: dict[str, str]):
+    """Yield (kind, value, text) for each review named on line i: ("name", unit),
+    ("ambiguous", candidates) or ("unattributed", reason). A name broken onto the next
+    line is joined to it."""
+    line = lines[i]
+    text = line
+    if i + 1 < len(lines):
+        text += " " + lines[i + 1][CONTINUATION.match(lines[i + 1]).end():]
+    for m in CODEX.finditer(text):
+        if m.start() >= len(line):
+            break
+        snippet = text[m.start():m.start() + 40].strip()
+        n = NUMBERED.match(text, m.start())
+        if n:
+            if n.group(1) in aliases:
+                yield "name", aliases[n.group(1)], snippet
+            else:
+                yield "unattributed", f"review number {n.group(1)} is not in the alias table", \
+                    snippet
+            continue
+        dates = DATE.findall(text[m.end():m.end() + DATE_AFTER]) or DATE.findall(
+            text[max(0, m.start() - DATE_BEFORE):m.start()])[-1:]
+        if not dates:
+            yield "unattributed", "no review number or date", snippet
+            continue
+        candidates = tuple(u for u in reviews if u.split("/")[-1].startswith(dates[0] + "-"))
+        if len(candidates) == 1:
+            yield "name", candidates[0], snippet
+        elif candidates:
+            yield "ambiguous", candidates, snippet
+        else:
+            yield "unattributed", f"no review folder dated {dates[0]}", snippet
+    for m in OTHER_REVIEW.finditer(line):
+        yield "unattributed", "a named review with no record folder", line[m.start():][:40]
+
+
+def scan(root: Path, files: list[str], aliases: dict[str, str] | None = None) -> Inventory:
     inv = Inventory()
-    scanner = _Scanner(units_in(files))
+    units = units_in(files)
+    scanner = _Scanner(units)
+    reviews = [u for u in units if u.startswith("research/reviews/")]
+    if aliases is None:
+        aliases = {n: unit for n, (unit, _, _) in NAME_ALIASES.items()}
     for rel in files:
         if rel in NOT_SCANNED:
             continue
@@ -225,7 +310,9 @@ def scan(root: Path, files: list[str]) -> Inventory:
             continue
         own, cat = unit_of(rel), category(rel)
         for i in range(len(lines)):
+            names_a_review = False   # by path, on this line
             for kind, value, text in _targets(rel, lines, i, scanner):
+                names_a_review |= kind == "unit" and value.startswith("research/reviews/")
                 ref = Ref(rel, i + 1, cat)
                 if kind == "unit" and value != own:
                     inv.refs[value].add(ref)
@@ -234,20 +321,59 @@ def scan(root: Path, files: list[str]) -> Inventory:
                 elif kind == "missing":
                     inv.unresolved.append(Unresolved(rel, i + 1, text,
                                                      "names no record in the tree"))
+                elif kind == "glob":
+                    pattern, matches = value
+                    inv.globs.append(Ambiguous(rel, i + 1, pattern, matches))
+                    for u in matches:
+                        if u != own:
+                            inv.refs[u].add(Ref(rel, i + 1, cat, "glob"))
                 elif kind == "constructed":
                     inv.unresolved.append(Unresolved(
                         rel, i + 1, text, f"constructed path stops at {value}/; the code adds "
                         "the rest at run time"))
+            if cat not in CITING:
+                continue   # only names in machine-read files can decide a record's fate
+            for kind, value, text in _names(lines, i, reviews, aliases):
+                if kind == "name" and value != own:
+                    inv.refs[value].add(Ref(rel, i + 1, cat, "name"))
+                elif kind == "ambiguous":
+                    inv.ambiguous.append(Ambiguous(rel, i + 1, text, value))
+                    for u in value:
+                        inv.refs[u].add(Ref(rel, i + 1, cat, "ambiguous name"))
+                elif kind == "unattributed" and not names_a_review:
+                    inv.unattributed.append(Unresolved(rel, i + 1, text, value))
     inv.unresolved = sorted(set(inv.unresolved))
+    inv.ambiguous = sorted(set(inv.ambiguous))
+    inv.unattributed = sorted(set(inv.unattributed))
+    inv.globs = sorted(set(inv.globs))
     inv.undecodable.sort()
     return inv
 
 
+STATUSES = ("cited", "cited by name", "possibly cited (ambiguous name)", "uncited",
+            "uncited, no references")
+
+
 def status(unit: str, inv: Inventory) -> str:
     refs = inv.refs.get(unit, set())
-    if any(r.category in CITING for r in refs):
+    citing = {r.how for r in refs if r.category in CITING}
+    if citing & {"path", "glob"}:
         return "cited"
+    if "name" in citing:
+        return "cited by name"
+    if "ambiguous name" in citing:
+        return "possibly cited (ambiguous name)"
     return "uncited" if refs else "uncited, no references"
+
+
+def counts_as_cited(s: str) -> bool:
+    return s in STATUSES[:3]
+
+
+def linked_from_docs(unit: str, inv: Inventory) -> str:
+    """Which of doc and status (README, CLAUDE.md, docs/ but not docs/plans/) refer to it."""
+    cats = {r.category for r in inv.refs.get(unit, set())}
+    return ", ".join(c for c in ("doc", "status") if c in cats)
 
 
 def _note(unit: str) -> str:
@@ -264,11 +390,11 @@ def _counts(refs: set[Ref]) -> list[str]:
 
 
 def _where(refs: set[Ref]) -> list[str]:
-    by_file: dict[str, list[int]] = defaultdict(list)
+    by_file: dict[tuple[str, str], list[int]] = defaultdict(list)
     for r in sorted(refs):
-        by_file[r.file].append(r.line)
-    return [f"- `{f}` ({category(f)}): lines {', '.join(map(str, ls))}"
-            for f, ls in sorted(by_file.items())]
+        by_file[(r.file, r.how)].append(r.line)
+    return [f"- `{f}` ({category(f)}{'' if how == 'path' else ', ' + how}): lines "
+            f"{', '.join(map(str, ls))}" for (f, how), ls in sorted(by_file.items())]
 
 
 def _cell(text: str) -> str:
@@ -286,28 +412,46 @@ INTRO = (
     "A record is one folder under `research/verification/`, `research/reviews/` or "
     "`research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under "
     "`research_notes/`. A record is **cited** when a rule, test, profile, code, script or CI "
-    "file refers to it. It is **uncited** when only docs, `docs/STATUS.md`, config files or "
-    "other records refer to it, or nothing does. A record's references to itself are not "
-    "counted. The counts are referring lines.\n\n")
+    "file refers to it by path (or by a glob such as `2026-11-10-*`). It is **cited by name** "
+    "when such a file names it without a path (\"Codex review 3\", \"Codex review "
+    "2026-11-14\"), and **possibly cited (ambiguous name)** when such a file names a review "
+    "by a date that two or more review folders share; the script does not guess which. All "
+    "three count as cited. It is **uncited** when only docs, `docs/STATUS.md`, config files "
+    "or other records refer to it, or nothing does. A record's references to itself are not "
+    "counted. The counts are referring lines, of every kind.\n\n"
+    "Names are found by a short pattern list (\"Codex\" followed by a review number, or "
+    "with a date beside it) and a hand-kept alias table for the numbers "
+    "(`NAME_ALIASES` in the script, each with the line that justifies it). Names are looked "
+    "for only in rule, test, profile, code, script and CI files. Free prose (\"the research "
+    "record\", \"the review\") can still be missed, so check the uncited list by reading "
+    "before anything is deleted. *Linked from docs* shows whether README, CLAUDE.md, "
+    "`docs/` (not `docs/plans/`) or `docs/STATUS.md` still refer to the record, so those "
+    "links would need updating.\n\n")
 
 
 def render(inv: Inventory, units: list[str]) -> str:
-    groups = {s: [u for u in units if status(u, inv) == s]
-              for s in ("cited", "uncited", "uncited, no references")}
+    groups = {s: [u for u in units if status(u, inv) == s] for s in STATUSES}
+    n_cited = sum(len(groups[s]) for s in STATUSES[:3])
     out = [HEADER, "# Evidence inventory\n\n", INTRO,
-           (f"Records: {len(units)}. Cited: {len(groups['cited'])}. Uncited: "
-           f"{len(groups['uncited'])}. Uncited with no references: "
-           f"{len(groups['uncited, no references'])}.\n\n"),
+           (f"Records: {len(units)}. Counted as cited: {n_cited} ({len(groups['cited'])} by "
+            f"path, {len(groups['cited by name'])} by name only, "
+            f"{len(groups['possibly cited (ambiguous name)'])} by an ambiguous name only). "
+            f"Uncited: {len(groups['uncited'])}. Uncited with no references: "
+            f"{len(groups['uncited, no references'])}.\n\n"),
            "## Summary\n\n",
-           "| Record | Status | Note | " + " | ".join(CATEGORIES) + " |\n",
-           "|---|---|---|" + "---|" * len(CATEGORIES) + "\n"]
+           "| Record | Status | Note | Linked from docs | " + " | ".join(CATEGORIES) + " |\n",
+           "|---|---|---|---|" + "---|" * len(CATEGORIES) + "\n"]
     for s, members in groups.items():
         for u in members:
             refs = inv.refs.get(u, set())
-            out.append(f"| `{_cell(u)}` | {s} | {_note(u)} | " + " | ".join(_counts(refs)) + " |\n")
-    titles = {"cited": "Cited records", "uncited": "Uncited records (referred to only by docs, "
-              "status, config or other records)", "uncited, no references":
-              "Records nothing refers to"}
+            out.append(f"| `{_cell(u)}` | {s} | {_note(u)} | {linked_from_docs(u, inv)} | "
+                       + " | ".join(_counts(refs)) + " |\n")
+    titles = {"cited": "Cited records (by path)",
+              "cited by name": "Records cited by name only",
+              "possibly cited (ambiguous name)": "Records possibly cited by an ambiguous name",
+              "uncited": "Uncited records (referred to only by docs, status, config or other "
+                         "records)",
+              "uncited, no references": "Records nothing refers to"}
     for s, members in groups.items():
         out.append(f"\n## {titles[s]}\n")
         if not members:
@@ -323,6 +467,33 @@ def render(inv: Inventory, units: list[str]) -> str:
     for root in sorted(inv.root_refs):
         out.append(f"\n### `{root}`\n\n")
         out.extend(line + "\n" for line in _where(inv.root_refs[root]))
+    out.append("\n## Ambiguous name citations\n\n"
+               "A machine-read file names a review by a date that several review folders "
+               "share. Every candidate is counted as possibly cited.\n\n")
+    if inv.ambiguous:
+        out.append("| File | Line | Text | Candidates |\n|---|---|---|---|\n")
+        out.extend(f"| `{_cell(a.file)}` | {a.line} | `{_cell(a.text)}` | "
+                   f"{', '.join(f'`{c}`' for c in a.candidates)} |\n" for a in inv.ambiguous)
+    else:
+        out.append("None.\n")
+    out.append("\n## Review mentions not tied to a record\n\n"
+               "A machine-read file mentions a review with no number in the alias table and no "
+               "date, or a review that has no record folder. Read these by hand.\n\n")
+    if inv.unattributed:
+        out.append("| File | Line | Text | Why |\n|---|---|---|---|\n")
+        out.extend(f"| `{_cell(u.file)}` | {u.line} | `{_cell(u.text)}` | {u.reason} |\n"
+                   for u in inv.unattributed)
+    else:
+        out.append("None.\n")
+    out.append("\n## Glob matches\n\n"
+               "A path pattern with `*`, expanded to the records it matches. Each match is "
+               "counted as a reference from that file.\n\n")
+    if inv.globs:
+        out.append("| File | Line | Pattern | Matches |\n|---|---|---|---|\n")
+        out.extend(f"| `{_cell(g.file)}` | {g.line} | `{_cell(g.text)}` | "
+                   f"{', '.join(f'`{c}`' for c in g.candidates)} |\n" for g in inv.globs)
+    else:
+        out.append("None.\n")
     out.append("\n## Unresolved references\n\n"
                "References this script could not tie to one record: a built path that stops at "
                "a root folder, or a path that names no record in the tree (a placeholder, a "
