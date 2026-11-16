@@ -46,7 +46,10 @@ The source images in `Downloads/three-d-test` matched `input.file_sha256` in bot
 `selection.json` files. The selection controls (`--tolerance 30`, `--remove-at 60,396`,
 `--keep-at 470,470` for Roadie; none for Oddie) and the instructions text come from
 each `selection.json`. All other values came from their rules or defaults, as the
-records say. The four configs are `keep.yaml` (Roadie keep), `merge-blues.yaml`
+records say. Where a recorded value came from a rule, the script passes no
+flag, so the run uses today's rule value; it does not check that this still equals the
+recorded value (no drift was seen: `selection.json` and `model.3mf` are identical).
+The four configs are `keep.yaml` (Roadie keep), `merge-blues.yaml`
 (Oddie merge blues), `keep-merge-blues-greens.yaml` (Oddie keep), and none (Roadie drop).
 
 Every step exited as it did on the recorded run. Two color slices exit 1 in both runs,
@@ -87,11 +90,7 @@ cause: **the slicers write the time of slicing into the G-code.**
 ## Fields that differ between two runs
 
 These are the fields the rebuild proof may ignore. `<plate>` is a glue plate name, such
-as `glue-base` or `glue-color-1-f5f5f5`. `<gcode file>` is the path of a G-code file
-inside the output folder: `plate_1.gcode`, `face-up/plate_1.gcode`,
-`face-down/plate_1.gcode`, `<plate>/plate_1.gcode`,
-`prusaslicer.portability-only.gcode.txt`, `<plate>/prusaslicer.portability-only.gcode.txt`,
-or one of these with `.failed` added.
+as `glue-base` or `glue-color-1-f5f5f5`.
 
 | Record file | JSON path | Reason (measured) |
 |---|---|---|
@@ -100,9 +99,18 @@ or one of these with `.failed` added.
 | `slice.json` (color) | `$.faces.up.gcode.sha256`, `$.faces.down.gcode.sha256` | OrcaSlicer G-code timestamp (line 2) |
 | `slice.json` (color) | `$.glue.plates.<plate>.gcode.sha256` | OrcaSlicer G-code timestamp (line 2) |
 | `slice.json` (color) | `$.glue.plates.<plate>.portability.gcode.sha256` | PrusaSlicer G-code timestamp (line 1) |
-| `slice.json` (R1 and color) | `$.outputs.<gcode file>` (the file's SHA-256) | the G-code timestamp of that file |
+| `slice.json` (R1) | `$.outputs.plate_1.gcode` (the file's SHA-256) | OrcaSlicer G-code timestamp (line 2) |
+| `slice.json` (R1 and color) | `$.outputs.prusaslicer.portability-only.gcode.txt` | PrusaSlicer G-code timestamp (line 1) |
+| `slice.json` (color) | `$.outputs.face-up/plate_1.gcode`, `$.outputs.face-down/plate_1.gcode`, `$.outputs.face-down/plate_1.gcode.failed` | OrcaSlicer G-code timestamp (line 2) |
+| `slice.json` (color) | `$.outputs.<plate>/plate_1.gcode`, `$.outputs.<plate>/plate_1.gcode.failed` | OrcaSlicer G-code timestamp (line 2) |
+| `slice.json` (color) | `$.outputs.<plate>/prusaslicer.portability-only.gcode.txt`, `$.outputs.<plate>/prusaslicer.portability-only.gcode.txt.failed` | PrusaSlicer G-code timestamp (line 1) |
 | `strip.json` | `$.clearance.plates.base.gcode.sha256`, `$.clearance.plates.pieces.gcode.sha256`, `$.skin.face.gcode.sha256` | OrcaSlicer G-code timestamp (line 2) |
-| `strip.json` | `$.outputs.<gcode file>` (`clearance/slice/base/plate_1.gcode.failed`, `clearance/slice/pieces/plate_1.gcode`, `skin/slice/face-up/plate_1.gcode`) | OrcaSlicer G-code timestamp (line 2) |
+| `strip.json` | `$.outputs.clearance/slice/base/plate_1.gcode.failed`, `$.outputs.clearance/slice/pieces/plate_1.gcode`, `$.outputs.skin/slice/face-up/plate_1.gcode` | OrcaSlicer G-code timestamp (line 2) |
+
+Inferred, not measured: not to be ignored until measured. These `.failed` forms did not
+occur in this run, so they are not in the list above: `$.outputs.plate_1.gcode.failed`
+(R1), `$.outputs.face-up/plate_1.gcode.failed` and
+`$.outputs.prusaslicer.portability-only.gcode.txt.failed` (top level).
 
 The G-code files themselves differ in those timestamp lines only. No other field of
 `selection.json`, `flat.json`, `colors.json`, `colored.json`, `palette.json`,
