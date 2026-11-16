@@ -44,7 +44,10 @@ addenda):
   the config (`merge`). Too many colors left: the plan is written with `ready: false`,
   exit 1, and merges are suggested. Outlines, shading and merges are explicit options,
   never side effects of cleanup.
-- **Holes in the subject are filled by default** (`holes: fill | keep`).
+- **No hole handling was added:** Task 7e-a found no holes in either image (palette
+  record, Task 7e-a addendum, "Holes and inlets"; palette plan, Task 7e-b result,
+  "nothing was added for holes"). The planned `holes: fill | keep` key does not
+  exist.
 - **`verify_colors` rebuilds the plan** from the selection and requires identical labels
   and record, today's rule values and a color count within the printer's cap. A plan
   made on another machine is refused if the results differ.
@@ -60,9 +63,11 @@ approved 2026-11-12, "approved"):
   preview (owner, 2026-11-12). Per-inlay trimming drew base-colored hairlines.
 - **"Fold small pieces too":** in the glue version, glue pieces below the minimum fold
   into the base, so thin outline bands mostly vanish there (owner, 2026-11-12).
-- **No glue version for a plan that keeps a drawn outline.** Owner, verbatim: "for the
-  glued-together versions of our images let's make sure to not add teh outline - that
-  would be unrealistic to glue on" (2026-11-12).
+- **No glue version for a plan that keeps a drawn outline.** Owner, verbatim: "teh
+  colors match, but for the glued-together versions of our images let's make sure to
+  not add teh outline - that would be unrealistic to glue on, I think. Everyting else
+  looks ok" (2026-11-12; [geometry record](../../research/verification/2026-11-12-color-geometry/README.md),
+  Task 7).
 - **`--smooth-px` with `--colors` is refused,** and the width must equal the plan's
   `width_mm`.
 - **Bodies are meshed directly on a float32-exact grid,** not by 3-D unions: manifold3d
@@ -73,7 +78,8 @@ approved 2026-11-12, "approved"):
 - **Encoding D:** one mesh object with one closed shell per color, each triangle colored,
   core spec and Materials only, no UUIDs, byte-identical on repeat. Separate objects are
   dropped to the bed by both slicer CLIs, and PrusaSlicer crashes on them. The owner's
-  Bambu Studio check of the hand-made files: "A and D had all colors in place".
+  Bambu Studio check of the hand-made files: "roadie-a and roadie-d had all colors in
+  place" (the 3MF record).
 - **`palette.json` is the guarantee;** it names colors, never AMS slots.
 - The owner opened the real Roadie `model.3mf` in Bambu Studio: "1) yes. 2) yes. 3) yes"
   (in place, filaments assignable, it slices). The owner assigns filaments there.

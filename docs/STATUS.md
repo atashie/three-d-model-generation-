@@ -59,20 +59,22 @@ has been measured with calipers, and strength is not judged.
 | Machine | Facts | What has been verified on it |
 |---|---|---|
 | M5 MacBook | Apple M5, arm64, 16 GB, macOS 26.3, no CUDA | Python 3.13 stack installed and tested (`research/verification/2026-11-08-stack-smoke/`); all tests; wheel build and install. No slicer installed, so `tdmg slice` has not run a real slicer here. The owner fixtures (colors) have not been run here, so cross-platform parity is unverified |
-| PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, tests, lint, docs, wheel install. Optional import failures (PyMeshLab, Open3D, rembg/ONNX Runtime, bpy) recorded in [research/verification/2026-11-09-pc-stack/README.md](../research/verification/2026-11-09-pc-stack/README.md). Pinned OrcaSlicer 2.5.0 in `artifacts/tools/orcaslicer-2.5.0/` and PrusaSlicer 2.9.7 in `artifacts/tools/prusaslicer-2.9.7/`, both run by `tdmg slice` |
+| PC | Windows 11 Pro 10.0.26200 x64; i9-12900K (16 cores/24 threads), 64 GB RAM; Intel UHD 770, no discrete GPU | Core sync, tests, lint, docs, wheel install and geometry smoke checks passed. Optional import failures (PyMeshLab, Open3D, rembg/ONNX Runtime, bpy) recorded in [research/verification/2026-11-09-pc-stack/README.md](../research/verification/2026-11-09-pc-stack/README.md). Pinned OrcaSlicer 2.5.0 in `artifacts/tools/orcaslicer-2.5.0/` and PrusaSlicer 2.9.7 in `artifacts/tools/prusaslicer-2.9.7/`, both run by `tdmg slice` |
 
 - **CI:** `macos-15` (arm64), `ubuntu-latest`, `windows-latest`. The real slicers are not
   installed in CI, so `-m slicer` tests run on the PC only. Last CI-verified commit:
-  `50f7d1e` (run 43901659581, all three OSes, 2026-11-16). The restructure commits up
-  to `04806a8` (Task 2) are pushed, but their CI result is not recorded here; the Task 3
-  commits are not pushed.
+  `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
+  restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
+  (run 43946335668 passed). The Task 3 commits are not pushed.
 - **Latest local validation (2026-11-16, PC, restructure Task 3):** `uv run pytest -q`
   gave 2697 passed and 8 skipped (the real-slicer tests); `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the
   PC. A session started before the install needs a restart or that folder on PATH; in
-  Git Bash set `MSYS_NO_PATHCONV=1` for `agy-doctor`. It has no image model or image
-  tool. `agy-delegate` returned empty output twice while `agy -p` worked.
+  Git Bash set `MSYS_NO_PATHCONV=1` for `agy-doctor`. 18 models (Gemini 4
+  Hydrogen/Argon, 3.8 Flash, Claude, GPT-OSS); no image model and no image-generation
+  tool, so Google image generation would come from the Gemini app/AI Studio by hand or
+  the Gemini API. `agy-delegate` returned empty output twice while `agy -p` worked.
 - **Local data, not in git:** original images in `C:/Users/arikt/Downloads/three-d-test/`
   (STLs in its `makersLabModels/`). Runs in `artifacts/selection-runs/`,
   `artifacts/flat-runs/`, `artifacts/colors-runs/` (the approved plans are `*-f64`;
@@ -132,6 +134,7 @@ R1's `F2.export_matches_geometry` checks only bounds and volume (see
 | Use Meshy's free printability check as a second opinion? It means uploading the mesh | Not answered |
 | Photo privacy with hosted services, and their data and training terms | Uploading is allowed for now. **Marked to revisit** |
 | MakerLab engine/version, credits, settings, uploaded input provenance | Unknown; the owner supplied STLs, not generation metadata |
+| Intended output form | Not settled (a pending decision in earlier handoffs) |
 | Oddie shape acceptance and desired Roadie depth/form | Not settled. The extracted Roadie is a flat-backed relief; do not silently convert it to a full figurine |
 
 ## Owner decisions, in short

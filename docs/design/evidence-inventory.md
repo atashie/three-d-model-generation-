@@ -48,7 +48,7 @@ Records: 45. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous
 | `research/verification/2026-11-11-color-palette` | cited |  | doc | 4 | 12 | 3 |  | 1 |  |  |  | 3 |  | 6 |  |
 | `research/verification/2026-11-11-prusaslicer-windows` | cited |  | doc | 4 | 1 | 4 | 3 | 2 |  |  |  | 4 |  | 5 |  |
 | `research/verification/2026-11-12-color-3mf` | cited |  | doc | 4 |  | 1 |  | 4 |  |  |  | 2 |  | 8 |  |
-| `research/verification/2026-11-12-color-geometry` | cited |  | doc | 3 |  |  |  | 1 |  |  |  | 4 |  | 5 |  |
+| `research/verification/2026-11-12-color-geometry` | cited |  | doc | 3 |  |  |  | 1 |  |  |  | 5 |  | 5 |  |
 | `research/verification/2026-11-13-a1-profile-include` | cited |  | doc | 3 |  | 4 | 2 | 4 | 2 |  |  | 4 |  | 3 |  |
 | `research/verification/2026-11-13-color-slicing` | cited |  | doc | 4 |  | 4 |  | 8 |  |  |  | 4 |  | 6 |  |
 | `research/verification/2026-11-14-test-strips` | cited |  | doc | 3 | 2 |  |  | 1 |  |  |  | 4 |  | 11 |  |
@@ -162,7 +162,7 @@ Linked from kept records: `research/verification/2026-11-11-prusaslicer-windows`
 
 ### `docs/plans/2026-11-12-color-3mf.md`
 
-- `docs/design/color.md` (doc): lines 71
+- `docs/design/color.md` (doc): lines 76
 - `docs/print-types/attributes/color-multi.md` (doc): lines 368
 - `research/reviews/2026-11-12-color-3mf/README.md` (record): lines 3
 - `research/reviews/2026-11-12-color-3mf/prompt.md` (record): lines 3
@@ -179,7 +179,7 @@ Linked from kept records: `research/reviews/2026-11-12-color-3mf`, `research/ver
 
 ### `docs/plans/2026-11-12-color-geometry.md`
 
-- `docs/design/color.md` (doc): lines 54
+- `docs/design/color.md` (doc): lines 57
 - `docs/plans/2026-11-11-color-design.md` (record): lines 61
 - `docs/print-types/attributes/color-multi.md` (doc): lines 71, 367
 - `research/reviews/2026-11-12-color-geometry/README.md` (record): lines 3
@@ -291,7 +291,7 @@ Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research
 
 ### `research/reviews/2026-11-11-color-palette`
 
-- `docs/design/color.md` (doc): lines 86
+- `docs/design/color.md` (doc): lines 92
 - `docs/design/flat.md` (doc): lines 71
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 563
 - `research/verification/2026-11-11-prusaslicer-windows/README.md` (record): lines 170, 179
@@ -328,13 +328,13 @@ Linked from kept records: `docs/plans/2026-11-11-portability-check.md`, `researc
 
 ### `research/reviews/2026-11-12-color-3mf`
 
-- `docs/design/color.md` (doc): lines 93
+- `docs/design/color.md` (doc): lines 99
 - `src/tdmg/color_checks.py` (code): lines 452, 536, 548
 - `tests/test_threemf.py` (test): lines 306, 331, 364, 375
 
 ### `research/reviews/2026-11-12-color-geometry`
 
-- `docs/design/color.md` (doc): lines 90
+- `docs/design/color.md` (doc): lines 96
 - `docs/design/flat.md` (doc): lines 51
 - `docs/plans/2026-11-12-color-geometry.md` (record): lines 458
 - `docs/plans/2026-11-16-restructure.md` (record): lines 126
@@ -479,7 +479,7 @@ Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research
 
 ### `research/verification/2026-11-11-color-palette`
 
-- `docs/design/color.md` (doc): lines 28, 105
+- `docs/design/color.md` (doc): lines 28, 111
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 56, 288
 - `docs/plans/2026-11-16-restructure.md` (record): lines 45
 - `docs/print-types/attributes/color-multi.md` (doc): lines 363
@@ -514,7 +514,7 @@ Linked from kept records: `docs/plans/2026-11-11-portability-check.md`, `researc
 
 ### `research/verification/2026-11-12-color-3mf`
 
-- `docs/design/color.md` (doc): lines 107
+- `docs/design/color.md` (doc): lines 113
 - `docs/plans/2026-11-12-color-3mf.md` (record): lines 79, 115
 - `docs/plans/2026-11-13-color-slicing.md` (record): lines 61
 - `docs/print-types/attributes/color-multi.md` (doc): lines 375
@@ -530,7 +530,7 @@ Linked from kept records: `docs/plans/2026-11-12-color-3mf.md`, `docs/plans/2026
 
 ### `research/verification/2026-11-12-color-geometry`
 
-- `docs/design/color.md` (doc): lines 106
+- `docs/design/color.md` (doc): lines 69, 112
 - `docs/guide/pipeline-and-gate.md` (doc): lines 344
 - `docs/plans/2026-11-12-color-geometry.md` (record): lines 101, 173, 379
 - `docs/print-types/attributes/color-multi.md` (doc): lines 111, 372
@@ -669,7 +669,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`.
 Active work, stays where it is.
 
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 97
+- `docs/STATUS.md` (status): lines 99
 - `docs/design/README.md` (doc): lines 25
 - `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
@@ -682,7 +682,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 Active work, stays where it is.
 
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 55, 98, 160
+- `docs/STATUS.md` (status): lines 55, 100, 163
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
 
@@ -747,7 +747,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 
 - `README.md` (doc): lines 60
 - `docs/PLAN.md` (doc): lines 164, 197
-- `docs/STATUS.md` (status): lines 9, 49, 156
+- `docs/STATUS.md` (status): lines 9, 49, 159
 - `docs/design/README.md` (doc): lines 6
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 181
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 112, 151
@@ -764,13 +764,13 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `research/reviews`
 
 - `CLAUDE.md` (doc): lines 42
-- `docs/STATUS.md` (status): lines 179
+- `docs/STATUS.md` (status): lines 182
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232
 
 ### `research/verification`
 
-- `docs/STATUS.md` (status): lines 166
+- `docs/STATUS.md` (status): lines 169
 - `docs/plans/2026-11-16-restructure.md` (record): lines 117
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 40, 51, 214, 232, 279, 280
 
@@ -868,7 +868,7 @@ References this script could not tie to one record: a built path that stops at a
 | `docs/PLAN.md` | 165 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 9 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 49 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 165 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 168 | `research/README.md` | names no record in the tree |
 | `docs/design/README.md` | 23 | `research/README.md` | names no record in the tree |
 | `docs/design/flat.md` | 80 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `docs/design/flat.md` | 86 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
