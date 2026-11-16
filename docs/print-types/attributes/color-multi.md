@@ -13,8 +13,9 @@ The same color plan serves two routes:
 - **Glue:** the base has shallow pockets. Each color is printed separately and glued
   into its pocket.
 
-**Status (2026-11-14):** steps 1 to 4 are done. Step 5 (prints) has begun: part 1, the
-two test strips, is built (`tdmg strip`) and waits for the owner to print it.
+**Status (2026-11-16):** steps 1 to 4 are done. Step 5 (prints): part 1, the test
+strips, is closed (the skin strip was printed and calibrated; the owner skipped the
+clearance strip). Part 2, prints of owner plans, has begun.
 - `tdmg colors` turns a selection into a reviewed color plan (step 1).
 - `tdmg flat --colors` turns a ready plan into gated STL bodies for both routes
   (step 2), and writes the AMS bodies as one multicolor `model.3mf` (step 3).
@@ -25,7 +26,7 @@ two test strips, is built (`tdmg strip`) and waits for the owner to print it.
   [pipeline guide](../../guide/pipeline-and-gate.md)).
 - `tdmg strip OUT` makes two calibration prints for two of this page's rules (step 5,
   part 1; [the test strip plan](../../plans/2026-11-14-test-strip.md)). The first AMS and
-  glue prints of an owner plan (part 2) come after.
+  glue prints of an owner plan are part 2.
 
 On the owner's four plans, face up is PRINTABLE, with warnings. One owner plan has been
 printed on the AMS, from Bambu Studio's own slice: Roadie, outline dropped, smeared face
@@ -353,8 +354,8 @@ source.
 - Whether OrcaSlicer's flush amounts give clean colors. They are the slicer's, measured
   and not tuned.
 
-Each needs a test print. None is done. The first two have test strips ready to print
-(`tdmg strip`, step 5, part 1).
+The skin depth is calibrated for one filament pair; each of the others needs a test
+print, and none is done. `tdmg strip` can still make the clearance strip.
 
 ## Evidence
 

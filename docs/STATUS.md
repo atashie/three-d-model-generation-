@@ -127,6 +127,35 @@ passed. These commits are pushed; for CI see above.
 
 ## Next steps, in order
 
+1. **The owner prints figures** (R2 step 5, part 2). For an AMS print: `tdmg slice
+   COLORED_DIR`, then follow its "chosen:" line and print instructions (open
+   `model.3mf` in Bambu Studio, assign the filaments listed, turn it over if the chosen
+   face is down). Record each print. The first glue print is also the first test of the
+   0.2 mm glue gap: record how the pieces fit and the filament.
+2. **Repository restructure (being designed, 2026-11-16).** The owner's goal: any image
+   in, a confirmed printable file out, for several output classes (flat icons now;
+   simple figurines and simple flexis later), with per-job data purged once the owner
+   confirms a final file. Design in progress with the owner; no code changed yet.
+3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
+   unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
+   face up for now. Cause not investigated.
+4. **The glue route (open):** no owner plan has every glue plate PRINTABLE.
+5. **Caliper measurements,** if the owner gets calipers: three named dimensions within
+   `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
+6. **R1 features:** the keychain loop or base, then 3MF output for R1 (R2 already
+   writes `model.3mf`).
+7. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
+   still a bit rough", acceptable for now. Options: a per-image `--smooth-px`, or a
+   better source image.
+8. **R4 backend (open):** help the owner choose under their decision rule: a cheap
+   standard service, around $1 per model, beats a homemade pipeline if it does
+   everything we need.
+
+## R2 build history (steps 1 to 5, done)
+
+These were the "next steps" while R2 was built; kept as the record of each step.
+
+
 1. **R2 color, step 1 (`tdmg colors`): done; CI passed for `ef4b2cf`.** Next is step 2
    (item 2). The design is
    `docs/plans/2026-11-11-color-design.md`, and the plan is
@@ -307,17 +336,6 @@ passed. These commits are pushed; for CI see above.
        needs an Orca-specific extra file (PLAN point 7) or another route;
      - the pinned A1 `machine_start_gcode` never selects a filament (Task 1 record,
        Surprises). Check this before printing anything from step 4.
-3. **Caliper measurements,** if the owner gets calipers: three named dimensions within
-   `acceptance.dimension.tolerance` (still a hypothesis), logged as a calibration.
-4. **R1 features and 3MF:** the keychain loop or base, then 3MF output with a UUID
-   identity scheme.
-5. **Roadie's roughness (open):** the owner finds Roadie's smoothed edge "close but
-   still a bit rough", acceptable for now. Options: a per-image `--smooth-px`, or a
-   better source image.
-6. **R4 backend (open):** help the owner choose under their decision rule: a cheap
-   standard service, around $1 per model, beats a homemade pipeline if it does
-   everything we need.
-
 ## Done so far (history)
 
 - **F6.portability (2026-11-11):** PrusaSlicer 2.9.7 pinned and hash-verified
@@ -449,7 +467,8 @@ The full list is in `docs/PLAN.md` section 13.
     started: owner-generated "print-friendly" input art (flat colors, plain background),
     recorded with prompt and model, run through the unchanged pipeline.
   - **CI:** passed on Windows, macOS and Ubuntu for `50f7d1e` (run 43901659581).
-  - **Next:** the owner's next prints.
+  - **Next:** the owner's next prints, and the repository restructure (design with
+    the owner started 2026-11-16; see Next steps item 2).
     Open: why outline-kept plans fail face down; the glue route (still not printable);
     `colored_flat.py` REVIEW_END text (deliberately unchanged).
 - **Earlier (2026-11-15): Task 5, the skin strip printed.** The owner printed
