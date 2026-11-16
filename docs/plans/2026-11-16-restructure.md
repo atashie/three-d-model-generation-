@@ -128,8 +128,8 @@ anything.
 ### Task 3: design notes, remove uncited records, rule 6, STATUS
 
 **Steps:**
-- **Write the design notes.** Create `docs/design/selection.md`, `flat.md`, `color.md`,
-  `slicing.md` and `calibration.md`. Each note holds:
+- **Write the design notes.** Create `docs/design/selection.md`, `docs/design/flat.md`, `docs/design/color.md`,
+  `docs/design/slicing.md` and `docs/design/calibration.md`. Each note holds:
   - the decisions still in force, with the owner's words and dates;
   - review findings that still constrain the code;
   - links to `docs/evidence/`;
