@@ -448,7 +448,8 @@ The full list is in `docs/PLAN.md` section 13.
     `agy-delegate` returned empty output twice here while `agy -p` worked. Idea, not
     started: owner-generated "print-friendly" input art (flat colors, plain background),
     recorded with prompt and model, run through the unchanged pipeline.
-  - **Next:** push and CI; then the owner's next prints.
+  - **CI:** passed on Windows, macOS and Ubuntu for `50f7d1e` (run 43901659581).
+  - **Next:** the owner's next prints.
     Open: why outline-kept plans fail face down; the glue route (still not printable);
     `colored_flat.py` REVIEW_END text (deliberately unchanged).
 - **Earlier (2026-11-15): Task 5, the skin strip printed.** The owner printed
