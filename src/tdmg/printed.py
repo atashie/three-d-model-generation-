@@ -14,7 +14,10 @@ does not understand instead of skipping it:
 - analyse: where the slicer put the model (its bounding box centred on the plate, turned
   by the quarter turn that fits best over all layers) and every layer's metrics.
 - layer_metrics: per layer, the largest distance from the model's edge to printed plastic,
-  and whether the parts and holes of the print match those of the model one to one.
+  and whether the parts and holes of the print match those of the model one to one. A
+  layer whose largest sampled gap is within the sampling bound of the allowance is refined
+  (refine_edge): edge samples are halved where a Lipschitz bound leaves it in doubt, so
+  the layer gets a measured PASS or FAIL (docs/plans/2026-11-16-face-down-default.md).
 - f3_checks: F3.printed_connectivity, F3.edge_coverage and F3.edge_overprint for tdmg
   slice, by the rules the owner approved (docs/plans/2026-11-10-thin-wall-policy.md,
   Decisions 2 and 2a).
@@ -60,8 +63,9 @@ EDGE_SAMPLE_MM = 0.05
 # samples leave within the bound of the allowance (refine_edge; docs/plans/
 # 2026-11-16-face-down-default.md, Decision 2). A resolution, not a threshold: the
 # G-code gives coordinates to 3 decimals, 0.001 mm, so a finer spacing measures nothing
-# the G-code states. Evidence: OrcaSlicer writes X and Y with at most 3 decimals (the
-# format XY_ROUND_MM below rests on: GCodeWriter.cpp at v2.5.0 and every model move of
+# the G-code states: one unit of that last digit, 2 * XY_ROUND_MM. Evidence: OrcaSlicer
+# writes X and Y with at most 3 decimals (the format XY_ROUND_MM below rests on:
+# GCodeWriter.cpp at v2.5.0 and every model move of
 # the owner's G-code; the parser assumes it and does not refuse more);
 # research/verification/2026-11-11-prusaslicer-windows/README.md: "no X, Y or Z word has
 # more than 3 decimals" (PrusaSlicer 2.9.7's files). An A1 example (measured 2026-11-16,
@@ -1000,7 +1004,9 @@ def refine_edge(section, printed, alignment: Alignment, allowance_mm: float, edg
     turned to bed mm; a rigid motion keeps midpoints and lengths). All open pairs of a
     round are split together, in a fixed order (no randomness), so the result is the same
     on every run. It stops when no pair is open or every open pair is EDGE_REFINE_MIN_MM or
-    shorter.
+    shorter. It deliberately goes on after a new sample is over the allowance: the layer
+    FAILs either way, and max_gap_mm is then the largest gap found by the whole
+    refinement, the same on every run, not whichever sample first went over.
 
     Returns max_gap_mm, at_bed_mm and at_model_mm, the largest gap over every sample, the
     new ones included (a new one replaces a coarse one only when strictly larger), and
@@ -1092,6 +1098,11 @@ def layer_metrics(section, printed, alignment: Alignment, allowance_mm: float,
                share_over_allowance=float((d > allowance_mm).mean()),
                at_model_mm=[float(v) for v in model_pts[i]])
     out["score"] += float(d.mean())
+    # Refined here, so on every turn analyse_sections measures, though only the chosen
+    # turn's result is judged: kept for simplicity. The cost is small beside the overprint
+    # samples: a 250 mm square with a 0.1999 mm gap along one side, 315,000 midpoints in
+    # 0.39 s against overprint's 1.5 s on the same layer (the 2026-11-16 quality review's
+    # measurement, not re-run here).
     if out["max_gap_mm"] + COVERAGE_BOUND_MM > allowance_mm >= out["max_gap_mm"]:
         out.update(refine_edge(section, printed, alignment, allowance_mm, edges))
     return out

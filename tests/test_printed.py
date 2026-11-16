@@ -19,11 +19,11 @@ import tdmg.printed
 from tdmg.flat import extrude
 from tdmg.printed import (
     ARC_STEP_MM,
-    COVERAGE_BOUND_MM,
     EDGE_REFINE_MIN_MM,
     EDGE_SAMPLE_MM,
     MODEL_FEATURES,
     QUARTER_TURNS,
+    XY_ROUND_MM,
     Alignment,
     Plate,
     Setup,
@@ -1084,8 +1084,10 @@ def notched(x, y, r):
 
 
 def test_a_near_pass_whose_true_gap_is_within_the_allowance_passes():
-    # A uniform 0.19 mm gap: sampled 0.19 + 0.025 is over 0.2 (near), but the pair bound
-    # (0.19 + 0.19 + s) / 2 is within it once s <= 0.02 mm.
+    # A uniform 0.19 mm gap: sampled 0.19 + 0.025 is over 0.2 (near). The pair bound
+    # (0.19 + 0.19 + s) / 2 = 0.19 + s / 2 is over 0.2 at s = 0.05 and 0.025 mm, so each
+    # pair is bisected twice, to s = 0.0125 mm: bound 0.19 + 0.0125 / 2 = 0.19625 mm,
+    # within 0.2 (EDGE_SAMPLE_MM / 8 = 0.0125 / 2).
     m, coverage = coverage_of(square(), short_by(0.19))
     assert coverage.status == "PASS", coverage.note
     assert m["max_gap_mm"] == pytest.approx(0.19)
@@ -1203,10 +1205,10 @@ def test_a_near_peak_on_a_sample_passes_only_with_the_tight_pair_bound():
     assert coverage.measured["refined_layers"] == [0.2]
 
 
-def test_the_refinement_floor_is_the_g_code_resolution():
-    # Three decimals in the A1 G-code's coordinates; the bound is half the sample spacing.
-    assert EDGE_REFINE_MIN_MM == 0.001
-    assert COVERAGE_BOUND_MM == EDGE_SAMPLE_MM / 2
+def test_the_refinement_floor_is_one_unit_of_the_g_codes_last_digit():
+    # XY_ROUND_MM is half a unit of the third decimal (a printed X or Y is within it of the
+    # slicer's own); the floor is one whole unit, the G-code's coordinate resolution.
+    assert EDGE_REFINE_MIN_MM == pytest.approx(2 * XY_ROUND_MM)
 
 
 coord = st.floats(-5, 5, allow_nan=False)
@@ -1218,7 +1220,9 @@ coord = st.floats(-5, 5, allow_nan=False)
        t=st.floats(0, 1))
 def test_the_pair_bound_is_never_below_the_true_distance(ax, ay, bx, by, cx, cy, w, h, r, t):
     # Distance to a footprint is 1-Lipschitz, so any point of the segment a-b is within
-    # (d_a + d_b + s) / 2 of it.
+    # (d_a + d_b + s) / 2 of it. The 1e-9 mm slack is for floating point only (the
+    # distances, the point p and the hypot are each rounded, errors near 1e-15 mm here):
+    # far below any gap the check judges, and no tolerance on the bound itself.
     printed = shapely.box(cx, cy, cx + w, cy + h).buffer(r)
     a, b = np.array([ax, ay]), np.array([bx, by])
     p = a + t * (b - a)

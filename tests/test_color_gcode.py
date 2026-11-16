@@ -318,6 +318,8 @@ def test_a_tools_near_pass_is_settled_by_refinement():
     assert c.status == "PASS", c.note
     m = c.measured
     assert m["max_gap_mm"] + COVERAGE_BOUND_MM > m["allowance_mm"] >= m["max_gap_mm"]
+    # The inlay's body is only in the top layer (z 0.2 to 0.4 mm in bodies()), printed at
+    # the fixture's second layer, Z_HEIGHT 0.4; on the first (z 0.2) T1 has no body.
     assert m["refined_layers"] == [0.4]
     assert m["pair_bound_max_mm"] <= m["allowance_mm"]
     assert "were refined" in c.note
