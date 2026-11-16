@@ -128,8 +128,9 @@ class Route:
             if value is not True:
                 reason = parent.get("reason")
                 hint = self.not_built or "required"
-                hint += f": {reason}" if isinstance(reason, str) and reason else ""
-                raise self._refuse(f"{path} is {value!r}, not true ({hint})")
+                if isinstance(reason, str) and reason:
+                    hint += ": " + reason.encode("ascii", "backslashreplace").decode("ascii")
+                raise self._refuse(f"{path} is {value!a}, not true ({hint})")
         for path in self.dict_fields:
             _, value = self._field(record, path)
             if not isinstance(value, dict):
@@ -150,17 +151,17 @@ class Route:
                 raise self._refuse(f"bodies[{i}] has no string file")
             unsafe = [s for s in UNSAFE_IN_NAME if s in name]
             if unsafe:
-                raise self._refuse(f"bodies[{i}] file {name!r} is not a bare file name "
-                                   f"(holds {', '.join(map(repr, unsafe))})")
+                raise self._refuse(f"bodies[{i}] file {name!a} is not a bare file name "
+                                   f"(holds {', '.join(map(ascii, unsafe))})")
             if re.fullmatch(self.pattern, name, flags=re.ASCII) is None:
-                raise self._refuse(f"bodies[{i}] file {name!r} does not match "
+                raise self._refuse(f"bodies[{i}] file {name!a} does not match "
                                    f"{self.pattern!r}")
             names.append(name)
         if not names:
             raise self._refuse(f"lists no {self.name} body")
         repeated = sorted({n for n in names if names.count(n) > 1})
         if repeated:
-            raise self._refuse(f"lists {', '.join(repeated)} more than once")
+            raise self._refuse(f"lists {', '.join(map(ascii, repeated))} more than once")
         missing = [n for n in self.must_list if n not in names]
         if missing:
             raise self._refuse(f"does not list {', '.join(missing)}")
@@ -169,12 +170,14 @@ class Route:
             raise self._refuse("has no outputs object")
         absent = [n for n in names if n not in outputs]
         if absent:
-            raise self._refuse(f"outputs lack {', '.join(absent)}")
+            raise self._refuse(f"outputs lack {', '.join(map(ascii, absent))}")
+        # Case-insensitive: on Windows and macOS "GLUE-x.STL" is the same kind of file.
         extra = sorted(k for k in outputs
-                       if isinstance(k, str) and fnmatchcase(k, self.glob or "")
+                       if isinstance(k, str) and fnmatchcase(k.lower(), self.glob or "")
                        and k not in names)
         if extra:
-            raise self._refuse(f"outputs hold {', '.join(extra)}, which bodies do not list")
+            raise self._refuse(f"outputs hold {', '.join(map(ascii, extra))}, which bodies "
+                               "do not list")
         return tuple(names)
 
     def required_files(self, record: dict | None = None) -> tuple[str, ...]:
@@ -228,7 +231,7 @@ class Recipe:
             if r.name == name:
                 return r
         known = ", ".join(r.name for r in self.routes) or "none"
-        raise KeyError(f"recipe {self.id} has no route {name!r} (routes: {known})")
+        raise KeyError(f"recipe {self.id} has no route {name!a} (routes: {known})")
 
 
 RECIPES: tuple[Recipe, ...] = (
@@ -267,7 +270,7 @@ def recipe(recipe_id: str) -> Recipe:
     for r in RECIPES:
         if r.id == recipe_id:
             return r
-    raise KeyError(f"unknown recipe {recipe_id!r}")
+    raise KeyError(f"unknown recipe {recipe_id!a}")
 
 
 def class_of(recipe_id: str) -> str | None:
@@ -300,7 +303,7 @@ def resolve(output_class: str, colors: bool) -> Recipe:
     usable recipe of the requested kind. Each refusal names the class and the status of
     its recipes."""
     if output_class not in CLASSES:
-        raise ValueError(f"unknown output class {output_class!r} "
+        raise ValueError(f"unknown output class {output_class!a} "
                          f"(known: {', '.join(CLASSES)})")
     members = [recipe(i) for i in CLASSES[output_class]]
     statuses = ", ".join(f"{r.id} {r.status.value}" for r in members)

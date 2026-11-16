@@ -138,9 +138,36 @@ def test_glue_route_cross_checks_outputs(outputs):
         recipe("R2").route("glue").required_files(_glue_record(outputs=outputs))
 
 
+@pytest.mark.parametrize("key", ["Glue-color-3-000000.stl", "GLUE-COLOR-4-000000.STL",
+                                 "glue-base.STL"])
+def test_glue_route_matches_unlisted_output_keys_without_case(key):
+    outputs = {"glue-base.stl": "0", key: "0"}
+    with pytest.raises(ValueError, match="which bodies do not list"):
+        recipe("R2").route("glue").required_files(
+            _glue_record(files=("glue-base.stl",), outputs=outputs))
+
+
+@pytest.mark.parametrize("record", [
+    _glue_record(files=("glue-base.stl", "glue-color-1-ääbbcc.stl")),
+    _glue_record(files=("glue-base.stl", "glüe/../x.stl")),
+    _glue_record(built="是", reason="план"),
+    _glue_record(files=("glue-base.stl",), outputs={"glue-base.stl": "0", "glue-ü.stl": "0"}),
+])
+def test_refusal_messages_are_ascii(record):
+    with pytest.raises(ValueError) as e:
+        recipe("R2").route("glue").required_files(record)
+    assert str(e.value).isascii(), str(e.value).encode("unicode_escape")
+    with pytest.raises(ValueError) as e:
+        resolve("figürine", colors=False)
+    assert str(e.value).isascii()
+    with pytest.raises(KeyError) as k:
+        recipe("R2").route("ämś")
+    assert str(k.value).isascii()
+
+
 def test_glue_route_refuses_repeats_and_a_missing_base():
     glue = recipe("R2").route("glue")
-    with pytest.raises(ValueError, match="glue-base.stl more than once"):
+    with pytest.raises(ValueError, match="'glue-base.stl' more than once"):
         glue.required_files(_glue_record(files=("glue-base.stl", "glue-base.stl")))
     with pytest.raises(ValueError, match="does not list glue-base.stl"):
         glue.required_files(_glue_record(files=("glue-color-2-a1b2c3.stl",)))
