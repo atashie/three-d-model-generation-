@@ -60,3 +60,34 @@ NOT CERTIFIED by `F3.edge_coverage` UNKNOWN (as recorded on 2026-11-13) and
   samples are 0.05 mm apart, so the true largest gap can be up to 0.025 mm more, which
   could reach 0.276 mm. It is a near-pass the sampling cannot settle, not a measured
   failure.
+
+## Re-run with face down by default and refined edge coverage (2026-11-16)
+
+Plan `docs/plans/2026-11-16-face-down-default.md`, Task 3. Code at `3bb2d6b`
+(`slice-6`, `colorslice-2`, `strip-4`). Pinned OrcaSlicer 2.5.0 and PrusaSlicer 2.9.7,
+the owner's Windows PC. Outputs: `artifacts/slice-runs/fd6/` (git-ignored), one CLI
+transcript per run beside each folder.
+
+| Plan | Face down (new default) | Face up (`--face up`) |
+| --- | --- | --- |
+| Roadie, outline dropped | **PRINTABLE** (was NOT CERTIFIED: coverage UNKNOWN); 10 changes, 1897 s | PRINTABLE; 9 changes, 1873 s |
+| Roadie, outline kept | NOT CERTIFIED: `F3.edge_coverage` FAIL, z 0.2, 1.179 mm gap against 0.275; 9 changes, 1922 s | PRINTABLE; 9 changes, 2002 s |
+| Oddie, blues merged | PRINTABLE; 9 changes, 1868 s | PRINTABLE; 9 changes, 1910 s |
+| Oddie, outline kept | NOT CERTIFIED: `F3.edge_coverage` FAIL, z 0.2, 0.637 mm gap against 0.275; 9 changes, 2096 s | PRINTABLE; 9 changes, 2124 s |
+
+- **Roadie drop, face down:** the silhouette's z 0.2 layer was refined (sampled largest
+  0.2506 mm; largest pair bound 0.257 mm against 0.275 mm), so it is a measured PASS.
+- **The two outline-kept plans, face down:** real FAILs, found by the 0.05 mm samples
+  (no layer was refined). The first layer is the colored face, and on it the slicer
+  leaves part of the outer edge unprinted (Roadie at model (17.2, 25.1) mm, Oddie at
+  (38.5, 2.6) mm). The cause is not measured. One possible cause: the first layer is
+  shrunk by elephant foot compensation (0.075 mm), and the kept outline is a thin band
+  along the edge. These plans were never sliced face down at Task 7, so this is new
+  information, not a regression.
+- **Glue plates:** unchanged (the glue route is still not printable for either drop
+  plan).
+- **R1, Roadie and Oddie:** both PRINTABLE; no layer refined.
+- **`tdmg strip`:** as before (skin PRINTABLE; clearance base NOT CERTIFIED by
+  `F3.printed_connectivity` alone, with the note; exit 0). The new strip_id is
+  `59a147aa4ef6d57522da5e2d5593a7091da3e8b8b52659435aaed37c118b8857` (`strip-4`). The
+  owner's printed skin strip came from the `strip-3` files; the geometry is unchanged.

@@ -135,3 +135,31 @@ Run the real-slicer tests.
   - `README.md` if it names the face;
   - STATUS.
 - **Codex review** in `research/reviews/2026-11-16-face-down/`, handled as before.
+
+## Amendment after Task 3 (2026-11-16): slice both faces, prefer face down
+
+- **What Task 3 found** (`research/verification/2026-11-15-first-ams-print/README.md`,
+  last section): the two outline-kept plans FAIL `F3.edge_coverage` face down. On the
+  first layer, part of the outer edge is unprinted: Roadie 1.18 mm, Oddie 0.64 mm against
+  0.275 mm. Both pass face up. The two outline-dropped plans pass both ways.
+- **The owner's decision (2026-11-16):** "Slice both, prefer down (Recommended)".
+- **Decision 1a:**
+  - **Default (`--face` not given) is `auto`:** slice both faces, then choose the face
+    to print: down if it is PRINTABLE, else up if it is PRINTABLE, else none.
+  - **The record** gains `preferred_face` ("down", "up" or null) and the reason, for
+    example "face down is PRINTABLE (the owner's preference)" or "face down is NOT
+    CERTIFIED (F3.edge_coverage FAIL); face up is PRINTABLE".
+  - **The CLI** prints the chosen face's print instructions and one line saying why.
+    The other face's verdict is still printed.
+  - **Exit codes under `auto`:**
+    - a FAIL on the face not chosen does not set exit 1 when the chosen face is
+      PRINTABLE;
+    - with no PRINTABLE face, the exit is as today;
+    - glue plates are judged as today.
+  - **Explicit faces:** `--face up`, `down` and `both` behave exactly as now. `both`
+    makes no choice; it reports both faces.
+  - **Versions:** `colorslice-2` is not pushed yet, so it covers this too. Its comment
+    is updated.
+- **Task 2b:** implement Decision 1a, tests first: each preference branch, the exit
+  codes, the record and the messages. Then the spec and quality reviews. Then re-run
+  the four owner plans with the default.
