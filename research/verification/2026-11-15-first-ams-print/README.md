@@ -41,3 +41,22 @@ The photo cannot tell 1 from 2. Neither cause is measured.
 NOT CERTIFIED by `F3.edge_coverage` UNKNOWN (as recorded on 2026-11-13) and
 `F6.portability` UNKNOWN (PrusaSlicer was not passed in this run); 10 color changes,
 1897 s. UNKNOWN means not measured, not a failure.
+
+## The face-down print (reported 2026-11-16)
+
+- **What was printed:** the same `model.3mf`, turned over in Bambu Studio (rotated 180°
+  about X), every other setting unchanged; sliced and printed from Bambu Studio.
+- **The owner's words:** "done, and the newly printed items look great".
+- **No photo.**
+- **What it shows:** with only the face changed, the owner judged the result good, so
+  face down removed the smearing seen face up. This print does not separate the two
+  causes above (flush, drag) for the face-up print; it shows that face down, with Bambu
+  Studio's default flushing, is good enough by the owner's eye.
+- **What it does not change:** `tdmg slice` still defaults to face up, and its face-down
+  slice of this plan is NOT CERTIFIED (`F3.edge_coverage` UNKNOWN). Changing the default is
+  the owner's decision.
+- **Why that check is UNKNOWN** (the run's `slice.json`): the worst layer, z 0.2 mm (the
+  first layer, the colored face), leaves 0.251 mm against a tolerance of 0.275 mm. Edge
+  samples are 0.05 mm apart, so the true largest gap can be up to 0.025 mm more, which
+  could reach 0.276 mm. It is a near-pass the sampling cannot settle, not a measured
+  failure.
