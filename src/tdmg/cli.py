@@ -455,9 +455,10 @@ def slice_(
         "--prusaslicer-dir", help="PrusaSlicer folder from scripts/setup_prusaslicer.py, for "
                                   "F6.portability; default $TDMG_PRUSASLICER_DIR; without "
                                   "either, F6.portability is UNKNOWN")] = None,
-    face: Annotated[str, typer.Option(
+    face: Annotated[str | None, typer.Option(
         "--face", help="For a tdmg flat --colors folder: the face(s) to slice, up, down or "
-                       "both; default up (the owner's default)")] = DEFAULT_FACE,
+                       f"both; default {DEFAULT_FACE} (the owner's default)",
+        show_default=False)] = None,
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
 
@@ -466,7 +467,7 @@ def slice_(
     with admesh); prusaslicer.portability-only.gcode.txt is generic G-code,
     never for the A1.
 
-    A tdmg flat --colors folder is sliced face up (--face down or both on
+    A tdmg flat --colors folder is sliced face down (--face up or both on
     request), each color on its own filament, and each glue plate as a
     single-color part; F6.portability then reads model.3mf.
 
@@ -483,9 +484,10 @@ def slice_(
     colored = is_colored_folder(flat_dir)
     try:
         make = make_color_slice if colored else make_slice
-        if not colored and face != DEFAULT_FACE:
+        # Any --face given is refused for a single-color folder, the default's value too.
+        if not colored and face is not None:
             raise SlicerError("--face applies to a tdmg flat --colors folder only")
-        extra = {"face": face} if colored else {}
+        extra = {"face": DEFAULT_FACE if face is None else face} if colored else {}
         rec = make(flat_dir, out, slicer_dir=slicer_dir, timeout_s=timeout_s,
                    check_tree=not skip_tree_check, prusaslicer_dir=prusaslicer_dir, **extra)
     except SlicerError as e:

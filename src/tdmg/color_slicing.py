@@ -1,7 +1,7 @@
 """tdmg slice for a tdmg flat --colors folder (docs/plans/2026-11-13-color-slicing.md,
 Decisions 2 to 7 as amended, and Task 6).
 
-make_color_slice slices the AMS version face up (the default), face down or both with the
+make_color_slice slices the AMS version face down (the default), face up or both with the
 pinned OrcaSlicer, each color on its own filament, slices each glue plate as an R1 part,
 runs F6.portability
 on the portable model.3mf with the pinned PrusaSlicer, and writes slice.json (schema
@@ -164,7 +164,9 @@ COLOR_RECORD_SCHEMA = "tdmg.colorslice/1"
 # can change. colorslice-1 (2026-11-13): plan docs/plans/2026-11-13-color-slicing.md, Task 6.
 # colorslice-2 (2026-11-16): F3.edge_coverage of the silhouette and of each tool settles a
 # layer left within its sampling bound by refining the edge samples (slice-6;
-# docs/plans/2026-11-16-face-down-default.md, Decision 2).
+# docs/plans/2026-11-16-face-down-default.md, Decision 2); and, under the same unpushed
+# label, the default face is down (Decision 1). The default itself is not hashed: the
+# faces sliced are ("faces"), so a run without --face gets a new colorslice_id anyway.
 COLORSLICE_ALGORITHM = "colorslice-2"
 FACES = ("up", "down")
 FACE_FOLDER = {"up": "face-up", "down": "face-down"}
@@ -220,18 +222,29 @@ PRINT_TAIL = (
     "give each color the filament listed; each face's plate_1.gcode is for checking only "
     "(tdmg's G-code is not yet printed or compared with Bambu Studio's own slice); "
     f"{PRUSA_GCODE_NAME} is not for printing")
-# The owner's default face (plan Task 7, 2026-11-13: "Face up (Recommended)").
-DEFAULT_FACE = "up"
+# The owner's default face: down (2026-11-16, "Face down, settle check (Recommended)";
+# docs/plans/2026-11-16-face-down-default.md, Decision 1). The first AMS print of Roadie
+# face up came out smeared; the same model.3mf turned over in Bambu Studio printed well
+# (research/verification/2026-11-15-first-ams-print/README.md). It was face up before
+# (plan Task 7, 2026-11-13: "Face up (Recommended)"). model.3mf stays face up.
+DEFAULT_FACE = "down"
 FACE_CHOICES = {"up": ("up",), "down": ("down",), "both": ("up", "down")}
+# How to turn model.3mf (face up) over in Bambu Studio. A half turn about X puts the same
+# face on the bed as turn_over's half turn about y: the two differ by a half turn in the
+# plate's plane. Both are rigid turns, not mirrors, so the face reads as designed when
+# the print is picked up and turned back.
+TURN_IN_STUDIO = ("select the model, Rotate (R), 180 degrees about X: a rigid half turn, "
+                  "the same face down as face-down/ (sliced turned about y), not a mirror")
 PRINT_FACE = {
     ("up",): "to print face up: open model.3mf in Bambu Studio (it is face up) and "
              + PRINT_TAIL,
     ("down",): "to print face down: open model.3mf in Bambu Studio and turn it over "
-               "(model.3mf is face up; face down is it turned 180 degrees about the y axis, "
-               "the inlays on the bed), then " + PRINT_TAIL,
-    ("up", "down"): "both faces are PRINTABLE; the owner's default is face up (plan Task "
-                    "7): open model.3mf in Bambu Studio (it is face up; turn it over for "
-                    "face down) and " + PRINT_TAIL}
+               f"(model.3mf is face up; {TURN_IN_STUDIO}; the inlays on the bed), then "
+               + PRINT_TAIL,
+    ("up", "down"): "both faces are PRINTABLE; the owner's default is face down (the "
+                    "owner's decision of 2026-11-16): open model.3mf in Bambu Studio (it is "
+                    f"face up; turn it over for face down: {TURN_IN_STUDIO}) and "
+                    + PRINT_TAIL}
 
 
 def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
@@ -323,7 +336,7 @@ def glue_route(plates: dict) -> dict:
 COLOR_DO_NOT_PRINT = (f"a check FAILed: the G-code of that face or plate is kept as "
                       f"{FAILED_GCODE_NAME}; do not print it")
 COLOR_REVIEW = (
-    "Each face sliced (face up by default; face-up/, face-down/) is sliced from "
+    "Each face sliced (face down by default; face-up/, face-down/) is sliced from "
     "orca-input.3mf, each color on its own filament (filament_map). Open its plate_1.gcode "
     "in a G-code preview to check the "
     "colors, the layers and the prime tower; it is for checking only, not for printing. To "
@@ -831,8 +844,8 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     statistics, the log when written), filaments/ (the derived filament profiles), one
     folder per glue plate (R1's files), PrusaSlicer's G-code from model.3mf, and slice.json
     last. Returns the record. SlicerError for a refused input, with nothing written.
-    face: "up" (the default, the owner's decision of 2026-11-13), "down" or "both"; only
-    the faces sliced are in the record and in colorslice_id ("faces")."""
+    face: "down" (the default, the owner's decision of 2026-11-16; DEFAULT_FACE), "up" or
+    "both"; only the faces sliced are in the record and in colorslice_id ("faces")."""
     colored_dir = Path(colored_dir)
     _timeout(timeout_s, load_rules())                  # refused before anything else
     if face not in FACE_CHOICES:
