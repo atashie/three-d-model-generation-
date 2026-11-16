@@ -52,7 +52,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–3 done; next Task 4 (recipe registry) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–4 done; next Task 5 (`.gitignore`) |
 
 ## Machines
 
@@ -101,7 +101,9 @@ has been measured with calipers, and strength is not judged.
    0 to 15, run with subagents task by task. Done: Task 0 (repeat runs: 119 of 159 files
    identical, the rest differ only in G-code timestamp lines; the printed Roadie
    `model.3mf` rebuilds identically), Task 1 (evidence inventory), Task 2 (tag
-   `pre-restructure`; record paths beside name citations), Task 3 (this). Next: Task 4.
+   `pre-restructure`; record paths beside name citations), Task 3 (design notes), Task 4
+   (recipe registry: `in progress` status, stages, outputs by route, output classes and
+   `resolve`). Next: Task 5.
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -160,9 +162,9 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–3 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
-  Tasks 0–2 and the tag `pre-restructure` are pushed; Task 3 is not. Next is Task 4, the
-  recipe registry.
+- **State:** Tasks 0–4 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
+  Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 and 4 are not. Next is Task 5,
+  `.gitignore`.
 - **Task 3 did:** design notes `docs/design/{selection,flat,color,slicing,calibration}.md`
   with an index; removed the five uncited records in commit `814a962` (listed in
   `research/README.md`); replaced CLAUDE.md rule 6; cut this page to current state.

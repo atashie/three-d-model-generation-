@@ -77,7 +77,7 @@ Almost every combination is physically possible. The real constraints sit inside
 
 ### Planned recipes
 
-The compatibility table in `docs/print-types/README.md` shows each combination as ✅ implemented, 🚧 planned, or ⏳ not planned yet. It is generated from the recipe declarations in code, the same source the CLI uses, so the docs and the CLI cannot disagree.
+The recipe status table in `docs/print-types/recipes.md` shows each recipe as implemented, in progress, planned, or not planned, with its output class (`flat-icon`, `figurine`, `flexi`), stages and required outputs. It is generated from the recipe declarations in code (`src/tdmg/recipes.py`), the same source `tdmg recipes` uses, so the docs and the CLI cannot disagree.
 
 | Recipe | Attributes | Example |
 |---|---|---|

@@ -45,7 +45,7 @@ from tdmg.colors import ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
-from tdmg.recipes import ATTRIBUTE_LABELS, RECIPES
+from tdmg.recipes import ATTRIBUTE_LABELS, CLASSES, RECIPES, class_of, class_status
 from tdmg.rules import load_rules
 from tdmg.selection import (
     SelectionError,
@@ -89,12 +89,16 @@ def rules() -> None:
 
 @app.command()
 def recipes() -> None:
-    """List the print recipes and their status."""
+    """List the print recipes, their status and output class, then the classes."""
     for r in RECIPES:
         colors = "/".join(c.value for c in r.colors)
         attrs = f"{r.geometry.value}-{r.articulation.value}-{colors}-{r.assembly.value}"
         typer.echo(f"{r.id}  {r.name:24s} {attrs:16s} {r.status.value:12s} "
+                   f"{class_of(r.id) or '-':10s} "
                    f"phase {r.roadmap_phase}  ({ATTRIBUTE_LABELS[r.geometry.value]})")
+    typer.echo("")
+    for name, ids in CLASSES.items():
+        typer.echo(f"class {name:10s} {class_status(name).value:12s} {', '.join(ids)}")
 
 
 @app.command()

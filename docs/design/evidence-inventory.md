@@ -10,7 +10,7 @@ Each number in the summary's category columns is the number of lines in files of
 
 What is recognised: paths written from the repository root (`research/...`, with `/` or a backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built from string literals, globs, and review names found by a short pattern list ("Codex" with a date beside it). A numbered name ("Codex review 3") counts only through a path written on the same line; without one it is listed under *Review mentions not tied to a record*. Names are looked for only in machine-read files. Lines there that mention a root word but give no reference are listed under *Unparsed mentions*. Free prose ("the research record", "the review") can still be missed, so read the uncited list before anything is deleted.
 
-Records: 45. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 4. Uncited with no references: 0.
+Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 2. Uncited with no references: 0.
 
 ## Summary
 
@@ -29,6 +29,8 @@ Records: 45. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous
 | `docs/plans/2026-11-13-color-slicing.md` | cited |  | doc | 4 |  | 4 |  | 11 |  |  |  | 5 |  | 30 |  |
 | `docs/plans/2026-11-14-test-strip.md` | cited |  | doc | 4 |  | 3 |  | 2 |  |  |  | 4 |  | 7 |  |
 | `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc | 2 |  | 2 |  | 7 |  |  |  | 4 |  | 3 |  |
+| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 1 |  |  |  | 2 | 1 | 4 |  |
+| `docs/plans/2026-11-16-restructure.md` | cited | active work, stays where it is | doc, status | 2 |  | 1 |  |  |  |  |  | 1 | 3 | 3 |  |
 | `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 1 | 4 |  |
 | `research/reviews/2026-11-09-codex` | cited |  | doc | 2 |  |  | 2 |  |  |  |  | 2 |  | 2 |  |
 | `research/reviews/2026-11-10-thin-walls` | cited |  | doc | 2 |  | 1 |  |  |  |  |  | 1 |  | 2 |  |
@@ -57,8 +59,6 @@ Records: 45. Counted as cited: 41 (39 by path, 0 by name only, 2 by an ambiguous
 | `research_notes/Image to printable 3D model landscape` | cited | kept in place (design section 6) | doc | 1 | 28 |  |  |  |  |  |  | 4 |  | 2 |  |
 | `research/reviews/2026-11-09-pc` | possibly cited (ambiguous name) |  |  | 1 |  |  | 1 |  |  |  |  |  |  | 1 |  |
 | `research/reviews/2026-11-16-restructure-design` | possibly cited (ambiguous name) | active work, stays where it is |  | 1 |  | 4 |  | 5 |  |  |  |  |  | 1 |  |
-| `docs/plans/2026-11-16-restructure-design.md` | uncited | active work, stays where it is | doc, status | 2 |  |  |  |  |  |  |  | 2 | 1 | 4 |  |
-| `docs/plans/2026-11-16-restructure.md` | uncited | active work, stays where it is | doc, status | 2 |  |  |  |  |  |  |  | 1 | 3 | 3 |  |
 | `reports/Image to printable 3D model landscape.md` | uncited | kept in place (design section 6) | doc | 1 |  |  |  |  |  |  |  | 4 |  | 32 |  |
 | `research/verification/2026-11-09-pc-stack` | uncited |  | doc, status | 2 |  |  |  |  |  |  |  | 3 | 1 | 2 |  |
 
@@ -249,7 +249,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 - `research/reviews/2026-11-16-face-down/README.md` (record): lines 3
 - `research/reviews/2026-11-16-face-down/prompt.md` (record): lines 3
 - `research/verification/2026-11-15-first-ams-print/README.md` (record): lines 66
-- `src/tdmg/cli.py` (code): lines 403
+- `src/tdmg/cli.py` (code): lines 407
 - `src/tdmg/color_slicing.py` (code): lines 170, 235
 - `src/tdmg/printed.py` (code): lines 20, 63, 1023
 - `src/tdmg/slicing.py` (code): lines 170
@@ -257,6 +257,32 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 - `tests/test_printed.py` (test): lines 1088
 
 Linked from kept records: `research/reviews/2026-11-16-face-down`, `research/verification/2026-11-15-first-ams-print`.
+
+### `docs/plans/2026-11-16-restructure-design.md`
+
+Active work, stays where it is.
+
+- `docs/PLAN.md` (doc): lines 163
+- `docs/STATUS.md` (status): lines 99
+- `docs/design/README.md` (doc): lines 25
+- `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
+- `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
+- `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1
+- `src/tdmg/recipes.py` (code): lines 9
+
+Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-16-restructure-design`.
+
+### `docs/plans/2026-11-16-restructure.md`
+
+Active work, stays where it is.
+
+- `docs/PLAN.md` (doc): lines 163
+- `docs/STATUS.md` (status): lines 55, 100, 165
+- `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
+- `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
+- `tests/test_recipes.py` (test): lines 36
+
+Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `research/verification/2026-11-16-repeatability`.
 
 ### `research/experiments/2026-11-g3-local-vs-hosted`
 
@@ -361,7 +387,7 @@ Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `docs/plans
 - `research/verification/2026-11-14-test-strips/README.md` (record): lines 213
 - `src/tdmg/calibration_strip.py` (code, name): lines 580, 589, 629, 643, 794, 837
 - `src/tdmg/calibration_strip.py` (code): lines 590
-- `src/tdmg/cli.py` (code, name): lines 581, 620
+- `src/tdmg/cli.py` (code, name): lines 585, 624
 - `tests/test_calibration_strip.py` (test, name): lines 571, 701, 833, 979, 1013, 1162, 1324, 1349, 1380
 
 Linked from kept records: `docs/plans/2026-11-14-test-strip.md`, `research/verification/2026-11-14-test-strips`.
@@ -664,30 +690,6 @@ Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`.
 
 ## Uncited records (referred to only by docs, status, config or other records)
 
-### `docs/plans/2026-11-16-restructure-design.md`
-
-Active work, stays where it is.
-
-- `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 99
-- `docs/design/README.md` (doc): lines 25
-- `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
-- `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
-- `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1
-
-Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-16-restructure-design`.
-
-### `docs/plans/2026-11-16-restructure.md`
-
-Active work, stays where it is.
-
-- `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 55, 100, 163
-- `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
-- `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
-
-Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `research/verification/2026-11-16-repeatability`.
-
 ### `reports/Image to printable 3D model landscape.md`
 
 Kept in place (design section 6).
@@ -747,7 +749,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 
 - `README.md` (doc): lines 60
 - `docs/PLAN.md` (doc): lines 164, 197
-- `docs/STATUS.md` (status): lines 9, 49, 159
+- `docs/STATUS.md` (status): lines 9, 49, 161
 - `docs/design/README.md` (doc): lines 6
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 181
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 112, 151
@@ -764,13 +766,13 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `research/reviews`
 
 - `CLAUDE.md` (doc): lines 42
-- `docs/STATUS.md` (status): lines 182
+- `docs/STATUS.md` (status): lines 184
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232
 
 ### `research/verification`
 
-- `docs/STATUS.md` (status): lines 169
+- `docs/STATUS.md` (status): lines 171
 - `docs/plans/2026-11-16-restructure.md` (record): lines 117
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 40, 51, 214, 232, 279, 280
 
@@ -816,7 +818,7 @@ A machine-read file mentions a review with no date and no review path on the sam
 |---|---|---|---|
 | `src/tdmg/calibration_strip.py` | 687 | `review N1): the` | a named review with no record folder |
 | `src/tdmg/calibration_strip.py` | 855 | `review P5). ASCII and LF only, so it is` | a named review with no record folder |
-| `src/tdmg/cli.py` | 576 | `review P1)."""` | a named review with no record folder |
+| `src/tdmg/cli.py` | 580 | `review P1)."""` | a named review with no record folder |
 | `src/tdmg/color_checks.py` | 541 | `review of R2 step 4 Tasks 3-4).` | a named review with no record folder |
 | `src/tdmg/printed.py` | 1305 | `Codex review of that day, finding 1, whe` | no review number or date |
 | `src/tdmg/printed.py` | 1305 | `review of that day, finding 1, where ref` | a named review with no record folder |
@@ -868,7 +870,7 @@ References this script could not tie to one record: a built path that stops at a
 | `docs/PLAN.md` | 165 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 9 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 49 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 168 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 170 | `research/README.md` | names no record in the tree |
 | `docs/design/README.md` | 23 | `research/README.md` | names no record in the tree |
 | `docs/design/flat.md` | 80 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `docs/design/flat.md` | 86 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |

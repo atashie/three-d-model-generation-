@@ -42,7 +42,10 @@ def test_rules_lists_every_rule():
 
 
 def test_recipes_and_printers():
-    assert "R1" in runner.invoke(app, ["recipes"]).output
+    out = _plain(runner.invoke(app, ["recipes"]).output)
+    assert "R1 Flat single-color G1-A0-C1-L1 in progress flat-icon phase 1" in out
+    assert "class flat-icon in progress R1, R2" in out
+    assert "class figurine planned R4, R7" in out
     out = runner.invoke(app, ["printers"]).output
     assert "bambu-a1" in out and "up to 4 filaments" in out
 

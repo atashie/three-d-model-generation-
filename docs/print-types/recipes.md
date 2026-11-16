@@ -4,13 +4,33 @@
 
 A recipe is a named combination of the four attributes that the project implements. See [README.md](README.md) for the attribute model.
 
-| Recipe | Name | Geometry | Joints | Color | Assembly | Example | Phase | Status |
-|---|---|---|---|---|---|---|---|---|
-| R1 | Flat single-color | G1 Flat / 2.5D extrusion | A0 No joints | C1 Single filament | L1 One print | keychain, sign, cookie cutter | 1 | planned |
-| R2 | Flat multicolor | G1 Flat / 2.5D extrusion | A0 No joints | C2 One body per filament | L1 One print | two-color logo coaster | 3 | planned |
-| R3 | Relief and lithophane | G2 Relief / heightfield | A0 No joints | C1 Single filament, C4 Filament change by layer | L1 One print | lithophane, bas-relief | 4 | planned |
-| R4 | Figurine, single color | G3 Full 3D | A0 No joints | C1 Single filament | L1 One print | figure from a photo | 5 | planned |
-| R5 | Assembled parts | G3 Full 3D | A0 No joints | C1 Single filament | L2 Parts assembled after printing | figure larger than the bed, or one color per part | 6 | planned |
-| R6 | Flat flexi | G1 Flat / 2.5D extrusion | A1 Flat print-in-place joints | C1 Single filament, C2 One body per filament | L1 One print | articulated flat animal | 7 | planned |
-| R7 | Painted figurine | G3 Full 3D | A0 No joints | C3 Per-triangle paint | L1 One print | multicolor figure on AMS | 8 | planned |
-| R8 | 3D flexi | G3 Full 3D | A2 3D print-in-place joints | C1 Single filament | L1 One print | print-in-place articulated dragon (research track) | 9 | planned |
+| Recipe | Name | Geometry | Joints | Color | Assembly | Example | Phase | Status | Class |
+|---|---|---|---|---|---|---|---|---|---|
+| R1 | Flat single-color | G1 Flat / 2.5D extrusion | A0 No joints | C1 Single filament | L1 One print | keychain, sign, cookie cutter | 1 | in progress | flat-icon |
+| R2 | Flat multicolor | G1 Flat / 2.5D extrusion | A0 No joints | C2 One body per filament | L1 One print | two-color logo coaster | 3 | in progress | flat-icon |
+| R3 | Relief and lithophane | G2 Relief / heightfield | A0 No joints | C1 Single filament, C4 Filament change by layer | L1 One print | lithophane, bas-relief | 4 | planned | - |
+| R4 | Figurine, single color | G3 Full 3D | A0 No joints | C1 Single filament | L1 One print | figure from a photo | 5 | planned | figurine |
+| R5 | Assembled parts | G3 Full 3D | A0 No joints | C1 Single filament | L2 Parts assembled after printing | figure larger than the bed, or one color per part | 6 | planned | - |
+| R6 | Flat flexi | G1 Flat / 2.5D extrusion | A1 Flat print-in-place joints | C1 Single filament, C2 One body per filament | L1 One print | articulated flat animal | 7 | planned | flexi |
+| R7 | Painted figurine | G3 Full 3D | A0 No joints | C3 Per-triangle paint | L1 One print | multicolor figure on AMS | 8 | planned | figurine |
+| R8 | 3D flexi | G3 Full 3D | A2 3D print-in-place joints | C1 Single filament | L1 One print | print-in-place articulated dragon (research track) | 9 | planned | flexi |
+
+## Output classes
+
+An output class is an owner-facing name for a group of recipes. A job names a class; `tdmg.recipes.resolve` picks the first recipe in it that is implemented or in progress and offers the requested color (single-color or multicolor), and refuses the class otherwise. A class's status is the best status of its recipes.
+
+| Class | Recipes | Status |
+|---|---|---|
+| flat-icon | R1, R2 | in progress |
+| figurine | R4, R7 | planned |
+| flexi | R6, R8 | planned |
+
+## Stages and required outputs
+
+Each route is one way to print the recipe. A finished print by that route holds these files. Recipes not listed have no stages or routes yet.
+
+| Recipe | Stages | Route | Required files |
+|---|---|---|---|
+| R1 | select, flat, slice | single | `model.stl` |
+| R2 | select, colors, colored_flat, slice | ams | `model.3mf`, `palette.json` |
+| R2 | select, colors, colored_flat, slice | glue | every `glue-*.stl` in `colored.json` bodies (route glue), `colored.json` `glue.built`, `colored.json` `glue.report` |

@@ -27,7 +27,7 @@ The categories you started with map onto these attributes:
 - **Attribute pages** (`attributes/`) hold the rules and failure modes of one attribute value, whatever it is combined with. For example, `geometry-flat.md` covers every flat print.
 - **Recipe pages** (`recipes/`) cover one named combination that we implement. A recipe page links its attribute pages and adds only what is specific to the combination.
 
-The recipe list and status are generated from code: [recipes.md](recipes.md).
+The recipe list, status, output classes, stages and required outputs are generated from code: [recipes.md](recipes.md).
 
 Almost every combination is physically possible. The real constraints live inside recipes:
 - Layer-change color (C4) varies only with height.
