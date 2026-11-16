@@ -75,6 +75,7 @@ SMOOTH_RULE = "flat.smooth.sigma_px"
 # no longer depend on OpenCV's code path; the owner chose to change it.
 FLAT_ALGORITHM_VERSION = "flat-3"
 RECORD_SCHEMA = "tdmg.flat/1"
+MODEL_STL = "model.stl"  # the R1 print file (tdmg.recipes names it for the library)
 # outline.png display colours only; these are not thresholds.
 OUTLINE_KEPT = (128, 128, 128)        # grey: in the mask and in the final shape
 OUTLINE_REMOVED = (220, 40, 40)       # red: in the mask, not in the final shape
@@ -909,7 +910,7 @@ def make_flat(selection_dir, width_mm, thickness_mm, out_dir, printer="bambu-a1"
                                                 opening["value"], min_island["value"])
     stl = encode_stl(extrude(parts, thickness_mm))
     kept = rasterise(parts, transform, mask.shape)
-    files = {"model.stl": stl, "outline.png": png_bytes(_outline_image(mask, kept))}
+    files = {MODEL_STL: stl, "outline.png": png_bytes(_outline_image(mask, kept))}
 
     gated = merge_exact(trimesh.load(io.BytesIO(stl), file_type="stl", process=False))
     checks = topology_checks(gated) + flat_checks(gated, parts, transform, width_mm,

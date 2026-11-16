@@ -10,6 +10,7 @@ class, and resolve() turns it into one concrete recipe (docs/plans/
 2026-11-16-restructure-design.md section 2).
 """
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from fnmatch import fnmatchcase
@@ -67,51 +68,119 @@ ATTRIBUTE_LABELS: dict[str, str] = {
 }
 
 
+# Characters and sequences a listed file name must not hold: it must be a bare name in the
+# print folder, never a path (checked before the pattern, so the refusal says why).
+UNSAFE_IN_NAME: tuple[str, ...] = ("/", "\\", "..", ":", "\0")
+
+
 @dataclass(frozen=True)
 class Route:
     """One way to print a recipe, and the library files a finished print of it must hold.
 
-    `files` are fixed names. Some routes also need files whose names depend on the color
-    plan: those are the "bodies" rows of the stage record `record` whose "route" field is
-    this route's name, read from each row's "file" field, and each must match `pattern`.
-    `record_fields` are dotted paths in `record` that must be present, not null and not
-    false.
+    `files` are fixed names. A route that names a stage `record` also needs files whose
+    names depend on the color plan. They are the "bodies" rows of that record whose
+    "route" field is this route's name, read from each row's "file" field. Each must be a
+    bare file name (none of UNSAFE_IN_NAME) that fully matches the regular expression
+    `pattern`, none may repeat, and each of `must_list` must be among them. They are
+    cross-checked against the record's "outputs" (file name -> sha256): each listed name
+    must be a key, and the keys matching the glob `glob` must be exactly the listed set.
+    In the record, each dotted path in `true_fields` must be the value true, and each in
+    `dict_fields` a dict. `not_built` says what a false true-field means. `listed_label`
+    names the listed files for people (the generated docs).
+
+    These checks read the record only: they do not look at files on disk or their
+    hashes (that is the library's finish step).
     """
 
     name: str
     files: tuple[str, ...] = ()
     record: str | None = None
     pattern: str | None = None
-    record_fields: tuple[str, ...] = ()
+    glob: str | None = None
+    must_list: tuple[str, ...] = ()
+    true_fields: tuple[str, ...] = ()
+    dict_fields: tuple[str, ...] = ()
+    not_built: str | None = None
+    listed_label: str | None = None
+
+    def _refuse(self, why: str) -> ValueError:
+        return ValueError(f"route {self.name!r}: {self.record} {why}")
+
+    def _field(self, record: dict, path: str):
+        """(parent dict, value) at a dotted path; refuses a missing step."""
+        parent, value = None, record
+        for key in path.split("."):
+            if not isinstance(value, dict) or key not in value:
+                raise self._refuse(f"has no {path}")
+            parent, value = value, value[key]
+        return parent, value
 
     def listed_files(self, record: dict) -> tuple[str, ...]:
         """The plan-dependent files this route needs, in the record's order.
 
-        Raises ValueError if a field in `record_fields` is missing or null (for the glue
-        route: the glue version was not built), if the record lists no file for this
-        route, or if a listed file does not match `pattern`."""
-        for path in self.record_fields:
-            value = record
-            for key in path.split("."):
-                found = value.get(key) if isinstance(value, dict) else None
-                if found is None or found is False:
-                    raise ValueError(f"route {self.name!r}: {self.record} has no {path}")
-                value = found
+        Raises ValueError for any record this class's docstring does not accept,
+        including a malformed shape (bodies not a list, a row not a dict, a missing or
+        non-string "route" or "file", outputs not a dict)."""
+        if not isinstance(record, dict):
+            raise self._refuse("is not a JSON object")
+        for path in self.true_fields:
+            parent, value = self._field(record, path)
+            if value is not True:
+                reason = parent.get("reason")
+                hint = self.not_built or "required"
+                hint += f": {reason}" if isinstance(reason, str) and reason else ""
+                raise self._refuse(f"{path} is {value!r}, not true ({hint})")
+        for path in self.dict_fields:
+            _, value = self._field(record, path)
+            if not isinstance(value, dict):
+                raise self._refuse(f"{path} is {type(value).__name__}, not an object")
         if self.pattern is None:
             return ()
-        names = tuple(row["file"] for row in record.get("bodies", [])
-                      if row.get("route") == self.name)
+        bodies = record.get("bodies")
+        if not isinstance(bodies, list):
+            raise self._refuse("has no bodies list")
+        names = []
+        for i, row in enumerate(bodies):
+            if not isinstance(row, dict) or not isinstance(row.get("route"), str):
+                raise self._refuse(f"bodies[{i}] is not an object with a string route")
+            if row["route"] != self.name:
+                continue
+            name = row.get("file")
+            if not isinstance(name, str):
+                raise self._refuse(f"bodies[{i}] has no string file")
+            unsafe = [s for s in UNSAFE_IN_NAME if s in name]
+            if unsafe:
+                raise self._refuse(f"bodies[{i}] file {name!r} is not a bare file name "
+                                   f"(holds {', '.join(map(repr, unsafe))})")
+            if re.fullmatch(self.pattern, name, flags=re.ASCII) is None:
+                raise self._refuse(f"bodies[{i}] file {name!r} does not match "
+                                   f"{self.pattern!r}")
+            names.append(name)
         if not names:
-            raise ValueError(f"route {self.name!r}: {self.record} lists no {self.pattern}")
-        bad = [n for n in names if not fnmatchcase(n, self.pattern)]
-        if bad:
-            raise ValueError(f"route {self.name!r}: {', '.join(bad)} do not match "
-                             f"{self.pattern!r}")
-        return names
+            raise self._refuse(f"lists no {self.name} body")
+        repeated = sorted({n for n in names if names.count(n) > 1})
+        if repeated:
+            raise self._refuse(f"lists {', '.join(repeated)} more than once")
+        missing = [n for n in self.must_list if n not in names]
+        if missing:
+            raise self._refuse(f"does not list {', '.join(missing)}")
+        outputs = record.get("outputs")
+        if not isinstance(outputs, dict):
+            raise self._refuse("has no outputs object")
+        absent = [n for n in names if n not in outputs]
+        if absent:
+            raise self._refuse(f"outputs lack {', '.join(absent)}")
+        extra = sorted(k for k in outputs
+                       if isinstance(k, str) and fnmatchcase(k, self.glob or "")
+                       and k not in names)
+        if extra:
+            raise self._refuse(f"outputs hold {', '.join(extra)}, which bodies do not list")
+        return tuple(names)
 
     def required_files(self, record: dict | None = None) -> tuple[str, ...]:
         """Every file a finished print by this route must hold: `files`, then the files
-        `record` lists. A route that names a `record` needs it."""
+        `record` lists. A route that names a `record` needs it. This reads the record
+        only; it does not check files on disk or their hashes."""
         if self.record is None:
             return self.files
         if record is None:
@@ -119,18 +188,24 @@ class Route:
         return self.files + self.listed_files(record)
 
 
-# R1: `tdmg flat` writes model.stl (src/tdmg/cli.py, flat). R2: `tdmg flat --colors` writes
-# model.3mf and palette.json for the AMS print (src/tdmg/colored_flat.py, MODEL_3MF and
-# PALETTE_NAME); for the glue print, the plates glue-base.stl and
-# glue-color-<i>-<rrggbb>.stl (colored_flat.body_file), each a colored.json "bodies" row
-# with route "glue", and the glue report in colored.json "glue" ("built" true and
-# "report" not null; "built" is false and "report" null when the glue version was not
-# built). The stage records (flat.json, colored.json, slice.json) are not listed here.
+# R1: `tdmg flat` writes model.stl (flat.MODEL_STL). R2: `tdmg flat --colors` writes
+# model.3mf and palette.json for the AMS print (colored_flat.MODEL_3MF and PALETTE_NAME);
+# for the glue print, the plates glue-base.stl and glue-color-<i>-<rrggbb>.stl
+# (colored_flat.body_file: <i> the palette index as a decimal integer, <rrggbb> the hex
+# code in lower case), each a colored.json "bodies" row with route "glue" and a key of
+# colored.json "outputs", and the glue report in colored.json "glue" ("built" true and
+# "report" an object; "built" false, "report" null and a "reason" when the glue version
+# was not built). The stage records (flat.json, colored.json, slice.json) are not listed.
+# Literal names, not imports: this module stays free of the geometry stack; tests tie
+# them to the constants.
+GLUE_FILE = r"glue-(base|color-(0|[1-9][0-9]*)-[0-9a-f]{6})\.stl"
 R1_ROUTES = (Route("single", files=("model.stl",)),)
 R2_ROUTES = (
     Route("ams", files=("model.3mf", "palette.json")),
-    Route("glue", record="colored.json", pattern="glue-*.stl",
-          record_fields=("glue.built", "glue.report")),
+    Route("glue", record="colored.json", pattern=GLUE_FILE, glob="glue-*.stl",
+          must_list=("glue-base.stl",), true_fields=("glue.built",),
+          dict_fields=("glue.report",), not_built="glue version not built",
+          listed_label="`glue-base.stl` and every `glue-color-<i>-<rrggbb>.stl`"),
 )
 
 
@@ -146,13 +221,13 @@ class Recipe:
     roadmap_phase: int
     status: Status = Status.PLANNED
     stages: tuple[str, ...] = ()      # stage names, in order
-    outputs: tuple[Route, ...] = ()   # the ways to print it, each with its required files
+    routes: tuple[Route, ...] = ()    # the ways to print it, each with its required files
 
     def route(self, name: str) -> Route:
-        for r in self.outputs:
+        for r in self.routes:
             if r.name == name:
                 return r
-        known = ", ".join(r.name for r in self.outputs) or "none"
+        known = ", ".join(r.name for r in self.routes) or "none"
         raise KeyError(f"recipe {self.id} has no route {name!r} (routes: {known})")
 
 
@@ -178,7 +253,9 @@ RECIPES: tuple[Recipe, ...] = (
 )
 
 
-# Output classes: owner-facing names for groups of recipes, in recipe order.
+# Output classes: owner-facing names for groups of recipes, in recipe order. The order is
+# policy: resolve() picks the first usable recipe that offers the requested color, so
+# reordering a tuple can change which recipe a job gets.
 CLASSES: dict[str, tuple[str, ...]] = {
     "flat-icon": ("R1", "R2"),
     "figurine": ("R4", "R7"),

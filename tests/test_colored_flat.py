@@ -248,6 +248,24 @@ def test_files_and_their_hashes(made):
     assert [b["file"] for b in rec["bodies"]] == expected_ams + expected_glue
 
 
+def test_the_recipe_registry_reads_a_real_record(made):
+    """tdmg.recipes names the files a finished R2 print holds; on a real colored.json
+    each route's files are among the written outputs, and the glue route lists every
+    glue plate."""
+    from tdmg.recipes import recipe
+
+    rec, out = made[:2]
+    r2 = recipe("R2")
+    ams = r2.route("ams").required_files()
+    glue = r2.route("glue").required_files(json.loads((out / RECORD_NAME).read_bytes()))
+    assert set(ams) <= set(rec["outputs"])
+    assert glue == tuple(b["file"] for b in rec["bodies"] if b["route"] == "glue")
+    assert set(glue) == {n for n in rec["outputs"] if n.startswith("glue-")}
+    assert glue[0] == "glue-base.stl" and len(glue) >= 2
+    for name in (*ams, *glue):
+        assert (out / name).is_file()
+
+
 def test_written_stl_bytes_are_exactly_the_gated_ones(made):
     rec, out, captured = made[:3]
     for route, key in (("ams", "ams_checks"), ("glue", "glue_checks")):

@@ -172,7 +172,7 @@ Linked from kept records: `research/verification/2026-11-11-prusaslicer-windows`
 - `src/tdmg/color_checks.py` (code): lines 14, 421
 - `src/tdmg/colored_flat.py` (code): lines 25, 108
 - `src/tdmg/threemf.py` (code): lines 1
-- `tests/test_colored_flat.py` (test): lines 680
+- `tests/test_colored_flat.py` (test): lines 698
 - `tests/test_threemf.py` (test): lines 4
 
 Linked from kept records: `research/reviews/2026-11-12-color-3mf`, `research/verification/2026-11-12-color-3mf`.
@@ -280,7 +280,7 @@ Active work, stays where it is.
 - `docs/STATUS.md` (status): lines 55, 100, 165
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
-- `tests/test_recipes.py` (test): lines 36
+- `tests/test_recipes.py` (test): lines 41
 
 Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `research/verification/2026-11-16-repeatability`.
 
@@ -321,7 +321,7 @@ Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research
 - `docs/design/flat.md` (doc): lines 71
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 563
 - `research/verification/2026-11-11-prusaslicer-windows/README.md` (record): lines 170, 179
-- `src/tdmg/flat.py` (code): lines 697
+- `src/tdmg/flat.py` (code): lines 698
 - `src/tdmg/portability.py` (code, ambiguous name): lines 440, 631
 - `src/tdmg/slicing.py` (code, ambiguous name): lines 28, 154
 - `src/tdmg/smoothing.py` (code): lines 16, 296, 328

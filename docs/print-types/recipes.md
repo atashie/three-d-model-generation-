@@ -27,10 +27,10 @@ An output class is an owner-facing name for a group of recipes. A job names a cl
 
 ## Stages and required outputs
 
-Each route is one way to print the recipe. A finished print by that route holds these files. Recipes not listed have no stages or routes yet.
+Each route is one way to print the recipe. A finished print by that route holds these files, and its stage record has these field values. Recipes not listed have no stages or routes yet.
 
-| Recipe | Stages | Route | Required files |
-|---|---|---|---|
-| R1 | select, flat, slice | single | `model.stl` |
-| R2 | select, colors, colored_flat, slice | ams | `model.3mf`, `palette.json` |
-| R2 | select, colors, colored_flat, slice | glue | every `glue-*.stl` in `colored.json` bodies (route glue), `colored.json` `glue.built`, `colored.json` `glue.report` |
+| Recipe | Stages | Route | Required files | Required record fields |
+|---|---|---|---|---|
+| R1 | select, flat, slice | single | `model.stl` | - |
+| R2 | select, colors, colored_flat, slice | ams | `model.3mf`, `palette.json` | - |
+| R2 | select, colors, colored_flat, slice | glue | `glue-base.stl` and every `glue-color-<i>-<rrggbb>.stl`, as listed in `colored.json` bodies (route glue) and outputs | `colored.json` `glue.built` true, `colored.json` `glue.report` an object |
