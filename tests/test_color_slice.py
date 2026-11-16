@@ -208,6 +208,7 @@ def test_the_id_is_the_hash_of_its_inputs(colored, orca, tmp_path):
     identity = {
         "algorithm": "colorslice-2", "colorflat_id": rec["links"]["colorflat_id"],
         "colored_record_sha256": rec["links"]["colored_record_sha256"],
+        "face": "both",                  # the option: auto and both slice the same faces
         "faces": {f: {"orca_input_sha256": rec["faces"][f]["orca_input"]["sha256"]}
                   for f in ("up", "down")},
         "slicer": {"version": rec["slicer"]["version"],
@@ -326,19 +327,22 @@ def test_a_failed_inherited_check_is_carried_and_quarantines(folder, tmp_path,
 
 # --- Verdicts ------------------------------------------------------------------------------
 
-def _all_pass(monkeypatch, faces=("up", "down")):
+def _all_pass(monkeypatch, faces=("up", "down"), fail=()):
     """Make the color checks (on these faces; the faces are sliced up, then down) and
-    F6.portability PASS (the fakes cannot produce them)."""
+    F6.portability PASS (the fakes cannot produce them); on the faces in fail, the
+    required color checks FAIL instead."""
     real = cs.color_slice_checks
     calls = []
 
     def passing(gcode, shells, setup, statistics=None, not_measured=None):
         checks, record = real(gcode, shells, setup, statistics, not_measured)
         calls.append(None)
-        if ("up", "down")[len(calls) - 1] not in faces:
+        face = ("up", "down")[len(calls) - 1]
+        if face not in faces and face not in fail:
             return checks, record
+        status = "FAIL" if face in fail else "PASS"
         req = required_check_ids(len(list(shells)))
-        return [CheckResult(c.id, "PASS", c.measured, c.threshold, c.rule, c.note)
+        return [CheckResult(c.id, status, c.measured, c.threshold, c.rule, c.note)
                 if c.id in req else c for c in checks], record
     monkeypatch.setattr(cs, "color_slice_checks", passing)
     monkeypatch.setattr(cs, "_portability", lambda *a, **kw: (
@@ -716,27 +720,133 @@ def test_a_body_row_field_is_validated_before_slicing(folder, tmp_path, orca, ro
 
 # --- The owner's Task 7 decisions: default face and F3 warnings ------------------------------
 
-def test_face_down_is_the_default(colored, orca, tmp_path):
-    # The owner's decision of 2026-11-16 ("Face down, settle check (Recommended)"), after
-    # the first AMS print (research/verification/2026-11-15-first-ams-print/README.md).
-    assert cs.DEFAULT_FACE == "down"
-    assert inspect.signature(cs.make_color_slice).parameters["face"].default == "down"
+def test_auto_is_the_default(colored, orca, tmp_path):
+    # The owner's decision of 2026-11-16 ("Slice both, prefer down (Recommended)"; plan
+    # docs/plans/2026-11-16-face-down-default.md, Decision 1a): both faces are sliced and
+    # face down is preferred when it is PRINTABLE.
+    assert cs.DEFAULT_FACE == "auto"
+    assert inspect.signature(cs.make_color_slice).parameters["face"].default == "auto"
     out = tmp_path / "s"
     r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
                             str(orca())])
     assert r.exit_code == 0, r.output
     rec = json.loads((out / "slice.json").read_bytes())
-    assert list(rec["faces"]) == ["down"] and rec["params"]["face"] == "down"
-    assert not (out / "face-up").exists()
-    assert next(iter(rec["verdicts"])) == "face-down" and "face-up" not in rec["verdicts"]
-    assert not any(line.startswith("face-up") for line in r.stdout.splitlines())
+    assert set(rec["faces"]) == {"up", "down"} and rec["params"]["face"] == "auto"
+    assert (out / "face-up").is_dir() and (out / "face-down").is_dir()
+    # With the fakes neither face is PRINTABLE (UNKNOWN checks): none is chosen.
+    assert rec["preferred_face"] is None
+    assert rec["preferred_face_reason"].startswith("no face is PRINTABLE: face down is NOT "
+                                                   "CERTIFIED (")
     rec = cs.make_color_slice(colored, tmp_path / "f", orca())
-    assert list(rec["faces"]) == ["down"] and rec["params"]["face"] == "down"
+    assert list(rec["faces"]) == ["up", "down"] and rec["params"]["face"] == "auto"
 
 
-def test_the_help_names_face_down_as_the_default():
+def test_the_help_names_the_default():
     text = " ".join(_plain(runner.invoke(app, ["slice", "--help"]).output).split())
-    assert "default down (the owner's default)" in text
+    assert "default: both, preferring face down when it is PRINTABLE" in text
+
+
+def _face(verdict, certification=None):
+    return {"verdict": verdict, "certification": certification or verdict}
+
+
+@pytest.mark.parametrize(("down", "up", "chosen", "reason"), [
+    (_face("PRINTABLE"), _face("PRINTABLE"), "down",
+     "face down is PRINTABLE (the owner's preference)"),
+    (_face("PRINTABLE"), _face("NOT CERTIFIED", "NOT CERTIFIED: F6.color_changes FAIL"),
+     "down", "face down is PRINTABLE (the owner's preference)"),
+    (_face("NOT CERTIFIED", "NOT CERTIFIED: F3.edge_coverage FAIL"), _face("PRINTABLE"),
+     "up", "face down is NOT CERTIFIED (F3.edge_coverage FAIL); face up is PRINTABLE"),
+    (_face("NOT CERTIFIED", "NOT CERTIFIED: F3.edge_coverage FAIL"),
+     _face("NOT CERTIFIED", "NOT CERTIFIED: F3.edge_coverage UNKNOWN"), None,
+     ("no face is PRINTABLE: face down is NOT CERTIFIED (F3.edge_coverage FAIL); face up "
+      "is NOT CERTIFIED (F3.edge_coverage UNKNOWN)")),
+])
+def test_the_preferred_face(down, up, chosen, reason):
+    assert cs.choose_face({"up": up, "down": down}) == (chosen, reason)
+
+
+def _auto(colored, orca, out, *extra):
+    r = runner.invoke(app, ["slice", str(colored), "--out", str(out), "--slicer-dir",
+                            str(orca()), *extra])
+    return r, r.stdout.splitlines(), json.loads((out / "slice.json").read_bytes())
+
+
+def test_auto_prints_face_down_when_it_is_printable(colored, orca, tmp_path, monkeypatch):
+    _all_pass(monkeypatch)
+    r, lines, rec = _auto(colored, orca, tmp_path / "s")
+    assert r.exit_code == 0, r.output
+    assert rec["preferred_face"] == "down"
+    reason = "face down is PRINTABLE (the owner's preference)"
+    assert rec["preferred_face_reason"] == reason
+    assert "face-up: PRINTABLE" in lines and "face-down: PRINTABLE" in lines
+    assert f"chosen: face down: {reason}" in lines
+    assert cs.print_message(["down"]) in lines
+    assert cs.print_message(["up"]) not in lines and cs.print_message(["up", "down"]) \
+        not in lines
+
+
+def test_auto_prints_face_up_when_face_down_fails(colored, orca, tmp_path, monkeypatch):
+    # The outline-kept plans' case (plan amendment): face down FAILs F3, face up passes.
+    # The FAIL on the face not chosen does not set exit 1.
+    _all_pass(monkeypatch, faces=("up",), fail=("down",))
+    r, lines, rec = _auto(colored, orca, tmp_path / "s")
+    assert r.exit_code == 0, r.output
+    assert rec["preferred_face"] == "up"
+    reason = rec["preferred_face_reason"]
+    assert reason.startswith("face down is NOT CERTIFIED (") and "FAIL" in reason
+    assert reason.endswith("; face up is PRINTABLE")
+    assert f"chosen: face up: {reason}" in lines
+    assert any(line.startswith("face-down: NOT CERTIFIED") for line in lines)
+    assert rec["faces"]["down"]["gcode"]["quarantined"] is True
+    assert cs.print_message(["up"]) in lines
+    assert cs.COLOR_DO_NOT_PRINT not in lines
+
+
+def test_auto_with_no_printable_face_exits_as_before(colored, orca, tmp_path, monkeypatch):
+    _all_pass(monkeypatch, faces=(), fail=("down",))
+    r, lines, rec = _auto(colored, orca, tmp_path / "s")
+    assert r.exit_code == 1, r.output                       # a required check FAILed
+    assert rec["preferred_face"] is None
+    assert f"chosen: none: {rec['preferred_face_reason']}" in lines
+    assert any(line.startswith("no face is PRINTABLE") for line in lines)
+    assert cs.COLOR_DO_NOT_PRINT in lines
+
+
+@pytest.mark.parametrize("face", ["both", "up", "down"])
+def test_an_explicit_face_makes_no_choice(colored, orca, tmp_path, monkeypatch, face):
+    # --face both reports both faces and chooses none: face down's FAIL sets exit 1, as
+    # before the amendment.
+    if face == "both":
+        _all_pass(monkeypatch, faces=("up",), fail=("down",))
+    r, lines, rec = _auto(colored, orca, tmp_path / "s", "--face", face)
+    assert rec["preferred_face"] is None
+    assert rec["preferred_face_reason"] == f"--face {face}: no face is chosen"
+    assert not any(line.startswith("chosen:") for line in lines)
+    if face == "both":
+        assert r.exit_code == 1, r.output
+        assert cs.print_message(["up"]) in lines and cs.COLOR_DO_NOT_PRINT in lines
+
+
+def _exit_record(face, preferred, down, up, glue="PASS"):
+    def part(status):
+        return {"required_checks": ["X"], "checks": [{"id": "X", "status": status}]}
+    return {"params": {"face": face}, "preferred_face": preferred,
+            "faces": {"up": part(up), "down": part(down)},
+            "glue": {"plates": {"glue-base": part(glue)}},
+            "portability": {"check": {"status": "PASS"}}}
+
+
+@pytest.mark.parametrize(("rec", "fails"), [
+    (_exit_record("auto", "up", "FAIL", "PASS"), False),      # the face not chosen FAILs
+    (_exit_record("auto", "up", "FAIL", "PASS", glue="FAIL"), True),   # glue as before
+    (_exit_record("auto", None, "FAIL", "UNKNOWN"), True),    # no choice: as before
+    (_exit_record("auto", None, "UNKNOWN", "UNKNOWN"), False),
+    (_exit_record("both", None, "FAIL", "PASS"), True),       # explicit: as before
+])
+def test_the_exit_code_rule(rec, fails):
+    from tdmg.cli import _color_failed
+    assert _color_failed(rec) is fails
 
 
 @pytest.mark.parametrize("face", ["up", "down", "both"])

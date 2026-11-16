@@ -386,6 +386,20 @@ def _filament_line(fmap: list[dict]) -> str:
                      + f" {f['hex']}" for f in fmap)
 
 
+def _color_failed(rec: dict) -> bool:
+    """Whether a colored slice exits 1: a required check FAILed (a warning that FAILs is
+    printed, never blocking), or F6.portability FAILed. Under auto with a chosen face
+    (preferred_face; Decision 1a of docs/plans/2026-11-16-face-down-default.md), only that
+    face counts: a FAIL on the other face does not, and the chosen face is PRINTABLE. With
+    no face chosen, or an explicit --face, every face counts. Glue plates always count."""
+    chosen = rec["preferred_face"] if rec["params"]["face"] == "auto" else None
+    faces = [rec["faces"][chosen]] if chosen is not None else list(rec["faces"].values())
+    parts = [*faces, *rec["glue"]["plates"].values()]
+    failed = any(c["status"] == "FAIL" and c["id"] in p["required_checks"]
+                 for p in parts for c in p["checks"])
+    return failed or rec["portability"]["check"]["status"] == "FAIL"
+
+
 def _color_slice_output(rec: dict, out: Path) -> None:
     """tdmg slice's output for a colored folder (tdmg.color_slicing)."""
     sliced = [face for face in FACES if face in rec["faces"]]
@@ -419,7 +433,14 @@ def _color_slice_output(rec: dict, out: Path) -> None:
     if not rec["slicer"]["app_tree_verified"]:
         typer.echo("app tree not verified (--skip-tree-check)")
     typer.echo(_filament_line(rec["filament_map"]))
-    message = print_message([f for f in sliced if rec["faces"][f]["verdict"] == "PRINTABLE"])
+    if rec["params"]["face"] == "auto":         # the choice and why (Decision 1a)
+        chosen = rec["preferred_face"]
+        typer.echo(f"chosen: {'none' if chosen is None else f'face {chosen}'}: "
+                   f"{rec['preferred_face_reason']}")
+        printable = [] if chosen is None else [chosen]
+    else:
+        printable = [f for f in sliced if rec["faces"][f]["verdict"] == "PRINTABLE"]
+    message = print_message(printable)
     if message:
         typer.echo(message)
     else:
@@ -457,7 +478,8 @@ def slice_(
                                   "either, F6.portability is UNKNOWN")] = None,
     face: Annotated[str | None, typer.Option(
         "--face", help="For a tdmg flat --colors folder: the face(s) to slice, up, down or "
-                       f"both; default {DEFAULT_FACE} (the owner's default)",
+                       "both (both reports the two and chooses none); default: both, "
+                       "preferring face down when it is PRINTABLE (the owner's default)",
         show_default=False)] = None,
 ) -> None:
     """Slice a flat model with the pinned OrcaSlicer: write the G-code and slice.json.
@@ -467,13 +489,16 @@ def slice_(
     with admesh); prusaslicer.portability-only.gcode.txt is generic G-code,
     never for the A1.
 
-    A tdmg flat --colors folder is sliced face down (--face up or both on
-    request), each color on its own filament, and each glue plate as a
-    single-color part; F6.portability then reads model.3mf.
+    A tdmg flat --colors folder is sliced face up and face down, and face
+    down is printed if it is PRINTABLE, else face up if it is (--face up,
+    down or both for one face, or both without a choice), each color on
+    its own filament, and each glue plate as a single-color part;
+    F6.portability then reads model.3mf.
 
     Exit codes:
       0  files written, and no required check FAILed (UNKNOWN checks
-         and warnings allowed)
+         and warnings allowed); without --face, a FAIL on the face not
+         chosen is allowed when the chosen face is PRINTABLE
       1  files written, and a required check FAILed
       2  input or setup error (including a missing or unverified
          slicer): nothing is written; or an I/O failure while
@@ -498,11 +523,7 @@ def slice_(
         raise typer.Exit(2) from None
     if colored:
         _color_slice_output(rec, out)
-        # Only a required check counts: a warning that FAILs is printed, never blocking.
-        parts = [*rec["faces"].values(), *rec["glue"]["plates"].values()]
-        failed = any(c["status"] == "FAIL" and c["id"] in p["required_checks"]
-                     for p in parts for c in p["checks"])
-        if failed or rec["portability"]["check"]["status"] == "FAIL":
+        if _color_failed(rec):
             typer.echo(COLOR_DO_NOT_PRINT)
             raise typer.Exit(1)
         return

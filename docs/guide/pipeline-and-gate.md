@@ -370,16 +370,28 @@ carried into each verdict, and a FAIL quarantines the G-code. As in R1, a file c
 together with its hash in `colored.json` is not detected; `colorslice_id` records the
 lineage (the hash of `colored.json`).
 
-**Faces:** face down by default (the owner's decision of 2026-11-16, "Face down, settle
-check (Recommended)"; plan `docs/plans/2026-11-16-face-down-default.md`). The first AMS
-print of Roadie face up came out smeared; the same `model.3mf` turned over in Bambu
-Studio printed well (`research/verification/2026-11-15-first-ams-print/README.md`).
-`--face up` or `--face both` on request. Only the faces sliced are in the record. Face
-up was the default from 2026-11-13 (plan Task 7: "Face up (Recommended)") to
-2026-11-16. `model.3mf` stays face up.
+**Faces:** by default both faces are sliced, and face down is preferred when it is
+PRINTABLE (the owner's decision of 2026-11-16, "Slice both, prefer down (Recommended)";
+plan `docs/plans/2026-11-16-face-down-default.md`, Decision 1a).
+- **Why face down:** the first AMS print of Roadie face up came out smeared; the same
+  `model.3mf` turned over in Bambu Studio printed well
+  (`research/verification/2026-11-15-first-ams-print/README.md`).
+- **Why both:** re-slicing then showed the two outline-kept plans FAIL
+  `F3.edge_coverage` face down (on the first layer, part of the outer edge is
+  unprinted: Roadie 1.18 mm, Oddie 0.64 mm against 0.275 mm) but pass face up (the
+  same record, last section).
+- **The choice** (no `--face`): face down if it is PRINTABLE, else face up if it is,
+  else none. The record has `preferred_face` ("down", "up" or null) and
+  `preferred_face_reason`, for example "face down is NOT CERTIFIED (F3.edge_coverage
+  FAIL); face up is PRINTABLE".
+- **Explicit faces:** `--face up` or `--face down` slices one face; `--face both`
+  slices both and chooses none.
+
+Only the faces sliced are in the record. Face up was the default from 2026-11-13 (plan
+Task 7: "Face up (Recommended)") to 2026-11-16. `model.3mf` stays face up.
 
 **Outputs, in `OUT`:**
-- `face-down/` (and `face-up/` when sliced):
+- `face-up/` and `face-down/` (one of them with `--face up` or `--face down`):
   - `orca-input.3mf`: the OrcaSlicer-only input. It holds the same gated meshes as
     `model.3mf`, one part per body, and a settings file that puts each part on its
     filament. The OrcaSlicer CLI prints `model.3mf` on one filament, so it needs this
@@ -470,14 +482,21 @@ connectivity check FAIL: the whole model printed 7 parts against 1 in the model 
 layers differ, z 2.6 to 3); …", built from what each check measured (parts and holes,
 printed against the model), or "connectivity check UNKNOWN for …: <the check's reason>".
 Then the
-filament for each color, and what to print:
-- face up PRINTABLE: "to print face up: open model.3mf in Bambu Studio (it is face up)
-  and give each color the filament listed; …";
-- only face down PRINTABLE: the message says to turn `model.3mf` over in Bambu Studio:
-  "select the model, Rotate (R), 180 degrees about X: a rigid half turn, not a mirror;
-  the same face is on the bed as in face-down/ (tdmg turns it about y, so the plate
-  layout is turned 180 degrees)";
-- both PRINTABLE: it says that the owner's default is face down, and how to turn it.
+filament for each color, and what to print. Every face sliced still has its verdict
+line. By default (no `--face`), one line gives the choice and why, for example "chosen:
+face up: face down is NOT CERTIFIED (F3.edge_coverage FAIL); face up is PRINTABLE", and
+the print instructions are for the chosen face only:
+- face up: "to print face up: open model.3mf in Bambu Studio (it is face up) and give
+  each color the filament listed; …";
+- face down: the message says to turn `model.3mf` over in Bambu Studio: "select the
+  model, Rotate (R), 180 degrees about X: a rigid half turn, not a mirror; the same
+  face is on the bed as in face-down/ (tdmg turns it about y, so the plate layout is
+  turned 180 degrees)";
+- none: "no face is PRINTABLE: do not print yet; …".
+
+With `--face both` there is no choice line, and the instructions cover every PRINTABLE
+face; when both are, the message says the owner's default is face down, and how to turn
+it.
 
 `tdmg`'s G-code is for checking only: it is not yet printed or compared with Bambu
 Studio's own slice.
@@ -485,6 +504,9 @@ Studio's own slice.
 **Exit codes:** 0 means the files are written and no required check FAILed (UNKNOWN
 checks and warnings are allowed). 1 means a required check FAILed (files written). 2
 means an input or setup error, with nothing written. A warning never sets exit code 1.
+By default (no `--face`), when a face is chosen, only that face's checks count: a FAIL
+on the other face does not set exit 1 (its G-code is still quarantined). With no face
+chosen, or with an explicit `--face`, every face counts. Glue plates always count.
 
 **The owner's four plans** (60 × 3 mm, 4 colors each, face up, 2026-11-13, Windows PC):
 all four are **PRINTABLE**, with warnings. The numbers are the slicer's.

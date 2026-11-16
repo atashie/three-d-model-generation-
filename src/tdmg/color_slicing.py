@@ -1,7 +1,9 @@
 """tdmg slice for a tdmg flat --colors folder (docs/plans/2026-11-13-color-slicing.md,
 Decisions 2 to 7 as amended, and Task 6).
 
-make_color_slice slices the AMS version face down (the default), face up or both with the
+make_color_slice slices the AMS version face up and face down by default ("auto": face
+down is preferred when it is PRINTABLE, choose_face), or one face, or both without a
+choice, with the
 pinned OrcaSlicer, each color on its own filament, slices each glue plate as an R1 part,
 runs F6.portability
 on the portable model.3mf with the pinned PrusaSlicer, and writes slice.json (schema
@@ -59,7 +61,8 @@ the colorflat_id (lineage) and the colored.json hash (which pins the inherited c
 through its output hashes, every STL, model.3mf and palette.json); each face's
 orca-input.3mf hash; the pinned slicer and profiles as tdmg.slicing names them; the
 derived filament profiles' hashes; the command template; the F3 inputs (tolerance rule
-value, elefant_foot_compensation); the faces; PrusaSlicer's identity, settings and command
+value, elefant_foot_compensation); the face option and the faces; PrusaSlicer's identity,
+settings and command
 templates (None without it); and each glue plate's slice_id. The timeouts, the environment
 and the platform are recorded beside it, not in it.
 """
@@ -165,8 +168,10 @@ COLOR_RECORD_SCHEMA = "tdmg.colorslice/1"
 # colorslice-2 (2026-11-16): F3.edge_coverage of the silhouette and of each tool settles a
 # layer left within its sampling bound by refining the edge samples (slice-6;
 # docs/plans/2026-11-16-face-down-default.md, Decision 2); and, under the same unpushed
-# label, the default face is down (Decision 1). The default itself is not hashed: the
-# faces sliced are ("faces"), so a run without --face gets a new colorslice_id anyway.
+# label, the default is "auto" (Decision 1a, amending Decision 1's face down): both faces
+# sliced, face down preferred when PRINTABLE, the record's preferred_face and its reason,
+# and under auto a FAIL on the face not chosen no longer sets exit 1. The identity adds
+# the face option ("face"), so auto and both, which slice the same faces, differ.
 COLORSLICE_ALGORITHM = "colorslice-2"
 FACES = ("up", "down")
 FACE_FOLDER = {"up": "face-up", "down": "face-down"}
@@ -222,13 +227,19 @@ PRINT_TAIL = (
     "give each color the filament listed; each face's plate_1.gcode is for checking only "
     "(tdmg's G-code is not yet printed or compared with Bambu Studio's own slice); "
     f"{PRUSA_GCODE_NAME} is not for printing")
-# The owner's default face: down (2026-11-16, "Face down, settle check (Recommended)";
-# docs/plans/2026-11-16-face-down-default.md, Decision 1). The first AMS print of Roadie
-# face up came out smeared; the same model.3mf turned over in Bambu Studio printed well
-# (research/verification/2026-11-15-first-ams-print/README.md). It was face up before
-# (plan Task 7, 2026-11-13: "Face up (Recommended)"). model.3mf stays face up.
-DEFAULT_FACE = "down"
-FACE_CHOICES = {"up": ("up",), "down": ("down",), "both": ("up", "down")}
+# The owner's default: "auto", both faces sliced and face down preferred when it is
+# PRINTABLE (2026-11-16, "Slice both, prefer down (Recommended)";
+# docs/plans/2026-11-16-face-down-default.md, Decision 1a). Face down because the first
+# AMS print of Roadie face up came out smeared and the same model.3mf turned over in
+# Bambu Studio printed well (research/verification/2026-11-15-first-ams-print/README.md;
+# Decision 1, "Face down, settle check (Recommended)"); both, because re-slicing then
+# showed the two outline-kept plans FAIL F3.edge_coverage face down but PASS face up (the
+# same record, last section). It was face up before (plan Task 7, 2026-11-13: "Face up
+# (Recommended)"). model.3mf stays face up.
+DEFAULT_FACE = "auto"
+FACE_CHOICES = {"auto": ("up", "down"), "up": ("up",), "down": ("down",),
+                "both": ("up", "down")}
+PREFERRED_FACES = ("down", "up")          # auto's order of preference (Decision 1a)
 # How to turn model.3mf (face up) over in Bambu Studio. A half turn about X puts the same
 # face on the bed as turn_over's half turn about y; the two differ by a half turn in the
 # plate's plane, so the plate layout is turned 180 degrees. Both are rigid turns, not
@@ -246,6 +257,27 @@ PRINT_FACE = {
                     "owner's decision of 2026-11-16: open model.3mf in Bambu Studio, which "
                     f"is face up; for face down, turn it over: {TURN_IN_STUDIO}. Then "
                     + PRINT_TAIL}
+
+
+def _face_state(face: str, record: dict) -> str:
+    """'face down is PRINTABLE', or 'face down is NOT CERTIFIED (<its reasons>)'."""
+    cert = record["certification"]
+    if record["verdict"] == "PRINTABLE":
+        return f"face {face} is PRINTABLE"
+    return f"face {face} is NOT CERTIFIED ({cert.removeprefix('NOT CERTIFIED: ')})"
+
+
+def choose_face(faces: dict) -> tuple[str | None, str]:
+    """auto's choice (Decision 1a) from the two face records: (the face to print, why).
+    Face down if it is PRINTABLE, else face up if it is, else none."""
+    first, second = PREFERRED_FACES
+    if faces[first]["verdict"] == "PRINTABLE":
+        return first, f"{_face_state(first, faces[first])} (the owner's preference)"
+    if faces[second]["verdict"] == "PRINTABLE":
+        return second, (f"{_face_state(first, faces[first])}; "
+                        f"{_face_state(second, faces[second])}")
+    return None, ("no face is PRINTABLE: " + "; ".join(
+        _face_state(f, faces[f]) for f in PREFERRED_FACES))
 
 
 def face_warnings(checks: list[CheckResult], fmap: list[dict]) -> list[dict]:
@@ -337,7 +369,8 @@ def glue_route(plates: dict) -> dict:
 COLOR_DO_NOT_PRINT = (f"a check FAILed: the G-code of that face or plate is kept as "
                       f"{FAILED_GCODE_NAME}; do not print it")
 COLOR_REVIEW = (
-    "Each face sliced (face down by default; face-up/, face-down/) is sliced from "
+    "Each face sliced (by default both, face down preferred when it is PRINTABLE: "
+    "preferred_face; face-up/, face-down/) is sliced from "
     "orca-input.3mf, each color on its own filament (filament_map). Open its plate_1.gcode "
     "in a G-code preview to check the "
     "colors, the layers and the prime tower; it is for checking only, not for printing. To "
@@ -845,8 +878,12 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     statistics, the log when written), filaments/ (the derived filament profiles), one
     folder per glue plate (R1's files), PrusaSlicer's G-code from model.3mf, and slice.json
     last. Returns the record. SlicerError for a refused input, with nothing written.
-    face: "down" (the default, the owner's decision of 2026-11-16; DEFAULT_FACE), "up" or
-    "both"; only the faces sliced are in the record and in colorslice_id ("faces")."""
+    face: "auto" (the default, the owner's decision of 2026-11-16; DEFAULT_FACE), "up",
+    "down" or "both". auto and both slice both faces; only the faces sliced are in the
+    record and in colorslice_id ("faces", with the option itself as "face"). Under auto
+    the record's preferred_face is the face to print (choose_face: down if PRINTABLE, else
+    up if PRINTABLE, else None) and preferred_face_reason says why; with an explicit face
+    no face is chosen (None)."""
     colored_dir = Path(colored_dir)
     _timeout(timeout_s, load_rules())                  # refused before anything else
     if face not in FACE_CHOICES:
@@ -927,7 +964,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
 
     template = command_template(len(shells))
     identity = {"algorithm": COLORSLICE_ALGORITHM, "colorflat_id": record_in["colorflat_id"],
-                "colored_record_sha256": colored_sha,
+                "colored_record_sha256": colored_sha, "face": face,
                 "faces": {f: face_ids[f] for f in sliced},
                 "slicer": ctx.slicer_identity(), "profiles": ctx.profile_hashes(),
                 "filaments": [f["sha256"] for f in filaments], "command": template,
@@ -935,6 +972,8 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
                 "glue_plates": {name: p["slice_id"] for name, p in plates.items()}}
     pinned = ctx.profile_data["filament"]
     z_min, z_max = z_extent(shells)
+    preferred, preferred_reason = (choose_face(face_records) if face == "auto" else
+                                   (None, f"--face {face}: no face is chosen"))
     record = {
         "schema": COLOR_RECORD_SCHEMA, "tdmg_version": __version__,
         "algorithm": COLORSLICE_ALGORITHM,
@@ -971,6 +1010,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
                  "route": glue_route(plates) if glue["built"] else None},
         "verdicts": {**{FACE_FOLDER[f]: face_records[f]["verdict"] for f in sliced},
                      **{name: p["verdict"] for name, p in plates.items()}},
+        "preferred_face": preferred, "preferred_face_reason": preferred_reason,
         "outputs": {name: _sha(data) for name, data in files.items()},
         "environment": {**environment(), "platform": platform.platform()},
         "review": COLOR_REVIEW,
