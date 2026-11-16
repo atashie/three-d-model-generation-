@@ -43,7 +43,7 @@ from tdmg.color_gcode import (
 )
 from tdmg.flat import extrude
 from tdmg.orca_input import turn_over
-from tdmg.printed import F3_SLICE_CHECK_IDS, Setup, UnsupportedGcode
+from tdmg.printed import COVERAGE_BOUND_MM, F3_SLICE_CHECK_IDS, Setup, UnsupportedGcode
 from tdmg.threemf import Shell
 
 HEXES = ["#f60606", "#f5f5f5", "#f0f10a", "#451812"]
@@ -306,6 +306,21 @@ def test_a_tool_just_over_the_allowance_fails_and_just_under_passes():
         moved = shapely.affinity.translate(A, -dx, 0)
         checks, _ = run(text_of([SQUARE], [RING, 1, moved, 2, B]))
         assert checks[TOOL_PLACEMENT].status == want, (dx, checks[TOOL_PLACEMENT].note)
+
+
+def test_a_tools_near_pass_is_settled_by_refinement():
+    # Inlay 1 printed 0.12 mm short on its right side: its largest sampled gap (about
+    # 0.185 mm, at the corners) is within the sampling bound of 0.2 mm, and refining the
+    # edge samples (tdmg.printed.refine_edge) settles it as a PASS.
+    short = shapely.box(2, 6, 8 - 0.12, 14)
+    checks, _ = run(text_of([SQUARE], [RING, 1, short, 2, B]))
+    c = checks[per_tool_id("F3.edge_coverage", 1)]
+    assert c.status == "PASS", c.note
+    m = c.measured
+    assert m["max_gap_mm"] + COVERAGE_BOUND_MM > m["allowance_mm"] >= m["max_gap_mm"]
+    assert m["refined_layers"] == [0.4]
+    assert m["pair_bound_max_mm"] <= m["allowance_mm"]
+    assert "were refined" in c.note
 
 
 def test_a_missing_body_on_a_layer_fails():

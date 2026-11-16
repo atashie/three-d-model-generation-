@@ -1094,7 +1094,7 @@ def test_a_near_pass_whose_true_gap_is_within_the_allowance_passes():
     assert coverage.measured["pair_bound_max_mm"] == pytest.approx(0.19 + EDGE_SAMPLE_MM / 8)
     assert coverage.measured["refine_min_mm"] == EDGE_REFINE_MIN_MM
     assert coverage.measured["layers_within_sampling_bound"] == 0
-    assert "refined" in coverage.note
+    assert "were refined" in coverage.note
 
 
 @pytest.mark.parametrize("angle", [0, 90])
@@ -1143,7 +1143,7 @@ def test_layers_not_near_are_not_refined(gap, monkeypatch):
     assert coverage.status == ("FAIL" if gap > ALLOWANCE else "PASS")
     assert coverage.measured["refined_layers"] == []
     assert coverage.measured["pair_bound_max_mm"] is None
-    assert "refined" not in coverage.note
+    assert "were refined" not in coverage.note
 
 
 def holed():
@@ -1182,6 +1182,25 @@ def test_refinement_is_deterministic():
     again = coverage_of(square(), notched(10, 5.0125, 0.2))
     assert json.dumps([first[0], first[1].measured, first[1].note]) == json.dumps(
         [again[0], again[1].measured, again[1].note])
+
+
+def test_the_pair_bound_is_the_mean_of_the_gaps_plus_half_the_spacing():
+    # Tighter than the larger gap plus s / 2 whenever the gaps differ.
+    assert pair_bound(0.1, 0.2, 0.05) == pytest.approx(0.175)
+    assert pair_bound(0.3, 0.1, 0.0) == pytest.approx(0.2)
+    assert pair_bound(0.0, 0.0, 0.05) == pytest.approx(0.025)
+
+
+def test_a_near_peak_on_a_sample_passes_only_with_the_tight_pair_bound():
+    # A 0.1999 mm notch centred on the sample at y = 5: that sample sees 0.1999 mm, its
+    # neighbours 0.05 mm away 0.1499 mm. The pair bound (0.1999 + 0.1499 + 0.05) / 2 is
+    # within 0.2 at once; the larger gap plus s / 2 would stay over 0.2 down to the floor
+    # (0.1999 + 0.0005), leaving it UNKNOWN.
+    m, coverage = coverage_of(square(), notched(10, 5.0, 0.1999))
+    assert coverage.status == "PASS", coverage.note
+    assert m["max_gap_mm"] + EDGE_REFINE_MIN_MM / 2 > ALLOWANCE
+    assert m["pair_bound_max_mm"] <= ALLOWANCE
+    assert coverage.measured["refined_layers"] == [0.2]
 
 
 def test_the_refinement_floor_is_the_g_code_resolution():

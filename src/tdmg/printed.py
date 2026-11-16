@@ -58,11 +58,16 @@ ARC_STEP_MM = 0.05
 EDGE_SAMPLE_MM = 0.05
 # The finest spacing to which F3.edge_coverage halves edge samples on a layer the 0.05 mm
 # samples leave within the bound of the allowance (refine_edge; docs/plans/
-# 2026-11-16-face-down-default.md, Decision 2). A resolution, not a threshold: the A1
-# G-code gives coordinates to 3 decimals, 0.001 mm (measured 2026-11-16: line 1410 of
+# 2026-11-16-face-down-default.md, Decision 2). A resolution, not a threshold: the
+# G-code gives coordinates to 3 decimals, 0.001 mm, so a finer spacing measures nothing
+# the G-code states. Evidence: OrcaSlicer writes X and Y with at most 3 decimals (the
+# format XY_ROUND_MM below rests on: GCodeWriter.cpp at v2.5.0 and every model move of
+# the owner's G-code; the parser assumes it and does not refuse more);
+# research/verification/2026-11-11-prusaslicer-windows/README.md: "no X, Y or Z word has
+# more than 3 decimals" (PrusaSlicer 2.9.7's files). An A1 example (measured 2026-11-16,
+# not committed: artifacts/ is git-ignored): line 1410 of
 # artifacts/slice-runs/color5-roadie-drop-v3-f64-down/face-down/plate_1.gcode is
-# "G1 X123.156 Y141.322 F42000"; artifacts/ is not committed), so a finer spacing
-# measures nothing the G-code states.
+# "G1 X123.156 Y141.322 F42000", and no X or Y word in that file has 4 or more decimals.
 EDGE_REFINE_MIN_MM = 0.001
 # Bead ends and joins are polygons with this many segments per quarter circle (the
 # research record's value). Their vertices lie on the circle, so the polygon is inside the
@@ -1417,7 +1422,8 @@ def _coverage(layers: list[dict], alignment: Alignment, threshold: dict) -> Chec
                                       else worst_refined["pair_bound_max_mm"]),
                 "refine_min_mm": EDGE_REFINE_MIN_MM}
     how = (f"The largest distance from a model-edge sample (every {EDGE_SAMPLE_MM:g} mm; the "
-           f"true largest is at most {COVERAGE_BOUND_MM:g} mm more) to printed plastic, "
+           f"true largest is at most {COVERAGE_BOUND_MM:g} mm more, or, on a refined layer, "
+           "at most its largest pair bound) to printed plastic, "
            "with the model's bounding box centred on the plate as the slicer places it, "
            "against the tolerance, plus the profile's elefant_foot_compensation on the "
            "first layer. ")
