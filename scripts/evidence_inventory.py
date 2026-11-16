@@ -16,7 +16,8 @@ What counts as a reference (each is tested in tests/test_evidence_inventory.py):
 - a path broken over two lines (the second line's comment marker is skipped), when the
   joined text names a record in the tree;
 - a glob (research/verification/2026-11-10-*), expanded to the records it matches;
-- in rule, test, profile, code, script and CI files only: a review named without a path,
+- in machine-read files only (rule, test, profile, code, script, CI, .toml/.yaml config):
+  a review named without a path,
   "Codex review 3" (through NAME_ALIASES) or "Codex review 2026-11-14" (by date). A date
   that several review folders share is listed as ambiguous and counts for all of them.
 A built path that stops at a root folder, and a path that names no record in the tree,
@@ -49,7 +50,7 @@ ROOTS = ("research/verification", "research/reviews", "research/experiments", "r
 # Roots whose records are their direct children.
 UNIT_ROOTS = ("research/verification", "research/reviews", "research/experiments",
               "research_notes", "docs/plans", "reports")
-CITING = ("rule", "test", "profile", "code", "script", "CI")
+CITING = ("rule", "test", "profile", "code", "script", "CI", "config-citing")
 CATEGORIES = (*CITING, "doc", "status", "record", "config")
 KEPT_IN_PLACE = ("research_notes", "reports")   # design section 6; CLAUDE.md rule 6
 ACTIVE = ("docs/plans/2026-11-16-restructure-design.md", "docs/plans/2026-11-16-restructure.md",
@@ -74,6 +75,9 @@ CONTINUATION = re.compile(r"^\s*(?:#+|//+|\*|>|[\"'])?\s*")
 # in the repo names beside it; tests/test_evidence_inventory.py checks that each locator
 # text is in its ref file. A dated name ("Codex review 2026-11-14") needs no alias when one
 # review folder has that date; when several do, it is listed as ambiguous, not guessed.
+# Temporary: the STATUS-line justifications stand in until Task 2 of
+# docs/plans/2026-11-16-restructure.md writes the record's path beside each numbered
+# citation in code and tests; then this table can go.
 NAME_ALIASES = {
     "2": ("research/reviews/2026-11-11-color-palette",
           "research/reviews/2026-11-11-color-palette/README.md",
@@ -91,6 +95,10 @@ NUMBERED = re.compile(r"Codex(?: review)? (\d+)(?![\d-])")
 DATE = re.compile(r"(?<![\w/-])(\d{4}-\d{2}-\d{2})(?![\w-])")   # not inside a path or name
 DATE_AFTER, DATE_BEFORE = 60, 40   # characters searched for a date beside "Codex"
 OTHER_REVIEW = re.compile(r"\b[Rr]eview (?:[NP]\d+|of )")   # named reviews with no folder
+# Safety net: a root word beside a quote, / or \ on a line that gave no reference
+# ($ROOT/research/..., os.path.join(ROOT, "research"), "Research", joinpath("plans")).
+_WORD = r"(?:research_notes|research|reports|plans)"
+MENTION = re.compile(rf"(?i)[\"'/\\]\s*{_WORD}\b|\b{_WORD}\s*[\"'/\\]")
 
 
 @dataclass(frozen=True, order=True)
@@ -125,6 +133,7 @@ class Inventory:
     ambiguous: list[Ambiguous] = field(default_factory=list)
     unattributed: list[Unresolved] = field(default_factory=list)
     globs: list[Ambiguous] = field(default_factory=list)
+    unparsed: list[Unresolved] = field(default_factory=list)
     undecodable: list[str] = field(default_factory=list)
 
 
@@ -137,7 +146,13 @@ def category(path: str) -> str:
                         ("scripts/", "script"), (".github/", "CI"), ("docs/", "doc")):
         if path.startswith(prefix):
             return cat
-    return "doc" if path.endswith(".md") else "config"
+    # Outside the known folders: a program or a machine-read config can cite a record too.
+    suffix = posixpath.splitext(path)[1]
+    if suffix in (".py", ".sh", ".ps1"):
+        return "code"
+    if suffix in (".yaml", ".yml", ".toml"):
+        return "config-citing"
+    return "doc" if suffix == ".md" else "config"
 
 
 def unit_of(path: str) -> str | None:
@@ -159,7 +174,11 @@ def units_in(files: list[str]) -> list[str]:
 
 
 def _read(root: Path, rel: str, inv: Inventory) -> list[str] | None:
-    data = (root / rel).read_bytes()
+    try:
+        data = (root / rel).read_bytes()
+    except FileNotFoundError:
+        raise SystemExit(f"evidence_inventory: {rel} is tracked by git but missing on disk; "
+                         "restore it or remove it from the index, then run again") from None
     if b"\x00" in data[:8192]:
         return None
     try:
@@ -174,6 +193,14 @@ def _norm(text: str) -> str:
     return text.replace("\\\\", "/").replace("\\", "/").replace("%20", " ")
 
 
+def _root_at(text: str) -> str | None:
+    """The root folder that text starts with (longest first), or None."""
+    for root in ROOTS:
+        if text.startswith(root) and not re.match(r"[\w-]", text[len(root):len(root) + 1]):
+            return root
+    return None
+
+
 class _Scanner:
     def __init__(self, units: list[str]):
         self.units = set(units)
@@ -186,10 +213,11 @@ class _Scanner:
     def match(self, text: str) -> tuple[str, str]:
         """Classify a normalised path text that starts at a root.
 
-        Returns (kind, value): ("unit", unit), ("root", root) or ("missing", path)."""
-        for root in ROOTS:
-            if text.startswith(root) and (len(text) == len(root) or text[len(root)] != "_"):
-                break
+        Returns (kind, value): ("unit", unit), ("root", root), ("glob", (pattern, units))
+        or ("missing", path)."""
+        root = _root_at(text)
+        if root is None:
+            return "missing", PATH_CHARS.match(text).group(0)
         rest = text[len(root):]
         if root in UNIT_ROOTS and rest.startswith("/"):
             for name in self.names[root]:
@@ -211,31 +239,51 @@ class _Scanner:
         return "missing", token
 
 
+def _plain_path(rel: str, prefix: str, text: str) -> str | None:
+    """The repo-relative form of a plain path: text, after prefix (./ or ../ parts).
+
+    With no prefix the path is from the repo root. With one, a Markdown file's path is
+    relative to the file's folder (as its links are); any other file's is tried from the
+    repo root first (as rules refs and profile records are), then from the file's folder.
+    None if no reading lands under a root folder."""
+    if not prefix:
+        return text
+    bases = [posixpath.dirname(rel)] if rel.endswith(".md") else ["", posixpath.dirname(rel)]
+    for here in bases:
+        base = posixpath.normpath(posixpath.join(here, prefix)) if here or prefix else "."
+        if base == ".." or base.startswith("../"):
+            continue
+        path = text if base == "." else f"{base}/{text}"
+        if _root_at(path):
+            return path
+    return None
+
+
 def _targets(rel: str, lines: list[str], i: int, scanner: _Scanner):
     """Yield (kind, value, text) for line i of file rel."""
     line = _norm(lines[i])
     here = posixpath.dirname(rel)
     for m in PLAIN.finditer(line):
         start = m.start() + len(m.group(1))
-        text = line[start:]
-        kind, value = scanner.match(text)
         token_end = start + len(PATH_CHARS.match(line, start).group(0))
         if "/" not in line[start:token_end]:
             continue   # the bare word "research", not a path
+        written = line[m.start():token_end].strip()
+        path = _plain_path(rel, m.group(1), line[start:])
+        if path is None:
+            base = posixpath.normpath(posixpath.join(here, m.group(1)))
+            where = "the tree" if base == ".." or base.startswith("../") else "the record folders"
+            yield "outside", f"relative path resolves outside {where}", written
+            continue
+        kind, value = scanner.match(path)
         truncated = line[token_end:].strip() == "" and line[token_end - 1:token_end] in "/-"
         if kind != "unit" and truncated and i + 1 < len(lines):
             nxt = _norm(lines[i + 1])
-            joined = line[start:token_end] + nxt[CONTINUATION.match(nxt).end():]
-            jkind, jvalue = scanner.match(joined)
+            cut = len(path) - (len(line) - token_end)   # the token's end inside path
+            jkind, jvalue = scanner.match(path[:cut] + nxt[CONTINUATION.match(nxt).end():])
             if jkind == "unit":
                 kind, value = jkind, jvalue
-        if m.group(1):   # ./ or ../ prefix: resolve against the file's folder
-            base = posixpath.normpath(posixpath.join(here, m.group(1)))
-            resolved = text if base == "." else f"{base}/{text}"
-            if not any(resolved.startswith(r) for r in ROOTS):
-                continue
-            kind, value = scanner.match(resolved)
-        yield kind, value, value if kind == "missing" else line[m.start():token_end].strip()
+        yield kind, value, value if kind == "missing" else written
     if rel.endswith(".md"):
         for target in MD_LINK.findall(lines[i]) + MD_REFDEF.findall(lines[i]):
             target = _norm(unquote(target.strip("<>"))).split("#")[0]
@@ -311,7 +359,9 @@ def scan(root: Path, files: list[str], aliases: dict[str, str] | None = None) ->
         own, cat = unit_of(rel), category(rel)
         for i in range(len(lines)):
             names_a_review = False   # by path, on this line
+            found = False            # any target at all, on this line
             for kind, value, text in _targets(rel, lines, i, scanner):
+                found = True
                 names_a_review |= kind == "unit" and value.startswith("research/reviews/")
                 ref = Ref(rel, i + 1, cat)
                 if kind == "unit" and value != own:
@@ -331,8 +381,13 @@ def scan(root: Path, files: list[str], aliases: dict[str, str] | None = None) ->
                     inv.unresolved.append(Unresolved(
                         rel, i + 1, text, f"constructed path stops at {value}/; the code adds "
                         "the rest at run time"))
+                elif kind == "outside":
+                    inv.unresolved.append(Unresolved(rel, i + 1, text, value))
             if cat not in CITING:
-                continue   # only names in machine-read files can decide a record's fate
+                continue   # only machine-read files can decide a record's fate
+            if not found and (m := MENTION.search(lines[i])):
+                inv.unparsed.append(Unresolved(rel, i + 1, lines[i][m.start():][:50].strip(),
+                                               "a root word with no path this script reads"))
             for kind, value, text in _names(lines, i, reviews, aliases):
                 if kind == "name" and value != own:
                     inv.refs[value].add(Ref(rel, i + 1, cat, "name"))
@@ -346,6 +401,7 @@ def scan(root: Path, files: list[str], aliases: dict[str, str] | None = None) ->
     inv.ambiguous = sorted(set(inv.ambiguous))
     inv.unattributed = sorted(set(inv.unattributed))
     inv.globs = sorted(set(inv.globs))
+    inv.unparsed = sorted(set(inv.unparsed))
     inv.undecodable.sort()
     return inv
 
@@ -368,6 +424,19 @@ def status(unit: str, inv: Inventory) -> str:
 
 def counts_as_cited(s: str) -> bool:
     return s in STATUSES[:3]
+
+
+def kept_units(inv: Inventory, units: list[str]) -> set[str]:
+    """Records that stay in the tree: counted as cited, kept in place or active work."""
+    return {u for u in units if counts_as_cited(status(u, inv)) or _note(u)}
+
+
+def linked_from_kept(unit: str, inv: Inventory, units: list[str],
+                     kept: set[str] | None = None) -> list[str]:
+    """The kept records whose files refer to unit (by any kind of reference)."""
+    kept = kept_units(inv, units) if kept is None else kept
+    return sorted({o for r in inv.refs.get(unit, set())
+                   if (o := unit_of(r.file)) and o != unit and o in kept})
 
 
 def linked_from_docs(unit: str, inv: Inventory) -> str:
@@ -411,22 +480,30 @@ INTRO = (
     "files change, so regenerate it before you use it.\n\n"
     "A record is one folder under `research/verification/`, `research/reviews/` or "
     "`research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under "
-    "`research_notes/`. A record is **cited** when a rule, test, profile, code, script or CI "
-    "file refers to it by path (or by a glob such as `2026-11-10-*`). It is **cited by name** "
-    "when such a file names it without a path (\"Codex review 3\", \"Codex review "
-    "2026-11-14\"), and **possibly cited (ambiguous name)** when such a file names a review "
-    "by a date that two or more review folders share; the script does not guess which. All "
-    "three count as cited. It is **uncited** when only docs, `docs/STATUS.md`, config files "
-    "or other records refer to it, or nothing does. A record's references to itself are not "
-    "counted. The counts are referring lines, of every kind.\n\n"
-    "Names are found by a short pattern list (\"Codex\" followed by a review number, or "
-    "with a date beside it) and a hand-kept alias table for the numbers "
-    "(`NAME_ALIASES` in the script, each with the line that justifies it). Names are looked "
-    "for only in rule, test, profile, code, script and CI files. Free prose (\"the research "
-    "record\", \"the review\") can still be missed, so check the uncited list by reading "
-    "before anything is deleted. *Linked from docs* shows whether README, CLAUDE.md, "
-    "`docs/` (not `docs/plans/`) or `docs/STATUS.md` still refer to the record, so those "
-    "links would need updating.\n\n")
+    "`research_notes/`. A record is **cited** when a machine-read file (a rule, test, "
+    "profile, code, script, CI or `.toml`/`.yaml` config file) refers to it by path, or by a "
+    "glob such as `2026-11-10-*`. It is **cited by name** when such a file names it without "
+    "a path (\"Codex review 3\", \"Codex review 2026-11-14\"), and **possibly cited "
+    "(ambiguous name)** when such a file names a review by a date that two or more review "
+    "folders share; the script does not guess which. All three count as cited. It is "
+    "**uncited** when only docs, `docs/STATUS.md`, other config files or other records "
+    "refer to it, or nothing does. References from other records, including kept ones, do "
+    "not make a record cited; if an uncited record is removed, those links point at a path "
+    "that exists only in git history. A record's references to itself are not counted.\n\n"
+    "Each number in the summary's category columns is the number of lines in files of that "
+    "category that refer to the record, by path, glob or name together. *Linked from docs* "
+    "shows whether README, CLAUDE.md, `docs/` (not `docs/plans/`) or `docs/STATUS.md` still "
+    "refer to it. *Linked from kept records* is the number of records that stay in the tree "
+    "(counted as cited, kept in place or active work) whose files refer to it; the record's "
+    "own section names them.\n\n"
+    "What is recognised: paths written from the repository root (`research/...`, with `/` or a "
+    "backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built "
+    "from string literals, globs, and review names found by a short pattern list "
+    "(\"Codex\" with a review number, or with a date beside it) plus a hand-kept alias table "
+    "for the numbers (`NAME_ALIASES` in the script). Names are looked for only in "
+    "machine-read files. Lines there that mention a root word but give no reference are "
+    "listed under *Unparsed mentions*. Free prose (\"the research record\", \"the review\") "
+    "can still be missed, so read the uncited list before anything is deleted.\n\n")
 
 
 def render(inv: Inventory, units: list[str]) -> str:
@@ -439,12 +516,15 @@ def render(inv: Inventory, units: list[str]) -> str:
             f"Uncited: {len(groups['uncited'])}. Uncited with no references: "
             f"{len(groups['uncited, no references'])}.\n\n"),
            "## Summary\n\n",
-           "| Record | Status | Note | Linked from docs | " + " | ".join(CATEGORIES) + " |\n",
-           "|---|---|---|---|" + "---|" * len(CATEGORIES) + "\n"]
+           ("| Record | Status | Note | Linked from docs | Linked from kept records | "
+            + " | ".join(CATEGORIES) + " |\n"),
+           "|---|---|---|---|---|" + "---|" * len(CATEGORIES) + "\n"]
+    kept = kept_units(inv, units)
     for s, members in groups.items():
         for u in members:
             refs = inv.refs.get(u, set())
             out.append(f"| `{_cell(u)}` | {s} | {_note(u)} | {linked_from_docs(u, inv)} | "
+                       f"{len(linked_from_kept(u, inv, units, kept)) or ''} | "
                        + " | ".join(_counts(refs)) + " |\n")
     titles = {"cited": "Cited records (by path)",
               "cited by name": "Records cited by name only",
@@ -462,6 +542,9 @@ def render(inv: Inventory, units: list[str]) -> str:
                                                      else ""))
             refs = inv.refs.get(u, set())
             out.extend(_lines(_where(refs), "No references."))
+            if linked := linked_from_kept(u, inv, units, kept):
+                out.append("\nLinked from kept records: "
+                           + ", ".join(f"`{_cell(o)}`" for o in linked) + ".\n")
     out.append("\n## References to a root folder\n\n"
                "A mention of a whole folder, such as `research/reviews/`, not one record.\n")
     for root in sorted(inv.root_refs):
@@ -485,6 +568,16 @@ def render(inv: Inventory, units: list[str]) -> str:
                    for u in inv.unattributed)
     else:
         out.append("None.\n")
+    out.append("\n## Unparsed mentions\n\n"
+               "A line in a machine-read file that puts a root word (research, reports, "
+               "research_notes, plans) beside a quote, slash or backslash but gave no reference "
+               "this script reads, for example a path built at run time. Read these by hand.\n\n")
+    if inv.unparsed:
+        out.append("| File | Line | Text |\n|---|---|---|\n")
+        out.extend(f"| `{_cell(u.file)}` | {u.line} | `{_cell(u.text)}` |\n"
+                   for u in inv.unparsed)
+    else:
+        out.append("None.\n")
     out.append("\n## Glob matches\n\n"
                "A path pattern with `*`, expanded to the records it matches. Each match is "
                "counted as a reference from that file.\n\n")
@@ -496,8 +589,9 @@ def render(inv: Inventory, units: list[str]) -> str:
         out.append("None.\n")
     out.append("\n## Unresolved references\n\n"
                "References this script could not tie to one record: a built path that stops at "
-               "a root folder, or a path that names no record in the tree (a placeholder, a "
-               "pattern, a record that does not exist, or a name broken over lines).\n\n")
+               "a root folder, a `./` or `../` path that resolves outside the record folders, "
+               "or a path that names no record in the tree (a placeholder, a pattern, a record "
+               "that does not exist, or a name broken over lines).\n\n")
     if inv.unresolved:
         out.append("| File | Line | Text | Why |\n|---|---|---|---|\n")
         out.extend(f"| `{_cell(u.file)}` | {u.line} | `{_cell(u.text)}` | {u.reason} |\n"
@@ -514,8 +608,8 @@ def tracked_files(root: Path) -> list[str]:
     return sorted(f for f in out.stdout.decode("utf-8").split("\0") if f)
 
 
-def main(argv: list[str]) -> int:
-    root = Path(__file__).resolve().parents[1]
+def main(argv: list[str], root: Path | None = None) -> int:
+    root = Path(__file__).resolve().parents[1] if root is None else root
     files = tracked_files(root)
     text = render(scan(root, files), units_in(files))
     path = root / OUTPUT

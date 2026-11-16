@@ -4,66 +4,68 @@
 
 Which research records the repository points at, and from where. It is a snapshot for the restructure (Task 1 of `docs/plans/2026-11-16-restructure.md`); line numbers move as files change, so regenerate it before you use it.
 
-A record is one folder under `research/verification/`, `research/reviews/` or `research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under `research_notes/`. A record is **cited** when a rule, test, profile, code, script or CI file refers to it by path (or by a glob such as `2026-11-10-*`). It is **cited by name** when such a file names it without a path ("Codex review 3", "Codex review 2026-11-14"), and **possibly cited (ambiguous name)** when such a file names a review by a date that two or more review folders share; the script does not guess which. All three count as cited. It is **uncited** when only docs, `docs/STATUS.md`, config files or other records refer to it, or nothing does. A record's references to itself are not counted. The counts are referring lines, of every kind.
+A record is one folder under `research/verification/`, `research/reviews/` or `research/experiments/`, one file under `docs/plans/` or `reports/`, or one entry under `research_notes/`. A record is **cited** when a machine-read file (a rule, test, profile, code, script, CI or `.toml`/`.yaml` config file) refers to it by path, or by a glob such as `2026-11-10-*`. It is **cited by name** when such a file names it without a path ("Codex review 3", "Codex review 2026-11-14"), and **possibly cited (ambiguous name)** when such a file names a review by a date that two or more review folders share; the script does not guess which. All three count as cited. It is **uncited** when only docs, `docs/STATUS.md`, other config files or other records refer to it, or nothing does. References from other records, including kept ones, do not make a record cited; if an uncited record is removed, those links point at a path that exists only in git history. A record's references to itself are not counted.
 
-Names are found by a short pattern list ("Codex" followed by a review number, or with a date beside it) and a hand-kept alias table for the numbers (`NAME_ALIASES` in the script, each with the line that justifies it). Names are looked for only in rule, test, profile, code, script and CI files. Free prose ("the research record", "the review") can still be missed, so check the uncited list by reading before anything is deleted. *Linked from docs* shows whether README, CLAUDE.md, `docs/` (not `docs/plans/`) or `docs/STATUS.md` still refer to the record, so those links would need updating.
+Each number in the summary's category columns is the number of lines in files of that category that refer to the record, by path, glob or name together. *Linked from docs* shows whether README, CLAUDE.md, `docs/` (not `docs/plans/`) or `docs/STATUS.md` still refer to it. *Linked from kept records* is the number of records that stay in the tree (counted as cited, kept in place or active work) whose files refer to it; the record's own section names them.
+
+What is recognised: paths written from the repository root (`research/...`, with `/` or a backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built from string literals, globs, and review names found by a short pattern list ("Codex" with a review number, or with a date beside it) plus a hand-kept alias table for the numbers (`NAME_ALIASES` in the script). Names are looked for only in machine-read files. Lines there that mention a root word but give no reference are listed under *Unparsed mentions*. Free prose ("the research record", "the review") can still be missed, so read the uncited list before anything is deleted.
 
 Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous name only). Uncited: 9. Uncited with no references: 0.
 
 ## Summary
 
-| Record | Status | Note | Linked from docs | rule | test | profile | code | script | CI | doc | status | record | config |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/plans/2026-11-10-flat-geometry.md` | cited |  | status |  |  |  | 1 |  |  |  | 1 | 1 |  |
-| `docs/plans/2026-11-10-outline-smoothing.md` | cited |  | status |  | 2 |  | 1 |  |  |  | 1 |  |  |
-| `docs/plans/2026-11-10-slicer-check.md` | cited |  | status |  | 2 |  | 2 |  |  |  | 1 | 1 |  |
-| `docs/plans/2026-11-10-subject-selection.md` | cited |  | doc, status |  |  |  | 1 |  |  | 1 | 1 | 1 |  |
-| `docs/plans/2026-11-10-thin-wall-policy.md` | cited |  | doc, status |  |  |  | 2 |  |  | 2 | 1 | 2 |  |
-| `docs/plans/2026-11-11-color-design.md` | cited |  | doc, status | 2 |  |  |  |  |  | 3 | 2 | 5 |  |
-| `docs/plans/2026-11-11-color-palette.md` | cited |  | doc, status | 3 | 8 |  | 7 |  |  | 1 | 1 | 5 |  |
-| `docs/plans/2026-11-11-portability-check.md` | cited |  | status |  | 1 |  | 2 |  |  |  | 1 | 1 |  |
-| `docs/plans/2026-11-12-color-3mf.md` | cited |  | doc, status |  | 2 |  | 5 |  |  | 1 | 2 | 5 |  |
-| `docs/plans/2026-11-12-color-geometry.md` | cited |  | doc, status | 3 | 3 |  | 4 |  |  | 2 | 1 | 9 |  |
-| `docs/plans/2026-11-13-color-slicing.md` | cited |  | doc, status |  | 4 |  | 11 |  |  | 3 | 1 | 30 |  |
-| `docs/plans/2026-11-14-test-strip.md` | cited |  | doc, status |  | 3 |  | 2 |  |  | 3 | 2 | 7 |  |
-| `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc, status |  | 2 |  | 7 |  |  | 3 | 2 | 3 |  |
-| `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status |  |  |  | 2 |  |  | 5 | 3 | 4 |  |
-| `research/reviews/2026-11-10-thin-walls` | cited |  | status |  | 1 |  |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-11-color-palette` | cited |  | status |  | 8 |  | 8 |  |  |  | 3 | 3 |  |
-| `research/reviews/2026-11-14-test-strips` | cited |  | status |  | 9 |  | 9 |  |  |  | 2 | 3 |  |
-| `research/verification/2026-11-08-stack-smoke` | cited |  | doc, status | 1 | 1 |  |  |  |  | 4 | 1 | 23 | 1 |
-| `research/verification/2026-11-09-slicer-3mf-import` | cited |  | doc | 8 |  |  |  |  |  | 1 |  | 4 |  |
-| `research/verification/2026-11-10-orcaslicer-windows` | cited |  | doc, status | 2 | 1 | 3 | 2 | 1 |  | 4 | 2 | 53 |  |
-| `research/verification/2026-11-10-outline-smoothing` | cited |  | doc, status | 1 |  |  |  |  |  | 2 | 2 | 3 |  |
-| `research/verification/2026-11-10-subject-selection` | cited |  | doc, status | 2 | 1 |  |  |  |  | 2 | 1 | 7 |  |
-| `research/verification/2026-11-10-thin-walls` | cited |  | doc, status |  | 2 |  | 2 |  |  | 3 | 2 | 4 |  |
-| `research/verification/2026-11-11-color-palette` | cited |  | doc | 12 | 3 |  | 1 |  |  | 1 |  | 6 |  |
-| `research/verification/2026-11-11-prusaslicer-windows` | cited |  | doc, status | 1 | 4 | 3 | 2 |  |  | 3 | 1 | 5 |  |
-| `research/verification/2026-11-12-color-3mf` | cited |  | doc, status |  | 1 |  | 4 |  |  | 1 | 1 | 8 |  |
-| `research/verification/2026-11-12-color-geometry` | cited |  | doc, status |  |  |  | 1 |  |  | 3 | 1 | 5 |  |
-| `research/verification/2026-11-13-a1-profile-include` | cited |  | doc, status |  | 4 | 2 | 4 | 2 |  | 3 | 1 | 3 |  |
-| `research/verification/2026-11-13-color-slicing` | cited |  | doc, status |  | 4 |  | 8 |  |  | 3 | 1 | 6 |  |
-| `research/verification/2026-11-14-test-strips` | cited |  | doc, status | 2 |  |  | 1 |  |  | 3 | 3 | 11 |  |
-| `research/verification/2026-11-15-first-ams-print` | cited |  | doc, status |  | 1 |  | 1 |  |  | 7 | 2 | 5 |  |
-| `research/verification/2026-11-16-repeatability` | cited | active work, stays where it is |  |  |  |  |  | 1 |  |  |  | 1 |  |
-| `research_notes/Image to printable 3D model landscape` | cited | kept in place (design section 6) | doc | 28 |  |  |  |  |  | 4 |  | 2 |  |
-| `research/reviews/2026-11-12-color-3mf` | cited by name |  | status |  | 4 |  | 3 |  |  |  | 1 |  |  |
-| `research/reviews/2026-11-12-color-geometry` | cited by name |  | status |  | 3 |  | 4 |  |  |  | 1 | 1 |  |
-| `research/reviews/2026-11-13-color-slicing` | cited by name |  | status |  | 4 |  | 4 |  |  |  | 2 |  |  |
-| `research/reviews/2026-11-09-codex` | possibly cited (ambiguous name) |  | doc |  |  | 1 |  |  |  | 2 |  | 2 |  |
-| `research/reviews/2026-11-09-pc` | possibly cited (ambiguous name) |  |  |  |  | 1 |  |  |  |  |  | 1 |  |
-| `research/reviews/2026-11-11-portability` | possibly cited (ambiguous name) |  | status |  | 3 |  | 4 |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-16-face-down` | possibly cited (ambiguous name) |  | status |  | 4 |  | 5 |  |  |  | 1 | 1 |  |
-| `research/reviews/2026-11-16-restructure-design` | possibly cited (ambiguous name) | active work, stays where it is | status |  | 4 |  | 5 |  |  |  | 1 | 2 |  |
-| `docs/plans/2026-11-16-restructure-design.md` | uncited | active work, stays where it is | status |  |  |  |  |  |  |  | 1 | 3 |  |
-| `docs/plans/2026-11-16-restructure.md` | uncited | active work, stays where it is | status |  |  |  |  |  |  |  | 1 | 2 |  |
-| `reports/Image to printable 3D model landscape.md` | uncited | kept in place (design section 6) | doc |  |  |  |  |  |  | 4 |  | 32 |  |
-| `research/reviews/2026-11-10-flat` | uncited |  | status |  |  |  |  |  |  |  | 1 | 1 |  |
-| `research/reviews/2026-11-10-selection` | uncited |  | status |  |  |  |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-10-slicer` | uncited |  | status |  |  |  |  |  |  |  | 1 | 2 |  |
-| `research/reviews/2026-11-10-smoothing` | uncited |  | status |  |  |  |  |  |  |  | 1 | 2 |  |
-| `research/verification/2026-11-09-pc-stack` | uncited |  | doc, status |  |  |  |  |  |  | 3 | 2 | 1 |  |
-| `research/verification/2026-11-10-flat-geometry` | uncited |  | status |  |  |  |  |  |  |  | 1 | 1 |  |
+| Record | Status | Note | Linked from docs | Linked from kept records | rule | test | profile | code | script | CI | config-citing | doc | status | record | config |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `docs/plans/2026-11-10-flat-geometry.md` | cited |  | status |  |  |  |  | 1 |  |  |  |  | 1 | 1 |  |
+| `docs/plans/2026-11-10-outline-smoothing.md` | cited |  | status |  |  | 2 |  | 1 |  |  |  |  | 1 |  |  |
+| `docs/plans/2026-11-10-slicer-check.md` | cited |  | status | 1 |  | 2 |  | 2 |  |  |  |  | 1 | 1 |  |
+| `docs/plans/2026-11-10-subject-selection.md` | cited |  | doc, status | 1 |  |  |  | 1 |  |  |  | 1 | 1 | 1 |  |
+| `docs/plans/2026-11-10-thin-wall-policy.md` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 2 | 1 | 2 |  |
+| `docs/plans/2026-11-11-color-design.md` | cited |  | doc, status | 5 | 2 |  |  |  |  |  |  | 3 | 2 | 5 |  |
+| `docs/plans/2026-11-11-color-palette.md` | cited |  | doc, status | 3 | 3 | 8 |  | 7 |  |  |  | 1 | 1 | 5 |  |
+| `docs/plans/2026-11-11-portability-check.md` | cited |  | status | 1 |  | 1 |  | 2 |  |  |  |  | 1 | 1 |  |
+| `docs/plans/2026-11-12-color-3mf.md` | cited |  | doc, status | 2 |  | 2 |  | 5 |  |  |  | 1 | 2 | 5 |  |
+| `docs/plans/2026-11-12-color-geometry.md` | cited |  | doc, status | 3 | 3 | 3 |  | 4 |  |  |  | 2 | 1 | 9 |  |
+| `docs/plans/2026-11-13-color-slicing.md` | cited |  | doc, status | 4 |  | 4 |  | 11 |  |  |  | 3 | 1 | 30 |  |
+| `docs/plans/2026-11-14-test-strip.md` | cited |  | doc, status | 4 |  | 3 |  | 2 |  |  |  | 3 | 2 | 7 |  |
+| `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc, status | 2 |  | 2 |  | 7 |  |  |  | 3 | 2 | 3 |  |
+| `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 3 | 4 |  |
+| `research/reviews/2026-11-10-thin-walls` | cited |  | status | 2 |  | 1 |  |  |  |  |  |  | 1 | 2 |  |
+| `research/reviews/2026-11-11-color-palette` | cited |  | status | 2 |  | 8 |  | 8 |  |  |  |  | 3 | 3 |  |
+| `research/reviews/2026-11-14-test-strips` | cited |  | status | 2 |  | 9 |  | 9 |  |  |  |  | 2 | 3 |  |
+| `research/verification/2026-11-08-stack-smoke` | cited |  | doc, status | 2 | 1 | 1 |  |  |  |  | 1 | 4 | 1 | 23 |  |
+| `research/verification/2026-11-09-slicer-3mf-import` | cited |  | doc | 2 | 8 |  |  |  |  |  |  | 1 |  | 4 |  |
+| `research/verification/2026-11-10-orcaslicer-windows` | cited |  | doc, status | 5 | 2 | 1 | 3 | 2 | 1 |  |  | 4 | 2 | 53 |  |
+| `research/verification/2026-11-10-outline-smoothing` | cited |  | doc, status | 2 | 1 |  |  |  |  |  |  | 2 | 2 | 3 |  |
+| `research/verification/2026-11-10-subject-selection` | cited |  | doc, status | 2 | 2 | 1 |  |  |  |  |  | 2 | 1 | 7 |  |
+| `research/verification/2026-11-10-thin-walls` | cited |  | doc, status | 3 |  | 2 |  | 2 |  |  |  | 3 | 2 | 4 |  |
+| `research/verification/2026-11-11-color-palette` | cited |  | doc | 4 | 12 | 3 |  | 1 |  |  |  | 1 |  | 6 |  |
+| `research/verification/2026-11-11-prusaslicer-windows` | cited |  | doc, status | 4 | 1 | 4 | 3 | 2 |  |  |  | 3 | 1 | 5 |  |
+| `research/verification/2026-11-12-color-3mf` | cited |  | doc, status | 4 |  | 1 |  | 4 |  |  |  | 1 | 1 | 8 |  |
+| `research/verification/2026-11-12-color-geometry` | cited |  | doc, status | 3 |  |  |  | 1 |  |  |  | 3 | 1 | 5 |  |
+| `research/verification/2026-11-13-a1-profile-include` | cited |  | doc, status | 3 |  | 4 | 2 | 4 | 2 |  |  | 3 | 1 | 3 |  |
+| `research/verification/2026-11-13-color-slicing` | cited |  | doc, status | 4 |  | 4 |  | 8 |  |  |  | 3 | 1 | 6 |  |
+| `research/verification/2026-11-14-test-strips` | cited |  | doc, status | 3 | 2 |  |  | 1 |  |  |  | 3 | 3 | 11 |  |
+| `research/verification/2026-11-15-first-ams-print` | cited |  | doc, status | 3 |  | 1 |  | 1 |  |  |  | 7 | 2 | 5 |  |
+| `research/verification/2026-11-16-repeatability` | cited | active work, stays where it is |  | 1 |  |  |  |  | 1 |  |  |  |  | 1 |  |
+| `research_notes/Image to printable 3D model landscape` | cited | kept in place (design section 6) | doc | 1 | 28 |  |  |  |  |  |  | 4 |  | 2 |  |
+| `research/reviews/2026-11-12-color-3mf` | cited by name |  | status |  |  | 4 |  | 3 |  |  |  |  | 1 |  |  |
+| `research/reviews/2026-11-12-color-geometry` | cited by name |  | status | 1 |  | 3 |  | 4 |  |  |  |  | 1 | 1 |  |
+| `research/reviews/2026-11-13-color-slicing` | cited by name |  | status |  |  | 4 |  | 4 |  |  |  |  | 2 |  |  |
+| `research/reviews/2026-11-09-codex` | possibly cited (ambiguous name) |  | doc | 2 |  |  | 1 |  |  |  |  | 2 |  | 2 |  |
+| `research/reviews/2026-11-09-pc` | possibly cited (ambiguous name) |  |  | 1 |  |  | 1 |  |  |  |  |  |  | 1 |  |
+| `research/reviews/2026-11-11-portability` | possibly cited (ambiguous name) |  | status | 2 |  | 3 |  | 4 |  |  |  |  | 1 | 2 |  |
+| `research/reviews/2026-11-16-face-down` | possibly cited (ambiguous name) |  | status | 1 |  | 4 |  | 5 |  |  |  |  | 1 | 1 |  |
+| `research/reviews/2026-11-16-restructure-design` | possibly cited (ambiguous name) | active work, stays where it is | status | 2 |  | 4 |  | 5 |  |  |  |  | 1 | 2 |  |
+| `docs/plans/2026-11-16-restructure-design.md` | uncited | active work, stays where it is | status | 2 |  |  |  |  |  |  |  |  | 1 | 3 |  |
+| `docs/plans/2026-11-16-restructure.md` | uncited | active work, stays where it is | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
+| `reports/Image to printable 3D model landscape.md` | uncited | kept in place (design section 6) | doc | 1 |  |  |  |  |  |  |  | 4 |  | 32 |  |
+| `research/reviews/2026-11-10-flat` | uncited |  | status | 1 |  |  |  |  |  |  |  |  | 1 | 1 |  |
+| `research/reviews/2026-11-10-selection` | uncited |  | status | 1 |  |  |  |  |  |  |  |  | 1 | 2 |  |
+| `research/reviews/2026-11-10-slicer` | uncited |  | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
+| `research/reviews/2026-11-10-smoothing` | uncited |  | status | 2 |  |  |  |  |  |  |  |  | 1 | 2 |  |
+| `research/verification/2026-11-09-pc-stack` | uncited |  | doc, status | 1 |  |  |  |  |  |  |  | 3 | 2 | 1 |  |
+| `research/verification/2026-11-10-flat-geometry` | uncited |  | status | 1 |  |  |  |  |  |  |  |  | 1 | 1 |  |
 
 ## Cited records (by path)
 
@@ -89,12 +91,16 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_slice.py` (test): lines 1
 - `tests/test_slicer.py` (test): lines 1
 
+Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`.
+
 ### `docs/plans/2026-11-10-subject-selection.md`
 
 - `docs/PLAN.md` (doc): lines 493
 - `docs/STATUS.md` (status): lines 376
 - `research/verification/2026-11-10-subject-selection/README.md` (record): lines 5
 - `src/tdmg/selection.py` (code): lines 1
+
+Linked from kept records: `research/verification/2026-11-10-subject-selection`.
 
 ### `docs/plans/2026-11-10-thin-wall-policy.md`
 
@@ -105,6 +111,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `docs/plans/2026-11-10-slicer-check.md` (record): lines 228
 - `src/tdmg/printed.py` (code): lines 22
 - `src/tdmg/slicing.py` (code): lines 12
+
+Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `docs/plans/2026-11-10-slicer-check.md`.
 
 ### `docs/plans/2026-11-11-color-design.md`
 
@@ -117,6 +125,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `docs/print-types/attributes/color-multi.md` (doc): lines 9, 365
 - `research/reviews/2026-11-11-color-palette/prompt.md` (record): lines 3
 - `rules/color.yaml` (rule): lines 16, 158
+
+Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/2026-11-12-color-3mf.md`, `docs/plans/2026-11-12-color-geometry.md`, `docs/plans/2026-11-13-color-slicing.md`, `research/reviews/2026-11-11-color-palette`.
 
 ### `docs/plans/2026-11-11-color-palette.md`
 
@@ -144,6 +154,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_rules.py` (test): lines 85
 - `tests/test_smooth_labels.py` (test): lines 1
 
+Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `research/reviews/2026-11-11-color-palette`, `research/verification/2026-11-11-color-palette`.
+
 ### `docs/plans/2026-11-11-portability-check.md`
 
 - `docs/STATUS.md` (status): lines 359
@@ -151,6 +163,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/portability.py` (code): lines 3
 - `src/tdmg/slicing.py` (code): lines 24
 - `tests/test_portability.py` (test): lines 1
+
+Linked from kept records: `research/verification/2026-11-11-prusaslicer-windows`.
 
 ### `docs/plans/2026-11-12-color-3mf.md`
 
@@ -166,6 +180,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/threemf.py` (code): lines 1
 - `tests/test_colored_flat.py` (test): lines 680
 - `tests/test_threemf.py` (test): lines 4
+
+Linked from kept records: `research/reviews/2026-11-12-color-3mf`, `research/verification/2026-11-12-color-3mf`.
 
 ### `docs/plans/2026-11-12-color-geometry.md`
 
@@ -189,6 +205,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_color_glue.py` (test): lines 3
 - `tests/test_colored_flat.py` (test): lines 2
 
+Linked from kept records: `docs/plans/2026-11-11-color-design.md`, `research/reviews/2026-11-12-color-geometry`, `research/verification/2026-11-12-color-geometry`.
+
 ### `docs/plans/2026-11-13-color-slicing.md`
 
 - `docs/STATUS.md` (status): lines 256
@@ -211,6 +229,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_orca_input.py` (test): lines 5
 - `tests/test_slice.py` (test): lines 1258
 
+Linked from kept records: `docs/plans/2026-11-11-color-design.md`, `research/reviews/2026-11-13-color-slicing`, `research/verification/2026-11-13-a1-profile-include`, `research/verification/2026-11-13-color-slicing`.
+
 ### `docs/plans/2026-11-14-test-strip.md`
 
 - `docs/STATUS.md` (status): lines 311, 495
@@ -224,6 +244,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `research/verification/2026-11-14-test-strips/README.md` (record): lines 3
 - `src/tdmg/calibration_strip.py` (code): lines 3, 556
 - `tests/test_calibration_strip.py` (test): lines 2, 97, 591
+
+Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-14-test-strips`, `research/reviews/2026-11-16-restructure-design`, `research/verification/2026-11-14-test-strips`.
 
 ### `docs/plans/2026-11-16-face-down-default.md`
 
@@ -240,6 +262,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_color_slice.py` (test): lines 725
 - `tests/test_printed.py` (test): lines 1087
 
+Linked from kept records: `research/reviews/2026-11-16-face-down`, `research/verification/2026-11-15-first-ams-print`.
+
 ### `research/experiments/2026-11-g3-local-vs-hosted`
 
 - `docs/PLAN.md` (doc): lines 330, 471, 475, 477
@@ -250,12 +274,16 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `research/verification/2026-11-09-pc-stack/README.md` (record): lines 79, 81
 - `src/tdmg/checks.py` (code): lines 64, 76
 
+Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `reports/Image to printable 3D model landscape.md`.
+
 ### `research/reviews/2026-11-10-thin-walls`
 
 - `docs/STATUS.md` (status): lines 682
 - `docs/plans/2026-11-10-thin-wall-policy.md` (record): lines 124
 - `research/verification/2026-11-10-thin-walls/README.md` (record): lines 132
 - `tests/test_printed.py` (test): lines 668
+
+Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research/verification/2026-11-10-thin-walls`.
 
 ### `research/reviews/2026-11-11-color-palette`
 
@@ -273,6 +301,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_slice.py` (test, ambiguous name): lines 1077
 - `tests/test_smooth_labels.py` (test): lines 203, 561
 
+Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `research/verification/2026-11-11-prusaslicer-windows`.
+
 ### `research/reviews/2026-11-14-test-strips`
 
 - `docs/STATUS.md` (status): lines 313, 497
@@ -283,6 +313,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/cli.py` (code, name): lines 581, 620
 - `tests/test_calibration_strip.py` (test, name): lines 571, 701, 833, 979, 1013, 1162, 1324, 1349, 1380
 
+Linked from kept records: `docs/plans/2026-11-14-test-strip.md`, `research/verification/2026-11-14-test-strips`.
+
 ### `research/verification/2026-11-08-stack-smoke`
 
 - `docs/PLAN.md` (doc): lines 7
@@ -290,7 +322,7 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `docs/print-types/attributes/color-single.md` (doc): lines 40
 - `docs/print-types/attributes/geometry-flat.md` (doc): lines 68
 - `docs/reference/dependencies.md` (doc): lines 73
-- `pyproject.toml` (config): lines 9
+- `pyproject.toml` (config-citing): lines 9
 - `reports/Image to printable 3D model landscape.md` (record): lines 111, 174, 284, 307
 - `research/reviews/2026-11-09-codex/README.md` (record): lines 24
 - `research/reviews/2026-11-09-codex/code-and-verification.md` (record): lines 3, 8, 13, 18, 23, 28, 33, 38, 43, 48, 53, 58
@@ -302,6 +334,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `rules/tools.yaml` (rule): lines 54
 - `tests/test_environment.py` (test): lines 4
 
+Linked from kept records: `reports/Image to printable 3D model landscape.md`, `research/reviews/2026-11-09-codex`.
+
 ### `research/verification/2026-11-09-slicer-3mf-import`
 
 - `docs/PLAN.md` (doc): lines 36
@@ -309,6 +343,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `research/reviews/2026-11-09-codex/portability.md` (record): lines 19, 65
 - `research/reviews/2026-11-09-codex/prompt-portability.txt` (record): lines 3
 - `rules/tools.yaml` (rule): lines 61, 68, 81, 95, 101, 115, 121, 134
+
+Linked from kept records: `docs/plans/2026-11-12-color-3mf.md`, `research/reviews/2026-11-09-codex`.
 
 ### `research/verification/2026-11-10-orcaslicer-windows`
 
@@ -335,6 +371,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/slicing.py` (code): lines 5
 - `tests/test_slicer.py` (test): lines 36
 
+Linked from kept records: `docs/plans/2026-11-10-slicer-check.md`, `research/reviews/2026-11-16-restructure-design`, `research/verification/2026-11-10-thin-walls`, `research/verification/2026-11-12-color-3mf`, `research/verification/2026-11-13-color-slicing`.
+
 ### `research/verification/2026-11-10-outline-smoothing`
 
 - `docs/STATUS.md` (status, glob): lines 90
@@ -346,6 +384,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `research/verification/2026-11-10-thin-walls/README.md` (record): lines 56
 - `rules/geometry-flat.yaml` (rule): lines 58
 
+Linked from kept records: `docs/plans/2026-11-10-outline-smoothing.md`, `research/verification/2026-11-10-thin-walls`.
+
 ### `research/verification/2026-11-10-subject-selection`
 
 - `docs/STATUS.md` (status, glob): lines 90
@@ -354,6 +394,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `docs/plans/2026-11-10-subject-selection.md` (record): lines 14, 50, 130, 145, 180, 989
 - `rules/perception.yaml` (rule): lines 10, 24
 - `tests/selection_fixtures.py` (test): lines 3
+
+Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`, `docs/plans/2026-11-10-subject-selection.md`.
 
 ### `research/verification/2026-11-10-thin-walls`
 
@@ -368,6 +410,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/gcode_fixtures.py` (test): lines 4
 - `tests/test_slice.py` (test): lines 59
 
+Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research/reviews/2026-11-10-thin-walls`, `research/verification/2026-11-11-prusaslicer-windows`.
+
 ### `research/verification/2026-11-11-color-palette`
 
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 56, 288
@@ -380,6 +424,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/color.py` (code): lines 7
 - `tests/conftest.py` (test): lines 2, 15
 - `tests/test_rules.py` (test): lines 84
+
+Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-16-restructure-design`.
 
 ### `research/verification/2026-11-11-prusaslicer-windows`
 
@@ -398,6 +444,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_portability.py` (test): lines 3, 39, 76
 - `tests/test_rules.py` (test): lines 59
 
+Linked from kept records: `docs/plans/2026-11-11-portability-check.md`, `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-11-portability`, `research/reviews/2026-11-16-restructure-design`.
+
 ### `research/verification/2026-11-12-color-3mf`
 
 - `docs/STATUS.md` (status): lines 321
@@ -412,6 +460,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/threemf.py` (code): lines 4, 18
 - `tests/test_orca_input.py` (test): lines 188
 
+Linked from kept records: `docs/plans/2026-11-12-color-3mf.md`, `docs/plans/2026-11-13-color-slicing.md`, `research/reviews/2026-11-12-color-3mf`, `research/verification/2026-11-13-color-slicing`.
+
 ### `research/verification/2026-11-12-color-geometry`
 
 - `docs/STATUS.md` (status): lines 235
@@ -421,6 +471,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `research/reviews/2026-11-12-color-3mf/README.md` (record): lines 58
 - `research/reviews/2026-11-12-color-geometry/prompt.md` (record): lines 3
 - `src/tdmg/color_glue.py` (code): lines 75
+
+Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `research/reviews/2026-11-12-color-3mf`, `research/reviews/2026-11-12-color-geometry`.
 
 ### `research/verification/2026-11-13-a1-profile-include`
 
@@ -437,6 +489,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_printed.py` (test): lines 811
 - `tests/test_setup_orcaslicer.py` (test): lines 247, 303
 - `tests/test_slicer.py` (test): lines 39
+
+Linked from kept records: `docs/plans/2026-11-13-color-slicing.md`, `research/reviews/2026-11-13-color-slicing`, `research/reviews/2026-11-16-restructure-design`.
 
 ### `research/verification/2026-11-13-color-slicing`
 
@@ -455,6 +509,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `tests/test_color_slice.py` (test): lines 958, 1040
 - `tests/test_printed.py` (test): lines 1009
 
+Linked from kept records: `docs/plans/2026-11-13-color-slicing.md`, `docs/plans/2026-11-14-test-strip.md`, `research/reviews/2026-11-13-color-slicing`, `research/verification/2026-11-14-test-strips`.
+
 ### `research/verification/2026-11-14-test-strips`
 
 - `docs/STATUS.md` (status): lines 486, 527, 566
@@ -466,6 +522,8 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 40, 207, 214
 - `rules/color.yaml` (rule): lines 168, 173
 - `src/tdmg/calibration_strip.py` (code): lines 650
+
+Linked from kept records: `docs/plans/2026-11-14-test-strip.md`, `research/reviews/2026-11-14-test-strips`, `research/reviews/2026-11-16-restructure-design`.
 
 ### `research/verification/2026-11-15-first-ams-print`
 
@@ -479,12 +537,16 @@ Records: 50. Counted as cited: 41 (33 by path, 3 by name only, 5 by an ambiguous
 - `src/tdmg/color_slicing.py` (code): lines 237
 - `tests/test_color_gcode.py` (test): lines 744
 
+Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`, `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-16-face-down`.
+
 ### `research/verification/2026-11-16-repeatability`
 
 Active work, stays where it is.
 
 - `docs/plans/2026-11-16-restructure.md` (record): lines 77
 - `scripts/repeat_runs.py` (script): lines 63
+
+Linked from kept records: `docs/plans/2026-11-16-restructure.md`.
 
 ### `research_notes/Image to printable 3D model landscape`
 
@@ -504,6 +566,8 @@ Kept in place (design section 6).
 - `rules/geometry-relief.yaml` (rule): lines 9
 - `rules/tools.yaml` (rule): lines 9
 
+Linked from kept records: `research/reviews/2026-11-09-codex`.
+
 ## Records cited by name only
 
 ### `research/reviews/2026-11-12-color-3mf`
@@ -522,6 +586,8 @@ Kept in place (design section 6).
 - `tests/test_color_checks.py` (test, name): lines 908
 - `tests/test_color_glue.py` (test, name): lines 188, 459
 
+Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`.
+
 ### `research/reviews/2026-11-13-color-slicing`
 
 - `docs/STATUS.md` (status): lines 307, 310
@@ -539,10 +605,14 @@ Kept in place (design section 6).
 - `reports/Image to printable 3D model landscape.md` (record): lines 348
 - `research/verification/2026-11-09-slicer-3mf-import/README.md` (record): lines 14
 
+Linked from kept records: `reports/Image to printable 3D model landscape.md`, `research/verification/2026-11-09-slicer-3mf-import`.
+
 ### `research/reviews/2026-11-09-pc`
 
 - `docs/plans/2026-11-10-subject-selection.md` (record): lines 1042
 - `profiles/printers/bambu-a1.yaml` (profile, ambiguous name): lines 43
+
+Linked from kept records: `docs/plans/2026-11-10-subject-selection.md`.
 
 ### `research/reviews/2026-11-11-portability`
 
@@ -555,6 +625,8 @@ Kept in place (design section 6).
 - `tests/test_portability.py` (test, ambiguous name): lines 475
 - `tests/test_slice.py` (test, ambiguous name): lines 1077
 
+Linked from kept records: `docs/plans/2026-11-11-portability-check.md`, `research/verification/2026-11-11-prusaslicer-windows`.
+
 ### `research/reviews/2026-11-16-face-down`
 
 - `docs/STATUS.md` (status): lines 463
@@ -564,6 +636,8 @@ Kept in place (design section 6).
 - `src/tdmg/slicing.py` (code, ambiguous name): lines 170
 - `tests/test_color_slice.py` (test, ambiguous name): lines 792
 - `tests/test_printed.py` (test, ambiguous name): lines 703, 1215, 1289
+
+Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`.
 
 ### `research/reviews/2026-11-16-restructure-design`
 
@@ -578,6 +652,8 @@ Active work, stays where it is.
 - `tests/test_color_slice.py` (test, ambiguous name): lines 792
 - `tests/test_printed.py` (test, ambiguous name): lines 703, 1215, 1289
 
+Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `docs/plans/2026-11-16-restructure.md`.
+
 ## Uncited records (referred to only by docs, status, config or other records)
 
 ### `docs/plans/2026-11-16-restructure-design.md`
@@ -589,6 +665,8 @@ Active work, stays where it is.
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1
 
+Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-16-restructure-design`.
+
 ### `docs/plans/2026-11-16-restructure.md`
 
 Active work, stays where it is.
@@ -596,6 +674,8 @@ Active work, stays where it is.
 - `docs/STATUS.md` (status): lines 143
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
+
+Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `research/verification/2026-11-16-repeatability`.
 
 ### `reports/Image to printable 3D model landscape.md`
 
@@ -611,15 +691,21 @@ Kept in place (design section 6).
 - `research/reviews/2026-11-09-codex/research-factcheck.md` (record): lines 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21
 - `research/reviews/2026-11-09-codex/research-fidelity.md` (record): lines 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35
 
+Linked from kept records: `research/reviews/2026-11-09-codex`.
+
 ### `research/reviews/2026-11-10-flat`
 
 - `docs/STATUS.md` (status): lines 384
 - `docs/plans/2026-11-10-flat-geometry.md` (record): lines 435
 
+Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`.
+
 ### `research/reviews/2026-11-10-selection`
 
 - `docs/STATUS.md` (status): lines 381
 - `docs/plans/2026-11-10-subject-selection.md` (record): lines 1035, 1091
+
+Linked from kept records: `docs/plans/2026-11-10-subject-selection.md`.
 
 ### `research/reviews/2026-11-10-slicer`
 
@@ -627,11 +713,15 @@ Kept in place (design section 6).
 - `docs/plans/2026-11-10-slicer-check.md` (record): lines 218
 - `research/verification/2026-11-10-orcaslicer-windows/README.md` (record): lines 175
 
+Linked from kept records: `docs/plans/2026-11-10-slicer-check.md`, `research/verification/2026-11-10-orcaslicer-windows`.
+
 ### `research/reviews/2026-11-10-smoothing`
 
 - `docs/STATUS.md` (status): lines 390
 - `docs/plans/2026-11-10-outline-smoothing.md` (record): lines 178
 - `research/verification/2026-11-10-outline-smoothing/README.md` (record): lines 62
+
+Linked from kept records: `docs/plans/2026-11-10-outline-smoothing.md`, `research/verification/2026-11-10-outline-smoothing`.
 
 ### `research/verification/2026-11-09-pc-stack`
 
@@ -641,10 +731,14 @@ Kept in place (design section 6).
 - `docs/reference/dependencies.md` (doc): lines 15
 - `research/reviews/2026-11-09-pc/README.md` (record): lines 4
 
+Linked from kept records: `research/reviews/2026-11-09-pc`.
+
 ### `research/verification/2026-11-10-flat-geometry`
 
 - `docs/STATUS.md` (status, glob): lines 90
 - `docs/plans/2026-11-10-flat-geometry.md` (record): lines 432
+
+Linked from kept records: `docs/plans/2026-11-10-flat-geometry.md`.
 
 ## Records nothing refers to
 
@@ -678,7 +772,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 - `docs/PLAN.md` (doc): lines 190
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 167
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92
-- `pyproject.toml` (config): lines 75, 76
+- `pyproject.toml` (config-citing): lines 75, 76
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 22
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 222, 233
 - `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1, 6
@@ -768,6 +862,18 @@ A machine-read file mentions a review with no number in the alias table and no d
 | `tests/test_threemf.py` | 373 | `Review of the Codex 4 fix: a "version ne` | a named review with no record folder |
 | `tests/test_threemf.py` | 562 | `review of R2 step 4 Tasks 3-4, r34/holes` | a named review with no record folder |
 
+## Unparsed mentions
+
+A line in a machine-read file that puts a root word (research, reports, research_notes, plans) beside a quote, slash or backslash but gave no reference this script reads, for example a path built at run time. Read these by hand.
+
+| File | Line | Text |
+|---|---|---|
+| `tests/conftest.py` | 22 | `RESEARCH / "results.txt").read_text(encoding="utf-` |
+| `tests/test_color_glue.py` | 42 | `plans' test thickness.` |
+| `tests/test_color_slice.py` | 811 | `plans' case (plan amendment): face down FAILs F3,` |
+| `tests/test_color_slice.py` | 1086 | `plans" in text` |
+| `tests/test_slice.py` | 1351 | `research"` |
+
 ## Glob matches
 
 A path pattern with `*`, expanded to the records it matches. Each match is counted as a reference from that file.
@@ -778,7 +884,7 @@ A path pattern with `*`, expanded to the records it matches. Each match is count
 
 ## Unresolved references
 
-References this script could not tie to one record: a built path that stops at a root folder, or a path that names no record in the tree (a placeholder, a pattern, a record that does not exist, or a name broken over lines).
+References this script could not tie to one record: a built path that stops at a root folder, a `./` or `../` path that resolves outside the record folders, or a path that names no record in the tree (a placeholder, a pattern, a record that does not exist, or a name broken over lines).
 
 | File | Line | Text | Why |
 |---|---|---|---|
