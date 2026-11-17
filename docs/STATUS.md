@@ -81,9 +81,21 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   `tdmg finish` and `tdmg library check`, with the hard rules (only the owner's own words
   in a confirmation or the purge permission). `tests/test_make_print_skill.py` checks
   that every `tdmg` command, flag and `job set` key in it exists in the CLI, and that the
-  same slicer folders are given throughout. Its steps up to the colors stage were run
-  once on a scratch job with a test image (2026-11-17, PC); the rest has not been run
-  with the owner yet (first: Roadie, Task 14).
+  same slicer folders are given throughout; it also checks flag values, that every
+  STAGE.KEY the text names exists, that each `job set` line is accepted by a temporary
+  job, and that commands carrying the owner's words start with `MSYS_NO_PATHCONV=1` and
+  single-quote them. Its steps up to the colors stage were run once on a scratch job
+  with a test image (2026-11-17, PC); the rest has not been run with the owner yet
+  (first: Roadie, Task 14).
+- **Owner's words verbatim on Windows** (Task 12 quality review, measured 2026-11-17 on
+  the PC): Click expanded every argument on Windows (`$HOME`, `%USERNAME%`, `~`, globs),
+  even inside shell single quotes. The `tdmg` script and `python -m tdmg.cli` now call
+  `tdmg.cli.main()`, which turns that off (`tests/test_entry_point.py`). Git Bash also
+  turns a leading `/` into a Windows path (`/yes` became `C:/Program Files/Git/yes`)
+  unless `MSYS_NO_PATHCONV=1`; a doubled backslash reached Python as one. The skill says
+  how to quote, and to check each read-back. `tdmg finish --dry-run` takes
+  `--purge-owner-said` and prints it back as `purge.json` will hold it; the real run
+  prints it before writing `purge.json`.
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
