@@ -4,6 +4,8 @@ import copy
 import hashlib
 import inspect
 import re
+import subprocess
+import sys
 
 import pytest
 import yaml
@@ -29,6 +31,7 @@ from tdmg.jobs import (
     parse_job,
     path_problem,
     save_job,
+    set_mask,
     unset_required,
     validate_job,
 )
@@ -218,6 +221,42 @@ def test_refuses_an_existing_job(tmp_path, image):
     assert (_jobs(tmp_path) / "r" / JOB_FILE).read_bytes() == data
 
 
+def test_refuses_an_incomplete_job_folder(tmp_path, image):
+    (_jobs(tmp_path) / "r" / "source").mkdir(parents=True)
+    _refused(tmp_path, re.escape("(no job.yaml); delete it and try again"),
+             _jobs(tmp_path), "r", "flat-icon", image)
+
+
+def test_refuses_a_symlink(tmp_path, image):
+    _jobs(tmp_path).mkdir()
+    try:
+        (_jobs(tmp_path) / "r").symlink_to(tmp_path / "elsewhere", target_is_directory=True)
+    except OSError:
+        pytest.skip("this account cannot create symlinks")
+    _refused(tmp_path, "is a link", _jobs(tmp_path), "r", "flat-icon", image)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions are a Windows feature")
+@pytest.mark.parametrize("broken", [False, True])
+def test_refuses_a_junction(tmp_path, image, broken):
+    target = tmp_path / "target"
+    target.mkdir()
+    _jobs(tmp_path).mkdir()
+    subprocess.run(["cmd", "/c", "mklink", "/J", str(_jobs(tmp_path) / "r"), str(target)],
+                   check=True, capture_output=True)
+    if broken:
+        target.rmdir()
+    _refused(tmp_path, "is a link", _jobs(tmp_path), "r", "flat-icon", image)
+
+
+def test_a_broken_entry_at_mkdir_gives_a_clear_message(tmp_path, image, monkeypatch):
+    def fail(*a, **k):
+        raise FileExistsError(17, "exists")
+    monkeypatch.setattr(jobs, "write_outputs", fail)
+    with pytest.raises(JobError, match="something is already there"):
+        new_job(_jobs(tmp_path), "r", "flat-icon", image)
+
+
 def test_refuses_an_existing_file_of_that_name(tmp_path, image):
     _jobs(tmp_path).mkdir()
     (_jobs(tmp_path) / "r").write_text("x")
@@ -311,15 +350,70 @@ def test_text_that_utf8_cannot_store_is_refused(tmp_path, image):
              generated={"prompt": "bad \ud800"})
 
 
-def test_sizes_are_written_as_floats_and_numbers_keep_their_type(tmp_path, image):
+def test_sizes_are_written_as_floats(tmp_path, image):
     # As the CLI passes them: the stage records hash 60 and 60.0 differently.
     new_job(_jobs(tmp_path), "r", "flat-icon", image, width_mm=60, thickness_mm=3)
     job = load_job(_jobs(tmp_path) / "r")
     assert type(job["stages"]["flat"]["width_mm"]) is float
     assert b"width_mm: 60.0\n" in (_jobs(tmp_path) / "r" / JOB_FILE).read_bytes()
-    # A hand-edited integer is read back as an integer, not changed.
-    job["stages"]["flat"]["width_mm"] = 60
-    assert type(parse_job(dump_job(job))["stages"]["flat"]["width_mm"]) is int
+
+
+REAL_PARAMS = [("select", "tolerance"), ("colors", "width_mm"),
+               ("colors", "outline_width_mm"), ("colored_flat", "thickness_mm"),
+               ("colored_flat", "width_mm"), ("slice", "timeout_s")]
+
+
+@pytest.mark.parametrize(("stage", "key"), REAL_PARAMS)
+def test_a_hand_written_integer_in_a_float_parameter_is_read_as_a_float(base, stage, key):
+    text = dump_job(base).decode()
+    start = text.index(f"  {stage}:\n")
+    line = text.index(f"    {key}: null\n", start)
+    edited = text[:line] + f"    {key}: 7\n" + text[line + len(f"    {key}: null\n"):]
+    job = parse_job(edited.encode())
+    value = job["stages"][stage][key]
+    assert value == 7.0 and type(value) is float
+    assert f"    {key}: 7.0\n" in dump_job(job).decode()
+
+
+def test_float_parameters_are_the_cli_float_options():
+    # Every option the stage commands take as a float (and colors' float key) is real.
+    want = {("flat", "width_mm"), ("flat", "thickness_mm"), ("flat", "smooth_px"),
+            *REAL_PARAMS}
+    real = {(stage, key) for stage, fields in STAGE_FIELDS.items()
+            for key, f in fields.items() if f.real}
+    assert real == want
+    for fn, stage in ((cli.select, "select"), (cli.flat, "flat"), (cli.slice_, "slice")):
+        for name, param in inspect.signature(fn).parameters.items():
+            if name in STAGE_FIELDS[stage]:
+                floaty = param.annotation.__origin__ in (float, float | None)
+                assert STAGE_FIELDS[stage][name].real == floaty, (stage, name)
+
+
+def test_integer_parameters_stay_integers(base):
+    job = validate_job(_set(base, "stages.select.alpha_min", 200))
+    assert type(job["stages"]["select"]["alpha_min"]) is int
+
+
+def test_a_huge_integer_is_refused_not_raised(base):
+    with pytest.raises(JobError, match="too large"):
+        validate_job(_set(base, "stages.colors.width_mm", 10 ** 400))
+
+
+def test_a_huge_size_at_job_new_is_refused(tmp_path, image):
+    _refused(tmp_path, "too large", _jobs(tmp_path), "r", "flat-icon", image,
+             width_mm=10 ** 400)
+
+
+@pytest.mark.parametrize(("colors", "kw", "match"), [
+    (False, {"width_mm": 0}, "stages.flat.width_mm: width_mm must be a finite number above 0"),
+    (False, {"thickness_mm": -3}, "stages.flat.thickness_mm: thickness_mm must be"),
+    (True, {"width_mm": -1}, "stages.colors.width_mm: width_mm must be a finite number"),
+    (True, {"thickness_mm": 0}, "stages.colored_flat.thickness_mm: thickness_mm must be"),
+    (False, {"width_mm": float("inf")}, "finite"),
+])
+def test_job_new_refuses_sizes_the_stage_would_refuse(tmp_path, image, colors, kw, match):
+    _refused(tmp_path, re.escape(match), _jobs(tmp_path), "r", "flat-icon", image,
+             colors=colors, **kw)
 
 
 # --- save_job and the revision ----------------------------------------------------------
@@ -358,11 +452,115 @@ def test_save_refuses_fixed_changes(tmp_path, image, key, value):
         save_job(_jobs(tmp_path) / "r", job)
 
 
-def test_save_refuses_a_source_change(tmp_path, image):
+@pytest.mark.parametrize(("key", "value"), [("origin", "photo"), ("file", "source/x.png"),
+                                            ("sha256", "0" * 64)])
+def test_save_refuses_a_source_change(tmp_path, image, key, value):
     job = new_job(_jobs(tmp_path), "r", "flat-icon", image)
-    job["source"]["origin"] = "photo"
+    job["source"][key] = value
     with pytest.raises(JobError, match="source cannot change"):
         save_job(_jobs(tmp_path) / "r", job)
+
+
+def test_save_refuses_a_generated_field_change(tmp_path, image):
+    job = new_job(_jobs(tmp_path), "r", "flat-icon", image, origin="generated")
+    job["source"]["prompt"] = "something else"
+    with pytest.raises(JobError, match="source cannot change"):
+        save_job(_jobs(tmp_path) / "r", job)
+
+
+def test_save_refuses_a_mask_whose_file_is_not_there(tmp_path, image):
+    job = new_job(_jobs(tmp_path), "r", "flat-icon", image)
+    job["source"]["mask"] = {"file": "source/mask.png", "sha256": "0" * 64}
+    job["stages"]["select"]["mask"] = "source/mask.png"
+    with pytest.raises(JobError, match="is missing"):
+        save_job(_jobs(tmp_path) / "r", job)
+
+
+# --- set_mask --------------------------------------------------------------------------
+
+def _mask_file(tmp_path, name, value=255, size=(20, 10)):
+    path = tmp_path / "masks" / name
+    path.parent.mkdir(exist_ok=True)
+    im = Image.new("L", size, 0)
+    im.paste(value, (0, 0, 10, 10))
+    im.save(path)
+    return path
+
+
+def test_set_mask_after_job_new(tmp_path, image):
+    folder = _jobs(tmp_path) / "r"
+    new_job(_jobs(tmp_path), "r", "flat-icon", image, colors=True, origin="generated",
+            generated={"prompt": "p"})
+    before = load_job(folder)
+    m = _mask_file(tmp_path, "mask.png")
+    job = set_mask(folder, m)
+    digest = hashlib.sha256(m.read_bytes()).hexdigest()
+    assert job["revision"] == 2
+    assert job["source"]["mask"] == {"file": "source/mask.png", "sha256": digest}
+    assert job["stages"]["select"]["mask"] == "source/mask.png"
+    for key in ("file", "sha256", "origin", *GENERATED_FIELDS):
+        assert job["source"][key] == before["source"][key]
+    assert load_job(folder) == job
+    check_source(folder, job)
+
+
+def test_set_mask_keeps_earlier_masks_and_never_overwrites(tmp_path, image, mask):
+    folder = _jobs(tmp_path) / "r"
+    new_job(_jobs(tmp_path), "r", "flat-icon", image, mask=mask)
+    first = (folder / "source" / "mask.png").read_bytes()
+    corrected = _mask_file(tmp_path, "mask.png", value=0)       # same name, other pixels
+    job = set_mask(folder, corrected)
+    digest = hashlib.sha256(corrected.read_bytes()).hexdigest()
+    assert job["source"]["mask"]["file"] == f"source/mask-{digest[:12]}.png"
+    assert (folder / "source" / "mask.png").read_bytes() == first     # kept as it was
+    assert (folder / job["source"]["mask"]["file"]).read_bytes() == corrected.read_bytes()
+    # The first mask again: its file is reused, not copied.
+    again = set_mask(folder, mask)
+    assert again["source"]["mask"]["file"] == "source/mask.png" and again["revision"] == 3
+    assert sorted(p.name for p in (folder / "source").iterdir()) == [
+        "mask-" + digest[:12] + ".png", "mask.png", "roadie.png"]
+
+
+def test_set_mask_none_removes_it_but_keeps_the_file(tmp_path, image, mask):
+    folder = _jobs(tmp_path) / "r"
+    new_job(_jobs(tmp_path), "r", "flat-icon", image, mask=mask)
+    job = set_mask(folder, None)
+    assert job["source"]["mask"] is None and job["stages"]["select"]["mask"] is None
+    assert (folder / "source" / "mask.png").exists()
+
+
+def test_set_the_same_mask_twice_changes_nothing(tmp_path, image, mask):
+    folder = _jobs(tmp_path) / "r"
+    new_job(_jobs(tmp_path), "r", "flat-icon", image, mask=mask)
+    data = (folder / JOB_FILE).read_bytes()
+    assert set_mask(folder, mask)["revision"] == 1
+    assert (folder / JOB_FILE).read_bytes() == data
+
+
+@pytest.mark.parametrize(("make", "match"), [
+    (lambda t: _mask_file(t, "small.png", size=(5, 5)), "mask size"),
+    (lambda t: _mask_file(t, "grey.png", value=128), "only 0 and 255"),
+    (lambda t: _mask_file(t, "ROADIE.png"), "both named"),
+    (lambda t: _mask_file(t, "con.png"), "Windows reserves"),
+    (lambda t: t / "nope.png", "does not exist"),
+])
+def test_set_mask_refusals_change_nothing(tmp_path, image, make, match):
+    folder = _jobs(tmp_path) / "r"
+    new_job(_jobs(tmp_path), "r", "flat-icon", image)
+    before = sorted(p.relative_to(folder) for p in folder.rglob("*"))
+    data = (folder / JOB_FILE).read_bytes()
+    with pytest.raises(JobError, match=match):
+        set_mask(folder, make(tmp_path))
+    assert sorted(p.relative_to(folder) for p in folder.rglob("*")) == before
+    assert (folder / JOB_FILE).read_bytes() == data
+
+
+def test_set_mask_refuses_when_the_image_changed(tmp_path, image, mask):
+    folder = _jobs(tmp_path) / "r"
+    new_job(_jobs(tmp_path), "r", "flat-icon", image)
+    (folder / "source" / "roadie.png").write_bytes(b"other")
+    with pytest.raises(JobError, match="has changed"):
+        set_mask(folder, mask)
 
 
 def test_save_refuses_an_invalid_change(tmp_path, image):
@@ -459,6 +657,14 @@ def test_strict_validation(base, path, value, match):
         validate_job(_set(base, path, value))
 
 
+def test_source_missing_keys_come_before_values(base):
+    broken = _drop(_set(base, "source.sha256", "bad"), "source.origin")
+    with pytest.raises(JobError, match="source: missing key 'origin'"):
+        validate_job(broken)
+    with pytest.raises(JobError, match="source: unknown key 'colour'"):
+        validate_job(_set(_drop(base, "source.file"), "source.colour", 1))
+
+
 @pytest.mark.parametrize("path", ["schema", "revision", "source.sha256", "source.mask",
                                   "stages.slice", "stages.colors.merge",
                                   "stages.select.mask"])
@@ -493,7 +699,30 @@ def _write(tmp_path, text):
     (lambda t: t.replace("confirmations: []", "confirmations: &x []"), "anchors and aliases"),
     (lambda t: t.replace("stages:\n", "stages:\n  <<: {}\n"), "merge keys"),
     (lambda t: t.replace("revision: 1", "? [a]\n: 1"), "plain name"),
-    (lambda t: t.replace("revision: 1", "revision: !!python/int 1"), "not valid YAML"),
+    (lambda t: t.replace("revision: 1", "revision: !!python/int 1"), "explicit tags"),
+    (lambda t: t.replace("revision: 1", "revision: !!int 1"), "explicit tags"),
+    (lambda t: t.replace("name: r", "name: !!str r"), "explicit tags"),
+    (lambda t: t.replace("stages:\n", "stages: !!map\n"), "explicit tags"),
+    (lambda t: t.replace("confirmations: []", "confirmations: !foo []"), "explicit tags"),
+    # YAML 1.1 forms that SafeLoader would read as numbers or booleans are text here.
+    (lambda t: t.replace("revision: 1", "revision: 0:01"), "revision must be"),
+    (lambda t: t.replace("revision: 1", "revision: 01"), "revision must be"),
+    (lambda t: t.replace("revision: 1", "revision: 0x1"), "revision must be"),
+    (lambda t: t.replace("revision: 1", "revision: 0o1"), "revision must be"),
+    (lambda t: t.replace("revision: 1", "revision: 0b1"), "revision must be"),
+    (lambda t: t.replace("revision: 1", "revision: 1_0"), "revision must be"),
+    (lambda t: t.replace("revision: 1", "revision: +1"), "revision must be"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: 1:30", 1), "must be a number"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: 010", 1), "must be a number"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: 1_000.0", 1), "must be a number"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: 60.", 1), "must be a number"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: 6e1", 1), "must be a number"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: .inf", 1), "must be a number"),
+    (lambda t: t.replace("skip_tree_check: false", "skip_tree_check: no"), "true or false"),
+    (lambda t: t.replace("skip_tree_check: false", "skip_tree_check: False"),
+     "true or false"),
+    (lambda t: t.replace("skip_tree_check: false", "skip_tree_check: off"), "true or false"),
+    (lambda t: t.replace("    face: null", "    face: Null"), "must be one of"),
     (lambda t: t + "---\n" + t, "not valid YAML"),
     (lambda t: t.replace("skip_tree_check: false", "skip_tree_check: 2026-11-16"),
      "true or false"),
@@ -503,6 +732,20 @@ def test_hand_edits_are_read_strictly(tmp_path, base, edit, match):
     folder = _write(tmp_path, edit(dump_job(base).decode()))
     with pytest.raises(JobError, match=re.escape(match)):
         load_job(folder)
+
+
+def test_yaml_11_forms_in_text_stay_text(tmp_path, image):
+    job = new_job(_jobs(tmp_path), "g", "flat-icon", image, origin="generated")
+    text = dump_job(job).decode().replace("prompt: unknown", "prompt: 1:30").replace(
+        "edits: unknown", "edits: yes")
+    back = parse_job(text.encode())
+    assert back["source"]["prompt"] == "1:30" and back["source"]["edits"] == "yes"
+
+
+@pytest.mark.parametrize("text", ["60.0", "-0.5", "0.1", "1.0e+20", "1.0e-05", "5.0e-324"])
+def test_plain_decimal_floats_are_numbers(base, text):
+    data = dump_job(base).decode().replace("    width_mm: null", f"    width_mm: {text}", 1)
+    assert parse_job(data.encode())["stages"]["colored_flat"]["width_mm"] == float(text)
 
 
 def test_a_hand_edit_in_another_layout_is_accepted(tmp_path, base):

@@ -7,7 +7,9 @@
 - `source`: the image `file` (a path inside the job folder, `source/<name>`), its `sha256`,
   the owner-corrected selection `mask` (null, or `file` and `sha256`), and `origin` (photo,
   drawing, generated or unknown). For `generated` it also holds GENERATED_FIELDS, each a
-  string, `unknown` when the owner does not know it;
+  string, `unknown` when the owner does not know it. Only the mask may change after
+  `job new` (set_mask, for a mask corrected after the selection preview); the rest of
+  `source` is fixed;
 - `stages`: every stage of the recipe with all of its parameters (STAGE_FIELDS);
 - `confirmations`: a list, empty until `tdmg job confirm` exists (plan Task 8);
 - `revision`: 1 when made, bumped by every change (save_job).
@@ -15,16 +17,23 @@
 A stage parameter maps one to one onto the stage command's option of the same name (the
 CLI's snake_case spelling; for `colors`, the keys of tdmg.color_config). The value null
 means "not given": the command's own default applies, exactly as when the option is left
-out (selection and colors record a value given and the same value taken from a default
-differently, so a job must not spell out a default). A REQUIRED parameter has no default:
-null means "not set yet", and the stage cannot run until it is set (unset_required).
+out. A job must not spell out a default: the selection record's selection_id tells a
+value given from the same value taken from a rule default, and colors.json records each
+setting's source (flag, config, rule or default) beside the setting, though colors_id
+hashes the values only. A REQUIRED parameter has no default: null means "not set yet",
+and the stage cannot run until it is set (unset_required). A parameter the command takes
+as a float is a float in the job: an integer written by hand (60) is read as 60.0, since
+the records hash 60 and 60.0 differently.
 
 Slicer folders are not parameters: they are absolute paths on one machine, so they come
 from the environment when a stage runs, not from job.yaml.
 
-Reading is strict: unknown and missing keys, wrong types, YAML anchors, aliases, merge keys
-and duplicate keys are refused, and every path must be relative to the job folder
-(forward slashes, no `..`, no drive letter). Writing is canonical (dump_job): the same
+Reading is strict: unknown and missing keys, wrong types, YAML anchors, aliases, merge
+keys, duplicate keys and explicit tags (!!str) are refused, and every path must be
+relative to the job folder (forward slashes, no `..`, no drive letter). Only plain decimal
+numbers are numbers, only true/false are booleans and only null/~/nothing is null: YAML
+1.1's other forms (1:30, 010, 0x1f, 1_000, yes, on, dates) are text, which a number,
+boolean or null field then refuses. Writing is canonical (dump_job): the same
 content always gives the same bytes (with the PyYAML version pinned in uv.lock), and the
 file is written through tdmg.records (exclusive creates for a new job, an atomic rename for
 job.yaml).
@@ -38,6 +47,7 @@ import math
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import ClassVar
 
 import yaml
 from pydantic import ValidationError
@@ -46,6 +56,9 @@ from tdmg import paths
 from tdmg.color_config import KEYS as COLOR_KEYS
 from tdmg.color_config import ColorConfig
 from tdmg.color_slicing import FACE_CHOICES
+from tdmg.colored_flat import _number as colored_flat_size
+from tdmg.colors import check_width_mm as colors_width
+from tdmg.flat import _require_positive as flat_size
 from tdmg.recipes import CLASSES, recipe, resolve
 from tdmg.records import RecordError, replace_file, write_outputs
 from tdmg.selection import SelectionError, load_image, load_mask
@@ -53,15 +66,18 @@ from tdmg.selection import SelectionError, load_image, load_mask
 SCHEMA = "tdmg.job/1"
 JOB_FILE = "job.yaml"
 SOURCE_DIR = "source"
-NAME_MAX = 63
-NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
+NAME_MAX = 63           # the plan's pattern: one leading character and up to 62 more
+NAME_PATTERN = re.compile(rf"[a-z0-9][a-z0-9-]{{0,{NAME_MAX - 1}}}")
 NAME_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
 # Device names Windows reserves in any case and with any extension (CON, con.txt, ...).
 WINDOWS_RESERVED = frozenset({"con", "prn", "aux", "nul",
                               *(f"com{i}" for i in range(1, 10)),
                               *(f"lpt{i}" for i in range(1, 10))})
 # A source file keeps its own name when it is a plain portable one; otherwise job new
-# refuses it and says how to rename it.
+# refuses it and says how to rename it. 128 characters is a format choice, not a print
+# limit: below every common file system's 255-character name limit, and short enough that
+# <name>/source/<file> (at most 63 + 8 + 128 = 199 characters) leaves about 60 for the
+# jobs folder's own path inside Windows' classic 260-character path limit.
 SOURCE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 ORIGINS = ("photo", "drawing", "generated", "unknown")
 DEFAULT_ORIGIN = "unknown"
@@ -180,7 +196,11 @@ def _text(v) -> str | None:
 def _number(v) -> str | None:
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return f"must be a number, not {type(v).__name__}"
-    if not math.isfinite(v):
+    try:
+        finite = math.isfinite(v)
+    except OverflowError:            # an integer too large for a float
+        return "is too large a number"
+    if not finite:
         return f"must be a finite number, not {v}"
     return None
 
@@ -234,12 +254,29 @@ def _color_key(key: str) -> Check:
 
 
 class Field:
-    """A stage parameter: its type check, and whether it has no default (required)."""
+    """A stage parameter: its type check; whether it has no default (required); its
+    default; whether the command takes it as a float (`real`: an integer is read as a
+    float, as the command line would pass it); and `limit`, the stage's own range check
+    (raises ValueError), run where a value is set (check_limits), not on every read."""
 
-    def __init__(self, check: Check, *, required: bool = False, default=None):
+    def __init__(self, check: Check, *, required: bool = False, default=None,
+                 real: bool = False, limit: Callable[[object], object] | None = None):
+        # null is allowed where it means "not given" (default None) or "not set yet"
+        # (required); a parameter with another default must hold a value.
         self.check = _nullable(check) if required or default is None else check
         self.required = required
         self.default = default
+        self.real = real
+        self.limit = limit
+
+
+def _real(**kw) -> Field:
+    return Field(_number, real=True, **kw)
+
+
+def _named(check, name: str):
+    """A stage check that takes (name, value), as one that takes the value."""
+    return lambda v: check(name, v)
 
 
 # Each stage's parameters, named as the stage command's options (CLI snake_case; for
@@ -248,32 +285,34 @@ class Field:
 # hold machine paths (--slicer-dir, --prusaslicer-dir, --out and the input folders, which
 # the job runner supplies), --config (colors' file keys are parameters here) and flat's
 # --smooth-px under --colors (the stage refuses any value).
+REAL_COLOR_KEYS = ("outline_width_mm",)    # tdmg.color_config's float key
 STAGE_FIELDS: dict[str, dict[str, Field]] = {
     "select": {                                   # tdmg select
         "instructions": Field(_text),
         "remove_at": Field(_points, default=[]),
         "keep_at": Field(_points, default=[]),
-        "tolerance": Field(_number),
+        "tolerance": _real(),
         "alpha_min": Field(_integer),
         "mask": Field(_source_file_problem),
     },
     "flat": {                                     # tdmg flat (no --colors)
-        "width_mm": Field(_number, required=True),
-        "thickness_mm": Field(_number, required=True),
+        "width_mm": _real(required=True, limit=_named(flat_size, "width_mm")),
+        "thickness_mm": _real(required=True, limit=_named(flat_size, "thickness_mm")),
         "printer": Field(_text),
-        "smooth_px": Field(_number),
+        "smooth_px": _real(),
     },
     "colors": {                                   # tdmg colors, with its config keys
-        "width_mm": Field(_number, required=True),
-        **{key: Field(_color_key(key)) for key in COLOR_KEYS},
+        "width_mm": _real(required=True, limit=colors_width),
+        **{key: Field(_color_key(key), real=key in REAL_COLOR_KEYS) for key in COLOR_KEYS},
     },
     "colored_flat": {                             # tdmg flat --colors
-        "thickness_mm": Field(_number, required=True),
-        "width_mm": Field(_number),
+        "thickness_mm": _real(required=True,
+                              limit=_named(colored_flat_size, "thickness_mm")),
+        "width_mm": _real(),
         "printer": Field(_text),
     },
     "slice": {                                    # tdmg slice
-        "timeout_s": Field(_number),
+        "timeout_s": _real(),
         "skip_tree_check": Field(_boolean, default=False),
         "face": Field(_choice(tuple(FACE_CHOICES))),
     },
@@ -310,6 +349,19 @@ def required_stage(recipe_id: str, key: str) -> str | None:
         if field is not None and field.required:
             return stage
     return None
+
+
+def check_limits(job: dict) -> None:
+    """Run each set parameter's stage range check (Field.limit), so a value the stage
+    would refuse (a width of 0) is refused when it is set, not only when the stage runs."""
+    for stage in recipe(job["recipe"]).stages:
+        for key, f in stage_fields(job["recipe"], stage).items():
+            value = job["stages"][stage][key]
+            if f.limit is not None and value is not None:
+                try:
+                    f.limit(value)
+                except ValueError as e:
+                    raise JobError(f"stages.{stage}.{key}: {e}") from None
 
 
 def unset_required(job: dict) -> list[str]:
@@ -357,8 +409,10 @@ def _generated_value(v) -> str | None:
 
 
 def validate_job(job) -> dict:
-    """The job if it follows tdmg.job/1 exactly; JobError naming the first problem."""
+    """A copy of the job if it follows tdmg.job/1 exactly, with every integer in a float
+    parameter (Field.real) made a float; JobError naming the first problem."""
     _keys("job", job, TOP_KEYS)
+    job = copy.deepcopy(job)
     if job["schema"] != SCHEMA:
         raise JobError(f"job schema is {job['schema']!a}; this tdmg reads {SCHEMA}")
     problem = name_problem(job["name"])
@@ -390,15 +444,23 @@ def validate_job(job) -> dict:
 def _validate_source(source) -> None:
     if not isinstance(source, dict):
         raise JobError(f"source must be a mapping, not {type(source).__name__}")
-    origin = source.get("origin")
+    # Keys first (unknown, then missing), then values.
+    unknown = [k for k in source if k not in SOURCE_KEYS + GENERATED_FIELDS]
+    if unknown:
+        raise JobError(f"source: unknown key {unknown[0]!a} "
+                       f"(known: {', '.join(SOURCE_KEYS + GENERATED_FIELDS)})")
+    missing = [k for k in SOURCE_KEYS if k not in source]
+    if missing:
+        raise JobError(f"source: missing key {missing[0]!a}")
+    origin = source["origin"]
     _field("source.origin", origin, _choice(ORIGINS))
-    keys = SOURCE_KEYS + (GENERATED_FIELDS if origin == "generated" else ())
     if origin != "generated":
         extra = [k for k in GENERATED_FIELDS if k in source]
         if extra:
             raise JobError(f"source.{extra[0]} is for origin generated only "
                            f"(origin is {origin})")
-    _keys("source", source, keys)
+    _keys("source", source, SOURCE_KEYS + (GENERATED_FIELDS if origin == "generated"
+                                          else ()))
     _field("source.file", source["file"], _source_file_problem)
     _field("source.sha256", source["sha256"], _sha256)
     mask = source["mask"]
@@ -420,7 +482,10 @@ def _validate_stages(rid: str, stages, source: dict) -> None:
         fields = stage_fields(rid, stage)
         _keys(f"stages.{stage}", stages[stage], tuple(fields))
         for key, f in fields.items():
-            _field(f"stages.{stage}.{key}", stages[stage][key], f.check)
+            value = stages[stage][key]
+            _field(f"stages.{stage}.{key}", value, f.check)
+            if f.real and isinstance(value, int) and not isinstance(value, bool):
+                stages[stage][key] = float(value)     # as the command line passes it
     select = stages.get("select")
     if select is not None:
         mask_file = None if source["mask"] is None else source["mask"]["file"]
@@ -432,13 +497,20 @@ def _validate_stages(rid: str, stages, source: dict) -> None:
 # --- canonical YAML ----------------------------------------------------------------------
 
 class _StrictLoader(yaml.SafeLoader):
-    """SafeLoader that refuses anchors, aliases, merge keys, non-scalar and repeated keys."""
+    """SafeLoader that refuses anchors, aliases, explicit tags, merge keys, non-scalar and
+    repeated keys, and that resolves only plain forms: decimal integers, decimal floats
+    with a point, true/false and null/~/nothing. Every other plain scalar is text."""
+
+    yaml_implicit_resolvers: ClassVar[dict] = {}    # filled below, replacing SafeLoader's
 
     def compose_node(self, parent, index):
         event = self.peek_event()
         if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
             raise JobError("anchors and aliases (&name, *name) are not allowed; write each "
                            "value out")
+        if getattr(event, "tag", None) is not None:
+            raise JobError(f"explicit tags ({event.tag}) are not allowed; write the value "
+                           "plainly")
         return super().compose_node(parent, index)
 
     def construct_mapping(self, node, deep=False):
@@ -453,6 +525,18 @@ class _StrictLoader(yaml.SafeLoader):
                 raise JobError(f"duplicate key {key!a}")
             seen.add(key)
         return super().construct_mapping(node, deep=deep)
+
+
+# A subset of SafeLoader's resolvers, so whatever SafeDumper writes unquoted reads back the
+# same: SafeDumper quotes any text that SafeLoader would resolve to something else.
+for _tag, _pattern, _first in (
+        ("bool", r"true|false", "tf"),
+        ("int", r"-?(?:0|[1-9][0-9]*)", "-0123456789"),
+        ("float", r"-?(?:0|[1-9][0-9]*)\.[0-9]+(?:[eE][-+]?[0-9]+)?", "-0123456789"),
+        ("null", r"~|null|", ["~", "n", ""]),
+        ("merge", r"<<", "<")):
+    _StrictLoader.add_implicit_resolver(f"tag:yaml.org,2002:{_tag}",
+                                        re.compile(rf"^(?:{_pattern})$"), list(_first))
 
 
 class _Dumper(yaml.SafeDumper):
@@ -486,8 +570,9 @@ def parse_job(data: bytes) -> dict:
 
 def dump_job(job: dict) -> bytes:
     """job.yaml's canonical bytes: the same content always gives the same bytes. Validated
-    first, and checked to read back as the same content and the same bytes."""
-    validate_job(job)
+    first (validate_job, so an integer in a float parameter is written as a float), and
+    checked to read back as the same content and the same bytes."""
+    job = validate_job(job)
     data = _yaml(job)
     back = parse_job(data)
     if back != job or _yaml(back) != data:
@@ -544,7 +629,17 @@ def check_source(folder: str | Path, job: dict) -> None:
                            f"{digest}, job.yaml says {entry['sha256']}")
 
 
+# Fixed for the job's life: a different image, origin or class is a new job. Within
+# source, only the mask may change (set_mask).
 FIXED_KEYS = ("schema", "name", "class", "recipe", "source")
+CHANGEABLE_SOURCE_KEYS = ("mask",)
+
+
+def _fixed(job: dict, key: str):
+    value = job.get(key)
+    if key == "source" and isinstance(value, dict):
+        return {k: v for k, v in value.items() if k not in CHANGEABLE_SOURCE_KEYS}
+    return value
 
 
 def save_job(folder: str | Path, job: dict) -> dict:
@@ -552,18 +647,22 @@ def save_job(folder: str | Path, job: dict) -> dict:
 
     `job` must carry the revision on disk (it was read and changed in memory), or the
     change is refused as made against an older version. Name, class, recipe and source are
-    fixed: a different source or class is a new job. A job equal to the one on disk is not
-    written and keeps its revision."""
+    fixed, except source.mask, whose new file must already be in the folder with that
+    SHA-256 (set_mask puts it there). A job equal to the one on disk is not written and
+    keeps its revision."""
     folder = Path(folder)
     current = load_job(folder)
-    if job.get("revision") != current["revision"]:
+    job = validate_job(job)
+    if job["revision"] != current["revision"]:
         raise JobError(f"job {current['name']} is at revision {current['revision']}, not "
-                       f"{job.get('revision')!a}; read it again and redo the change")
-    changed = [k for k in FIXED_KEYS if job.get(k) != current[k]]
+                       f"{job['revision']!a}; read it again and redo the change")
+    changed = [k for k in FIXED_KEYS if _fixed(job, k) != _fixed(current, k)]
     if changed:
         raise JobError(f"a job's {', '.join(changed)} cannot change; make a new job")
     if job == current:
         return current
+    if job["source"]["mask"] != current["source"]["mask"]:
+        check_source(folder, job)
     new = copy.deepcopy(job)
     new["revision"] = current["revision"] + 1
     data = dump_job(new)
@@ -582,6 +681,89 @@ def _read_checked(path: Path, what: str) -> bytes:
     return path.read_bytes()
 
 
+def _read_mask(mask: Path, shape: tuple[int, int], image_name: str) -> tuple[bytes, str]:
+    """The mask file's bytes and SHA-256, if it is a black/white image of `shape` with a
+    plain name other than the image's."""
+    data = _read_checked(mask, "mask")
+    problem = source_name_problem(mask.name)
+    if problem:
+        raise JobError(f"mask {problem}")
+    if mask.name.lower() == image_name.lower():
+        raise JobError(f"the mask and the image are both named {image_name!a}; rename "
+                       "one of them")
+    try:
+        load_mask(mask, shape)
+    except SelectionError as e:
+        raise JobError(f"mask: {e}") from None
+    digest = hashlib.sha256(data).hexdigest()
+    if hashlib.sha256(mask.read_bytes()).hexdigest() != digest:
+        raise JobError(f"mask {mask} changed while it was read; try again")
+    return data, digest
+
+
+def _mask_destination(source_dir: Path, name: str, digest: str) -> tuple[str, bool]:
+    """(file name in source/, whether it must be written). A file already there is never
+    overwritten: an earlier mask may be covered by a confirmation. The mask's own name is
+    used if it is free or already holds these bytes; else <stem>-<12 hex of its SHA-256>
+    <suffix>; if that holds other bytes too, refused. Names are compared ignoring case, as
+    Windows and macOS do."""
+    present = {p.name.lower(): p for p in source_dir.iterdir()} if source_dir.is_dir() else {}
+    stem, dot, suffix = name.rpartition(".")
+    hashed = f"{stem}-{digest[:12]}.{suffix}" if dot else f"{name}-{digest[:12]}"
+    for candidate in (name, hashed):
+        problem = source_name_problem(candidate)
+        if problem:
+            raise JobError(f"mask {problem}")
+        existing = present.get(candidate.lower())
+        if existing is None:
+            return candidate, True
+        if existing.name == candidate and existing.is_file() and \
+                hashlib.sha256(existing.read_bytes()).hexdigest() == digest:
+            return candidate, False
+    raise JobError(f"source/ already holds other files named {name!a} and {hashed!a}; "
+                   "rename the mask")
+
+
+def set_mask(folder: str | Path, mask: str | Path | None) -> dict:
+    """Give the job an owner-corrected selection mask (or none, with None); return the job.
+
+    The mask must be a black/white image of the source image's size (tdmg select's
+    load_mask). It is copied into source/ (_mask_destination: earlier masks are kept,
+    never overwritten), then source.mask and stages.select.mask are set and the revision
+    bumped (save_job). The image, origin and generated fields do not change."""
+    folder = Path(folder)
+    job = load_job(folder)
+    check_source(folder, job)
+    if "select" not in job["stages"]:
+        raise JobError(f"recipe {job['recipe']} has no select stage to use a mask")
+    entry = None
+    copy_to = None
+    if mask is not None:
+        image = folder / job["source"]["file"]
+        try:
+            intake = load_image(image)
+        except SelectionError as e:
+            raise JobError(f"source image: {e}") from None
+        mask = Path(mask)
+        data, digest = _read_mask(mask, intake.rgba.shape[:2], image.name)
+        name, write = _mask_destination(folder / SOURCE_DIR, mask.name, digest)
+        entry = {"file": f"{SOURCE_DIR}/{name}", "sha256": digest}
+        copy_to = (folder / SOURCE_DIR / name, data) if write else None
+    new = copy.deepcopy(job)
+    new["source"]["mask"] = entry
+    new["stages"]["select"]["mask"] = None if entry is None else entry["file"]
+    validate_job(new)                       # refuse before copying anything
+    if copy_to is not None:
+        path, data = copy_to
+        try:
+            with open(path, "xb") as f:     # exclusive: never replaces a file
+                f.write(data)
+        except FileExistsError:
+            raise JobError(f"{path} appeared while the mask was being set; try again"
+                           ) from None
+    return save_job(folder, new)
+
+
 def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Path, *,
             colors: bool = False, mask: str | Path | None = None,
             origin: str = DEFAULT_ORIGIN, generated: dict[str, str] | None = None,
@@ -589,16 +771,23 @@ def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Pat
     """Make jobs_dir/name/ with the image (and mask) in source/ and job.yaml last; return
     the job.
 
-    Refused, with nothing written: a bad name; an existing jobs_dir/name (file or folder);
-    a class that resolve() refuses; an image that is missing or that tdmg select cannot
-    read; a mask that is not a black/white image of the image's size; a source file name
-    that is not plain (source_name_problem); generated fields for an origin other than
-    generated. width_mm and thickness_mm set the stage parameters that require them
-    (required_stage), as floats; left out, they stay null (not set yet). Generated fields
-    not given are "unknown"."""
+    Refused, with nothing written: a bad name; an existing jobs_dir/name (a job, an
+    incomplete job folder, a file, a link or junction); a class that resolve() refuses; an
+    image that is missing or that tdmg select cannot read; a mask that is not a black/white
+    image of the image's size; a source file name that is not plain (source_name_problem);
+    generated fields for an origin other than generated; a width or thickness the stage
+    would refuse (check_limits). width_mm and thickness_mm set the stage parameters that
+    require them (required_stage), as floats; left out, they stay null (not set yet).
+    Generated fields not given are "unknown"."""
     name = check_name(name)
     folder = Path(jobs_dir) / name
-    if folder.exists() or folder.is_symlink():
+    if folder.is_symlink() or folder.is_junction():
+        raise JobError(f"{folder} is a link (symlink or junction), not a job; remove it and "
+                       "try again")
+    if folder.is_dir() and not (folder / JOB_FILE).exists():
+        raise JobError(f"incomplete job folder {folder} (no {JOB_FILE}); delete it and try "
+                       "again")
+    if folder.exists():
         raise JobError(f"job {name} already exists ({folder}); choose another name")
     try:
         r = resolve(output_class, colors)
@@ -630,20 +819,7 @@ def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Pat
               "mask": None, "origin": origin}
     if mask is not None:
         mask = Path(mask)
-        mdata = _read_checked(mask, "mask")
-        problem = source_name_problem(mask.name)
-        if problem:
-            raise JobError(f"mask {problem}")
-        if mask.name.lower() == image.name.lower():
-            raise JobError(f"the mask and the image are both named {image.name!a}; rename "
-                           "one of them")
-        try:
-            load_mask(mask, intake.rgba.shape[:2])
-        except SelectionError as e:
-            raise JobError(f"mask: {e}") from None
-        mdigest = hashlib.sha256(mdata).hexdigest()
-        if hashlib.sha256(mask.read_bytes()).hexdigest() != mdigest:
-            raise JobError(f"mask {mask} changed while it was read; try again")
+        mdata, mdigest = _read_mask(mask, intake.rgba.shape[:2], image.name)
         files[f"{SOURCE_DIR}/{mask.name}"] = mdata
         source["mask"] = {"file": f"{SOURCE_DIR}/{mask.name}", "sha256": mdigest}
     if origin == "generated":
@@ -659,14 +835,22 @@ def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Pat
         stage = required_stage(r.id, key)
         if stage is None:
             raise JobError(f"recipe {r.id} has no stage that needs {key}")
+        problem = _number(value)
+        if problem:
+            raise JobError(f"{key} {problem}")
         # A float, as tdmg flat and tdmg colors receive it from the command line: the
         # records hash the number as JSON, where 60 and 60.0 differ.
         stages[stage][key] = float(value)
-    job = {"schema": SCHEMA, "name": name, "class": output_class, "recipe": r.id,
-           "source": source, "stages": stages, "confirmations": [], "revision": 1}
+    job = validate_job({"schema": SCHEMA, "name": name, "class": output_class,
+                        "recipe": r.id, "source": source, "stages": stages,
+                        "confirmations": [], "revision": 1})
+    check_limits(job)
     record = dump_job(job)
     try:
         write_outputs(folder, files, JOB_FILE, record, create_folder=True, subfolders=True)
     except RecordError as e:
         raise JobError(str(e)) from None
+    except FileExistsError:
+        raise JobError(f"cannot create {folder}: something is already there (a file, or a "
+                       "broken link or junction); remove it and try again") from None
     return job

@@ -29,7 +29,7 @@ Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous
 | `docs/plans/2026-11-13-color-slicing.md` | cited |  | doc | 4 |  | 4 |  | 11 |  |  |  | 5 |  | 30 |  |
 | `docs/plans/2026-11-14-test-strip.md` | cited |  | doc | 4 |  | 3 |  | 2 |  |  |  | 4 |  | 7 |  |
 | `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc | 2 |  | 2 |  | 7 |  |  |  | 4 |  | 3 |  |
-| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 1 |  |  |  | 2 | 1 | 4 | 1 |
+| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 2 |  |  |  | 2 | 1 | 4 | 1 |
 | `docs/plans/2026-11-16-restructure.md` | cited | active work, stays where it is | doc, status | 2 |  | 1 |  |  |  |  |  | 1 | 3 | 3 |  |
 | `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 1 | 4 |  |
 | `research/reviews/2026-11-09-codex` | cited |  | doc | 2 |  |  | 2 |  |  |  |  | 2 |  | 2 |  |
@@ -269,6 +269,7 @@ Active work, stays where it is.
 - `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1
+- `src/tdmg/jobs.py` (code): lines 2
 - `src/tdmg/recipes.py` (code): lines 9
 
 Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-16-restructure-design`.
