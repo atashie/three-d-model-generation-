@@ -98,7 +98,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–10 done; next Task 11 (owner-image test fixtures) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–11 done; next Task 12 (the make-print skill) |
 
 ## Machines
 
@@ -156,7 +156,9 @@ has been measured with calipers, and strength is not judged.
    status`), Task 8 (`tdmg job confirm`), Task 9 (`tdmg finish`; tested with fake
    slicers and temporary git repositories, not run on a real job; not yet reviewed by
    Codex), Task 10 (`tdmg library check` and `verify`; fake slicers only, not yet
-   reviewed). Next: Task 11 (owner-image test fixtures).
+   reviewed), Task 11 (owner-image test fixtures build their selection in a temporary
+   folder from `prints/<entry>/`, then `jobs/<job>/`, then `artifacts/selection-runs/`;
+   skip naming each path). Next: Task 12 (the make-print skill).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -215,9 +217,18 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–10 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
+- **State:** Tasks 0–11 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
   Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 onwards are not. Next is
-  Task 11, the owner-image test fixtures.
+  Task 12, the make-print skill.
+- **Task 11:** `tests/conftest.py` maps `roadie-tol30` to the library entry and job
+  `roadie-drop` (then its legacy folder) and `oddie` to its legacy folder only. A built
+  selection must have band-survival.txt's `selection_id` and results.txt's mask/cutout
+  hashes; a present source that differs is passed over with a warning, and the test
+  fails when none matches. On the PC (2026-11-17) the owner tests use the legacy folders
+  (no `prints/` or `jobs/` yet); a one-off check with a job made from the owner's
+  `roadie.png` and the recorded controls rebuilt `selection.json` byte for byte by both
+  the library and the job path. After Task 14 deletes Roadie's legacy folders, Roadie's
+  owner tests need `prints/roadie-drop/source/` (git-ignored) or skip.
 - **Task 10 decisions** (dated note in the plan's Task 10): "source unavailable" alone
   exits 0, since it is the normal state of every clone; `--require-private` makes it a
   failure for a copied `prints/`. After the spec review, `provenance.json` also holds

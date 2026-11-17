@@ -761,18 +761,17 @@ OWNER_PALETTE = {"roadie-tol30": ["#ed0707", "#ededed", "#eeef0a", "#5c271b"],
 
 
 @pytest.mark.parametrize("name", ["roadie-tol30", "oddie"])
-def test_owner_images(name, owner_selection, tmp_path):
-    from conftest import SELECTIONS
+def test_owner_images(name, owner_selection_dir, tmp_path):
     from test_color_cleanup import OWNER_CLEANUP
     from test_smooth_labels import OWNER_FINE_SHA, PARITY
 
     from tdmg.smoothing import smooth_labels
 
-    owner_selection(name)                     # skips if absent, fails if not the Task 1 files
+    selection = owner_selection_dir(name)     # skips if absent, fails if not the Task 1 files
     out = tmp_path / name
     t0 = time.perf_counter()
     # outline_color none: the Task 6 pins were measured with no outline handling.
-    rec = run(SELECTIONS / name, out, flags={"colors": 4, "extract": 4, "edges": "smooth",
+    rec = run(selection, out, flags={"colors": 4, "extract": 4, "edges": "smooth",
                                              "outline_color": "none"})
     dt = time.perf_counter() - t0
     labels = np.array(Image.open(out / "labels.png")).astype(np.int32)
@@ -1167,15 +1166,14 @@ OWNER_EXTRACTED = {
 
 
 @pytest.mark.parametrize("run_name", list(OWNER_RUNS))
-def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_path):
-    from conftest import SELECTIONS
+def test_owner_images_at_the_default_extraction(run_name, owner_selection_dir, tmp_path):
     from test_smooth_labels import PARITY
 
     name, flags, want = OWNER_RUNS[run_name]
-    owner_selection(name)                     # skips if absent, fails if not the Task 1 files
+    selection = owner_selection_dir(name)     # skips if absent, fails if not the Task 1 files
     out = tmp_path / run_name
     t0 = time.perf_counter()
-    rec = run(SELECTIONS / name, out, flags=flags)
+    rec = run(selection, out, flags=flags)
     dt = time.perf_counter() - t0
     ext = rec["extraction"]["palette"]
     o = rec["outline"]
@@ -1196,7 +1194,7 @@ def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_p
         want["stroke_width_px"], want["n_wide"], want["specks"]), PARITY
     assert rec["ready"] is want["ready"]
     if want["ready"]:
-        verify_colors(out, SELECTIONS / name)
+        verify_colors(out, selection)
     else:
         pairs = rec["shade_pairs"]
         assert rec["not_ready_reason"] == not_ready_reason(
@@ -1206,7 +1204,7 @@ def test_owner_images_at_the_default_extraction(run_name, owner_selection, tmp_p
             assert ("consider merge: [[3, 1]] (#395266 into #547e9d)"
                     in rec["not_ready_reason"])
         with pytest.raises(ColorsError, match="not ready"):
-            verify_colors(out, SELECTIONS / name)
+            verify_colors(out, selection)
     thin = [f"{e['hex']} {t:.1%}" for e, t in zip(ext, o["thinness"], strict=True)]
     print(f"\n{run_name}: make_colors {dt:.2f} s; thinness {thin}; final {want['final']}; "
           f"ready {rec['ready']}; {rec['not_ready_reason']}; colors_id {rec['colors_id']}")
