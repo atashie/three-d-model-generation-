@@ -375,6 +375,21 @@ and public answer, and the source hash and origin.
 **Tests:** a tampered file, a missing source, a missing `COMPLETE`, and verify with a
 changed rule value.
 
+**Note added 2026-11-17 (implementation; code `src/tdmg/library.py`, tests
+`tests/test_library.py`):**
+- `check` judges the files against `COMPLETE` (which lists every file, `provenance.json`
+  among them), and the records against each other: `STAGED` against `COMPLETE`, and the
+  Task 9 `entry_problems` against `purge.json`.
+- `source/` or `private/` missing entirely is "unavailable" (a clone has neither) and
+  exits 0, with a note per entry; `--require-private` makes it exit 1, for a copy of
+  `prints/` that should hold them. A file missing from one that is present is damage.
+- An entry without `COMPLETE`, a `.staging-NAME` folder, or a verified entry whose job or
+  tombstone is still in `jobs/` is "incomplete": run `tdmg finish NAME` again. Exit 1.
+- `verify` compares what `provenance.json` holds (stage-record hashes, extracted checks
+  and verdicts, the confirmation's identity, file hashes and verdicts); `slice.json`'s
+  hash is not compared (it covers G-code hashes). Exit 0 identical, 1 differs, 2 cannot
+  run.
+
 ### Task 11: owner-image test fixtures
 
 `tests/conftest.py`'s owner fixtures build their selection in `tmp_path` from:

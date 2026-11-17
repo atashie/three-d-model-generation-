@@ -1151,7 +1151,8 @@ def test_card_wording(tmp_path, tmp_path_factory, slicers, repo):
     card = (tmp_path / "prints" / R1 / "card.md").read_text(encoding="utf-8")
     assert "\n    # not a heading\n    *not emphasis* and `ticks`\n" in card
     assert "tdmg has measured no printed dimension" in card
-    assert "A planned `tdmg library verify` (not built yet)" in card
+    assert f"`tdmg library verify {R1}` re-runs it under the current code" in card
+    assert "not built yet" not in card
     assert "has not been checked" in card and "layer height 0.2 mm" in card
     assert "Use the same printer" not in card
 

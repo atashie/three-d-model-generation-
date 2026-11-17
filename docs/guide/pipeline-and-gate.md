@@ -169,6 +169,32 @@ library was not checked). A known limit: a file written into `jobs/.purging-NAME
 the final check and before the deletion is deleted without being listed; nothing else
 knows that path while it exists, and `job new` refuses the name.
 
+**Checking the library (restructure Task 10).** `tdmg library check [NAME]` checks every
+entry of `prints/` (or one): `COMPLETE` is present and in form, every file is the one it
+lists (SHA-256), no listed file is missing and no unlisted file or folder is there;
+`STAGED`, `purge.json`, `provenance.json` and `job.yaml` agree with `COMPLETE`. `source/`
+and `private/` are git-ignored, so a fresh clone has neither: one of them missing entirely
+is a note ("source unavailable", "private files unavailable"), not damage, and the exit
+code stays 0, since that is the normal state of a clone. Give `--require-private` after
+copying `prints/` to another machine, where they should have come along: then a missing
+one is exit 1. A file in them that is missing or different is damage. An entry without
+`COMPLETE`, a leftover `prints/.staging-NAME/`, or an entry whose job (or its tombstone)
+is still in `jobs/` is incomplete: an interrupted `finish`; run `tdmg finish NAME` again.
+Exit 1 on damage or an incomplete entry; 2 when it cannot check. `tdmg library verify NAME
+--slicer-dir DIR [--prusaslicer-dir DIR]` runs the entry's `job.yaml` and `source/` again
+under the current code and rules, in a scratch folder, and compares it with
+`provenance.json`: every stage done, each stage record's SHA-256 (not `slice.json`'s,
+whose G-code hashes change with the timestamp), each stage's algorithm, verdicts and
+checks (status, rule, threshold), the slice identity, and the confirmed printable files
+(by SHA-256, so byte for byte) and their verdicts. The stages' other files and the
+checks' measured values cannot be compared (the library does not keep them), and it says
+so. It also lists what changed since the historical run: code commit, versions,
+libraries, rules (with each changed value), algorithm ids and profiles, and whether
+PrusaSlicer was configured then (the slice results depend on it). It writes nothing into
+`prints/` and never rewrites the historical verdict. Exit 0 when identical, 1 when it
+differs (information, not an error), 2 when it cannot run (the entry does not check, the
+source is not on this machine, or a stage cannot run).
+
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.

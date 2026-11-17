@@ -126,6 +126,45 @@ those G-code files. So:
   of the G-code file it names in the same folder (gcode_binding_problems).
 state.json and .lock are not compared: state.json holds slice.json's SHA-256 (the plan's
 note to Task 9), and .lock is the lock.
+
+**tdmg library check [NAME]** (check_library, check_entry; plan Task 10). Every folder of
+PRINTS_DIR (or NAME and its staging folder) is one of:
+- ok: COMPLETE in form; every file it lists present with that SHA-256, none missing, no
+  unlisted file and no folder that holds no listed file; STAGED lists the same files
+  (but STAGED and purge.json) with the same SHA-256s, so a COMPLETE written again over an
+  edited file is caught; entry_problems against purge.json; job.yaml's source hashes are
+  COMPLETE's and provenance.json's source is job.yaml's. A LOCAL_ONLY folder (source/,
+  private/: git-ignored) missing entirely is "unavailable", not damage: a clone has
+  neither. A file missing from one that is present is damage (a partial copy);
+- incomplete: no COMPLETE, a leftover .staging-NAME, or a verified entry whose job (or its
+  tombstone) is still in the jobs folder (library_jobs_dir, or --jobs-dir): what an
+  interrupted finish leaves; the remedy is to run tdmg finish NAME again;
+- damaged: anything else wrong, including a folder whose name is not a job name. Plain
+  files beside the entries are not looked at.
+Exit codes (tdmg.cli): 0 when every entry is ok; 1 when one is incomplete or damaged; 2
+when it cannot check. "Source unavailable" alone exits 0: it is the normal state of every
+clone (git does not carry source/ or private/), so making it a failure would make check
+fail on every machine but one and teach people to ignore exit 1. It is printed as a note
+on each entry and counted in the summary, and verify refuses without the source.
+--require-private makes it exit 1, for checking a copy of prints/ that should hold them.
+
+**tdmg library verify NAME** (verify, compare_with_provenance; plan Task 10). The entry
+must check ok and have its source. Its job.yaml and source/ are copied into a scratch
+folder (tempfile) and run with run_job and the given Machine; nothing is written into the
+library. Compared with provenance.json (which holds stage-record hashes and extracted
+checks and verdicts, not the records): every stage done; each stage record's SHA-256 but
+slice.json's (it covers G-code hashes, which vary with the slicer's timestamp line); each
+record's algorithm, verdicts (verdicts_in) and checks (check_results: status, rule,
+threshold, by path and id); from the confirmation, the slice identity, the confirmed
+printable files' SHA-256s (byte for byte; so private/ need not be on this machine) and
+their verdicts. Not compared, and said so (NOT_COMPARED): the stages' other files, and the
+checks' measured values. what_changed lists the causes outside the outputs: code commit
+(and uncommitted changes), tdmg version, uv.lock, Python, platform, key libraries,
+rules_sha256 and each used rule's default, unit and range, algorithm ids and profiles.
+Whether PrusaSlicer was configured is read from provenance.json (the slice profiles hold
+its pin exactly when it was: prusaslicer_then) and said, with a note when this run
+differs. A stage that fails (a slicer not given, say) or an entry that cannot be read is
+CannotVerify: exit 2; differences exit 1; none exit 0.
 """
 
 from __future__ import annotations
@@ -795,8 +834,8 @@ def card(state: State, public: bool, today: str) -> str:
     # Verdict
     L += ["", "## Historical verdict", "",
           (f"At commit `{state.git.commit}`, under the rules then in force (rules SHA-256 "
-          f"`{rules_sha256()}`). A planned `tdmg library verify` (not built yet) will re-run it "
-          "under later code and report differences; it will not rewrite this."), ""]
+          f"`{rules_sha256()}`). `tdmg library verify {job['name']}` re-runs it under the "
+          "current code and rules and reports the differences; it never rewrites this."), ""]
     for label, section in _route_sections(route, face, slice_rec):
         verdict, cert = section.get("verdict"), section.get("certification") or ""
         why = cert.removeprefix(str(verdict)).lstrip(": ")
@@ -1720,3 +1759,432 @@ def _resume_tombstone(run: _Run) -> None:
     _differs_note(run, record)
     delete_job(run.tombstone)
     run.say(f"7. purged {_p(run.folder)}: the owner said {_words(record['owner_said'])}")
+
+
+# --- tdmg library check (restructure plan Task 10) ----------------------------------------------
+
+# The git-ignored parts of an entry (.gitignore prints/*/source/, prints/*/private/): absent
+# from a fresh clone, so one of these folders missing entirely is "not on this machine",
+# not damage.
+LOCAL_ONLY = (SOURCE_DIR, PRIVATE_DIR)
+OK, INCOMPLETE, DAMAGED = "ok", "incomplete", "damaged"
+
+
+def library_jobs_dir() -> Path | None:
+    """The jobs folder library check looks in for a job whose finish did not end (the
+    checkout's jobs/; None outside a checkout). Tests point it at a temporary folder
+    (tests/conftest.py)."""
+    try:
+        return jobs.default_jobs_dir()
+    except JobError:
+        return None
+
+
+@dataclass
+class EntryCheck:
+    """One library entry (or a leftover staging folder), as library check found it."""
+    name: str
+    state: str                          # OK, INCOMPLETE or DAMAGED
+    problems: list[str]                 # what is wrong (INCOMPLETE or DAMAGED)
+    unavailable: list[str]              # LOCAL_ONLY folders not on this machine
+
+
+def _again(name: str) -> str:
+    return f"run tdmg finish {name} again to resume it"
+
+
+def check_entry(entry: Path, jobs_dir: Path | None = None) -> EntryCheck:
+    """library check of one entry (module docstring, "tdmg library check")."""
+    name = entry.name
+    try:
+        _no_links(entry, "library entry")
+    except LibraryError as e:
+        return EntryCheck(name, DAMAGED, [str(e)], [])
+    if not (entry / COMPLETE_FILE).exists():
+        why = (f"it was published, but its finish stopped before writing {COMPLETE_FILE}"
+               if (entry / STAGED_FILE).is_file() else "an interrupted tdmg finish left it")
+        return EntryCheck(name, INCOMPLETE, [f"no {COMPLETE_FILE}: {why}; {_again(name)}"],
+                          [])
+    listed = _manifest_files(entry / COMPLETE_FILE, COMPLETE_SCHEMA)
+    if listed is None:
+        return EntryCheck(name, DAMAGED, [(f"{COMPLETE_FILE} is not a {COMPLETE_SCHEMA} "
+                                          "manifest (damaged or edited)")], [])
+    try:
+        files, folders = _walk(entry)
+    except LibraryError as e:
+        return EntryCheck(name, DAMAGED, [str(e)], [])
+    files = [f for f in files if f != COMPLETE_FILE]
+    absent = [top for top in LOCAL_ONLY if not (entry / top).exists()
+              and any(rel.startswith(top + "/") for rel in listed)]
+    out = []
+    for rel in sorted(listed):
+        top = rel.split("/")[0]
+        if rel in files:
+            if _sha(_read(entry / rel)) != listed[rel]:
+                out.append(f"{_p(rel)}: its SHA-256 is not the one {COMPLETE_FILE} lists "
+                           "(changed or damaged)")
+        elif top not in absent:
+            out.append(f"{_p(rel)}: listed in {COMPLETE_FILE} but missing"
+                       + (f" ({top}/ is here, so this is not a clone without it: a partial "
+                          "copy, or a deleted file)" if top in LOCAL_ONLY else ""))
+    out += [f"{_p(rel)}: not listed in {COMPLETE_FILE} (an extra file)" for rel in files
+            if rel not in listed]
+    parents = {p.as_posix() for rel in listed for p in Path(rel).parents if str(p) != "."}
+    out += [f"{_p(rel)}/: a folder that holds no file {COMPLETE_FILE} lists"
+            for rel in folders if rel not in parents]
+    out += _consistency(entry, name, listed)
+    if out:
+        return EntryCheck(name, DAMAGED, out, absent)
+    for left in ([] if jobs_dir is None else
+                 [jobs_dir / name, jobs_dir / f"{jobs.TOMBSTONE_PREFIX}{name}"]):
+        if left.exists():
+            return EntryCheck(name, INCOMPLETE, [
+                (f"the entry verifies, but {_p(left)} is still there: the finish stopped "
+                f"before its purge ended; {_again(name)}")], absent)
+    return EntryCheck(name, OK, [], absent)
+
+
+def _consistency(entry: Path, name: str, listed: dict) -> list[str]:
+    """The entry's records agree with COMPLETE and with each other: STAGED lists what
+    COMPLETE lists (but STAGED and purge.json) with the same SHA-256s; entry_problems
+    (provenance.json, the printable files, the stage-record hashes, job.yaml and source
+    against purge.json); and the source hashes job.yaml names are those COMPLETE lists, and
+    provenance.json's source is job.yaml's. Judged from COMPLETE's list, so a folder not on
+    this machine is no problem here."""
+    out = []
+    staged = _manifest_files(entry / STAGED_FILE, STAGED_SCHEMA) \
+        if (entry / STAGED_FILE).is_file() else None
+    if staged is None:
+        out.append(f"no {STAGED_SCHEMA} {STAGED_FILE}")
+    else:
+        want = set(listed) - {STAGED_FILE, PURGE_FILE}
+        out += [f"{_p(rel)}: in {STAGED_FILE}, not in {COMPLETE_FILE}"
+                for rel in sorted(set(staged) - want)]
+        out += [f"{_p(rel)}: in {COMPLETE_FILE}, not in {STAGED_FILE}"
+                for rel in sorted(want - set(staged))]
+        out += [f"{_p(rel)}: {COMPLETE_FILE}'s SHA-256 is not {STAGED_FILE}'s (changed after "
+                "the rebuild was checked)" for rel in sorted(set(staged) & want)
+                if staged[rel] != listed[rel]]
+    try:
+        record = _purge_record(entry, name)
+        if record is None:
+            return [*out, f"no {PURGE_SCHEMA} {PURGE_FILE} for job {name}"]
+        out += entry_problems(entry, name, record)
+        job = parse_job(_read(entry / JOB_FILE)) if (entry / JOB_FILE).is_file() else None
+        prov = _json_or_none(_read(entry / PROVENANCE_FILE)) \
+            if (entry / PROVENANCE_FILE).is_file() else None
+    except (LibraryError, JobError) as e:
+        return [*out, str(e)]
+    except (KeyError, TypeError, ValueError, AttributeError) as e:  # a malformed record
+        return [*out, (f"the entry's records cannot be read together ({type(e).__name__}: "
+                      f"{e})")]
+    if job is not None:
+        for src in [job["source"]] + ([job["source"]["mask"]] if job["source"]["mask"]
+                                      else []):
+            if listed.get(src["file"]) != src["sha256"]:
+                out.append(f"{JOB_FILE} names {_p(src['file'])} with a SHA-256 that is not "
+                           f"the one {COMPLETE_FILE} lists")
+        if isinstance(prov, dict) and prov.get("source") != job["source"]:
+            out.append(f"{PROVENANCE_FILE}'s source is not {JOB_FILE}'s")
+    return out
+
+
+def _staging_leftover(name: str) -> EntryCheck:
+    return EntryCheck(f"{STAGING_PREFIX}{name}", INCOMPLETE, [
+        (f"an interrupted tdmg finish of job {name} left this staging folder (it stopped "
+        f"before the publish; nothing of the job was deleted); {_again(name)}")], [])
+
+
+def check_library(name: str | None = None, *, prints_dir: Path | None = None,
+                  jobs_dir: Path | None = None) -> list[EntryCheck]:
+    """tdmg library check [NAME]: every entry of the library (or the one named) and every
+    leftover staging folder (of NAME, when named). LibraryError when it cannot check: no
+    such library folder or entry, a bad name, a link in the library folder's path."""
+    prints_dir = Path(os.path.abspath(default_prints_dir() if prints_dir is None
+                                      else prints_dir))
+    jobs_dir = library_jobs_dir() if jobs_dir is None else Path(os.path.abspath(jobs_dir))
+    _no_links(prints_dir, "prints folder")
+    if not prints_dir.is_dir():
+        raise LibraryError(f"there is no library folder {_p(prints_dir)}; give --prints-dir")
+    if name is not None:
+        try:
+            name = check_name(name)
+        except JobError as e:
+            raise LibraryError(str(e)) from None
+        entry, staging = prints_dir / name, prints_dir / f"{STAGING_PREFIX}{name}"
+        out = [check_entry(entry, jobs_dir)] if entry.is_dir() or entry.is_symlink() else []
+        if staging.exists() or staging.is_symlink():
+            out.append(_staging_leftover(name))
+        if not out:
+            raise LibraryError(f"no library entry {name} in {_p(prints_dir)}")
+        return out
+    out = []
+    for path in sorted(prints_dir.iterdir(), key=lambda p: p.name):
+        if not (path.is_dir() or path.is_symlink()):
+            continue                    # a file beside the entries (a README, say)
+        if path.name.startswith(STAGING_PREFIX):
+            out.append(_staging_leftover(path.name.removeprefix(STAGING_PREFIX)))
+        elif jobs.name_problem(path.name) is not None:
+            out.append(EntryCheck(path.name, DAMAGED, [
+                ("not a library entry: its name is not a job name, and tdmg finish makes no "
+                "such folder")], []))
+        else:
+            out.append(check_entry(path, jobs_dir))
+    return out
+
+
+def unavailable_text(top: str) -> str:
+    """The note for a git-ignored folder that is not on this machine."""
+    if top == SOURCE_DIR:
+        return (f"source unavailable: {SOURCE_DIR}/ is git-ignored and is not on this "
+                "machine (a clone, or a copy of prints/ without it); tdmg library verify "
+                "needs it")
+    return (f"private files unavailable: {PRIVATE_DIR}/ is git-ignored and is not on this "
+            "machine; the printable files are on the machine that finished the print")
+
+
+# --- tdmg library verify (restructure plan Task 10) ---------------------------------------------
+
+class CannotVerify(LibraryError):
+    """library verify cannot run (exit 2): no such entry, the entry does not check, its
+    source is not on this machine, or a stage could not run."""
+
+
+def _head(repo: Path | None) -> str:
+    """The code checkout's commit now, saying when tracked files have uncommitted changes;
+    'unknown (...)' outside a git checkout."""
+    if repo is None or not (Path(repo) / ".git").exists():
+        return "unknown (not running from a git checkout)"
+    try:
+        commit = _git(Path(repo), "rev-parse", "HEAD").decode("ascii").strip()
+        dirty = _git(Path(repo), "status", "--porcelain=v1", "--untracked-files=no").strip()
+    except LibraryError as e:
+        return f"unknown ({e})"
+    return commit + (" (with uncommitted changes to tracked files)" if dirty else "")
+
+
+def _uv_lock(repo: Path | None) -> str | None:
+    lock = None if repo is None else Path(repo) / "uv.lock"
+    return _sha(lock.read_bytes()) if lock is not None and lock.is_file() else None
+
+
+def what_changed(prov: dict, job: dict, machine: Machine, repo: Path | None) -> list[str]:
+    """What differs between the historical run (provenance.json) and this one, outside the
+    outputs: the code commit, tdmg's version, uv.lock, Python and platform, the key
+    libraries, the rules (rules_sha256, and the default, unit and range of each rule the
+    records used), each stage's algorithm ids and profiles (with the slicer pins, and so
+    whether PrusaSlicer is configured)."""
+    out = []
+
+    def differs(what, was, now):
+        if was != now:
+            out.append(f"{what}: was {json.dumps(was, sort_keys=True)}, now "
+                       f"{json.dumps(now, sort_keys=True)}")
+    code, env = prov.get("code") or {}, prov.get("environment") or {}
+    head = _head(repo)
+    if head != code.get("git_commit"):
+        out.append(f"code commit: was {code.get('git_commit')}, now {head}")
+    differs("tdmg version", code.get("tdmg_version"), __version__)
+    differs("uv.lock SHA-256", code.get("uv_lock_sha256"), _uv_lock(repo))
+    differs("Python", env.get("python"), platform.python_version())
+    differs("platform", env.get("platform"), platform.platform())
+    was_libs, now_libs = env.get("libraries") or {}, _libraries()
+    for dist in sorted(set(was_libs) | set(now_libs)):
+        differs(f"library {dist}", was_libs.get(dist), now_libs.get(dist))
+    differs("rules_sha256 (every rule's id, default, unit and range)",
+            prov.get("rules_sha256"), rules_sha256())
+    registry = load_rules()
+    for rid, was in sorted((prov.get("rules") or {}).items()):
+        r = registry.get(rid)
+        if r is None:
+            out.append(f"rule {rid}: in rules/ then, not now")
+            continue
+        now = {"default": r.default, "unit": r.unit,
+               "range": None if r.range is None else list(r.range)}
+        for key in ("default", "unit", "range"):
+            differs(f"rule {rid} {key}", (was or {}).get(key), now[key])
+    for s in recipe(job["recipe"]).stages:
+        hist = (prov.get("stages") or {}).get(s) or {}
+        differs(f"stage {s} algorithm ids", hist.get("algorithms_expected"),
+                stage_algorithms(job, s))
+        differs(f"stage {s} profiles", (prov.get("profiles") or {}).get(s),
+                stage_profiles(job, s, machine) or None)
+    return out
+
+
+def prusaslicer_then(prov: dict) -> bool:
+    """Whether the historical run had PrusaSlicer configured: its slice stage's profiles
+    hold the PrusaSlicer pin exactly when it was (tdmg.job_runner.stage_profiles)."""
+    return "prusaslicer_pin_sha256" in ((prov.get("profiles") or {}).get("slice") or {})
+
+
+def _keyed(items, key) -> dict:
+    return {key(d): d for d in (items if isinstance(items, list) else [])
+            if isinstance(d, dict)}
+
+
+def _check_differences(stage: str, was, now: list[dict]) -> list[str]:
+    def key(d):
+        return (str(d.get("path")), str(d.get("id")))
+    a, b = _keyed(was, key), _keyed(now, key)
+    out = []
+    for k in sorted(set(a) | set(b)):
+        path, cid = k
+        if k not in b:
+            out.append(f"{stage} check {cid} at {path}: in the historical record, not now")
+        elif k not in a:
+            out.append(f"{stage} check {cid} at {path}: new now ({b[k].get('status')})")
+        else:
+            for field in ("status", "rule", "threshold"):
+                if a[k].get(field) != b[k].get(field):
+                    out.append(f"{stage} check {cid} at {path}: {field} was "
+                               f"{json.dumps(a[k].get(field))}, now "
+                               f"{json.dumps(b[k].get(field))}")
+    return out
+
+
+def _verdict_differences(stage: str, was, now: list[dict]) -> list[str]:
+    def key(d):
+        return str(d.get("path"))
+    a, b = _keyed(was, key), _keyed(now, key)
+    out = []
+    for p in sorted(set(a) | set(b)):
+        if p not in a or p not in b or a[p].get("value") != b[p].get("value"):
+            then = json.dumps(a[p].get("value")) if p in a else "absent"
+            now_ = json.dumps(b[p].get("value")) if p in b else "absent"
+            out.append(f"{stage} verdict at {p}: was {then}, now {now_}")
+    return out
+
+
+NOT_COMPARED = (
+    ("the stage folders' other files (previews, outlines, G-code and the rest): the library "
+    "keeps only the confirmed route's printable files, and the job's own files were deleted "
+    "by the purge"),
+    (f"slice/{SLICE_RECORD} byte for byte: provenance.json holds its SHA-256, which covers "
+    "the G-code hashes, and those change with the slicer's timestamp line "
+    f"({REPEATABILITY}); its identity, algorithm, verdicts and checks are compared instead"),
+    ("check measurements (a check's measured value): provenance.json holds each check's id, "
+    "status, rule and threshold only"),
+)
+
+
+def verify(name: str, *, machine: Machine | None = None, prints_dir: Path | None = None,
+           repo: Path | None = None, say: Callable[[str], None] = print) -> list[str]:
+    """tdmg library verify NAME (module docstring): run the entry's job.yaml and source/
+    under the current code and rules in a scratch folder; return the differences from the
+    historical run ([] when identical under the comparison rule). Nothing is written into
+    the library. CannotVerify when it cannot run."""
+    machine = Machine() if machine is None else machine
+    repo = code_checkout() if repo is None else Path(repo)
+    try:
+        name = check_name(name)
+    except JobError as e:
+        raise CannotVerify(str(e)) from None
+    prints_dir = Path(os.path.abspath(default_prints_dir() if prints_dir is None
+                                      else prints_dir))
+    entry = prints_dir / name
+    if not entry.is_dir():
+        raise CannotVerify(f"no library entry {name} in {_p(prints_dir)}")
+    found = check_entry(entry)
+    if found.state != OK:
+        raise CannotVerify(f"{_p(entry)} does not check ({'; '.join(found.problems[:6])}); "
+                           f"see tdmg library check {name}")
+    if SOURCE_DIR in found.unavailable:
+        raise CannotVerify(f"source unavailable: {_p(entry / SOURCE_DIR)} is not on this "
+                           "machine (it is git-ignored, so a clone has none). verify runs "
+                           "the job from job.yaml and source/: copy source/ from the "
+                           "machine that finished the print, then run tdmg library check")
+    prov = _json(_read(entry / PROVENANCE_FILE))
+    job_bytes = _read(entry / JOB_FILE)
+    try:
+        job = parse_job(job_bytes)
+    except JobError as e:
+        raise CannotVerify(f"{JOB_FILE} in {_p(entry)}: {e}") from None
+    then, now = prusaslicer_then(prov), machine.prusaslicer_configured()
+    say(f"historical run: commit {(prov.get('code') or {}).get('git_commit')}, finished "
+        f"{prov.get('finished')}, PrusaSlicer "
+        + ("configured (F6.portability was checked)" if then else
+           "not configured (F6.portability was UNKNOWN)"))
+    confirmed = (prov.get("confirmation") or {}).get("entry") or {}
+    say(f"historical verdict: {json.dumps(confirmed.get('verdicts'), sort_keys=True)} "
+        f"(route {confirmed.get('route')}" + (f", face {confirmed.get('face')}"
+                                              if confirmed.get("face") else "") + ")")
+    if then != now:
+        say("note: this run has PrusaSlicer " + ("configured" if now else "not configured")
+            + ", unlike the historical run, so F6.portability and the slice record will "
+            "differ; " + ("give --prusaslicer-dir" if then else
+                          "leave out --prusaslicer-dir and unset $TDMG_PRUSASLICER_DIR")
+            + " to compare like for like")
+    changed = what_changed(prov, job, machine, repo)
+    say("changed since the historical run (these are causes, not differences in the "
+        "outputs):" if changed else "unchanged since the historical run: the code commit, "
+        "versions, libraries, rules, algorithm ids and profiles")
+    for line in changed:
+        say(f"  {line}")
+    with tempfile.TemporaryDirectory(prefix="tdmg-verify-", ignore_cleanup_errors=True) as tmp:
+        scratch = Path(tmp) / name
+        scratch.mkdir()
+        (scratch / JOB_FILE).write_bytes(job_bytes)
+        shutil.copytree(entry / SOURCE_DIR, scratch / SOURCE_DIR)
+        say(f"running the job in a scratch folder ({_p(scratch)}) from job.yaml and "
+            "source/ ...")
+        try:
+            events, status = run_job(scratch, machine)
+        except JobError as e:
+            raise CannotVerify(f"the job cannot run: {e}") from None
+        failed = [f"stage {ev.stage} failed: {ev.message}" for ev in events
+                  if ev.action == "failed"]
+        if failed:
+            raise CannotVerify("; ".join(failed) + " (it cannot run under this code on this "
+                               "machine: a slicer folder not given, say)")
+        return compare_with_provenance(scratch, prov, status)
+
+
+def compare_with_provenance(scratch: Path, prov: dict, status) -> list[str]:
+    """The differences between a run of the entry's job (scratch) and provenance.json:
+    each stage done; each stage record's SHA-256 (but slice.json's) and algorithm; each
+    stage's verdicts and checks (status, rule, threshold); and, from the confirmation,
+    the slice record's identity, the confirmed route's printable files (by SHA-256, so
+    byte for byte) and their verdicts."""
+    out = []
+    hist = prov.get("stages") or {}
+    for s in status.stages:
+        h = hist.get(s.stage) or {}
+        if s.state != DONE:
+            out.append(f"stage {s.stage} is {s.state} now" + (f" ({s.note})" if s.note
+                                                               else "")
+                       + "; it was done in the historical run")
+            continue
+        data = _read(scratch / s.stage / STAGE_RECORDS[s.stage])
+        rec = _json_or_none(data)
+        rec = rec if isinstance(rec, dict) else {}
+        if s.stage != "slice" and _sha(data) != h.get("record_sha256"):
+            out.append(f"{s.stage}/{STAGE_RECORDS[s.stage]}: not byte for byte the "
+                       "historical record (its SHA-256 differs)")
+        if rec.get("algorithm") != h.get("algorithm"):
+            out.append(f"stage {s.stage} algorithm: was {h.get('algorithm')}, now "
+                       f"{rec.get('algorithm')}")
+        out += _verdict_differences(s.stage, h.get("verdicts"), verdicts_in(rec))
+        out += _check_differences(s.stage, h.get("checks"), check_results(rec))
+    if any(s.state != DONE for s in status.stages):
+        return [*out, "the printable files cannot be compared: a stage is not done"]
+    entry = (prov.get("confirmation") or {}).get("entry") or {}
+    covers = entry.get("covers") if isinstance(entry.get("covers"), dict) else {}
+    try:
+        cover = confirmations.print_cover(scratch, load_job(scratch), entry.get("route"),
+                                          entry.get("face"))
+    except JobError as e:
+        return [*out, f"the printable files cannot be bound: {e}"]
+    if cover.slice_id != entry.get("slice_id"):
+        out.append(f"the slice record's identity: was {entry.get('slice_id')}, now "
+                   f"{cover.slice_id}")
+    for rel in sorted(set(cover.covers) | set(covers)):
+        if cover.covers.get(rel) != covers.get(rel):
+            out.append(f"printable file {rel}: not byte for byte the historical one (its "
+                       "SHA-256 differs)" if rel in cover.covers and rel in covers else
+                       f"printable file {rel}: " + ("not made now" if rel in covers
+                                                    else "made now, not then"))
+    if cover.verdicts != entry.get("verdicts"):
+        out.append(f"the printed model's verdicts: were {entry.get('verdicts')}, now "
+                   f"{cover.verdicts}")
+    return out

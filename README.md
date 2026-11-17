@@ -44,6 +44,9 @@ uv run tdmg job confirm NAME --subject print --face down --owner-said "THE OWNER
                                           # record the owner's words (selection|colors|print)
 uv run tdmg finish NAME --public no --purge-owner-said "THE OWNER'S WORDS" --slicer-dir artifacts/tools/orcaslicer-2.5.0
                                           # rebuild and check, copy into prints/NAME/, then delete jobs/NAME/
+uv run tdmg library check [NAME]          # every hash of every library entry; source/ missing is a note
+uv run tdmg library verify NAME --slicer-dir artifacts/tools/orcaslicer-2.5.0
+                                          # run the entry again under today's code and rules; report changes
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

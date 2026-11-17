@@ -26,11 +26,15 @@ REAL_DEFAULT_PRINTS_DIR = tdmg.library.default_prints_dir
 @pytest.fixture(autouse=True)
 def _library_outside_the_checkout(tmp_path_factory, monkeypatch):
     """No test reads or writes the checkout's prints/: tdmg job new's default library and
-    tdmg finish's default prints folder are a fresh, empty temporary folder. So finished
-    prints in the checkout (prints/roadie-drop/, say) cannot change what a test sees."""
+    tdmg finish's (and tdmg library check's and verify's) default prints folder are a
+    fresh, empty temporary folder, and the jobs folder library check looks in is another.
+    So finished prints and jobs in the checkout (prints/roadie-drop/, say) cannot change
+    what a test sees."""
     library = tmp_path_factory.mktemp("prints-library")
+    no_jobs = tmp_path_factory.mktemp("library-jobs")
     monkeypatch.setattr(tdmg.cli, "default_library", lambda: library)
     monkeypatch.setattr(tdmg.library, "default_prints_dir", lambda: library)
+    monkeypatch.setattr(tdmg.library, "library_jobs_dir", lambda: no_jobs)
 
 
 @pytest.fixture(scope="session")

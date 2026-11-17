@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-17 (restructure Task 9: `tdmg finish`).
+**Last updated:** 2026-11-17 (restructure Task 10: `tdmg library check` and `verify`).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -62,6 +62,19 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   `private/` (git-ignored). Resumes after an interruption. Spec-review fixes done
   (2026-11-17). Tested with fake slicers only: **not yet run on a real job** (that
   is Task 14, Roadie).
+- **`tdmg library check [NAME]`** and **`tdmg library verify NAME --slicer-dir DIR`**
+  (restructure Task 10, `src/tdmg/library.py`): check verifies every entry's files
+  against `COMPLETE` (none changed, missing or extra) and its records against each other
+  (`STAGED`, `purge.json`, `provenance.json`, `job.yaml`); `source/` or `private/` missing
+  entirely is a note ("source unavailable": a clone has neither), exit 0 unless
+  `--require-private`; an entry without `COMPLETE`, a `.staging-NAME` folder or a job left
+  in `jobs/` is incomplete (run `tdmg finish NAME` again); exit 1 on damage or incomplete.
+  verify runs the entry's `job.yaml` and `source/` under today's code and rules in a
+  scratch folder, compares with `provenance.json` (record hashes but `slice.json`'s,
+  algorithms, verdicts, checks, slice identity, printable-file hashes) and lists what
+  changed (commit, versions, rules, algorithms, profiles, PrusaSlicer configured or not);
+  exit 0 identical, 1 differs, 2 cannot run. Tested with fake slicers only: **not yet run
+  on a real entry** (there is none until Task 14).
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
@@ -85,7 +98,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–9 done; next Task 10 (`tdmg library check` and `verify`) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–10 done; next Task 11 (owner-image test fixtures) |
 
 ## Machines
 
@@ -99,10 +112,10 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-17, PC, restructure Task 9, tests independent of prints/):**
-  `uv run pytest -q` gave 3246 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
-  account cannot create symlinks; the junction tests ran); `tests/test_finish.py` also
-  passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
+- **Latest local validation (2026-11-17, PC, restructure Task 10):** `uv run pytest -q`
+  gave 3271 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
+  account cannot create symlinks; the junction tests ran); `tests/test_library.py` (26
+  tests) also passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the
   PC. A session started before the install needs a restart or that folder on PATH; in
@@ -142,7 +155,8 @@ has been measured with calipers, and strength is not judged.
    Task 6 (`job.yaml` and `tdmg job new`), Task 7 (`tdmg job set`, `job run`, `job
    status`), Task 8 (`tdmg job confirm`), Task 9 (`tdmg finish`; tested with fake
    slicers and temporary git repositories, not run on a real job; not yet reviewed by
-   Codex). Next: Task 10 (`tdmg library check` and `verify`).
+   Codex), Task 10 (`tdmg library check` and `verify`; fake slicers only, not yet
+   reviewed). Next: Task 11 (owner-image test fixtures).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -201,9 +215,14 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–9 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
+- **State:** Tasks 0–10 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
   Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 onwards are not. Next is
-  Task 10, `tdmg library check` and `verify`.
+  Task 11, the owner-image test fixtures.
+- **Task 10 decisions** (dated note in the plan's Task 10): "source unavailable" alone
+  exits 0, since it is the normal state of every clone; `--require-private` makes it a
+  failure for a copied `prints/`. `verify` cannot compare `slice.json` byte for byte (its
+  hash in `provenance.json` covers G-code hashes), the stages' other files or the checks'
+  measured values; it says so on every run.
 - **Task 9 decisions:** the purge record is its own file, `purge.json`, written after the
   publish and before `COMPLETE`, so `COMPLETE` is last and lists it, and `provenance.json`
   stays the file that was staged and checked (accepted after the spec review; dated

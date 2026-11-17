@@ -7,7 +7,8 @@ for review) and `strip` (the two calibration strips, built, gated and sliced); `
 job.yaml (tdmg.jobs); `job set` changes its parameters, `job run` runs its stages,
 `job status` shows where it stands and `job confirm` records the owner's confirmation
 (tdmg.job_runner). `finish` moves a confirmed print into the library, prints/, and purges
-the job (tdmg.library)."""
+the job; `library check` checks the library's entries and `library verify` runs one again
+under the current code and rules (tdmg.library)."""
 
 import inspect
 from pathlib import Path
@@ -61,13 +62,22 @@ from tdmg.jobs import (
     DEFAULT_ORIGIN,
     JOB_FILE,
     ORIGINS,
+    SOURCE_DIR,
     JobError,
     default_jobs_dir,
     job_dir,
     new_job,
     unset_required,
 )
-from tdmg.library import LibraryError, RebuildDiffers, finish
+from tdmg.library import (
+    NOT_COMPARED,
+    LibraryError,
+    RebuildDiffers,
+    check_library,
+    finish,
+    unavailable_text,
+    verify,
+)
 from tdmg.paths import REPO_ROOT
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
@@ -1287,6 +1297,146 @@ def finish_command(
         typer.echo(f"error: unexpected {type(e).__name__} in tdmg finish: {e}; run it "
                    "again to resume", err=True)
         raise typer.Exit(2) from None
+
+
+library_app = typer.Typer(help="The print library, prints/: check its entries, and verify "
+                               "one under the current code and rules.",
+                          no_args_is_help=True)
+app.add_typer(library_app, name="library")
+PrintsDir = Annotated[Path | None, typer.Option(
+    "--prints-dir", help="The library folder; default prints/ in the source checkout.")]
+
+
+@library_app.command("check")
+def library_check(
+    name: Annotated[str | None, typer.Argument(
+        help="The entry to check (PRINTS_DIR/NAME); every entry when left out.")] = None,
+    require_private: Annotated[bool, typer.Option(
+        "--require-private",
+        help="Treat source/ or private/ not on this machine as a failure (exit 1): use it "
+             "after copying prints/ to another machine, where they should have come "
+             "along.")] = False,
+    prints_dir: PrintsDir = None,
+    jobs_dir: Annotated[Path | None, typer.Option(
+        "--jobs-dir", help="Where to look for a job whose finish did not end; default "
+                           "jobs/ in the source checkout.")] = None,
+) -> None:
+    """Check the library's entries: each has COMPLETE, and every file
+    is the one COMPLETE lists (SHA-256), with no file missing or extra;
+    STAGED, purge.json, provenance.json and job.yaml agree with
+    COMPLETE; the source is present.
+
+    source/ and private/ are git-ignored, so a clone has neither: a
+    folder of them missing entirely is reported as unavailable (not on
+    this machine), not as damage. A file in them that is missing or
+    different is damage.
+
+    An entry without COMPLETE, a leftover .staging-NAME folder, or an
+    entry whose job (or its .purging- tombstone) is still in the jobs
+    folder is incomplete: an interrupted tdmg finish; run tdmg finish
+    NAME again.
+
+    Exit codes:
+      0  every entry is complete and every hash matches. source/ or
+         private/ not on this machine is a note, not a failure (it is
+         the normal state of a clone), unless --require-private
+      1  an entry is damaged (a file changed, missing or extra; COMPLETE
+         not in its form; the records disagree) or incomplete
+      2  cannot check: no library folder, no entry NAME, a bad name
+    """
+    try:
+        found = check_library(name, prints_dir=prints_dir, jobs_dir=jobs_dir)
+    except LibraryError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    except Exception as e:  # noqa: BLE001 - a bug: say so, and exit 2 like any refusal
+        typer.echo(f"error: unexpected {type(e).__name__} in tdmg library check: {e}",
+                   err=True)
+        raise typer.Exit(2) from None
+    failed = False
+    for c in found:
+        missing = [unavailable_text(top) for top in c.unavailable]
+        word = {"ok": "ok", "incomplete": "INCOMPLETE", "damaged": "DAMAGED"}[c.state]
+        if c.state == "ok" and missing and require_private:
+            word = "UNAVAILABLE"
+        typer.echo(f"{c.name}: {word}")
+        for p in c.problems:
+            typer.echo(f"  {p}")
+        for m in missing:
+            typer.echo(f"  note: {m}")
+        failed |= c.state != "ok" or (require_private and bool(missing))
+    if not found:
+        typer.echo("the library has no entries")
+    typer.echo(f"{len(found)} checked: {sum(c.state == 'ok' for c in found)} ok, "
+               f"{sum(c.state == 'incomplete' for c in found)} incomplete, "
+               f"{sum(c.state == 'damaged' for c in found)} damaged; "
+               f"{sum(SOURCE_DIR in c.unavailable for c in found)} without their source on "
+               "this machine")
+    if failed:
+        raise typer.Exit(1)
+
+
+@library_app.command("verify")
+def library_verify(
+    name: Annotated[str, typer.Argument(help="The entry (PRINTS_DIR/NAME).")],
+    slicer_dir: SlicerDir = None,
+    prusaslicer_dir: PrusaDir = None,
+    prints_dir: PrintsDir = None,
+) -> None:
+    """Run an entry's job again under the current code and rules, in a
+    scratch folder, from its job.yaml and source/, and report how it
+    differs from the historical run that provenance.json records.
+
+    Compared: every stage done; each stage record's SHA-256 (byte for
+    byte; not slice.json's, whose G-code hashes change with the
+    slicer's timestamp); each stage's algorithm, verdicts and checks
+    (status, rule, threshold); the slice record's identity; the
+    confirmed route's printable files (SHA-256, so byte for byte) and
+    their verdicts. Not compared: the stages' other files (the job's
+    own were purged) and the checks' measured values (provenance.json
+    does not hold them). It also says what changed since then: code
+    commit, versions, libraries, rules, algorithm ids, profiles.
+
+    The slice stage's results depend on whether PrusaSlicer is
+    configured; verify says which the historical run had. Give the
+    --slicer-dir (and --prusaslicer-dir) the slice stage needs. Nothing
+    is written into the library; the historical verdict is never
+    rewritten.
+
+    Exit codes:
+      0  identical under the comparison rule
+      1  it differs (information, not an error: the code or the rules
+         may have changed; see what changed)
+      2  cannot run: no such entry, the entry does not check (tdmg
+         library check), the source is not on this machine, or a stage
+         could not run (a slicer folder not given, say)
+    """
+    try:
+        differences = verify(name, machine=Machine(slicer_dir, prusaslicer_dir),
+                             prints_dir=prints_dir, say=typer.echo)
+    except (LibraryError, JobError, RecordError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    except Exception as e:  # noqa: BLE001 - a bug: say so, and exit 2 like any refusal
+        typer.echo(f"error: unexpected {type(e).__name__} in tdmg library verify: {e}",
+                   err=True)
+        raise typer.Exit(2) from None
+    if differences:
+        typer.echo(f"differs from the historical run ({len(differences)}):")
+        for d in differences:
+            typer.echo(f"  {d}")
+    else:
+        typer.echo("identical to the historical run under the comparison rule")
+    for text in NOT_COMPARED:
+        typer.echo(f"  not compared: {text}")
+    if differences:
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
