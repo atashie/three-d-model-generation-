@@ -736,7 +736,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 - `README.md` (doc): lines 63
 - `docs/STATUS.md` (status): lines 71
 - `docs/design/README.md` (doc): lines 6
-- `docs/plans/2026-11-16-restructure-design.md` (record): lines 51, 182
+- `docs/plans/2026-11-16-restructure-design.md` (record): lines 51, 183
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 151
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 214, 222, 232, 279, 280
 - `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1, 6
@@ -746,7 +746,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 - `CLAUDE.md` (doc): lines 14
 - `README.md` (doc): lines 66
 - `docs/PLAN.md` (doc): lines 6, 196
-- `docs/plans/2026-11-16-restructure-design.md` (record): lines 182, 192, 206
+- `docs/plans/2026-11-16-restructure-design.md` (record): lines 183, 193, 207
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 167
 - `research/reviews/2026-11-09-codex/prompt-phase0.txt` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/codex-review.txt` (record): lines 13
@@ -757,7 +757,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 - `docs/PLAN.md` (doc): lines 164, 197
 - `docs/STATUS.md` (status): lines 8, 70, 186
 - `docs/design/README.md` (doc): lines 6
-- `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 181
+- `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 182
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 112, 151
 - `pyproject.toml` (config-citing): lines 75, 76
 - `research/README.md` (record): lines 1
@@ -787,7 +787,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 - `CLAUDE.md` (doc): lines 14
 - `README.md` (doc): lines 66
 - `docs/PLAN.md` (doc): lines 6, 196
-- `docs/plans/2026-11-16-restructure-design.md` (record): lines 182, 192, 205
+- `docs/plans/2026-11-16-restructure-design.md` (record): lines 183, 193, 206
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 167
 - `research/reviews/2026-11-09-codex/prompt-phase0.txt` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/codex-review.txt` (record): lines 13
@@ -896,7 +896,7 @@ References this script could not tie to one record: a built path that stops at a
 | `docs/plans/2026-11-16-restructure.md` | 107 | `research/reviews/2026-11-10-flat` | names no record in the tree |
 | `docs/plans/2026-11-16-restructure.md` | 108 | `research/verification/2026-11-10-flat-geometry` | names no record in the tree |
 | `docs/plans/2026-11-16-restructure.md` | 159 | `research/README.md` | names no record in the tree |
-| `docs/plans/2026-11-16-restructure.md` | 423 | `research/reviews/2026-11-16-restructure/` | names no record in the tree |
+| `docs/plans/2026-11-16-restructure.md` | 426 | `research/reviews/2026-11-16-restructure/` | names no record in the tree |
 | `research/README.md` | 27 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `research/README.md` | 28 | `research/reviews/2026-11-10-selection/` | names no record in the tree |
 | `research/README.md` | 29 | `research/reviews/2026-11-10-slicer/` | names no record in the tree |

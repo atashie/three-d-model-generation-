@@ -612,12 +612,12 @@ def _waits(job: dict, status: Status) -> list[str]:
                 waits.append(f"the color plan is not ready ({s.record['not_ready_reason']}): "
                              "choose merges from colors/regions.png and set them, e.g. "
                              f"tdmg job set {job['name']} \"colors.merge=[[FROM, INTO]]\"")
-    # The print instructions wait until a current print confirmation answers them: R1's
-    # single route; R2's ams route, on tdmg's chosen face when it chose one.
+    # The print instructions wait until any current print confirmation answers them (any
+    # route, any face): the owner has printed. A face other than tdmg's choice is shown on
+    # the confirmation's own line ("printed face X; tdmg chose Y").
     rec = by["slice"].record if "slice" in by and by["slice"].state == DONE else None
     colored = rec is not None and "faces" in rec
-    if rec is not None and not status.current("print", "ams" if colored else "single",
-                                              rec.get("preferred_face") if colored else None):
+    if rec is not None and not status.current("print"):
         if colored:                             # a colored slice: its own instructions
             waits.append(f"to print (files in colored_flat/): {rec['print']}"
                          if rec["print"] != NO_FACE_PRINTABLE else rec["print"])

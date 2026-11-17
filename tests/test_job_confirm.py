@@ -579,20 +579,20 @@ def test_status_notes_a_printed_face_tdmg_did_not_choose(tmp_path, slicers):
                     "up").exit_code == 0
     status = _status(folder)
     assert "printed face up; tdmg chose down" in status
-    # A print of another face than tdmg's choice does not answer the print wait.
-    assert "to print (files in colored_flat/)" in status
+    # Any current print confirmation answers the print wait, whatever its face; the
+    # remark above shows the difference.
+    assert "to print (files in colored_flat/)" not in status
     assert _confirm(folder, "--subject", "print", "--owner-said", WORDS, "--face",
                     "down").exit_code == 0
-    status = _status(folder)
-    assert "to print (files in colored_flat/)" not in status
-    assert status.count("tdmg chose") == 1
+    assert _status(folder).count("tdmg chose") == 1
 
 
-def test_a_glue_confirmation_does_not_answer_the_ams_wait(tmp_path, slicers):
+def test_any_current_print_confirmation_answers_the_print_wait(tmp_path, slicers):
     folder = _r2(tmp_path, slicers)
+    assert "no face is PRINTABLE" in _status(folder)       # the ams wait (fake slicer)
     assert _confirm(folder, "--subject", "print", "--route", "glue", "--owner-said", WORDS,
                     "--accept-not-certified").exit_code == 0
-    assert "no face is PRINTABLE" in _status(folder)       # the ams wait (fake slicer)
+    assert "no face is PRINTABLE" not in _status(folder)
 
 
 def test_a_stale_entry_waits_unless_a_matching_one_is_current(tmp_path, slicers):

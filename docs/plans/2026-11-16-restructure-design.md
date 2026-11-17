@@ -145,7 +145,8 @@ owner's words only when the owner gave them in the conversation.
    tree clean (so a commit pins the code).
 3. **Stage** into `prints/.staging-NAME/`: the recipe's required outputs, `job.yaml`,
    `source/` (image and any mask), `card.md`, `provenance.json`. The required set comes
-   from the recipe, not from a manifest.
+   from the recipe, not from a manifest. *(Amended 2026-11-17: the staged printable files
+   are the confirmed route's `Route.required_files` only; see the plan's Task 9 note.)*
 4. **Prove the rebuild** (decision 10): in a scratch folder, run the job from the staged
    `job.yaml` and `source/` only, at the same commit, with the pinned slicers. Compare
    by the classes measured in migration phase 0: deterministic files byte-identical;

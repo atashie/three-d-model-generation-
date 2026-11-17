@@ -346,8 +346,11 @@ and public answer, and the source hash and origin.
 - The card names the confirmed route and face, says only that route was confirmed, and
   notes "printed face X; tdmg chose Y" when the owner's face differs from the slice
   record's `preferred_face`.
+- When several current print entries share the route and face, `finish` uses the latest
+  of them, and the card quotes that entry's words. Every current entry is copied into
+  `provenance.json` verbatim.
 - The confirming entry is copied verbatim from `job.yaml` into the library
-  (`provenance.json` or the card): `job.yaml` is git-ignored and can be hand-edited, so
+  (`provenance.json` and the card): `job.yaml` is git-ignored and can be hand-edited, so
   the library copy is the lasting record of the owner's words.
 - `state.json` holds `slice.json`'s SHA-256, which varies with the G-code timestamps:
   leave `state.json` out of the rebuild comparison.
