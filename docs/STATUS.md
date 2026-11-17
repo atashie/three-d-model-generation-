@@ -56,9 +56,11 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   stages `prints/.staging-NAME/` (`job.yaml`, `source/`, the confirmed route's printable
   files, `provenance.json`, `card.md`); rebuilds the job in a scratch folder and compares
   every file, allowing only the measured G-code timestamp lines and `slice.json`'s G-code
-  hashes; renames it to `prints/NAME`, writes `purge.json` then `COMPLETE`; deletes
-  `jobs/NAME`. Printable files in `files/` (public) or `private/` (git-ignored). Resumes
-  after an interruption. Tested with fake slicers only: **not yet run on a real job** (that
+  hashes; renames it to `prints/NAME`, writes `purge.json` then `COMPLETE`; checks the
+  entry against `purge.json`, renames `jobs/NAME` to `jobs/.purging-NAME`, checks it holds
+  exactly what was listed, and deletes it. Printable files in `files/` (public) or
+  `private/` (git-ignored). Resumes after an interruption. Spec-review fixes done
+  (2026-11-17). Tested with fake slicers only: **not yet run on a real job** (that
   is Task 14, Roadie).
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
@@ -97,8 +99,8 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-17, PC, restructure Task 9):** `uv run pytest -q`
-  gave 3222 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
+- **Latest local validation (2026-11-17, PC, restructure Task 9 spec-review fixes):**
+  `uv run pytest -q` gave 3241 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
   account cannot create symlinks; the junction tests ran); `tests/test_finish.py` also
   passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
@@ -204,7 +206,11 @@ words and dates, are in [docs/design/](design/README.md).
   Task 10, `tdmg library check` and `verify`.
 - **Task 9 decisions:** the purge record is its own file, `purge.json`, written after the
   publish and before `COMPLETE`, so `COMPLETE` is last and lists it, and `provenance.json`
-  stays the file that was staged and checked. The rebuild compares every file of every
+  stays the file that was staged and checked (accepted after the spec review; dated
+  notes in the plan's Task 9 step 7 and design section 5 step 7). After the review the
+  deletion goes through a tombstone `jobs/.purging-NAME`, the entry is checked against
+  `purge.json` before anything is deleted, a `STAGED` manifest binds a resumed publish,
+  unreadable folders stop finish, and git renames are judged by both paths. The rebuild compares every file of every
   stage folder (not only the records and printable files); only the slice.json rows of
   the repeatability record's table may differ, so the "inferred, not measured" `.failed`
   forms (top-level `plate_1.gcode.failed`, `face-up/plate_1.gcode.failed`, a top-level

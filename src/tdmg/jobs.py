@@ -93,6 +93,9 @@ OLD_SCHEMA = "tdmg.job/1"
 READ_SCHEMAS = (OLD_SCHEMA, SCHEMA)
 JOB_FILE = "job.yaml"
 SOURCE_DIR = "source"
+# tdmg finish renames jobs/NAME to jobs/<TOMBSTONE_PREFIX>NAME before deleting it
+# (tdmg.library.purge_job). No job name starts with ".", so the two never collide.
+TOMBSTONE_PREFIX = ".purging-"
 NAME_MAX = 63           # the plan's pattern: one leading character and up to 62 more
 NAME_PATTERN = re.compile(rf"[a-z0-9][a-z0-9-]{{0,{NAME_MAX - 1}}}")
 NAME_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
@@ -967,7 +970,8 @@ def set_mask(folder: str | Path, mask: str | Path | None) -> dict:
 def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Path, *,
             colors: bool = False, mask: str | Path | None = None,
             origin: str = DEFAULT_ORIGIN, generated: dict[str, str] | None = None,
-            width_mm: float | None = None, thickness_mm: float | None = None) -> dict:
+            width_mm: float | None = None, thickness_mm: float | None = None,
+            prints_dir: str | Path | None = None) -> dict:
     """Make jobs_dir/name/ with the image (and mask) in source/ and job.yaml last; return
     the job.
 
@@ -976,7 +980,10 @@ def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Pat
     image that is missing or that tdmg select cannot read; a mask that is not a black/white
     image of the image's size; a source file name that is not plain (source_name_problem);
     generated fields for an origin other than generated; a width or thickness the stage
-    would refuse (check_limits). width_mm and thickness_mm set the stage parameters that
+    would refuse (check_limits); a name whose purge by tdmg finish is unfinished (its
+    tombstone jobs_dir/TOMBSTONE_PREFIX+name exists); and, given prints_dir, a name that is
+    already a print in the library (prints_dir/name, finished or not). width_mm and
+    thickness_mm set the stage parameters that
     require them (required_stage), as floats; left out, they stay null (not set yet).
     Generated fields not given are "unknown"."""
     name = check_name(name)
@@ -989,6 +996,13 @@ def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Pat
                        "again")
     if folder.exists():
         raise JobError(f"job {name} already exists ({folder}); choose another name")
+    tombstone = Path(jobs_dir) / f"{TOMBSTONE_PREFIX}{name}"
+    if tombstone.exists() or tombstone.is_symlink():
+        raise JobError(f"tdmg finish has not finished purging job {name} ({tombstone} "
+                       f"exists); run tdmg finish {name} again first, or choose another name")
+    if prints_dir is not None and (Path(prints_dir) / name).exists():
+        raise JobError(f"{name} is already a print in the library ({Path(prints_dir) / name})"
+                       "; choose another name")
     try:
         r = resolve(output_class, colors)
     except ValueError as e:

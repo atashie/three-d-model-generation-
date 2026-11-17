@@ -159,6 +159,14 @@ owner's words only when the owner gave them in the conversation.
 7. **Purge:** list everything under `jobs/NAME`, require the purge permission, delete
    exactly that folder. An interrupted `finish` is resumed by running it again: each
    step checks what is already done.
+   *(Amended 2026-11-17, after the Task 9 spec review; the coordinator accepted the
+   design: the purge record is its own file, `purge.json`, written after the publish and
+   before `COMPLETE`, so `COMPLETE` stays last and lists it, and `provenance.json` stays
+   the file that was staged and checked. Before anything is deleted, finish checks the
+   entry against `purge.json` (provenance, printable files, stage-record hashes,
+   `job.yaml` and source), renames `jobs/NAME` to the tombstone `jobs/.purging-NAME`,
+   checks the tombstone holds exactly what `purge.json` lists, then deletes it; a later
+   run finishes a tombstone left part way. Code: `src/tdmg/library.py`.)*
 
 **`provenance.json`:** git commit, `uv.lock` SHA-256, Python and platform, key library
 versions, the values of every rule used, profile and slicer pin ids and hashes,

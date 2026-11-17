@@ -149,12 +149,22 @@ G-code files may differ, the fields measured in
 verdicts must equal the confirmed ones, so a hand-edited verdict is caught. A difference
 stops `finish` (exit 1) with nothing published or deleted. (5) The printable files go to
 `files/` (tracked) or, with `--public no`, `private/` (git-ignored, like `source/`). (6)
-The staging folder is renamed to `prints/NAME`; `purge.json` (the owner's words, the date
-and every file of the job with its SHA-256) is written, then `COMPLETE` (the SHA-256 of
-every other file) last. (7) Exactly `jobs/NAME/` is deleted, without following links, and
-checked to be gone. `--dry-run` does steps 1 to 4 and says what 5 to 7 would do, changing
-nothing. After an interruption, run the same command again: it continues where it stopped,
-never publishes twice, and deletes the job only when `prints/NAME/COMPLETE` verifies.
+`STAGED` (the SHA-256 of every staged file) is written and the staging folder renamed to
+`prints/NAME`; `purge.json` (the owner's words, the date and every file of the job with
+its SHA-256) is written, then `COMPLETE` (the SHA-256 of every other file) last. (7)
+Before anything is deleted, `COMPLETE` must verify and the entry must be this job's
+(checked against `purge.json`: provenance, printable files, stage-record hashes,
+`job.yaml` and source). Then `jobs/NAME/` is renamed to `jobs/.purging-NAME/` (on Windows
+this fails at once if a program holds a file in it open), checked to hold exactly what
+`purge.json` lists (a file added since: renamed back and refused), and deleted without
+following links. A folder finish cannot read stops it before anything is deleted. Files
+the library does not keep that are not stage outputs, `job.yaml`, `state.json` or
+`source/` (notes, say) are named first; `--dry-run` names them too. `--dry-run` does steps
+1 to 4 and says what 5 to 7 would do, changing nothing. After an interruption, run the
+same command again: it continues where it stopped, never publishes twice, and deletes
+nothing unless `prints/NAME/COMPLETE` verifies and the entry is this job's. `tdmg job new`
+refuses a name whose tombstone exists, and a name already in the library (`prints/`, or
+`--prints-dir`).
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 

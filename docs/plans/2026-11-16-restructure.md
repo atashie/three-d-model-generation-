@@ -309,6 +309,14 @@ a rerun with identical bytes, refusals.
 7. Purge: `--purge-owner-said TEXT` is required. List the files, write the purge
    record (the owner's words, the date and the list) into
    `prints/NAME/provenance.json`, then delete exactly `jobs/NAME`.
+   *(Amended 2026-11-17, after the Task 9 spec review; the coordinator accepted the
+   design: the purge record is its own file, `purge.json`, written after the publish and
+   before `COMPLETE`, so `COMPLETE` stays last and lists it, and `provenance.json` stays
+   the file that was staged and checked. Before anything is deleted, finish checks the
+   entry against `purge.json` (provenance, printable files, stage-record hashes,
+   `job.yaml` and source), renames `jobs/NAME` to the tombstone `jobs/.purging-NAME`,
+   checks the tombstone holds exactly what `purge.json` lists, then deletes it; a later
+   run finishes a tombstone left part way. Code: `src/tdmg/library.py`.)*
 
    `--dry-run` does steps 1 to 4 and prints what 5 to 7 would do.
 

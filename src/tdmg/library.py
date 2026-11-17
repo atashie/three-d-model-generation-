@@ -12,8 +12,10 @@ dated notes to Task 9).
     files/ or        the confirmed route's printable files (Route.required_files): files/
     private/         when the owner says the design may be public (tracked), else private/
                      (git-ignored)
-    purge.json       the purge record: the owner's words, the date and every file of
-                     jobs/NAME with its SHA-256 (tracked)
+    STAGED           the SHA-256 of every staged file, written after the rebuild passed and
+                     before the publish (tracked)
+    purge.json       the purge record: the owner's words, the date and every file and
+                     folder of jobs/NAME, files with their SHA-256 (tracked)
     COMPLETE         the SHA-256 of every other file of the entry, written last (tracked)
 
 A folder without COMPLETE is not a finished entry.
@@ -25,15 +27,18 @@ and provenance.json stays byte for byte the file that was staged and checked bef
 publish: writing the purge record into provenance.json after COMPLETE would make COMPLETE's
 hash of it wrong, and writing COMPLETE again would break "written last". purge.json says
 what will be deleted (it is written before the deletion); finish checks afterwards that the
-folder is gone.
+folder is gone. COMPLETE certifies only itself, so before deleting anything finish also
+checks the entry against purge.json (entry_problems).
 
 **The steps** (finish):
 1. Names and paths: NAME is a job name (tdmg.jobs.check_name); the job is exactly
    JOBS_DIR/NAME, a folder with job.yaml; no component of the job folder, PRINTS_DIR, the
    staging folder PRINTS_DIR/.staging-NAME or the entry PRINTS_DIR/NAME is a symlink or a
    junction; the job and the library folders are disjoint after resolving; PRINTS_DIR/NAME
-   is absent (unless resuming). The job's lock (tdmg.job_runner.job_lock) is held for the
-   whole finish.
+   is absent (unless resuming). No folder inside the job may be a link or unreadable
+   (_walk). The job's lock (_Lock: the same .lock file as tdmg.job_runner.job_lock) is
+   taken before the entry's state is read and held for the whole finish; it moves with
+   the job folder to its tombstone.
 2. State: the source files match job.yaml; every stage is done and current (job_status,
    with the same Machine as job run); one print confirmation is chosen (choose_print) and
    it is current; the git tree of the code checkout is clean outside the jobs and prints
@@ -51,36 +56,51 @@ folder is gone.
    deleted, and finish stops (RebuildDiffers; exit 1).
 5. Public: the owner's answer (--public yes|no, required) is in the card and
    provenance.json, and decides files/ or private/.
-6. Publish: the staging folder is renamed to PRINTS_DIR/NAME; then purge.json; then
-   COMPLETE.
+6. Publish: STAGED is written into the staging folder, which is renamed to
+   PRINTS_DIR/NAME; then purge.json; then COMPLETE.
 7. Purge: needs the owner's words (--purge-owner-said, verbatim, not blank; dated with
    today's local date, as confirmations are). Every file and folder under jobs/NAME is
-   listed with its SHA-256 (a link inside it is refused) into purge.json; COMPLETE is
-   written and checked again (every hash); then exactly jobs/NAME is deleted
-   (shutil.rmtree, refusing to follow links) and checked to be gone.
+   listed (files with their SHA-256) into purge.json, with the jobs folder; COMPLETE is
+   written. Before anything is deleted: COMPLETE verifies (every hash) and the entry is
+   this job's (entry_problems: provenance.json, the printable files, each stage record's
+   hash, job.yaml and source against purge.json). Then purge_job renames jobs/NAME to its
+   tombstone JOBS_DIR/.purging-NAME (on Windows this fails at once when a program holds a
+   file in it open), checks that the tombstone holds exactly what purge.json lists (a
+   file added after the listing: it is renamed back and finish refuses), and deletes it
+   (shutil.rmtree, refusing to follow links), checking it is gone. Files the library does
+   not keep and that are not stage outputs, job.yaml, state.json or source/ (not_kept) are
+   named first.
 
 **Dry run** (dry_run): steps 1 to 4, including the rebuild; then it says what 5 to 7 would
-do and removes the staging folder (and PRINTS_DIR, if it made it). Nothing else changes.
-The purge words are not needed. It is refused while an earlier finish is unfinished.
+do (naming the not_kept files) and removes the staging folder (and PRINTS_DIR, if it made
+it). Nothing else changes. The purge words are not needed. It is refused while an earlier
+finish is unfinished.
 
 **Resume.** Running finish again after an interruption looks at what is on disk:
 - a staging folder (and no entry): the earlier run stopped before the publish. The
   staging folder holds only copies of the job's files and what finish wrote, so it is
   removed and steps 3 and 4 run again;
 - PRINTS_DIR/NAME without COMPLETE: the publish happened (the rename comes only after
-  the rebuild passed). It is never redone. Steps 1 and 2 run again; the entry's
-  provenance.json must name the same confirmation, the same public answer and the same
-  stage-record hashes as the job has now, and its job.yaml, source and printable files
-  must equal the job's byte for byte. Then purge.json (replaced if an earlier run wrote
-  one: the words of the run that deletes are recorded), COMPLETE and the purge;
-- PRINTS_DIR/NAME with COMPLETE while jobs/NAME still exists: the purge was interrupted.
-  COMPLETE must verify (verify_complete), and every file left in jobs/NAME must be in
-  purge.json with the same SHA-256; then the deletion is finished. purge.json is kept as
-  it is (COMPLETE covers it);
-- COMPLETE and no jobs/NAME: already finished; COMPLETE is verified and reported.
+  the rebuild passed). It is never redone. Steps 1 and 2 run again; every file of the
+  entry must be the one STAGED lists (staged_problems: so an edited card or provenance is
+  refused); provenance.json must name the same confirmation, the same public answer and
+  the same stage-record hashes as the job has now, and its job.yaml, source and printable
+  files must equal the job's byte for byte. Then purge.json (replaced if an earlier run
+  wrote one: the words of the run that deletes are recorded), COMPLETE and the purge;
+- PRINTS_DIR/NAME with COMPLETE while jobs/NAME still exists: the run stopped after
+  COMPLETE and before the rename to the tombstone, so jobs/NAME must hold exactly what
+  purge.json lists (a job made again under the same name does not); the entry is checked
+  as in step 7, then the purge runs. purge.json is kept as it is (COMPLETE covers it), and
+  finish says so when this run's --public or purge words differ;
+- the tombstone JOBS_DIR/.purging-NAME with a finished entry: the deletion stopped part
+  way. The entry is checked as in step 7, every file left must be in purge.json with the
+  same SHA-256, and the rest is deleted;
+- COMPLETE and neither jobs/NAME nor a tombstone: already finished; COMPLETE is verified
+  and reported.
 Anything else (a staging folder beside an entry, an entry or staging folder whose job is
-gone, an entry of another job) is refused with nothing changed. jobs/NAME is deleted only
-when PRINTS_DIR/NAME has COMPLETE and every hash in it matches.
+gone, an entry of another job, a job beside its tombstone) is refused with nothing
+changed. Nothing of the job is deleted unless PRINTS_DIR/NAME has COMPLETE, every hash in
+it matches, and the entry is this job's.
 
 **The rebuild comparison** (compare_jobs). The evidence is
 research/verification/2026-11-16-repeatability/README.md: two runs of the same inputs
@@ -95,7 +115,9 @@ those G-code files. So:
   <plate> a glue plate name), and only where both values are SHA-256 strings; the
   README's "inferred, not measured" forms (plate_1.gcode.failed at the top level,
   face-up/plate_1.gcode.failed, a top-level PrusaSlicer .failed G-code) are not in it;
-- every other file byte for byte, and the same set of files in every stage folder.
+- every other file byte for byte, and the same set of files in every stage folder;
+- each masked G-code hash, in the job's slice.json and the rebuild's, must be the SHA-256
+  of the G-code file it names in the same folder (gcode_binding_problems).
 state.json and .lock are not compared: state.json holds slice.json's SHA-256 (the plan's
 note to Task 9), and .lock is the lock.
 """
@@ -124,9 +146,9 @@ from tdmg.job_runner import (
     DONE,
     LOCK_FILE,
     STAGE_RECORDS,
+    STATE_FILE,
     ConfirmationStatus,
     Machine,
-    job_lock,
     job_status,
     rules_sha256,
     run_job,
@@ -144,12 +166,14 @@ CARD_FILE = "card.md"
 PROVENANCE_FILE = "provenance.json"
 PURGE_FILE = "purge.json"
 COMPLETE_FILE = "COMPLETE"
+STAGED_FILE = "STAGED"
 PUBLIC_DIR = "files"             # tracked: the owner said the design may be public
 PRIVATE_DIR = "private"          # git-ignored (.gitignore prints/*/private/)
 STAGING_PREFIX = ".staging-"     # git-ignored (.gitignore prints/.staging-*/)
 PROVENANCE_SCHEMA = "tdmg.provenance/1"
 PURGE_SCHEMA = "tdmg.purge/1"
 COMPLETE_SCHEMA = "tdmg.complete/1"
+STAGED_SCHEMA = "tdmg.staged/1"
 REPEATABILITY = "research/verification/2026-11-16-repeatability/README.md"
 # Temporary names tdmg.records.replace_file uses in the entry (".<stem>-XXXX.tmp"); a crash
 # can leave one behind, and the resume removes it.
@@ -195,12 +219,15 @@ _PLATE_PATTERN = GLUE_FILE.removesuffix(r"\.stl")
 _VOLATILE = tuple(tuple(re.compile(re.escape(k).replace(re.escape(PLATE), _PLATE_PATTERN))
                         for k in path) for path in VOLATILE_FIELDS)
 SLICE_RECORD = STAGE_RECORDS["slice"]
+# Tracked files allowed inside a --jobs-dir or --prints-dir that is inside the checkout.
+TREE_SKIP = ("jobs/", "prints/")
 MAX_SHOWN = 12                   # differing JSON paths shown per file
 
 
 class LibraryError(ValueError):
-    """finish refuses, or cannot go on; what it changed is said in the message. Nothing
-    of the job is deleted."""
+    """finish refuses, or cannot go on; what it changed is said in the message. Before
+    step 7's deletion nothing of the job is deleted; a deletion that stops part way leaves
+    the rest in the job's tombstone, and the next run finishes it."""
 
 
 class RebuildDiffers(LibraryError):
@@ -257,11 +284,34 @@ def _inside(a: Path, b: Path) -> bool:
     return a == b or b in a.parents
 
 
+# Windows' classic path limits for programs without long-path support: MAX_PATH, 260
+# characters with the final NUL, and 248 for a folder (MAX_PATH less room for an 8.3 file
+# name). A folder path of 248 or more cannot be read into (measured 2026-11-17 on the PC:
+# os.walk failed on a 256-character folder with "The system cannot find the path
+# specified"; tests/test_finish.py::test_a_path_too_long_stops_the_listing).
+WINDOWS_FOLDER_LIMIT = 248
+
+
+def _unreadable(path, e: OSError) -> LibraryError:
+    """A LibraryError for a file or folder finish cannot read, saying so plainly."""
+    where = str(e.filename or path)
+    text = f"cannot read {_p(where)} ({e.strerror or e})"
+    if os.name == "nt" and len(where) >= WINDOWS_FOLDER_LIMIT:
+        text += (f"; the path is {len(where)} characters long, at or over Windows' "
+                 f"{WINDOWS_FOLDER_LIMIT}-character limit for a folder (260 for a file) in "
+                 "programs without long-path support; move the job to a shorter path")
+    return LibraryError(text + "; finish stops, and nothing of the job is deleted")
+
+
 def _walk(root: Path) -> tuple[list[str], list[str]]:
     """(files, folders) under root, as sorted POSIX paths relative to it, without following
-    links; LibraryError on a link or anything that is not a plain file or folder."""
+    links; LibraryError on a link, anything that is not a plain file or folder, and any
+    folder that cannot be read (os.walk would otherwise skip it silently)."""
     files, folders = [], []
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+
+    def stop(e: OSError):
+        raise _unreadable(root, e)
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=stop):
         here = Path(dirpath)
         for name in sorted(dirnames + filenames):
             path = here / name
@@ -278,8 +328,15 @@ def _walk(root: Path) -> tuple[list[str], list[str]]:
     return sorted(files), sorted(folders)
 
 
+def _read(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError as e:
+        raise _unreadable(path, e) from None
+
+
 def _hashes(root: Path, files: list[str]) -> dict[str, str]:
-    return {rel: _sha((root / rel).read_bytes()) for rel in files}
+    return {rel: _sha(_read(root / rel)) for rel in files}
 
 
 # --- step 2: state ------------------------------------------------------------------------------
@@ -314,13 +371,22 @@ def git_state(repo: Path | None, jobs_dir: Path, prints_dir: Path) -> Git:
         raise LibraryError(f"{_p(repo)} is not a git checkout (no .git); the commit pins the "
                            "code, so finish needs one")
     top = Path(_git(Path(repo), "rev-parse", "--show-toplevel").decode("utf-8").strip())
-    out = _git(top, "status", "--porcelain=v1", "-z", "--untracked-files=all")
     skip = []
     for folder in (jobs_dir, prints_dir):
         try:
-            skip.append(Path(folder).resolve().relative_to(top.resolve()).as_posix())
+            rel = Path(folder).resolve().relative_to(top.resolve()).as_posix()
         except ValueError:
-            pass                        # outside the checkout: git does not list it
+            continue                    # outside the checkout: git does not list it
+        # A jobs or prints folder that holds tracked code would hide changes to it.
+        tracked = [t for t in _git(top, "ls-files", "-z", "--", rel or ".").decode(
+            "utf-8", "replace").split("\0") if t and not t.startswith(TREE_SKIP)]
+        if tracked or rel in ("", "."):
+            raise LibraryError(f"the folder {_p(folder)} holds files git tracks (for example "
+                               f"{_p((tracked or ['the whole checkout'])[0])}); give --jobs-dir "
+                               "and --prints-dir folders that hold no tracked files except "
+                               "under jobs/ and prints/")
+        skip.append(rel)
+    out = _git(top, "status", "--porcelain=v1", "-z", "--untracked-files=all")
     entries = out.split(b"\0")
     dirty, i = [], 0
     while i < len(entries):
@@ -328,12 +394,14 @@ def git_state(repo: Path | None, jobs_dir: Path, prints_dir: Path) -> Git:
         i += 1
         if not entry:
             continue
-        code, path = entry[:2], entry[3:]
-        if code[0] in "RC":
-            i += 1                      # a rename or copy: the source path follows
-        if any(path == s or path.startswith(s + "/") for s in skip):
+        code, paths_ = entry[:2], [entry[3:]]
+        if "R" in code or "C" in code:  # a rename or copy (staged or not): the source follows
+            paths_.append(entries[i].decode("utf-8", "replace") if i < len(entries) else "")
+            i += 1
+        # Every path the entry names must be inside a skipped folder.
+        if all(any(p == s or p.startswith(s + "/") for s in skip) for p in paths_):
             continue
-        dirty.append(path)
+        dirty += [p for p in paths_ if p]
     if dirty:
         shown = ", ".join(_p(d) for d in dirty[:5]) + (" ..." if len(dirty) > 5 else "")
         raise LibraryError(f"the git tree is not clean ({len(dirty)} change(s) outside the "
@@ -604,7 +672,9 @@ def provenance(state: State, public: bool, machine: Machine, today: str) -> dict
 # --- step 3: the card ---------------------------------------------------------------------------
 
 def _quote(text: str) -> list[str]:
-    return [f"> {line}" if line else ">" for line in text.split("\n")]
+    """The owner's words, verbatim, as an indented code block: Markdown shows it as it is,
+    with nothing in it read as formatting."""
+    return [f"    {line}" for line in text.split("\n")]
 
 
 def _route_sections(route: str, face: str | None, slice_rec: dict) -> list[tuple[str, dict]]:
@@ -695,16 +765,24 @@ def card(state: State, public: bool, today: str) -> str:
     prof = (slice_rec.get("slicer") or {}).get("profiles") or {}
     names = ", ".join(f"{k} \"{v.get('name')}\"" for k, v in sorted(prof.items()))
     L.append(f"tdmg sliced it with the pinned {slice_rec.get('slicer', {}).get('pin')} "
-             f"profiles ({names}). Use the same printer, process and filament profiles in "
-             "Bambu Studio.")
+             f"profiles ({names}). Whether Bambu Studio's own profiles of these names hold "
+             "the same settings has not been checked.")
+    settings = (slice_rec.get("portability") or {}).get("settings") or {}
+    heights = [(label, settings[flag]["value"]) for label, flag in
+               (("layer height", "--layer-height"),
+                ("first layer height", "--first-layer-height"))
+               if isinstance(settings.get(flag), dict) and "value" in settings[flag]]
+    if heights:
+        L.append("From the pinned process profile: " + ", ".join(
+            f"{label} {value} mm" for label, value in heights) + ".")
     for label, section in _route_sections(route, face, slice_rec):
         n = (section.get("stats") or {}).get("layer_count")
         L.append(f"- {label}: {n} layers")
     # Verdict
     L += ["", "## Historical verdict", "",
           (f"At commit `{state.git.commit}`, under the rules then in force (rules SHA-256 "
-          f"`{rules_sha256()}`). `tdmg library verify` re-runs it under today's code; it "
-          "never rewrites this."), ""]
+          f"`{rules_sha256()}`). A planned `tdmg library verify` (not built yet) will re-run it "
+          "under later code and report differences; it will not rewrite this."), ""]
     for label, section in _route_sections(route, face, slice_rec):
         verdict, cert = section.get("verdict"), section.get("certification") or ""
         why = cert.removeprefix(str(verdict)).lstrip(": ")
@@ -736,11 +814,12 @@ def card(state: State, public: bool, today: str) -> str:
         for rid_, v in open_rules.items():
             L.append(f"- `{rid_}` = {_values(v)} {v['unit']}: {v['kind']}, {v['validation']}")
     L.append("")
-    L.append("Strength is not judged, and no dimension has been measured with calipers.")
+    L.append("Strength is not judged, and tdmg has measured no printed dimension.")
     # Confirmation
     L += ["", "## The owner's confirmation", "",
           (f"Confirmation {state.chosen.number} ({confirmations.describe(entry)}), given on "
-          f"{entry['date']} at job revision {entry['revision']}, in the owner's words:"), ""]
+          f"{entry['date']} at job revision {entry['revision']}, in the owner's words "
+          "(verbatim):"), ""]
     L += _quote(entry["owner_said"])
     L += ["", (f"All {len(state.current_prints)} current print confirmation(s) are copied "
           "verbatim into provenance.json.")]
@@ -901,11 +980,46 @@ def compare_file(stage: str, rel: str, a: bytes, b: bytes) -> str | None:
     return f"{where}: bytes differ"
 
 
+def _volatile_values(obj, path=()):
+    """(key path, value, the dict holding it) of every volatile field holding a SHA-256."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if _volatile((*path, k)) and _hex(v):
+                yield (*path, k), v, obj
+            else:
+                yield from _volatile_values(v, (*path, k))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from _volatile_values(v, (*path, i))
+
+
+def gcode_binding_problems(slice_dir: Path, record: dict, where: str) -> list[str]:
+    """Each masked G-code hash must be the SHA-256 of that G-code file in the same slice
+    folder (outputs: its key; a gcode section: its "file"), so a masked field cannot hide
+    a hash that names some other bytes."""
+    out = []
+    for path, value, holder in _volatile_values(record):
+        rel = path[1] if path[0] == "outputs" else holder.get("file")
+        if not isinstance(rel, str) or jobs.path_problem(rel):
+            out.append(f"{where}: {json_path(path)} names no G-code file")
+            continue
+        file = slice_dir / rel
+        if not file.is_file() or _sha(_read(file)) != value:
+            out.append(f"{where}: {json_path(path)} is not the SHA-256 of {rel}")
+    return out
+
+
 def compare_jobs(job_dir: Path, rebuilt: Path, stages: tuple[str, ...]) -> list[str]:
     """Every difference between the job's stage folders and the rebuild's (module
-    docstring)."""
+    docstring), and each masked G-code hash of either slice record bound to its file."""
     out = []
     for stage in stages:
+        if stage == "slice":
+            for root, who in ((job_dir, "the job's"), (rebuilt, "the rebuild's")):
+                rec = _json_or_none(_read(root / stage / SLICE_RECORD))
+                if isinstance(rec, dict):
+                    out += gcode_binding_problems(root / stage, rec,
+                                                  f"{who} {stage}/{SLICE_RECORD}")
         a_files, _ = _walk(job_dir / stage)
         b_files, _ = _walk(rebuilt / stage)
         for rel in sorted(set(a_files) - set(b_files)):
@@ -913,8 +1027,8 @@ def compare_jobs(job_dir: Path, rebuilt: Path, stages: tuple[str, ...]) -> list[
         for rel in sorted(set(b_files) - set(a_files)):
             out.append(f"{stage}/{rel}: only in the rebuild")
         for rel in sorted(set(a_files) & set(b_files)):
-            why = compare_file(stage, rel, (job_dir / stage / rel).read_bytes(),
-                               (rebuilt / stage / rel).read_bytes())
+            why = compare_file(stage, rel, _read(job_dir / stage / rel),
+                               _read(rebuilt / stage / rel))
             if why:
                 out.append(why)
     return out
@@ -959,54 +1073,208 @@ def rebuild(staging: Path, state: State, machine: Machine, say) -> list[str]:
         return out
 
 
-# --- COMPLETE, purge.json ----------------------------------------------------------------------
+# --- COMPLETE, STAGED, purge.json --------------------------------------------------------------
+
+def _manifest(root: Path, schema: str, leave_out: tuple[str, ...]) -> bytes:
+    files, _ = _walk(root)
+    return record_text({"schema": schema, "files": _hashes(
+        root, [f for f in files if f not in leave_out])})
+
 
 def complete_bytes(entry: Path) -> bytes:
-    files, _ = _walk(entry)
-    files = [f for f in files if f != COMPLETE_FILE]
-    return record_text({"schema": COMPLETE_SCHEMA, "files": _hashes(entry, files)})
+    """COMPLETE: the SHA-256 of every other file of the entry."""
+    return _manifest(entry, COMPLETE_SCHEMA, (COMPLETE_FILE,))
+
+
+def staged_bytes(staging: Path) -> bytes:
+    """STAGED: the SHA-256 of every staged file, written once the rebuild has passed and
+    before the publish, so a resume can tell the published files are the checked ones."""
+    return _manifest(staging, STAGED_SCHEMA, (STAGED_FILE,))
+
+
+def _manifest_files(path: Path, schema: str) -> dict | None:
+    data = _json_or_none(_read(path)) if path.is_file() else None
+    if not (isinstance(data, dict) and data.get("schema") == schema
+            and isinstance(data.get("files"), dict)
+            and all(isinstance(k, str) and _hex(v) for k, v in data["files"].items())):
+        return None
+    return data["files"]
 
 
 def verify_complete(entry: Path) -> list[str]:
     """Why prints/NAME is not a verified finished entry ([] when it is): COMPLETE present
     and in form, the same set of files, and every SHA-256 matching."""
-    path = entry / COMPLETE_FILE
-    if not path.is_file():
-        return [f"{_p(entry)} has no {COMPLETE_FILE}"]
-    data = _json_or_none(path.read_bytes())
-    if not (isinstance(data, dict) and data.get("schema") == COMPLETE_SCHEMA
-            and isinstance(data.get("files"), dict)
-            and all(_hex(v) for v in data["files"].values())):
-        return [f"{COMPLETE_FILE} is not a {COMPLETE_SCHEMA} file"]
+    listed = _manifest_files(entry / COMPLETE_FILE, COMPLETE_SCHEMA)
+    if listed is None:
+        return [f"{_p(entry)} has no {COMPLETE_SCHEMA} {COMPLETE_FILE}"]
     try:
         files, _ = _walk(entry)
+        files = [f for f in files if f != COMPLETE_FILE]
+        out = [f"{_p(rel)}: not listed in {COMPLETE_FILE}" for rel in files
+               if rel not in listed]
+        out += [f"{_p(rel)}: listed in {COMPLETE_FILE} but missing" for rel in listed
+                if rel not in files]
+        out += [f"{_p(rel)}: its SHA-256 is not the one {COMPLETE_FILE} lists"
+                for rel in files if rel in listed and _sha(_read(entry / rel)) != listed[rel]]
     except LibraryError as e:
         return [str(e)]
-    files = [f for f in files if f != COMPLETE_FILE]
-    out = [f"{rel}: not listed in {COMPLETE_FILE}" for rel in files if rel not in data["files"]]
-    out += [f"{rel}: listed in {COMPLETE_FILE} but missing" for rel in data["files"]
-            if rel not in files]
-    out += [f"{rel}: its SHA-256 is not the one {COMPLETE_FILE} lists"
-            for rel in files if rel in data["files"]
-            and _sha((entry / rel).read_bytes()) != data["files"][rel]]
+    return out
+
+
+def staged_problems(entry: Path) -> list[str]:
+    """Why the published files are not the staged, checked ones ([] when they are):
+    STAGED lists every file but STAGED, purge.json and COMPLETE, with its SHA-256."""
+    listed = _manifest_files(entry / STAGED_FILE, STAGED_SCHEMA)
+    if listed is None:
+        return [f"{_p(entry)} has no {STAGED_SCHEMA} {STAGED_FILE}"]
+    files, _ = _walk(entry)
+    files = [f for f in files if f not in (STAGED_FILE, PURGE_FILE, COMPLETE_FILE)]
+    out = [f"{_p(rel)}: not staged" for rel in files if rel not in listed]
+    out += [f"{_p(rel)}: staged but missing" for rel in listed if rel not in files]
+    out += [f"{_p(rel)}: changed since it was staged" for rel in files
+            if rel in listed and _sha(_read(entry / rel)) != listed[rel]]
     return out
 
 
 def job_listing(folder: Path) -> tuple[dict[str, str], list[str]]:
-    """({file: SHA-256}, folders) of everything under jobs/NAME except finish's own lock
-    file; a link anywhere inside is refused."""
+    """({file: SHA-256}, folders) of everything under the job folder except finish's own
+    lock file; a link or an unreadable folder anywhere inside is refused."""
     files, folders = _walk(folder)
     files = [f for f in files if f != LOCK_FILE]
     return _hashes(folder, files), folders
 
 
-def purge_record(name: str, words: str, day: str, listing: tuple[dict, list]) -> bytes:
+def not_kept(files, stages: tuple[str, ...]) -> list[str]:
+    """The job's files that the library does not keep and that are not stage outputs,
+    job.yaml, state.json or source/ (notes left in the job folder, say): named before the
+    purge deletes them."""
+    keep_dirs = (*stages, SOURCE_DIR)
+    return sorted(f for f in files if f not in (JOB_FILE, STATE_FILE)
+                  and f.split("/")[0] not in keep_dirs)
+
+
+def jobs_folder_text(jobs_dir: Path, repo: Path | None) -> str:
+    """The jobs folder as purge.json records it: relative to the checkout when inside it."""
+    if repo is not None:
+        try:
+            return jobs_dir.resolve().relative_to(Path(repo).resolve()).as_posix()
+        except ValueError:
+            pass
+    return str(jobs_dir)
+
+
+def purge_record(name: str, words: str, day: str, listing: tuple[dict, list],
+                 jobs_text: str = "jobs") -> bytes:
     files, folders = listing
     return record_text({"schema": PURGE_SCHEMA, "name": name, "owner_said": words,
-                        "date": day,
-                        "deleted": f"the job folder {name} (jobs/{name}) and everything in it",
+                        "date": day, "jobs_folder": jobs_text,
+                        "deleted": f"the job folder {name} in {jobs_text} and everything in it",
                         "files": files, "folders": folders,
                         "not_listed": [LOCK_FILE + " (finish's own lock)"]})
+
+
+def _purge_record(entry: Path, name: str) -> dict | None:
+    record = _json_or_none(_read(entry / PURGE_FILE)) if (entry / PURGE_FILE).is_file() \
+        else None
+    if not (isinstance(record, dict) and record.get("schema") == PURGE_SCHEMA
+            and record.get("name") == name and isinstance(record.get("files"), dict)
+            and isinstance(record.get("folders"), list)
+            and isinstance(record.get("owner_said"), str)):
+        return None
+    return record
+
+
+def entry_problems(entry: Path, name: str, record: dict) -> list[str]:
+    """Why prints/NAME is not this job's finished entry, judged against purge.json's list
+    of the job's files ([] when it is). COMPLETE alone certifies only itself, so: a
+    provenance.json of this job; COMPLETE listing card.md, job.yaml, provenance.json,
+    purge.json, STAGED and the source files; every printable file of provenance.json
+    present with its SHA-256 and equal to the confirmed job file; each stage record's hash
+    in provenance.json equal to purge.json's hash of the job's record; the entry's job.yaml
+    and source files equal to purge.json's hashes of the job's own copies."""
+    listed = _manifest_files(entry / COMPLETE_FILE, COMPLETE_SCHEMA) or {}
+    prov = _json_or_none(_read(entry / PROVENANCE_FILE)) \
+        if (entry / PROVENANCE_FILE).is_file() else None
+    if not (isinstance(prov, dict) and prov.get("schema") == PROVENANCE_SCHEMA
+            and prov.get("name") == name):
+        return [f"{_p(entry)} has no {PROVENANCE_SCHEMA} {PROVENANCE_FILE} for job {name}"]
+    try:
+        job = parse_job(_read(entry / JOB_FILE)) if (entry / JOB_FILE).is_file() else None
+    except JobError as e:
+        return [f"{JOB_FILE} in {_p(entry)}: {e}"]
+    if job is None or job["name"] != name:
+        return [f"{_p(entry)} has no {JOB_FILE} of job {name}"]
+    jobfiles = record["files"]
+    sources = [job["source"]["file"]] + ([job["source"]["mask"]["file"]]
+                                         if job["source"]["mask"] else [])
+    out = [f"{COMPLETE_FILE} does not list {_p(rel)}" for rel in
+           (CARD_FILE, JOB_FILE, PROVENANCE_FILE, PURGE_FILE, STAGED_FILE, *sources)
+           if rel not in listed]
+    for rel in (JOB_FILE, *sources):
+        if rel in listed and jobfiles.get(rel) != listed[rel]:
+            out.append(f"{_p(rel)} in the entry is not the job's ({PURGE_FILE})")
+    printable = prov.get("printable_files")
+    folder = prov.get("printable_folder")
+    covers = ((prov.get("confirmation") or {}).get("entry") or {}).get("covers")
+    if not (isinstance(printable, dict) and printable and isinstance(covers, dict)
+            and folder in (PUBLIC_DIR, PRIVATE_DIR)):
+        out.append(f"{PROVENANCE_FILE} names no printable files or confirmation")
+    else:
+        for rel, digest in printable.items():
+            if listed.get(rel) != digest:
+                out.append(f"printable file {_p(rel)} is missing or not the one "
+                           f"{PROVENANCE_FILE} names")
+        for rel, digest in covers.items():
+            mine = f"{folder}/{rel.partition('/')[2]}"
+            if printable.get(mine) != digest or jobfiles.get(rel) != digest:
+                out.append(f"the confirmed file {_p(rel)} is not {_p(mine)} in the entry")
+    stages = prov.get("stages")
+    want = recipe(job["recipe"]).stages
+    if not (isinstance(stages, dict) and sorted(stages) == sorted(want)):
+        out.append(f"{PROVENANCE_FILE} does not name the stages {', '.join(want)}")
+    else:
+        for s in want:
+            v = stages[s] if isinstance(stages[s], dict) else {}
+            rel = f"{s}/{STAGE_RECORDS[s]}"
+            if v.get("record") != rel or v.get("record_sha256") != jobfiles.get(rel):
+                out.append(f"{PROVENANCE_FILE}'s hash of {rel} is not the job's "
+                           f"({PURGE_FILE})")
+    return out
+
+
+# --- the lock, the tombstone, the deletion ------------------------------------------------------
+
+class _Lock:
+    """The job's lock: the same file as tdmg.job_runner.job_lock (an exclusive create of
+    .lock in the job folder), held by finish from step 1 to the end. When the purge renames
+    the job folder to its tombstone the lock moves with it (moved): no job of that name
+    exists any more, and tdmg job new refuses a name whose tombstone exists. release()
+    removes the lock where it now is; after the deletion it is gone already."""
+
+    def __init__(self, folder: Path):
+        self.path = folder / LOCK_FILE
+
+    def acquire(self) -> None:
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY
+                         | getattr(os, "O_BINARY", 0))
+        except FileExistsError:
+            raise LibraryError(
+                f"job {self.path.parent.name} is locked: {_p(self.path)} exists. Another "
+                "tdmg command is using the job, or one stopped without removing the file; "
+                f"if none is running, delete {_p(self.path)}") from None
+        except OSError as e:
+            raise _unreadable(self.path, e) from None
+        try:
+            os.write(fd, f"pid {os.getpid()}\n".encode("ascii"))
+        finally:
+            os.close(fd)
+
+    def moved(self, folder: Path) -> None:
+        self.path = folder / LOCK_FILE
+
+    def release(self) -> None:
+        self.path.unlink(missing_ok=True)
 
 
 def _onexc(func, path, exc):
@@ -1023,17 +1291,63 @@ def _onexc(func, path, exc):
 
 
 def delete_job(folder: Path) -> None:
-    """Delete exactly the job folder; LibraryError when anything is left."""
+    """Delete exactly this folder (the tombstone), refusing links; LibraryError when
+    anything is left. What is left stays in the tombstone for the next run."""
     _no_links(folder, "job")
-    _walk(folder)                       # refuses a link anywhere inside
+    _walk(folder)                       # refuses a link or an unreadable folder inside
     try:
         shutil.rmtree(folder, onexc=_onexc)
     except OSError as e:
-        raise LibraryError(f"the purge stopped ({e.strerror or e}: {_p(e.filename or '')}); "
-                           "prints/ holds the finished entry; run finish again to finish "
-                           "the purge") from None
+        raise LibraryError(f"the purge stopped part way ({e.strerror or e}: "
+                           f"{_p(e.filename or '')}); prints/ holds the finished entry and "
+                           f"{_p(folder)} what is left of the job; run finish again to "
+                           "finish the purge") from None
     if folder.exists() or folder.is_symlink():
         raise LibraryError(f"{_p(folder)} is still there after the purge; run finish again")
+
+
+def tombstone_problems(root: Path, record: dict, *, exact: bool) -> list[str]:
+    """What under the job folder or its tombstone purge.json does not list with the same
+    SHA-256 (the lock aside); with exact, also what it lists that is missing."""
+    files, folders = job_listing(root)
+    listed, listed_dirs = record["files"], set(record["folders"])
+    out = [f"{_p(rel)}: not in {PURGE_FILE}" for rel in files if rel not in listed]
+    out += [f"{_p(rel)}: changed since {PURGE_FILE} listed it" for rel, d in files.items()
+            if rel in listed and listed[rel] != d]
+    out += [f"{_p(rel)}/: a folder not in {PURGE_FILE}" for rel in folders
+            if rel not in listed_dirs]
+    if exact:
+        out += [f"{_p(rel)}: listed in {PURGE_FILE} but missing" for rel in listed
+                if rel not in files]
+        out += [f"{_p(rel)}/: listed in {PURGE_FILE} but missing" for rel in listed_dirs
+                if rel not in folders]
+    return out
+
+
+def purge_job(folder: Path, tombstone: Path, record: dict, lock: _Lock) -> None:
+    """Step 7's deletion: rename the job folder to its tombstone (on Windows this fails at
+    once when a program has a file in it open, before anything is deleted), check that the
+    tombstone holds exactly what purge.json lists (else rename it back and refuse), then
+    delete it."""
+    _no_links(folder, "job")
+    if tombstone.exists() or tombstone.is_symlink():
+        raise LibraryError(f"{_p(tombstone)} exists already; nothing was deleted: look at it "
+                           "by hand")
+    try:
+        os.rename(folder, tombstone)
+    except OSError as e:
+        raise LibraryError(f"cannot move {_p(folder)} to {_p(tombstone)} ({e.strerror or e}): "
+                           "a program may have a file in it open; close it and run finish "
+                           "again. Nothing of the job was deleted") from None
+    lock.moved(tombstone)
+    problems = tombstone_problems(tombstone, record, exact=True)
+    if problems:
+        os.rename(tombstone, folder)
+        lock.moved(folder)
+        raise LibraryError(f"the job changed after {PURGE_FILE} listed it ("
+                           f"{'; '.join(problems[:5])}); nothing was deleted. Run finish "
+                           "again to list it afresh")
+    delete_job(tombstone)
 
 
 # --- finish ---------------------------------------------------------------------------------------
@@ -1042,13 +1356,36 @@ def _today(today: datetime.date | None) -> str:
     return (datetime.date.today() if today is None else today).isoformat()
 
 
+@dataclass
+class _Run:
+    """What one finish works on."""
+    name: str
+    folder: Path
+    tombstone: Path
+    staging: Path
+    entry: Path
+    jobs_dir: Path
+    prints_dir: Path
+    repo: Path | None
+    public: bool
+    words: str | None
+    number: int | None
+    dry_run: bool
+    machine: Machine
+    day: str
+    say: Callable[[str], None]
+    lock: _Lock | None = None
+
+
 def finish(name: str, *, public: bool | None, purge_owner_said: str | None,
            confirmation: int | None = None, dry_run: bool = False,
            machine: Machine | None = None, jobs_dir: Path | None = None,
            prints_dir: Path | None = None, repo: Path | None = None,
            say: Callable[[str], None] = print, today: datetime.date | None = None) -> None:
-    """tdmg finish (module docstring). Raises LibraryError on a refusal (nothing of the job
-    is deleted) and RebuildDiffers when the rebuild does not match."""
+    """tdmg finish (module docstring). Raises LibraryError on a refusal and RebuildDiffers
+    when the rebuild does not match; before the purge's deletion nothing of the job is
+    deleted, and a deletion that stops part way leaves the rest in the tombstone for the
+    next run."""
     machine = Machine() if machine is None else machine
     try:
         name = check_name(name)
@@ -1066,7 +1403,6 @@ def finish(name: str, *, public: bool | None, purge_owner_said: str | None,
     if confirmation is not None and confirmation < 1:
         raise LibraryError(f"--confirmation {confirmation}: confirmations are numbered "
                            "from 1 (tdmg job status)")
-    day = _today(today)
     try:
         jobs_dir = Path(os.path.abspath(jobs.default_jobs_dir() if jobs_dir is None
                                         else jobs_dir))
@@ -1074,75 +1410,92 @@ def finish(name: str, *, public: bool | None, purge_owner_said: str | None,
         raise LibraryError(str(e)) from None
     prints_dir = Path(os.path.abspath(default_prints_dir() if prints_dir is None
                                       else prints_dir))
-    repo = code_checkout() if repo is None else Path(repo)
-    folder = jobs_dir / name
-    staging = prints_dir / f"{STAGING_PREFIX}{name}"
-    entry = prints_dir / name
+    run = _Run(name, jobs_dir / name, jobs_dir / f"{jobs.TOMBSTONE_PREFIX}{name}",
+               prints_dir / f"{STAGING_PREFIX}{name}", prints_dir / name, jobs_dir,
+               prints_dir, code_checkout() if repo is None else Path(repo), public,
+               purge_owner_said, confirmation, dry_run, machine, _today(today), say)
+    folder, entry = run.folder, run.entry
     # Step 1: names and paths.
-    _no_links(folder, "job")
-    _no_links(prints_dir, "prints folder")
-    _no_links(staging, "staging folder")
-    _no_links(entry, "library entry")
+    for path, what in ((folder, "job"), (run.tombstone, "job tombstone"),
+                       (prints_dir, "prints folder"), (run.staging, "staging folder"),
+                       (entry, "library entry")):
+        _no_links(path, what)
     rj, rp = folder.resolve(), prints_dir.resolve()
     if _inside(rj, rp) or _inside(rp, rj):
         raise LibraryError(f"the job {_p(folder)} and the prints folder {_p(prints_dir)} "
                            "overlap; they must be separate folders")
     if rj != jobs_dir.resolve() / name:
         raise LibraryError(f"the job must be exactly {_p(jobs_dir / name)}")
-    has_job = folder.is_dir()
-    has_staging, has_entry = staging.exists(), entry.exists()
-    complete = (entry / COMPLETE_FILE).is_file()
-    if dry_run and (has_staging or has_entry):
-        raise LibraryError("an earlier finish of this job is unfinished (a staging folder or "
-                           f"{_p(entry)} exists); run finish without --dry-run to resume it")
-    if not has_job:
-        if folder.exists():
-            raise LibraryError(f"{_p(folder)} is not a folder")
-        if has_entry and complete and not has_staging:
-            problems = verify_complete(entry)
-            if problems:
-                raise LibraryError(f"{_p(entry)} does not verify: {'; '.join(problems)}")
-            say(f"job {name} is already finished: {_p(entry)} is complete and verifies, and "
-                "the job is gone")
-            return
-        if has_entry or has_staging:
-            raise LibraryError(f"there is no job {name} in {_p(jobs_dir)}, but "
-                               f"{_p(entry if has_entry else staging)} is not a finished "
-                               "entry; nothing was changed: look at it by hand")
-        raise LibraryError(f"no job {name} in {_p(jobs_dir)}")
-    if not (folder / JOB_FILE).is_file() and not (has_entry and complete):
-        raise LibraryError(f"{_p(folder)} has no {JOB_FILE}: not a job")
-    if has_staging and has_entry:
-        raise LibraryError(f"both {_p(staging)} and {_p(entry)} exist; nothing was changed: "
-                           "look at them by hand")
-    for path, what in ((staging, "staging folder"), (entry, "library entry")):
+    for path, what in ((folder, "job"), (run.tombstone, "job tombstone"),
+                       (run.staging, "staging folder"), (entry, "library entry")):
         if path.exists() and not path.is_dir():
             raise LibraryError(f"the {what} {_p(path)} is not a folder")
-    _walk(folder)                       # a link anywhere inside the job: refused now
+    if folder.exists() and run.tombstone.exists():
+        raise LibraryError(f"both {_p(folder)} and its tombstone {_p(run.tombstone)} exist; "
+                           "nothing was changed: look at them by hand")
+    held = folder if folder.exists() else run.tombstone if run.tombstone.exists() else None
+    if held is None:
+        _no_job(run)
+        return
+    _walk(held)                         # a link or unreadable folder inside: refused now
+    run.lock = _Lock(held)
+    run.lock.acquire()
+    try:
+        _locked(run, held)
+    finally:
+        run.lock.release()
+
+
+def _no_job(run: _Run) -> None:
+    """Neither the job nor its tombstone exists: finished already, or refused."""
+    entry, staging = run.entry, run.staging
+    if entry.is_dir() and (entry / COMPLETE_FILE).is_file() and not staging.exists():
+        problems = verify_complete(entry)
+        if problems:
+            raise LibraryError(f"{_p(entry)} does not verify: {'; '.join(problems)}")
+        run.say(f"job {run.name} is already finished: {_p(entry)} is complete and "
+                "verifies, and the job is gone")
+        return
+    if entry.exists() or staging.exists():
+        raise LibraryError(f"there is no job {run.name} in {_p(run.jobs_dir)}, but "
+                           f"{_p(entry if entry.exists() else staging)} is not a finished "
+                           "entry; nothing was changed: look at it by hand")
+    raise LibraryError(f"no job {run.name} in {_p(run.jobs_dir)}")
+
+
+def _locked(run: _Run, held: Path) -> None:
+    """Steps 1 (the rest) to 7, under the lock; the entry's state is read here."""
+    folder, entry, staging = run.folder, run.entry, run.staging
+    has_staging, has_entry = staging.exists(), entry.exists()
+    complete = (entry / COMPLETE_FILE).is_file()
     for path in (staging, entry):
         if path.is_dir():
             _walk(path)
-    try:
-        jobs.check_not_linked(folder)
-        lock = job_lock(folder)
-        lock.__enter__()
-    except JobError as e:
-        raise LibraryError(str(e)) from None
-    try:
-        say(f"1. names and paths: job {_p(folder)}, library entry {_p(entry)}")
-        if has_entry and complete:
-            _resume_purge(folder, entry, name, say)
-        elif has_entry:
-            _resume_publish(folder, entry, name, public, purge_owner_said, confirmation,
-                            machine, jobs_dir, prints_dir, repo, day, say)
-        else:
-            if has_staging:
-                _remove_staging(staging)
-                say(f"   removed {_p(staging)}, left by an interrupted finish; staging again")
-            _fresh(folder, staging, entry, prints_dir, name, public, purge_owner_said,
-                   confirmation, dry_run, machine, jobs_dir, repo, day, say)
-    finally:
-        lock.__exit__(None, None, None)
+    if run.dry_run and (has_staging or has_entry or held == run.tombstone):
+        raise LibraryError("an earlier finish of this job is unfinished (a staging folder, "
+                           f"{_p(entry)} or the job's tombstone exists); run finish without "
+                           "--dry-run to resume it")
+    if has_staging and has_entry:
+        raise LibraryError(f"both {_p(staging)} and {_p(entry)} exist; nothing was changed: "
+                           "look at them by hand")
+    run.say(f"1. names and paths: job {_p(folder)}, library entry {_p(entry)}")
+    if held == run.tombstone:
+        if not (has_entry and complete):
+            raise LibraryError(f"{_p(run.tombstone)} exists but {_p(entry)} is not a "
+                               "finished entry; nothing was changed: look at them by hand")
+        _resume_tombstone(run)
+        return
+    if not (folder / JOB_FILE).is_file():
+        raise LibraryError(f"{_p(folder)} has no {JOB_FILE}: not a job")
+    if has_entry and complete:
+        _resume_purge(run)
+    elif has_entry:
+        _resume_publish(run)
+    else:
+        if has_staging:
+            _remove_staging(staging)
+            run.say(f"   removed {_p(staging)}, left by an interrupted finish; staging again")
+        _fresh(run)
 
 
 def _remove_staging(staging: Path) -> None:
@@ -1157,99 +1510,124 @@ def _describe(c: ConfirmationStatus) -> str:
             f"{_words(e['owner_said'])}")
 
 
-def _fresh(folder, staging, entry, prints_dir, name, public, words, number, dry_run,
-           machine, jobs_dir, repo, day, say) -> None:
-    state = check_state(folder, machine, number, repo, jobs_dir, prints_dir)
-    say(f"2. state: every stage done and current; {_describe(state.chosen)}; git tree "
-        f"clean at {state.git.commit}")
+def _state(run: _Run) -> State:
+    state = check_state(run.folder, run.machine, run.number, run.repo, run.jobs_dir,
+                        run.prints_dir)
+    run.say(f"2. state: every stage done and current; {_describe(state.chosen)}; git tree "
+            f"clean at {state.git.commit}")
+    return state
+
+
+def _not_kept_line(run: _Run, files) -> str:
+    stages = recipe(load_job(run.folder)["recipe"]).stages
+    extra = not_kept(files, stages)
+    return ("" if not extra else
+            "; not kept in the library and not stage outputs: " + ", ".join(map(_p, extra)))
+
+
+def _fresh(run: _Run) -> None:
+    state = _state(run)
+    staging, prints_dir = run.staging, run.prints_dir
     made_prints = not prints_dir.exists()
+
+    def tidy():
+        if staging.exists():
+            _remove_staging(staging)
+        if made_prints and prints_dir.is_dir() and not any(prints_dir.iterdir()):
+            prints_dir.rmdir()
     try:
-        files = payload(state, public)
-        files[CARD_FILE] = card(state, public, day).encode("utf-8")
-        prov = record_text(provenance(state, public, machine, day))
+        files = payload(state, run.public)
+        files[CARD_FILE] = card(state, run.public, run.day).encode("utf-8")
+        prov = record_text(provenance(state, run.public, run.machine, run.day))
         try:
             write_outputs(staging, files, PROVENANCE_FILE, prov, create_folder=True,
                           subfolders=True)
         except RecordError as e:
             raise LibraryError(str(e)) from None
-        say(f"3. staged {_p(staging)}: {len(files) + 1} files")
-        differences = rebuild(staging, state, machine, say)
+        run.say(f"3. staged {_p(staging)}: {len(files) + 1} files")
+        differences = rebuild(staging, state, run.machine, run.say)
         if differences:
             raise RebuildDiffers(differences)
-        say("   the rebuild matches: every file byte for byte, except the G-code "
-            "timestamp lines and slice.json's hashes of those G-code files "
-            f"({REPEATABILITY})")
+        run.say("   the rebuild matches: every file byte for byte, except the G-code "
+                "timestamp lines and slice.json's hashes of those G-code files "
+                f"({REPEATABILITY})")
+        if not run.dry_run:
+            replace_file(staging, STAGED_FILE, staged_bytes(staging))
     except Exception:
-        if staging.exists():
-            _remove_staging(staging)
-        if made_prints and prints_dir.is_dir() and not any(prints_dir.iterdir()):
-            prints_dir.rmdir()
+        tidy()
         raise
-    folder_name = PUBLIC_DIR if public else PRIVATE_DIR
-    if dry_run:
-        _remove_staging(staging)
-        if made_prints and prints_dir.is_dir() and not any(prints_dir.iterdir()):
-            prints_dir.rmdir()
-        listing = job_listing(folder)
-        say("dry run: nothing was changed; the staging folder is removed. A real run would:")
-        say(f"5. public: {'yes' if public else 'no'}: the printable files in {folder_name}/"
-            + (" (tracked in git)" if public else " (git-ignored)"))
-        say(f"6. publish: rename the staging folder to {_p(entry)}, write {PURGE_FILE}, then "
-            f"{COMPLETE_FILE}")
-        say(f"7. purge: delete {_p(folder)} ({len(listing[0])} files, {len(listing[1])} "
-            "folders), with --purge-owner-said")
+    folder_name = PUBLIC_DIR if run.public else PRIVATE_DIR
+    if run.dry_run:
+        tidy()
+        files, folders = job_listing(run.folder)
+        run.say("dry run: nothing was changed; the staging folder is removed. A real run "
+                "would:")
+        run.say(f"5. public: {'yes' if run.public else 'no'}: the printable files in "
+                f"{folder_name}/" + (" (tracked in git)" if run.public else " (git-ignored)"))
+        run.say(f"6. publish: rename the staging folder to {_p(run.entry)}, write "
+                f"{PURGE_FILE}, then {COMPLETE_FILE}")
+        run.say(f"7. purge: delete {_p(run.folder)} ({len(files)} files, {len(folders)} "
+                f"folders), with --purge-owner-said{_not_kept_line(run, files)}")
         return
-    say(f"5. public: {'yes' if public else 'no'}: printable files in {folder_name}/")
-    os.rename(staging, entry)
-    say(f"6. published {_p(entry)}")
-    _purge(folder, entry, name, words, day, say)
+    run.say(f"5. public: {'yes' if run.public else 'no'}: printable files in {folder_name}/")
+    os.rename(staging, run.entry)
+    run.say(f"6. published {_p(run.entry)}")
+    _purge(run)
 
 
-def _purge(folder: Path, entry: Path, name: str, words: str, day: str, say,
-           *, write_record: bool = True) -> None:
-    if write_record:
-        listing = job_listing(folder)
-        replace_file(entry, PURGE_FILE, purge_record(name, words, day, listing))
-        replace_file(entry, COMPLETE_FILE, complete_bytes(entry))
-        say(f"   wrote {PURGE_FILE} ({len(listing[0])} files of the job listed) and "
+def _purge(run: _Run) -> None:
+    """Write purge.json and COMPLETE, check the entry, then delete the job."""
+    listing = job_listing(run.folder)
+    replace_file(run.entry, PURGE_FILE, purge_record(
+        run.name, run.words, run.day, listing, jobs_folder_text(run.jobs_dir, run.repo)))
+    replace_file(run.entry, COMPLETE_FILE, complete_bytes(run.entry))
+    run.say(f"   wrote {PURGE_FILE} ({len(listing[0])} files of the job listed) and "
             f"{COMPLETE_FILE}")
-    problems = verify_complete(entry)
+    _delete(run, listing[0])
+
+
+def _check_entry(run: _Run) -> dict:
+    """The entry verifies and is this job's: COMPLETE (every hash) and entry_problems."""
+    record = _purge_record(run.entry, run.name)
+    if record is None:
+        raise LibraryError(f"{_p(run.entry)} has no {PURGE_SCHEMA} {PURGE_FILE} for job "
+                           f"{run.name}; the job is not deleted")
+    problems = verify_complete(run.entry) or entry_problems(run.entry, run.name, record)
     if problems:
-        raise LibraryError(f"{_p(entry)} does not verify ({'; '.join(problems)}); the job "
-                           "is not deleted")
-    delete_job(folder)
-    say(f"7. purged {_p(folder)}: the owner said {_words(_purge_words(entry))}")
+        raise LibraryError(f"{_p(run.entry)} does not verify as this job's finished entry "
+                           f"({'; '.join(problems[:6])}); the job is not deleted")
+    return record
 
 
-def _purge_words(entry: Path) -> str:
-    return _json((entry / PURGE_FILE).read_bytes())["owner_said"]
+def _delete(run: _Run, files) -> None:
+    record = _check_entry(run)
+    note = _not_kept_line(run, files)
+    purge_job(run.folder, run.tombstone, record, run.lock)
+    run.say(f"7. purged {_p(run.folder)}: the owner said {_words(record['owner_said'])}"
+            + note)
 
 
 def _same_job(folder: Path, entry: Path) -> None:
     mine, theirs = folder / JOB_FILE, entry / JOB_FILE
-    if mine.is_file() and theirs.is_file() and mine.read_bytes() == theirs.read_bytes():
+    if mine.is_file() and theirs.is_file() and _read(mine) == _read(theirs):
         return
-    if not mine.is_file() and theirs.is_file():
-        return                          # a purge stopped part way; purge.json decides
     raise LibraryError(f"{_p(entry)} already exists and is not this job's print (its "
                        f"{JOB_FILE} differs); choose another job name, or look at it by "
                        "hand. Nothing was changed")
 
 
-def _resume_publish(folder, entry, name, public, words, number, machine, jobs_dir,
-                    prints_dir, repo, day, say) -> None:
+def _resume_publish(run: _Run) -> None:
     """prints/NAME without COMPLETE (module docstring, Resume)."""
-    _same_job(folder, entry)
-    state = check_state(folder, machine, number, repo, jobs_dir, prints_dir)
-    say(f"2. state: every stage done and current; {_describe(state.chosen)}; git tree "
-        f"clean at {state.git.commit}")
-    prov = _json_or_none((entry / PROVENANCE_FILE).read_bytes()) \
+    entry, name = run.entry, run.name
+    _same_job(run.folder, entry)
+    state = _state(run)
+    prov = _json_or_none(_read(entry / PROVENANCE_FILE)) \
         if (entry / PROVENANCE_FILE).is_file() else None
     if not (isinstance(prov, dict) and prov.get("schema") == PROVENANCE_SCHEMA
             and prov.get("name") == name):
         raise LibraryError(f"{_p(entry)} has no {PROVENANCE_SCHEMA} {PROVENANCE_FILE} for job "
                            f"{name}; nothing was changed: look at it by hand")
-    if prov.get("public") != public:
+    if prov.get("public") != run.public:
         raise LibraryError(f"{_p(entry)} was published with --public "
                            f"{'yes' if prov.get('public') else 'no'}; run finish again with "
                            "that answer (a publish is never redone)")
@@ -1259,44 +1637,65 @@ def _resume_publish(folder, entry, name, public, words, number, machine, jobs_di
                            f"{(prov.get('confirmation') or {}).get('number')}, not "
                            f"{state.chosen.number}; give --confirmation for it")
     hashes = {s: _sha(b) for s, b in state.records.items()}
-    if {s: v.get("record_sha256") for s, v in (prov.get("stages") or {}).items()} != hashes:
+    if {s: (v or {}).get("record_sha256") for s, v in (prov.get("stages") or {}).items()} \
+            != hashes:
         raise LibraryError("the job's stage records changed since the publish; nothing was "
                            "changed: look at it by hand")
-    expected = payload(state, public)
     for leftover in [p for p in entry.iterdir() if LEFTOVER_TMP.fullmatch(p.name)]:
         leftover.unlink()
-        say(f"   removed {leftover.name}, left by an interrupted write")
-    files, _ = _walk(entry)
-    allowed = set(expected) | {CARD_FILE, PROVENANCE_FILE, PURGE_FILE}
-    extra = [f for f in files if f not in allowed]
-    missing = [f for f in [*expected, CARD_FILE, PROVENANCE_FILE] if f not in files]
-    differ = [f for f in expected if f in files and (entry / f).read_bytes() != expected[f]]
-    if extra or missing or differ:
-        raise LibraryError(f"{_p(entry)} is not what finish published (extra: {extra}, "
-                           f"missing: {missing}, different: {differ}); nothing was changed")
-    say(f"6. {_p(entry)} was published by an earlier run (not redone); it matches the job")
-    _purge(folder, entry, name, words, day, say)
-
-
-def _resume_purge(folder: Path, entry: Path, name: str, say) -> None:
-    """COMPLETE with the job still present (module docstring, Resume)."""
-    _same_job(folder, entry)
-    problems = verify_complete(entry)
+        run.say(f"   removed {_p(leftover.name)}, left by an interrupted write")
+    problems = staged_problems(entry)
+    expected = payload(state, run.public)
+    problems += [f"{_p(f)}: not the job's" for f in expected
+                 if not (entry / f).is_file() or _read(entry / f) != expected[f]]
     if problems:
-        raise LibraryError(f"{_p(entry)} has {COMPLETE_FILE} but does not verify "
-                           f"({'; '.join(problems)}); the job is not deleted")
-    record = _json_or_none((entry / PURGE_FILE).read_bytes()) \
-        if (entry / PURGE_FILE).is_file() else None
-    if not (isinstance(record, dict) and record.get("schema") == PURGE_SCHEMA
-            and record.get("name") == name and isinstance(record.get("files"), dict)):
-        raise LibraryError(f"{_p(entry)} has no {PURGE_SCHEMA} {PURGE_FILE} for job {name}; "
-                           "the job is not deleted")
-    left, _ = job_listing(folder)
-    strange = [rel for rel, digest in left.items() if record["files"].get(rel) != digest]
-    if strange:
-        raise LibraryError(f"{_p(folder)} holds files that {PURGE_FILE} does not list with "
-                           f"these hashes ({', '.join(strange[:5])}); the job is not deleted")
-    say(f"6. {_p(entry)} is complete and verifies; finishing the interrupted purge")
-    _purge(folder, entry, name, record["owner_said"], record["date"], say,
-           write_record=False)
+        raise LibraryError(f"{_p(entry)} is not what finish staged and checked ("
+                           f"{'; '.join(problems[:6])}); nothing was changed")
+    run.say(f"6. {_p(entry)} was published by an earlier run (not redone); it matches what "
+            "was staged and checked, and the job")
+    _purge(run)
 
+
+def _differs_note(run: _Run, record: dict) -> None:
+    """Say plainly where this run's answers differ from the entry's, which are kept."""
+    prov = _json_or_none(_read(run.entry / PROVENANCE_FILE)) or {}
+    if prov.get("public") != run.public:
+        was = "yes" if prov.get("public") else "no"
+        run.say(f"   note: the entry was published with --public {was}; this run's "
+                f"--public {'yes' if run.public else 'no'} is not used (a publish is never "
+                "redone)")
+    if run.words is not None and run.words != record["owner_said"]:
+        run.say(f"   note: the earlier run's purge record is kept, with the owner's words "
+                f"{_words(record['owner_said'])}; this run's --purge-owner-said is not "
+                "recorded")
+
+
+def _resume_purge(run: _Run) -> None:
+    """COMPLETE with the job folder still present: the run stopped after COMPLETE, before
+    the job was moved to its tombstone, so the job must be exactly what purge.json lists
+    (a job made again under the same name is not)."""
+    _same_job(run.folder, run.entry)
+    record = _check_entry(run)
+    problems = tombstone_problems(run.folder, record, exact=True)
+    if problems:
+        raise LibraryError(f"{_p(run.folder)} is not the job {PURGE_FILE} lists ("
+                           f"{'; '.join(problems[:5])}); it may be a new job of the same "
+                           "name. Nothing was deleted")
+    run.say(f"6. {_p(run.entry)} is complete and verifies; finishing the interrupted purge")
+    _differs_note(run, record)
+    _delete(run, record["files"])
+
+
+def _resume_tombstone(run: _Run) -> None:
+    """The job's tombstone with a finished entry: the deletion stopped part way. Every file
+    left must be in purge.json with the same SHA-256; then it is deleted."""
+    record = _check_entry(run)
+    problems = tombstone_problems(run.tombstone, record, exact=False)
+    if problems:
+        raise LibraryError(f"{_p(run.tombstone)} holds what {PURGE_FILE} does not list ("
+                           f"{'; '.join(problems[:5])}); nothing was deleted")
+    run.say(f"6. {_p(run.entry)} is complete and verifies; finishing the deletion of "
+            f"{_p(run.tombstone)}")
+    _differs_note(run, record)
+    delete_job(run.tombstone)
+    run.say(f"7. purged {_p(run.folder)}: the owner said {_words(record['owner_said'])}")

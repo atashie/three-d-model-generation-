@@ -67,7 +67,7 @@ from tdmg.jobs import (
     new_job,
     unset_required,
 )
-from tdmg.library import LibraryError, RebuildDiffers, finish
+from tdmg.library import LibraryError, RebuildDiffers, default_prints_dir, finish
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, CLASSES, RECIPES, class_of, class_status
@@ -897,6 +897,11 @@ def job_new(
         "--jobs-dir", help="Folder that holds the jobs; default jobs/ in the source "
                            "checkout (required when tdmg is installed from a wheel).")
     ] = None,
+    prints_dir: Annotated[Path | None, typer.Option(
+        "--prints-dir", help="The print library; a name already in it is refused. Default: "
+                             "prints/ in the source checkout when --jobs-dir is not given; "
+                             "with --jobs-dir, no library is checked unless this is "
+                             "given.")] = None,
 ) -> None:
     """Start a job: make JOBS_DIR/NAME/ with the image (and mask) in
     source/ and job.yaml, every stage's parameters at their defaults.
@@ -906,8 +911,10 @@ def job_new(
 
     Exit codes:
       0  job made
-      2  refused (bad name, existing job, class not ready, image
-         missing or unreadable, bad mask); nothing is written; or
+      2  refused (bad name, existing job, a name already in the
+         library or still being purged by tdmg finish, class not
+         ready, image missing or unreadable, bad mask); nothing is
+         written; or
          an I/O failure while writing, which can leave a folder
          without job.yaml: such a folder is incomplete
     """
@@ -916,9 +923,12 @@ def job_new(
                  "edits": edits}
     try:
         where = default_jobs_dir() if jobs_dir is None else jobs_dir
+        library = prints_dir
+        if library is None and jobs_dir is None:
+            library = default_prints_dir()
         job = new_job(where, name, output_class, image, colors=colors, mask=mask,
                       origin=origin, generated=generated, width_mm=width_mm,
-                      thickness_mm=thickness_mm)
+                      thickness_mm=thickness_mm, prints_dir=library)
     except JobError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -1221,8 +1231,9 @@ def finish_command(
     G-code timestamp lines and slice.json's hashes of those G-code
     files may differ); (5) printable files in files/ or private/ by
     --public; (6) rename the staging folder to PRINTS_DIR/NAME, write
-    purge.json, then COMPLETE (every file's SHA-256) last; (7) delete
-    exactly JOBS_DIR/NAME.
+    purge.json, then COMPLETE (every file's SHA-256) last; (7) rename
+    JOBS_DIR/NAME to JOBS_DIR/.purging-NAME, check it holds exactly
+    what purge.json lists, and delete it.
 
     Run it again after an interruption: it continues from the step it
     stopped at, never publishes twice, and deletes the job only once
@@ -1237,7 +1248,10 @@ def finish_command(
          deleted, and the staging folder is removed
       2  refused (bad name, a link, an existing print, a stage not done,
          no current print confirmation, a dirty git tree, no --public,
-         no purge words) or an I/O failure; the job is not deleted
+         no purge words) or an I/O failure. Before step 7 deletes
+         anything the job is untouched; a deletion that stops part way
+         leaves the rest in JOBS_DIR/.purging-NAME, which the next run
+         deletes
     """
     answer = None if public is None else {"yes": True, "no": False}.get(public.lower())
     if public is not None and answer is None:
@@ -1261,7 +1275,8 @@ def finish_command(
         _os_error(e)
         raise typer.Exit(2) from None
     except Exception as e:  # noqa: BLE001 - a bug: say so, and exit 2 like any refusal
-        typer.echo(f"error: unexpected {type(e).__name__} in tdmg finish: {e}", err=True)
+        typer.echo(f"error: unexpected {type(e).__name__} in tdmg finish: {e}; run it "
+                   "again to resume", err=True)
         raise typer.Exit(2) from None
 
 
