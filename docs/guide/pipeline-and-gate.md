@@ -163,8 +163,11 @@ the library does not keep that are not stage outputs, `job.yaml`, `state.json` o
 1 to 4 and says what 5 to 7 would do, changing nothing. After an interruption, run the
 same command again: it continues where it stopped, never publishes twice, and deletes
 nothing unless `prints/NAME/COMPLETE` verifies and the entry is this job's. `tdmg job new`
-refuses a name whose tombstone exists, and a name already in the library (`prints/`, or
-`--prints-dir`).
+refuses a name whose tombstone exists, and a name already in the library (`--prints-dir`,
+default the checkout's `prints/`, even with `--jobs-dir`; outside a checkout it says the
+library was not checked). A known limit: a file written into `jobs/.purging-NAME/` after
+the final check and before the deletion is deleted without being listed; nothing else
+knows that path while it exists, and `job new` refuses the name.
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 

@@ -67,7 +67,8 @@ from tdmg.jobs import (
     new_job,
     unset_required,
 )
-from tdmg.library import LibraryError, RebuildDiffers, default_prints_dir, finish
+from tdmg.library import LibraryError, RebuildDiffers, finish
+from tdmg.paths import REPO_ROOT
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, CLASSES, RECIPES, class_of, class_status
@@ -899,8 +900,8 @@ def job_new(
     ] = None,
     prints_dir: Annotated[Path | None, typer.Option(
         "--prints-dir", help="The print library; a name already in it is refused. Default: "
-                             "prints/ in the source checkout when --jobs-dir is not given; "
-                             "with --jobs-dir, no library is checked unless this is "
+                             "prints/ in the source checkout (also with --jobs-dir); "
+                             "outside a checkout, none is checked unless this is "
                              "given.")] = None,
 ) -> None:
     """Start a job: make JOBS_DIR/NAME/ with the image (and mask) in
@@ -924,8 +925,8 @@ def job_new(
     try:
         where = default_jobs_dir() if jobs_dir is None else jobs_dir
         library = prints_dir
-        if library is None and jobs_dir is None:
-            library = default_prints_dir()
+        if library is None and REPO_ROOT is not None:
+            library = REPO_ROOT / "prints"   # the checkout's library, even with --jobs-dir
         job = new_job(where, name, output_class, image, colors=colors, mask=mask,
                       origin=origin, generated=generated, width_mm=width_mm,
                       thickness_mm=thickness_mm, prints_dir=library)
@@ -945,6 +946,9 @@ def job_new(
     unset = unset_required(job)
     if unset:
         typer.echo(f"not set yet (needed before those stages run): {', '.join(unset)}")
+    if library is None:
+        typer.echo("the print library was not checked for this name (tdmg is not running "
+                   "from a source checkout; give --prints-dir to check one)")
     typer.echo(f"wrote {folder / JOB_FILE}")
 
 

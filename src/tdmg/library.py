@@ -102,6 +102,12 @@ gone, an entry of another job, a job beside its tombstone) is refused with nothi
 changed. Nothing of the job is deleted unless PRINTS_DIR/NAME has COMPLETE, every hash in
 it matches, and the entry is this job's.
 
+**Known limit.** A file written into JOBS_DIR/.purging-NAME after purge_job's re-walk
+and before the deletion is deleted without being listed. Nothing else knows that path (no
+job has the name while the tombstone exists, and tdmg job new refuses the name), so only a
+program that already had the folder open, or that is given the tombstone's path, could do
+it.
+
 **The rebuild comparison** (compare_jobs). The evidence is
 research/verification/2026-11-16-repeatability/README.md: two runs of the same inputs
 differ only in the slicers' timestamp line of each G-code and in slice.json's hashes of
@@ -295,12 +301,18 @@ WINDOWS_FOLDER_LIMIT = 248
 def _unreadable(path, e: OSError) -> LibraryError:
     """A LibraryError for a file or folder finish cannot read, saying so plainly."""
     where = str(e.filename or path)
-    text = f"cannot read {_p(where)} ({e.strerror or e})"
-    if os.name == "nt" and len(where) >= WINDOWS_FOLDER_LIMIT:
-        text += (f"; the path is {len(where)} characters long, at or over Windows' "
-                 f"{WINDOWS_FOLDER_LIMIT}-character limit for a folder (260 for a file) in "
-                 "programs without long-path support; move the job to a shorter path")
+    text = f"cannot read {_p(where)} ({e.strerror or e})" + _long_hint(where)
     return LibraryError(text + "; finish stops, and nothing of the job is deleted")
+
+
+def _long_hint(where) -> str:
+    """The Windows path-limit hint, when the path is at or over the folder limit."""
+    where = str(where)
+    if os.name == "nt" and len(where) >= WINDOWS_FOLDER_LIMIT:
+        return (f"; the path is {len(where)} characters long, at or over Windows' "
+                f"{WINDOWS_FOLDER_LIMIT}-character limit for a folder (260 for a file) in "
+                "programs without long-path support; move the job to a shorter path")
+    return ""
 
 
 def _walk(root: Path) -> tuple[list[str], list[str]]:
@@ -324,7 +336,9 @@ def _walk(root: Path) -> tuple[list[str], list[str]]:
             elif path.is_file():
                 files.append(rel)
             else:
-                raise LibraryError(f"{_p(path)} is not a plain file or folder")
+                raise LibraryError(f"{_p(path)} is not a plain file or folder (or cannot be "
+                                   f"read){_long_hint(path)}; finish stops, and nothing of "
+                                   "the job is deleted")
     return sorted(files), sorted(folders)
 
 
@@ -1342,7 +1356,14 @@ def purge_job(folder: Path, tombstone: Path, record: dict, lock: _Lock) -> None:
     lock.moved(tombstone)
     problems = tombstone_problems(tombstone, record, exact=True)
     if problems:
-        os.rename(tombstone, folder)
+        try:
+            os.rename(tombstone, folder)
+        except OSError as e:
+            raise LibraryError(
+                f"the job changed after {PURGE_FILE} listed it ({'; '.join(problems[:5])}), "
+                f"and it could not be moved back to {_p(folder)} ({e.strerror or e}): the "
+                f"job is in {_p(tombstone)} and nothing was deleted. Look at both by hand; "
+                f"move it back to {_p(folder)} before running finish again") from None
         lock.moved(folder)
         raise LibraryError(f"the job changed after {PURGE_FILE} listed it ("
                            f"{'; '.join(problems[:5])}); nothing was deleted. Run finish "

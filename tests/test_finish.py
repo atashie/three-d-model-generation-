@@ -1154,3 +1154,58 @@ def test_card_wording(tmp_path, tmp_path_factory, slicers, repo):
     assert "A planned `tdmg library verify` (not built yet)" in card
     assert "has not been checked" in card and "layer height 0.2 mm" in card
     assert "Use the same printer" not in card
+
+
+# --- re-review minors (2026-11-17) ---------------------------------------------------------------
+
+def test_a_failed_move_back_says_where_the_job_is(tmp_path, tmp_path_factory, slicers, repo,
+                                                  monkeypatch):
+    """N7: jobs/NAME made again while the tombstone exists, so the move back fails."""
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    before = _tree(folder)
+    tombstone = folder.parent / f".purging-{R1}"
+
+    def remade(root, record, *, exact):
+        folder.mkdir()
+        (folder / "other.txt").write_bytes(b"a new job folder\n")
+        return ["late.txt: not in purge.json"]
+    monkeypatch.setattr(library, "tombstone_problems", remade)
+    with pytest.raises(LibraryError, match="the job is in .*nothing was deleted"):
+        _call(folder, slicers)
+    assert _tree(tombstone) == before and (folder / "other.txt").is_file()
+
+
+def test_a_path_over_the_limit_gets_the_hint(tmp_path):
+    """A file the walk lists but cannot stat, because its path is too long."""
+    _windows()
+    f = _small_job(tmp_path)
+    deep = f
+    while len(str(deep)) < 200:
+        deep = deep / "dddddddddd"
+    name = "z" * (265 - len(str(deep)))
+    try:
+        os.makedirs(deep, exist_ok=True)
+        (Path("\\\\?\\" + str(deep)) / name).write_text("z")
+    except OSError as e:
+        pytest.skip(f"cannot make a long path here ({e})")
+    try:
+        assert len(str(deep / name)) >= library.WINDOWS_FOLDER_LIMIT
+        with pytest.raises(LibraryError, match="not a plain file or folder .*characters long"):
+            library.job_listing(f)
+    finally:
+        shutil.rmtree("\\\\?\\" + str(f), ignore_errors=True)
+
+
+def test_job_new_checks_the_checkouts_library_with_jobs_dir(tmp_path, monkeypatch):
+    import tdmg.cli
+    image = _png(tmp_path / "in" / "roadie.png", roadie_like())
+    root = tmp_path / "checkout"
+    (root / "prints" / R1).mkdir(parents=True)
+    monkeypatch.setattr(tdmg.cli, "REPO_ROOT", root)
+    r = _invoke("job", "new", R1, "--class", "flat-icon", "--image", image, "--jobs-dir",
+                tmp_path / "jobs")
+    assert r.exit_code == 2 and "already a print in the library" in _plain(r.output)
+    monkeypatch.setattr(tdmg.cli, "REPO_ROOT", None)
+    r = _invoke("job", "new", R1, "--class", "flat-icon", "--image", image, "--jobs-dir",
+                tmp_path / "jobs")
+    assert r.exit_code == 0 and "library was not checked" in _plain(r.output)

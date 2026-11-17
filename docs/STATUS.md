@@ -99,8 +99,8 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-17, PC, restructure Task 9 spec-review fixes):**
-  `uv run pytest -q` gave 3241 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
+- **Latest local validation (2026-11-17, PC, restructure Task 9 re-review minors):**
+  `uv run pytest -q` gave 3244 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
   account cannot create symlinks; the junction tests ran); `tests/test_finish.py` also
   passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
