@@ -4,8 +4,9 @@ STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checke
 portability with the pinned PrusaSlicer). R2 adds `colors` (the color plan of a selection,
 for review) and `strip` (the two calibration strips, built, gated and sliced); `make` and
 `check` follow. `job new` starts a job: a folder in jobs/ with the source image and
-job.yaml (tdmg.jobs); `job set` changes its parameters, `job run` runs its stages and
-`job status` shows where it stands (tdmg.job_runner)."""
+job.yaml (tdmg.jobs); `job set` changes its parameters, `job run` runs its stages,
+`job status` shows where it stands and `job confirm` records the owner's confirmation
+(tdmg.job_runner)."""
 
 import inspect
 from pathlib import Path
@@ -47,6 +48,8 @@ from tdmg.colors import COLORS_PRINTER, ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
 from tdmg.job_runner import (
     Machine,
+    confirm,
+    confirmation_line,
     job_status,
     run_job,
     set_parameters,
@@ -1102,6 +1105,74 @@ def job_status_command(
         _os_error(e)
         raise typer.Exit(2) from None
     _status_output(status)
+
+
+@job_app.command("confirm")
+def job_confirm(
+    name: Annotated[str, typer.Argument(help="Job name.")],
+    subject: Annotated[str, typer.Option(
+        "--subject", help="What the owner confirms: selection (select/preview.png), colors "
+                          "(colors/regions.png) or print (the file printed).")],
+    owner_said: Annotated[str, typer.Option(
+        "--owner-said", help="The owner's own words, verbatim, exactly as they said or "
+                             "wrote them. Never words the owner did not say, and never a "
+                             "summary or paraphrase. Recorded as given.")],
+    face: Annotated[str | None, typer.Option(
+        "--face", help="For --subject print, route ams: the face the owner printed, up or "
+                       "down (as the owner says; never guessed from the slice).")] = None,
+    route: Annotated[str | None, typer.Option(
+        "--route", help="For --subject print: how it was printed: single (R1), ams or "
+                        "glue (R2); default single for R1, ams for R2.")] = None,
+    accept_not_certified: Annotated[bool, typer.Option(
+        "--accept-not-certified",
+        help="For --subject print: the owner printed (or chooses to print) a file whose "
+             "slice verdict is not PRINTABLE. Recorded in the confirmation.")] = False,
+    date: Annotated[str | None, typer.Option(
+        "--date", help="The date the owner gave the words, YYYY-MM-DD (their local "
+                       "date); default today's local date. Not after today.")] = None,
+    prusaslicer_dir: PrusaDir = None,
+    jobs_dir: JobsDir = None,
+) -> None:
+    """Record the owner's confirmation in job.yaml: their words verbatim,
+    the date, the job's revision and the SHA-256 of every file it covers.
+
+    Covered: selection, select/selection.json and select/preview.png;
+    colors, colors/colors.json and colors/regions.png; print, the
+    printable files (single: flat/model.stl; ams: colored_flat/model.3mf
+    and palette.json, with the face; glue: every glue plate), the slice
+    record's identity and its verdicts. Each file is hashed from disk and
+    must be the one its record names.
+
+    Pass only words the owner gave. Confirmations are only ever added:
+    a new one never changes an earlier one. tdmg job status and job run
+    show a confirmation as stale when a covered file changes.
+
+    Refused: empty words; a stage not done (print needs every stage);
+    a color plan not ready; a file differing from its record; for print,
+    a face not sliced, ams without --face, and a verdict that is not
+    PRINTABLE without --accept-not-certified.
+
+    Exit codes:
+      0  confirmation recorded
+      2  refused; job.yaml is not changed
+    """
+    try:
+        folder = _job_folder(name, jobs_dir)
+        job, _ = confirm(folder, subject, owner_said, date=date, route=route, face=face,
+                         accept_not_certified=accept_not_certified,
+                         machine=Machine(None, prusaslicer_dir))
+    except JobError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    status = job_status(folder, Machine(None, prusaslicer_dir), job=job)
+    typer.echo(f"job {name}: revision {job['revision']}")
+    typer.echo(f"recorded {confirmation_line(status.confirmations[-1])}")
+    for path, digest in job["confirmations"][-1]["covers"].items():
+        typer.echo(f"  covers {path} {digest}")
+    typer.echo(f"wrote {folder / JOB_FILE}")
 
 
 if __name__ == "__main__":

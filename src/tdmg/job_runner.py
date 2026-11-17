@@ -1,5 +1,6 @@
-"""Running a job: `tdmg job run`, `tdmg job status` and `tdmg job set` (restructure plan
-Task 7; design docs/plans/2026-11-16-restructure-design.md section 3).
+"""Running a job: `tdmg job run`, `tdmg job status`, `tdmg job set` and `tdmg job confirm`
+(restructure plan Tasks 7 and 8; design docs/plans/2026-11-16-restructure-design.md
+sections 3 and 4).
 
 **Stage folders.** Each stage of the job's recipe runs into `jobs/NAME/<stage>/` (select,
 flat, colors, colored_flat, slice), with the stage's own record (STAGE_RECORDS) written
@@ -56,24 +57,37 @@ A stage that fails before its record exists leaves its old folder and state.json
 were. A run left half way is tidied by the next run: an `<stage>.old/` with no `<stage>/`
 is put back, other `.old/` and `.new/` folders deleted.
 
-**Known limit.** Status trusts each record's own `outputs` hashes and does not hash the
-output files again, so a hand edit to a stage's file (flat/model.stl, say) is not seen
-here; Task 8's confirmations (which hash the files they cover) and Task 9's rebuild catch
-it.
+**Known limit.** A stage's state trusts each record's own `outputs` hashes and does not
+hash the output files again, so a hand edit to a stage's file (flat/model.stl, say) does
+not make the stage stale. A confirmation covering the file does go stale (its files are
+hashed again on every status), and confirm refuses a file that differs from its record;
+Task 9's rebuild catches the rest.
 
-**Lock.** job run and job set hold LOCK_FILE in the job folder (an exclusive create,
-removed when done), so two of them cannot change a job at once.
+**Lock.** job run, job set and job confirm hold LOCK_FILE in the job folder (an exclusive
+create, removed when done), so two of them cannot change a job at once.
 
 **Status:** per stage done (record present, key current, record algorithm and links
 agreeing, every earlier stage done), stale or not run; the verdict, algorithm and tdmg
-version of a done stage; confirmations (none yet: tdmg job confirm is plan Task 8); and
-what waits for the owner (unset required parameters, previews to check, a color plan that
-is not ready).
+version of a done stage; each confirmation, current or stale and why
+(tdmg.confirmations.current_problem, computed on every status, so job run's status shows
+it after a rerun); and what waits for the owner (unset required parameters, previews to
+check with no current confirmation, a color plan that is not ready, stale confirmations).
+
+**Confirm** (confirm, plan Task 8): records the owner's words for one subject, with the
+date, the job revision and the covered hashes (tdmg.confirmations), appended to
+job.yaml's confirmations through save_job, under the lock. It refuses: blank words; a
+date that is not YYYY-MM-DD or is after today; a subject the recipe has no stage for; a
+stage not done (select for selection; colors, with a ready plan, for colors; every stage
+for print); a covered file that differs from its record; for print, an unknown route, a
+missing or unneeded face, a face that was not sliced, and a verdict that is not PRINTABLE
+unless accept_not_certified (which is then recorded), and accept_not_certified when every
+verdict is PRINTABLE.
 """
 
 from __future__ import annotations
 
 import copy
+import datetime
 import hashlib
 import inspect
 import json
@@ -89,7 +103,7 @@ import yaml
 from pydantic import ValidationError
 
 import tdmg.slicing
-from tdmg import jobs
+from tdmg import confirmations, jobs
 from tdmg.color_config import KEYS as COLOR_KEYS
 from tdmg.color_slicing import (
     COLORSLICE_ALGORITHM,
@@ -143,7 +157,8 @@ STAGE_ERRORS = (JobError, SelectionError, FlatError, ColorsError, SlicerError, R
                 ValidationError, OSError)
 DONE, STALE, NOT_RUN = "done", "stale", "not run"
 MASK_CLEAR = ("none", "null", "~")
-CONFIRM_NOTE = "confirmations: none (tdmg job confirm is not built yet)"
+CONFIRM_NOTE = "confirmations: none"
+CURRENT = "current"
 
 
 def _sha(data: bytes) -> str:
@@ -445,6 +460,17 @@ class StageStatus:
 
 
 @dataclass
+class ConfirmationStatus:
+    number: int                      # 1-based, in job.yaml order
+    entry: dict
+    problem: str | None              # why stale; None when current
+
+    @property
+    def current(self) -> bool:
+        return self.problem is None
+
+
+@dataclass
 class Status:
     name: str
     recipe: str
@@ -452,10 +478,15 @@ class Status:
     stages: list[StageStatus]
     unset: list[str]
     waits: list[str] = field(default_factory=list)
+    confirmations: list[ConfirmationStatus] = field(default_factory=list)
 
     @property
     def all_done(self) -> bool:
         return all(s.state == DONE for s in self.stages)
+
+    def current(self, subject: str) -> bool:
+        """Whether a current confirmation of `subject` exists."""
+        return any(c.current and c.entry["subject"] == subject for c in self.confirmations)
 
 
 def job_status(folder: str | Path, machine: Machine | None = None, *,
@@ -488,6 +519,9 @@ def job_status(folder: str | Path, machine: Machine | None = None, *,
         earlier_done = earlier_done and verdict == DONE
         out.append(st)
     status = Status(job["name"], job["recipe"], job["revision"], out, jobs.unset_required(job))
+    status.confirmations = [
+        ConfirmationStatus(i, entry, confirmations.current_problem(folder, job, entry))
+        for i, entry in enumerate(job["confirmations"], start=1)]
     status.waits = _waits(job, status)
     return status
 
@@ -504,15 +538,17 @@ def _waits(job: dict, status: Status) -> list[str]:
         if s.state != DONE:
             continue
         if s.stage == "select":
-            waits.append("check select/preview.png: is this the subject?")
+            if not status.current("selection"):
+                waits.append("check select/preview.png: is this the subject?")
         elif s.stage == "colors":
             if s.record["ready"]:
-                waits.append("check colors/regions.png: are these the colors?")
+                if not status.current("colors"):
+                    waits.append("check colors/regions.png: are these the colors?")
             else:
                 waits.append(f"the color plan is not ready ({s.record['not_ready_reason']}): "
                              "choose merges from colors/regions.png and set them, e.g. "
                              f"tdmg job set {job['name']} \"colors.merge=[[FROM, INTO]]\"")
-    if "slice" in by and by["slice"].state == DONE:
+    if "slice" in by and by["slice"].state == DONE and not status.current("print"):
         rec = by["slice"].record
         if "faces" in rec:                      # a colored slice: its own instructions
             waits.append(f"to print (files in colored_flat/): {rec['print']}"
@@ -521,6 +557,12 @@ def _waits(job: dict, status: Status) -> list[str]:
             waits.append(f"to print (model.stl is in flat/): {PRINT_THIS}")
         else:
             waits.append("not PRINTABLE: do not print it; see slice/slice.json")
+    # A stale confirmation waits only while no later one of its subject is current (an
+    # older entry stays in job.yaml for good: it is the owner's words).
+    for c in status.confirmations:
+        if not c.current and not status.current(c.entry["subject"]):
+            waits.append(f"confirmation {c.number} ({confirmations.describe(c.entry)}) is "
+                         "stale: ask the owner to confirm again (tdmg job confirm)")
     return waits
 
 
@@ -551,10 +593,24 @@ def stage_line(s: StageStatus) -> str:
     return f"{head} - {detail} ({rec.get('algorithm')}, tdmg {rec.get('tdmg_version')})"
 
 
+def confirmation_line(c: ConfirmationStatus) -> str:
+    """'1. print (ams, face down), 2026-11-16, revision 4, "words": current' or
+    '...: STALE (why)'."""
+    e = c.entry
+    words = json.dumps(e["owner_said"], ensure_ascii=True)
+    state = CURRENT if c.current else f"STALE ({c.problem})"
+    return (f"{c.number}. {confirmations.describe(e)}, {e['date']}, revision "
+            f"{e['revision']}, {words}: {state}")
+
+
 def status_lines(status: Status) -> list[str]:
     lines = [f"job {status.name}: recipe {status.recipe}, revision {status.revision}"]
     lines += [f"  {stage_line(s)}" for s in status.stages]
-    lines.append(CONFIRM_NOTE)
+    if status.confirmations:
+        lines.append("confirmations:")
+        lines += [f"  {confirmation_line(c)}" for c in status.confirmations]
+    else:
+        lines.append(CONFIRM_NOTE)
     if status.waits:
         lines.append("waits for the owner:")
         lines += [f"  {w}" for w in status.waits]
@@ -816,3 +872,91 @@ def _set_locked(folder: Path, parsed, targets) -> tuple[dict, bool]:
             text += f" ({VALUE_HELP})"
         raise JobError(text) from None
     return saved, saved["revision"] != job["revision"]
+
+
+# --- tdmg job confirm ---------------------------------------------------------------------
+
+def confirm_date(value: str | None, today: datetime.date | None = None) -> str:
+    """The confirmation's date: `value` (YYYY-MM-DD, not after today), or today's local
+    date. Local, not UTC: the owner gives their words on their own calendar day."""
+    today = datetime.date.today() if today is None else today
+    if value is None:
+        return today.isoformat()
+    problem = jobs.date_problem(value)
+    if problem:
+        raise JobError(f"--date {problem}")
+    if datetime.date.fromisoformat(value) > today:
+        raise JobError(f"--date {value} is after today ({today.isoformat()}); give the date "
+                       "the owner said it")
+    return value
+
+
+def confirm(folder: str | Path, subject: str, owner_said: str, *, date: str | None = None,
+            route: str | None = None, face: str | None = None,
+            accept_not_certified: bool = False, machine: Machine | None = None
+            ) -> tuple[dict, dict]:
+    """Record the owner's confirmation of `subject`; return (the job, the new entry).
+
+    `owner_said` is the owner's own words, verbatim; nothing else may be passed. The entry
+    (tdmg.jobs module docstring) is appended to job.yaml's confirmations with save_job,
+    under the job's lock; refusals are listed in this module's docstring. `machine` matters
+    only for whether PrusaSlicer is configured (part of the slice stage's key)."""
+    folder = Path(folder)
+    machine = Machine() if machine is None else machine
+    problem = jobs.owner_words_problem(owner_said)
+    if problem:
+        raise JobError(f"--owner-said {problem}")
+    day = confirm_date(date)
+    check_not_linked(folder)
+    job = load_job(folder)
+    if subject not in jobs.subjects(job["recipe"]):
+        raise JobError(f"--subject {subject!a}: a {job['recipe']} job confirms "
+                       f"{', '.join(jobs.subjects(job['recipe']))}")
+    if subject != "print" and (route is not None or face is not None
+                               or accept_not_certified):
+        raise JobError("--route, --face and --accept-not-certified are for --subject print")
+    with job_lock(folder):
+        return _confirm_locked(folder, subject, owner_said, day, route, face,
+                               accept_not_certified, machine)
+
+
+def _confirm_locked(folder: Path, subject: str, owner_said: str, day: str,
+                    route: str | None, face: str | None, accept: bool, machine: Machine
+                    ) -> tuple[dict, dict]:
+    job = load_job(folder)                  # read again under the lock
+    check_source(folder, job)
+    status = job_status(folder, machine, job=job)
+    by = {s.stage: s for s in status.stages}
+    need = [s.stage for s in status.stages] if subject == "print" else \
+        [jobs.SUBJECT_STAGE[subject]]
+    not_done = [by[s] for s in need if by[s].state != DONE]
+    if not_done:
+        s = not_done[0]
+        raise JobError(f"cannot confirm {subject}: stage {s.stage} is {s.state}"
+                       + (f" ({s.note})" if s.note else "") + "; run tdmg job run first")
+    if subject == "colors" and not by["colors"].record["ready"]:
+        raise JobError("cannot confirm colors: the color plan is not ready "
+                       f"({by['colors'].record['not_ready_reason']})")
+    entry = {"subject": subject, "owner_said": owner_said, "date": day,
+             "revision": job["revision"]}
+    if subject != "print":
+        entry["covers"] = confirmations.subject_covers(folder, subject)
+    else:
+        route = confirmations.default_route(job["recipe"]) if route is None else route
+        cover = confirmations.print_cover(folder, job, route, face)
+        uncertified = sorted(k for k, v in cover.verdicts.items() if v != jobs.PRINTABLE)
+        if uncertified and not accept:
+            raise JobError(
+                f"not PRINTABLE: {', '.join(f'{k} {cover.verdicts[k]}' for k in uncertified)}"
+                ". Do not print it; if the owner printed it anyway, or chooses to, give "
+                "--accept-not-certified (it is recorded)")
+        if accept and not uncertified:
+            raise JobError("every verdict is PRINTABLE: --accept-not-certified is not "
+                           "needed; leave it out")
+        entry.update(covers=cover.covers, route=route,
+                     face=face if route in jobs.FACED_ROUTES else None,
+                     slice_id=cover.slice_id, verdicts=cover.verdicts,
+                     accept_not_certified=bool(uncertified))
+    new = copy.deepcopy(job)
+    new["confirmations"].append(entry)
+    return jobs.save_job(folder, new), entry

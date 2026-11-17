@@ -697,7 +697,7 @@ def _drop(job, path):
 
 @pytest.mark.parametrize(("path", "value", "match"), [
     ("extra", 1, "unknown key 'extra'"),
-    ("schema", "tdmg.job/2", "this tdmg reads tdmg.job/1"),
+    ("schema", "tdmg.job/3", "this tdmg reads tdmg.job/1 and tdmg.job/2"),
     ("name", "Roadie", "uppercase"),
     ("class", "statue", "not an output class"),
     ("recipe", "R1x", "not in class"),
@@ -706,7 +706,8 @@ def _drop(job, path):
     ("revision", "1", "revision must be"),
     ("revision", True, "revision must be"),
     ("confirmations", {}, "must be a list"),
-    ("confirmations", [{"subject": "print"}], "cannot record or read"),
+    ("confirmations", [{"subject": "print"}], "missing key"),
+    ("confirmations", [{"subject": "praise"}], "subject must be one of"),
     ("source", [], "source must be a mapping"),
     ("source.extra", 1, "unknown key 'extra'"),
     ("source.prompt", "x", "for origin generated only"),

@@ -40,6 +40,8 @@ uv run tdmg job new NAME --class flat-icon --image PATH [--colors]   # start a j
 uv run tdmg job set NAME flat.width_mm=60 flat.thickness_mm=3   # change the job's parameters
 uv run tdmg job run NAME --slicer-dir artifacts/tools/orcaslicer-2.5.0   # run the stages not done
 uv run tdmg job status NAME               # each stage: done, stale or not run; what waits for you
+uv run tdmg job confirm NAME --subject print --face down --owner-said "THE OWNER'S WORDS"
+                                          # record the owner's words (selection|colors|print)
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

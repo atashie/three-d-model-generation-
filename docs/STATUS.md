@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-16 (restructure Task 7 and its review fixes: `tdmg job set`, `job run`, `job status`).
+**Last updated:** 2026-11-16 (restructure Task 8: `tdmg job confirm`).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -39,7 +39,15 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   except G-code timestamps and their hashes); input keys (parameters, upstream record
   hashes, algorithm ids, rules, profiles) in `state.json`; a rerun goes into
   `<stage>.new/` and replaces the old folder only when its record exists; `--rerun
-  STAGE`; a per-job `.lock`. No confirmations yet (Task 8).
+  STAGE`; a per-job `.lock`.
+- **`tdmg job confirm NAME --subject selection|colors|print --owner-said TEXT [--face
+  up|down] [--route single|ams|glue] [--date YYYY-MM-DD] [--accept-not-certified]`**
+  (restructure Task 8): appends the owner's verbatim words to `job.yaml` (now
+  `tdmg.job/2`; `/1` still read) with the date, revision and covered file hashes; a print
+  entry adds the route, face, slice identity and verdicts. Refuses blank words, stages not
+  done, files that differ from their records, faces not sliced, and a verdict not
+  PRINTABLE without `--accept-not-certified`. Status shows each confirmation current or
+  stale, re-hashing the covered files each time.
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
@@ -63,7 +71,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–7 done; next Task 8 (`tdmg job confirm`) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–8 done; next Task 9 (`tdmg finish`) |
 
 ## Machines
 
@@ -77,8 +85,8 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-16, PC, restructure Task 7 re-review minors):**
-  `uv run pytest -q` gave 3114 passed and 9 skipped (8 real-slicer tests; one symlink
+- **Latest local validation (2026-11-16, PC, restructure Task 8):**
+  `uv run pytest -q` gave 3159 passed and 9 skipped (8 real-slicer tests; one symlink
   test, since this account cannot create symlinks); `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the
@@ -117,7 +125,8 @@ has been measured with calipers, and strength is not judged.
    (recipe registry: `in progress` status, stages, outputs by route, output classes and
    `resolve`), Task 5 (`.gitignore` for `jobs/` and the library's private parts),
    Task 6 (`job.yaml` and `tdmg job new`), Task 7 (`tdmg job set`, `job run`, `job
-   status`). Next: Task 8 (`tdmg job confirm`).
+   status`), Task 8 (`tdmg job confirm`; not yet reviewed by Codex). Next: Task 9
+   (`tdmg finish`).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.

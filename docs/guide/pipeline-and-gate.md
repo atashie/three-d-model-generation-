@@ -78,10 +78,11 @@ profiles it uses (and, for `select`, the image and mask hashes), kept in
 input record changed. A stage whose record names another algorithm, or whose links do not
 match the upstream records, is stale too; `--rerun STAGE` runs a stage again anyway (after
 a code change that kept the algorithm id). While `job run` or `job set` works on a job it
-holds `jobs/NAME/.lock`. A known limit: status trusts each stage record's own output
+holds `jobs/NAME/.lock`. A known limit: a stage's state trusts its record's own output
 hashes and does not hash the files again, so a hand edit to a stage's file (for example
-`flat/model.stl`) is not seen; confirmations (`tdmg job confirm`) and the rebuild proof
-of `tdmg finish` will catch it; neither is built yet. A rerun goes into `<stage>.new/`
+`flat/model.stl`) does not make the stage stale; a confirmation that covers the file does
+go stale (below), and the rebuild proof of `tdmg finish` (not built yet) will catch the
+rest. A rerun goes into `<stage>.new/`
 and replaces the old folder only once its
 record is written, so a failed rerun keeps the old results. The run stops at a required
 parameter not set, at a stage that fails, and after a color plan that is not ready; it
@@ -90,8 +91,27 @@ for the owner (parameters to set, `preview.png` and `regions.png` to check). `td
 status NAME` prints the same without running. For the colors stage, the five keys `tdmg
 colors` takes as flags are passed as flags, and `outline_color`, `merge` and
 `outline_width_mm` through a config file holding only those, so `colors.json` records
-them with source `config` (details in `src/tdmg/job_runner.py`). Confirmations
-(`tdmg job confirm`) are not built yet.
+them with source `config` (details in `src/tdmg/job_runner.py`).
+
+**Confirmations (restructure Task 8).** `tdmg job confirm NAME --subject
+selection|colors|print --owner-said TEXT` records the owner's own words, verbatim, in
+`job.yaml` (schema `tdmg.job/2`; `tdmg.job/1` files are still read and become `/2` at
+their next change). Only words the owner gave are passed; empty words are refused. Each
+entry holds the subject, the words, the date (`--date YYYY-MM-DD`, the owner's local
+date; default today), the job revision and the SHA-256 of each covered file, hashed from
+disk: `select/selection.json` and `select/preview.png`; `colors/colors.json` and
+`colors/regions.png`; for `print`, the printable files of the route (`--route`: `single`
+for R1, `flat/model.stl`; `ams` for R2, the default, `colored_flat/model.3mf` and
+`palette.json`, with the `--face up|down` the owner printed, which is required; `glue`,
+every glue plate). A print entry also holds the slice record's identity (`slice_id` or
+`colorslice_id`, not `slice.json`'s bytes, which change with the G-code timestamps) and
+the verdict of each printed file. `confirm` refuses: a stage not done (`print` needs
+every stage), a color plan that is not ready, a file that differs from the one its record
+names, a face that was not sliced, and a verdict that is not PRINTABLE unless
+`--accept-not-certified` is given, which is then recorded. Entries are only ever added.
+`job status` and `job run` hash the covered files again each time and show each
+confirmation as current or stale (a covered file changed or went missing, or the slice
+identity or a verdict changed); a rerun that writes the same bytes leaves it current.
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 

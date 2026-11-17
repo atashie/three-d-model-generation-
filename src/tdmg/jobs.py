@@ -1,7 +1,7 @@
 """Jobs: one print's working folder, `jobs/<name>/`, and its spec, `job.yaml`
 (docs/plans/2026-11-16-restructure-design.md sections 3 and 4; plan Task 6).
 
-`job.yaml` (schema tdmg.job/1) holds:
+`job.yaml` (schema tdmg.job/2; tdmg.job/1 files are still read, see READ_SCHEMAS) holds:
 - `name`, `class` (an output class, tdmg.recipes.CLASSES) and `recipe` (the recipe the class
   resolved to);
 - `source`: the image `file` (a path inside the job folder, `source/<name>`), its `sha256`,
@@ -11,8 +11,25 @@
   `job new` (set_mask, for a mask corrected after the selection preview); the rest of
   `source` is fixed;
 - `stages`: every stage of the recipe with all of its parameters (STAGE_FIELDS);
-- `confirmations`: a list, empty until `tdmg job confirm` exists (plan Task 8);
+- `confirmations`: the owner's confirmations, oldest first (plan Task 8; validated by
+  _validate_confirmation, made by tdmg.job_runner.confirm). Append-only: save_job refuses
+  a change that edits or removes an earlier entry, since each holds the owner's words;
 - `revision`: 1 when made, bumped by every change (save_job).
+
+**Confirmation entries.** Every entry has `subject` (SUBJECTS), `owner_said` (the owner's
+words, verbatim, not blank), `date` (YYYY-MM-DD: the owner's local calendar date on which
+the words were given; tdmg job confirm takes --date and defaults to today's local date),
+`revision` (the job's revision when it was confirmed, so lower than the job's own once written) and
+`covers` (path in the job folder -> SHA-256 of that file, hashed from disk when
+confirmed). The covered files are fixed per subject: SUBJECT_FILES for selection and
+colors; for print, the printable files of the route (tdmg.recipes Route.required_files) in
+the folder the slice stage reads (PRINT_STAGES). A print entry adds `route` (one of the
+recipe's routes), `face` (up or down for the ams route, null otherwise), `slice_id` (the
+slice record's identity: slice_id for R1, colorslice_id for R2; not slice.json's bytes,
+which hold G-code hashes and so the time of slicing), `verdicts` (covered printable file ->
+the slice verdict for it) and `accept_not_certified` (true exactly when a verdict is not
+PRINTABLE: the owner chose to print a file tdmg did not certify). Whether an entry is still
+current is computed whenever the status is read (tdmg.confirmations), never stored.
 
 A stage parameter maps one to one onto the stage command's option of the same name (the
 CLI's snake_case spelling; for `colors`, the keys of tdmg.color_config). The value null
@@ -43,6 +60,7 @@ job.yaml).
 from __future__ import annotations
 
 import copy
+import datetime
 import hashlib
 import math
 import re
@@ -65,7 +83,11 @@ from tdmg.recipes import CLASSES, recipe, resolve
 from tdmg.records import RecordError, replace_file, write_outputs
 from tdmg.selection import SelectionError, load_image, load_mask
 
-SCHEMA = "tdmg.job/1"
+SCHEMA = "tdmg.job/2"
+# Schemas read. tdmg.job/1 is tdmg.job/2 with confirmations always empty (it defined no
+# entry); a /1 file is read as it is and written as /2 by its next change (save_job).
+OLD_SCHEMA = "tdmg.job/1"
+READ_SCHEMAS = (OLD_SCHEMA, SCHEMA)
 JOB_FILE = "job.yaml"
 SOURCE_DIR = "source"
 NAME_MAX = 63           # the plan's pattern: one leading character and up to 62 more
@@ -93,6 +115,22 @@ TOP_KEYS = ("schema", "name", "class", "recipe", "source", "stages", "confirmati
 SOURCE_KEYS = ("file", "sha256", "mask", "origin")
 MASK_KEYS = ("file", "sha256")
 HEX64 = re.compile(r"[0-9a-f]{64}")
+# Confirmations (plan Task 8; module docstring).
+SUBJECTS = ("selection", "colors", "print")
+# The stage a non-print subject needs, and the files it covers (stage folder / file name).
+SUBJECT_STAGE = {"selection": "select", "colors": "colors"}
+SUBJECT_FILES = {"selection": ("select/selection.json", "select/preview.png"),
+                 "colors": ("colors/colors.json", "colors/regions.png")}
+# The stages whose folder holds the printable files (the one in the recipe: R1 flat, R2
+# colored_flat; the slice stage reads it).
+PRINT_STAGES = ("flat", "colored_flat")
+CONFIRM_KEYS = ("subject", "owner_said", "date", "revision", "covers")
+PRINT_KEYS = ("route", "face", "slice_id", "verdicts", "accept_not_certified")
+PRINTABLE = "PRINTABLE"
+VERDICTS = (PRINTABLE, "NOT CERTIFIED")
+FACED_ROUTES = ("ams",)          # routes printed on a chosen face; the others have none
+CONFIRM_FACES = ("up", "down")
+DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 # PyYAML folds long lines at this width; wide enough that no value is folded.
 YAML_WIDTH = 1_000_000
 
@@ -411,12 +449,14 @@ def _generated_value(v) -> str | None:
 
 
 def validate_job(job) -> dict:
-    """A copy of the job if it follows tdmg.job/1 exactly, with every integer in a float
-    parameter (Field.real) made a float; JobError naming the first problem."""
+    """A copy of the job if it follows tdmg.job/2 (or tdmg.job/1, READ_SCHEMAS) exactly,
+    with every integer in a float parameter (Field.real) made a float; JobError naming the
+    first problem."""
     _keys("job", job, TOP_KEYS)
     job = copy.deepcopy(job)
-    if job["schema"] != SCHEMA:
-        raise JobError(f"job schema is {job['schema']!a}; this tdmg reads {SCHEMA}")
+    if job["schema"] not in READ_SCHEMAS:
+        raise JobError(f"job schema is {job['schema']!a}; this tdmg reads "
+                       f"{' and '.join(READ_SCHEMAS)}")
     problem = name_problem(job["name"])
     if problem:
         raise JobError(f"name: {problem}")
@@ -430,17 +470,125 @@ def validate_job(job) -> dict:
                        f"({', '.join(CLASSES[cls])})")
     _validate_source(job["source"])
     _validate_stages(rid, job["stages"], job["source"])
-    conf = job["confirmations"]
-    if not isinstance(conf, list):
-        raise JobError(f"confirmations must be a list, not {type(conf).__name__}")
-    if conf:
-        # tdmg.job/1 defines no confirmation entry yet (plan Task 8 adds tdmg job confirm).
-        raise JobError("confirmations must be empty: this tdmg cannot record or read "
-                       "confirmations yet")
     rev = job["revision"]
     if _integer(rev) or rev < 1:
         raise JobError(f"revision must be an integer of at least 1, not {rev!a}")
+    conf = job["confirmations"]
+    if not isinstance(conf, list):
+        raise JobError(f"confirmations must be a list, not {type(conf).__name__}")
+    if conf and job["schema"] == OLD_SCHEMA:
+        raise JobError(f"confirmations must be empty in a {OLD_SCHEMA} job (it defines no "
+                       f"confirmation entry; {SCHEMA} does)")
+    for i, entry in enumerate(conf):
+        _validate_confirmation(f"confirmations[{i}]", entry, rid, rev)
     return job
+
+
+def print_stage(recipe_id: str) -> str:
+    """The stage whose folder holds the recipe's printable files (PRINT_STAGES)."""
+    found = [s for s in PRINT_STAGES if s in recipe(recipe_id).stages]
+    if len(found) != 1:
+        raise JobError(f"recipe {recipe_id} has no single stage of printable files")
+    return found[0]
+
+
+def subjects(recipe_id: str) -> tuple[str, ...]:
+    """The subjects a job of this recipe can confirm: those whose stage it has, and print."""
+    stages = recipe(recipe_id).stages
+    return tuple(s for s in SUBJECTS if s == "print" or SUBJECT_STAGE[s] in stages)
+
+
+def date_problem(v) -> str | None:
+    """Why `v` is not a date written YYYY-MM-DD, or None."""
+    if not isinstance(v, str) or DATE_PATTERN.fullmatch(v) is None:
+        return f"must be a date written YYYY-MM-DD, not {v!a}"
+    try:
+        datetime.date.fromisoformat(v)
+    except ValueError:
+        return f"{v!a} is not a real date"
+    return None
+
+
+def owner_words_problem(v) -> str | None:
+    """Why `v` cannot be the owner's words, or None: text, storable, not blank."""
+    problem = _text(v)
+    if problem:
+        return problem
+    if not v.strip():
+        return "cannot be empty: give the owner's own words, verbatim"
+    return None
+
+
+def _validate_confirmation(where: str, entry, rid: str, job_revision: int) -> None:
+    if not isinstance(entry, dict):
+        raise JobError(f"{where} must be a mapping, not {type(entry).__name__}")
+    subject = entry.get("subject")
+    _field(f"{where}.subject", subject, _choice(subjects(rid)))
+    _keys(where, entry, CONFIRM_KEYS + (PRINT_KEYS if subject == "print" else ()))
+    _field(f"{where}.owner_said", entry["owner_said"], owner_words_problem)
+    _field(f"{where}.date", entry["date"], date_problem)
+    rev = entry["revision"]
+    # At most the job's revision: save_job validates a new entry before it bumps the
+    # job's revision, so on disk an entry's revision is always lower.
+    if _integer(rev) or not 1 <= rev <= job_revision:
+        raise JobError(f"{where}.revision must be an integer from 1 to the job's revision "
+                       f"({job_revision}), not {rev!a}")
+    covers = entry["covers"]
+    if not isinstance(covers, dict) or not covers:
+        raise JobError(f"{where}.covers must be a mapping of file paths to SHA-256 values")
+    for path, digest in covers.items():
+        _field(f"{where}.covers key", path, path_problem)
+        _field(f"{where}.covers[{path}]", digest, _sha256)
+    if subject != "print":
+        want = SUBJECT_FILES[subject]
+        if sorted(covers) != sorted(want):
+            raise JobError(f"{where}.covers must be exactly {', '.join(want)}")
+        return
+    _validate_print(where, entry, rid)
+
+
+def _validate_print(where: str, entry: dict, rid: str) -> None:
+    routes = tuple(r.name for r in recipe(rid).routes)
+    _field(f"{where}.route", entry["route"], _choice(routes))
+    route = recipe(rid).route(entry["route"])
+    if route.name in FACED_ROUTES:
+        _field(f"{where}.face", entry["face"], _choice(CONFIRM_FACES))
+    elif entry["face"] is not None:
+        raise JobError(f"{where}.face must be null for route {route.name} (it has no face)")
+    _field(f"{where}.slice_id", entry["slice_id"], _sha256)
+    # The covered files: the route's printable files in the print stage's folder.
+    stage = print_stage(rid)
+    covers = entry["covers"]
+    names = []
+    for path in covers:
+        folder, _, name = path.partition("/")
+        if folder != stage or "/" in name:
+            raise JobError(f"{where}.covers: {path!a} is not a file of {stage}/")
+        names.append(name)
+    if route.record is None:
+        if sorted(names) != sorted(route.files):
+            raise JobError(f"{where}.covers must be exactly "
+                           f"{', '.join(f'{stage}/{n}' for n in route.files)}")
+    else:
+        bad = [n for n in names if n not in route.files
+               and re.fullmatch(route.pattern or "", n, flags=re.ASCII) is None]
+        missing = [n for n in route.files + route.must_list if n not in names]
+        if bad or missing:
+            raise JobError(f"{where}.covers must be the {route.name} route's files in "
+                           f"{stage}/ ({route.listed_label or ', '.join(route.files)})")
+    verdicts = entry["verdicts"]
+    if not isinstance(verdicts, dict) or not verdicts:
+        raise JobError(f"{where}.verdicts must map covered files to slice verdicts")
+    for path, verdict in verdicts.items():
+        if path not in covers:
+            raise JobError(f"{where}.verdicts: {path!a} is not a covered file")
+        _field(f"{where}.verdicts[{path}]", verdict, _choice(VERDICTS))
+    accept = entry["accept_not_certified"]
+    _field(f"{where}.accept_not_certified", accept, _boolean)
+    needed = any(v != PRINTABLE for v in verdicts.values())
+    if accept != needed:
+        raise JobError(f"{where}.accept_not_certified must be {str(needed).lower()}: it is "
+                       "true exactly when a verdict is not PRINTABLE")
 
 
 def _validate_source(source) -> None:
@@ -678,8 +826,9 @@ def save_job(folder: str | Path, job: dict) -> dict:
     set_mask is not the only safe way): its file must be in the folder with that SHA-256
     and be a black/white image of the source image's size. Each set parameter must pass
     the stage's own range check (check_limits). A job folder or source/ that is a link is
-    refused (check_not_linked). A job equal to the one on disk is not written and keeps
-    its revision."""
+    refused (check_not_linked). Confirmations are append-only: an earlier entry cannot
+    change or go. A tdmg.job/1 file is written as tdmg.job/2. A job equal to the one on
+    disk is not written and keeps its revision."""
     folder = Path(folder)
     check_not_linked(folder)
     current = load_job(folder)
@@ -692,11 +841,16 @@ def save_job(folder: str | Path, job: dict) -> dict:
         raise JobError(f"a job's {', '.join(changed)} cannot change; make a new job")
     if job == current:
         return current
+    old = current["confirmations"]
+    if job["confirmations"][:len(old)] != old:
+        raise JobError("confirmations are the owner's words: an earlier one cannot be "
+                       "changed or removed, only new ones added (tdmg job confirm)")
     check_limits(job)
     if job["source"]["mask"] != current["source"]["mask"]:
         check_source(folder, job)
         _check_mask_file(folder, job)
     new = copy.deepcopy(job)
+    new["schema"] = SCHEMA                  # a tdmg.job/1 file is written as /2
     new["revision"] = current["revision"] + 1
     data = dump_job(new)
     try:
