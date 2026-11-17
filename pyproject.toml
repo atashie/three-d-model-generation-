@@ -38,7 +38,7 @@ analysis = [
 ]
 
 [project.scripts]
-tdmg = "tdmg.cli:app"
+tdmg = "tdmg.cli:main"
 
 [dependency-groups]
 dev = [

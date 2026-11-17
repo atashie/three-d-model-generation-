@@ -160,7 +160,9 @@ this fails at once if a program holds a file in it open), checked to hold exactl
 following links. A folder finish cannot read stops it before anything is deleted. Files
 the library does not keep that are not stage outputs, `job.yaml`, `state.json` or
 `source/` (notes, say) are named first; `--dry-run` names them too. `--dry-run` does steps
-1 to 4 and says what 5 to 7 would do, changing nothing. After an interruption, run the
+1 to 4 and says what 5 to 7 would do, changing nothing; given `--purge-owner-said`, it
+checks the words and prints them back ASCII-escaped, as `purge.json` would hold them, so
+they can be checked first. The real run prints them again before it writes `purge.json`. After an interruption, run the
 same command again: it continues where it stopped, never publishes twice, and deletes
 nothing unless `prints/NAME/COMPLETE` verifies and the entry is this job's. `tdmg job new`
 refuses a name whose tombstone exists, and a name already in the library (`--prints-dir`,

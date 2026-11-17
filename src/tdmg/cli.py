@@ -1223,7 +1223,8 @@ def finish_command(
         "--purge-owner-said",
         help="The owner's own words, verbatim, giving permission to delete the job's "
              "working data. Never words the owner did not say. Required, except with "
-             "--dry-run.")] = None,
+             "--dry-run; a dry run given them prints them back as they would be "
+             "recorded.")] = None,
     confirmation: Annotated[int | None, typer.Option(
         "--confirmation", metavar="N",
         help="The print confirmation to finish (its number in tdmg job status); needed "
@@ -1444,5 +1445,15 @@ def library_verify(
         raise typer.Exit(1)
 
 
+def main() -> None:
+    """The tdmg console script (pyproject [project.scripts]) and python -m tdmg.cli.
+
+    Click expands every argument on Windows by default (expanduser, expandvars, glob), so
+    the owner's words ('$HOME', '%USERNAME%', '~ x', '*.png') would be rewritten even
+    inside shell single quotes; tdmg records words verbatim, so that is turned off. Tested
+    in tests/test_entry_point.py."""
+    app(windows_expand_args=False)
+
+
 if __name__ == "__main__":
-    app()
+    main()

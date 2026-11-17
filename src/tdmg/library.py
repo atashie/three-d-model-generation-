@@ -73,8 +73,10 @@ checks the entry against purge.json (entry_problems).
 
 **Dry run** (dry_run): steps 1 to 4, including the rebuild; then it says what 5 to 7 would
 do (naming the not_kept files) and removes the staging folder (and PRINTS_DIR, if it made
-it). Nothing else changes. The purge words are not needed. It is refused while an earlier
-finish is unfinished.
+it). Nothing else changes. The purge words are not needed; when given, they are
+checked like a real run's and printed back ASCII-escaped, as purge.json would hold them,
+so they can be checked before the real run (which prints them again before it writes
+purge.json). It is refused while an earlier finish is unfinished.
 
 **Resume.** Running finish again after an interruption looks at what is on disk:
 - a staging folder (and no entry): the earlier run stopped before the publish. The
@@ -1660,6 +1662,9 @@ def _fresh(run: _Run) -> None:
                 f"{PURGE_FILE}, then {COMPLETE_FILE}")
         run.say(f"7. purge: delete {_p(run.folder)} ({len(files)} files, {len(folders)} "
                 f"folders), with --purge-owner-said{_not_kept_line(run, files)}")
+        if run.words is not None:   # echoed as purge.json would store it, to check first
+            run.say(f"   it would record the purge permission: the owner said "
+                    f"{_words(run.words)}")
         return
     run.say(f"5. public: {'yes' if run.public else 'no'}: printable files in {folder_name}/")
     os.rename(staging, run.entry)
@@ -1670,6 +1675,7 @@ def _fresh(run: _Run) -> None:
 def _purge(run: _Run) -> None:
     """Write purge.json and COMPLETE, check the entry, then delete the job."""
     listing = job_listing(run.folder)
+    run.say(f"   recording the purge permission: the owner said {_words(run.words)}")
     replace_file(run.entry, PURGE_FILE, purge_record(
         run.name, run.words, run.day, listing, jobs_folder_text(run.jobs_dir, run.repo)))
     replace_file(run.entry, COMPLETE_FILE, complete_bytes(run.entry))

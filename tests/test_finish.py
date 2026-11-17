@@ -674,6 +674,45 @@ def test_dry_run_changes_nothing(tmp_path, tmp_path_factory, slicers, repo):
     assert r.exit_code == 0 and list((tmp_path / "prints").iterdir()) == []
 
 
+def test_dry_run_echoes_the_purge_words(tmp_path, tmp_path_factory, slicers, repo):
+    """--dry-run takes --purge-owner-said and prints it back as it would be stored (ASCII
+    escaped), so the words can be checked before the real run; nothing changes."""
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    words = "it’s fine, delete it: $HOME %USERNAME% ~ /yes"
+    before = _tree(tmp_path / "jobs")
+    r = _finish(folder, slicers, "--dry-run", purge=words)
+    assert r.exit_code == 0, r.output
+    assert f"the owner said {json.dumps(words)}" in _plain(r.output)
+    assert _tree(tmp_path / "jobs") == before
+    assert not (tmp_path / "prints").exists()
+
+
+def test_dry_run_refuses_empty_purge_words(tmp_path, tmp_path_factory, slicers, repo):
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    r = _finish(folder, slicers, "--dry-run", purge="  ")
+    assert r.exit_code == 2 and "--purge-owner-said" in _plain(r.output)
+
+
+def test_finish_says_the_purge_words_before_deleting(tmp_path, tmp_path_factory, slicers,
+                                                      repo, monkeypatch):
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    lines: list[str] = []
+    seen: list[list[str]] = []
+    real = library.purge_job
+
+    def spy(*args, **kw):
+        seen.append(list(lines))
+        return real(*args, **kw)
+
+    monkeypatch.setattr(library, "purge_job", spy)
+    finish(folder.name, public=False, purge_owner_said=PURGE,
+           machine=Machine(slicers[0], slicers[1]), jobs_dir=folder.parent,
+           prints_dir=tmp_path / "prints", say=lines.append)
+    assert seen, "purge_job was not called"
+    said = f"recording the purge permission: the owner said {json.dumps(PURGE)}"
+    assert any(said in line for line in seen[0]), seen[0]
+
+
 def test_dry_run_still_needs_the_public_answer(tmp_path, tmp_path_factory, slicers, repo):
     folder = _ready(tmp_path, tmp_path_factory, slicers)
     r = _finish(folder, slicers, "--dry-run", public=None, purge=None)
