@@ -267,7 +267,7 @@ Active work, stays where it is.
 - `.gitignore` (config): lines 13
 - `docs/PLAN.md` (doc): lines 163
 - `docs/STATUS.md` (status): lines 168
-- `docs/design/README.md` (doc): lines 25
+- `docs/design/README.md` (doc): lines 26
 - `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1
@@ -284,7 +284,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 Active work, stays where it is.
 
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 122, 169, 242
+- `docs/STATUS.md` (status): lines 122, 169, 245
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
 - `research/verification/2026-11-17-owner-fixture-pixels/README.md` (record): lines 3
@@ -659,7 +659,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`.
 
 ### `research/verification/2026-11-17-owner-fixture-pixels`
 
-- `docs/STATUS.md` (status): lines 255
+- `docs/STATUS.md` (status): lines 258
 - `tests/conftest.py` (test): lines 17, 54, 116
 
 ### `research_notes/Image to printable 3D model landscape`
@@ -769,7 +769,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 
 - `README.md` (doc): lines 73
 - `docs/PLAN.md` (doc): lines 164, 197
-- `docs/STATUS.md` (status): lines 8, 116, 238
+- `docs/STATUS.md` (status): lines 8, 116, 241
 - `docs/design/README.md` (doc): lines 6
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 190
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 112, 151
@@ -786,13 +786,13 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `research/reviews`
 
 - `CLAUDE.md` (doc): lines 43
-- `docs/STATUS.md` (status): lines 302
+- `docs/STATUS.md` (status): lines 305
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232
 
 ### `research/verification`
 
-- `docs/STATUS.md` (status): lines 289
+- `docs/STATUS.md` (status): lines 292
 - `docs/plans/2026-11-16-restructure.md` (record): lines 117
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 40, 51, 214, 232, 279, 280
 
@@ -891,8 +891,8 @@ References this script could not tie to one record: a built path that stops at a
 | `docs/PLAN.md` | 165 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 8 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 116 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 288 | `research/README.md` | names no record in the tree |
-| `docs/design/README.md` | 23 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 291 | `research/README.md` | names no record in the tree |
+| `docs/design/README.md` | 24 | `research/README.md` | names no record in the tree |
 | `docs/design/flat.md` | 80 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `docs/design/flat.md` | 86 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
 | `docs/design/flat.md` | 93 | `research/verification/2026-11-10-flat-geometry/` | names no record in the tree |

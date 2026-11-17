@@ -18,6 +18,7 @@ update the note and keep only the current decision, with "replaced ... on <date>
 | [color.md](color.md) | Color plans, colored solids and the multicolor 3MF (`tdmg colors`, `tdmg flat --colors`) |
 | [slicing.md](slicing.md) | Slicing and the checks read from the G-code (`tdmg slice`) |
 | [calibration.md](calibration.md) | Test strips (`tdmg strip`), calibrated rules and prints so far |
+| [jobs.md](jobs.md) | Jobs, the print library, and the inventory of the legacy `artifacts/` folders |
 | [evidence-inventory.md](evidence-inventory.md) | Generated: which records the repository cites, and from where |
 
 The evidence folder is described in [research/README.md](../../research/README.md). The

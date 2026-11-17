@@ -179,8 +179,11 @@ has been measured with calipers, and strength is not judged.
    Codex), Task 10 (`tdmg library check` and `verify`; fake slicers only, not yet
    reviewed), Task 11 (owner-image test fixtures build their selection in a temporary
    folder from `prints/<entry>/`, then `jobs/<job>/`, then `artifacts/selection-runs/`;
-   skip naming each path), Task 12 (the make-print skill). Next: Task 13 (legacy
-   inventory).
+   skip naming each path), Task 12 (the make-print skill), Task 13 (legacy inventory
+   `docs/design/jobs.md`; owner 2026-11-17: Roadie drop folders deleted after its finish,
+   other Roadie variants kept as open legacy, old exploratory runs deleted (139 entries,
+   done), environments kept). Next: Task 14 (Roadie: the first finished print; first move
+   the two tests that read Roadie drop's colored build to a kept plan).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
