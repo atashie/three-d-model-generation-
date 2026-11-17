@@ -59,6 +59,7 @@ from tdmg.color_slicing import FACE_CHOICES
 from tdmg.colored_flat import _number as colored_flat_size
 from tdmg.colors import check_width_mm as colors_width
 from tdmg.flat import _require_positive as flat_size
+from tdmg.flat import _smooth_value as flat_smooth
 from tdmg.recipes import CLASSES, recipe, resolve
 from tdmg.records import RecordError, replace_file, write_outputs
 from tdmg.selection import SelectionError, load_image, load_mask
@@ -299,7 +300,7 @@ STAGE_FIELDS: dict[str, dict[str, Field]] = {
         "width_mm": _real(required=True, limit=_named(flat_size, "width_mm")),
         "thickness_mm": _real(required=True, limit=_named(flat_size, "thickness_mm")),
         "printer": Field(_text),
-        "smooth_px": _real(),
+        "smooth_px": _real(limit=flat_smooth),
     },
     "colors": {                                   # tdmg colors, with its config keys
         "width_mm": _real(required=True, limit=colors_width),
@@ -308,7 +309,7 @@ STAGE_FIELDS: dict[str, dict[str, Field]] = {
     "colored_flat": {                             # tdmg flat --colors
         "thickness_mm": _real(required=True,
                               limit=_named(colored_flat_size, "thickness_mm")),
-        "width_mm": _real(),
+        "width_mm": _real(limit=_named(colored_flat_size, "width_mm")),
         "printer": Field(_text),
     },
     "slice": {                                    # tdmg slice
@@ -532,7 +533,9 @@ class _StrictLoader(yaml.SafeLoader):
 for _tag, _pattern, _first in (
         ("bool", r"true|false", "tf"),
         ("int", r"-?(?:0|[1-9][0-9]*)", "-0123456789"),
-        ("float", r"-?(?:0|[1-9][0-9]*)\.[0-9]+(?:[eE][-+]?[0-9]+)?", "-0123456789"),
+        # The exponent's sign is required, as in SafeLoader's float pattern: SafeDumper
+        # writes "1.0e5" (text) unquoted, and real floats as "1.0e+20" or "1.0e-05".
+        ("float", r"-?(?:0|[1-9][0-9]*)\.[0-9]+(?:[eE][-+][0-9]+)?", "-0123456789"),
         ("null", r"~|null|", ["~", "n", ""]),
         ("merge", r"<<", "<")):
     _StrictLoader.add_implicit_resolver(f"tag:yaml.org,2002:{_tag}",
@@ -642,15 +645,42 @@ def _fixed(job: dict, key: str):
     return value
 
 
+def check_not_linked(folder: str | Path) -> None:
+    """Refuse a job folder, or its source/ folder, that is a symlink or a junction: a job
+    writes only inside its own folder, never through a link to somewhere else."""
+    folder = Path(folder)
+    for path in (folder, folder / SOURCE_DIR):
+        if path.is_symlink() or path.is_junction():
+            raise JobError(f"{path} is a link (symlink or junction); a job folder and its "
+                           f"{SOURCE_DIR}/ must be plain folders")
+
+
+def _check_mask_file(folder: Path, job: dict) -> None:
+    """The job's mask file, if any, is a black/white image of the source image's size
+    (tdmg select's load_mask), as set_mask checks before it copies one in."""
+    entry = job["source"]["mask"]
+    if entry is None:
+        return
+    try:
+        intake = load_image(folder / job["source"]["file"])
+        load_mask(folder / entry["file"], intake.rgba.shape[:2])
+    except SelectionError as e:
+        raise JobError(f"{entry['file']}: {e}") from None
+
+
 def save_job(folder: str | Path, job: dict) -> dict:
     """Write a changed job over folder/job.yaml, with the revision bumped; return it.
 
     `job` must carry the revision on disk (it was read and changed in memory), or the
     change is refused as made against an older version. Name, class, recipe and source are
-    fixed, except source.mask, whose new file must already be in the folder with that
-    SHA-256 (set_mask puts it there). A job equal to the one on disk is not written and
-    keeps its revision."""
+    fixed, except source.mask. A changed mask is checked here whoever made the change (so
+    set_mask is not the only safe way): its file must be in the folder with that SHA-256
+    and be a black/white image of the source image's size. Each set parameter must pass
+    the stage's own range check (check_limits). A job folder or source/ that is a link is
+    refused (check_not_linked). A job equal to the one on disk is not written and keeps
+    its revision."""
     folder = Path(folder)
+    check_not_linked(folder)
     current = load_job(folder)
     job = validate_job(job)
     if job["revision"] != current["revision"]:
@@ -661,8 +691,10 @@ def save_job(folder: str | Path, job: dict) -> dict:
         raise JobError(f"a job's {', '.join(changed)} cannot change; make a new job")
     if job == current:
         return current
+    check_limits(job)
     if job["source"]["mask"] != current["source"]["mask"]:
         check_source(folder, job)
+        _check_mask_file(folder, job)
     new = copy.deepcopy(job)
     new["revision"] = current["revision"] + 1
     data = dump_job(new)
@@ -732,6 +764,7 @@ def set_mask(folder: str | Path, mask: str | Path | None) -> dict:
     never overwritten), then source.mask and stages.select.mask are set and the revision
     bumped (save_job). The image, origin and generated fields do not change."""
     folder = Path(folder)
+    check_not_linked(folder)
     job = load_job(folder)
     check_source(folder, job)
     if "select" not in job["stages"]:

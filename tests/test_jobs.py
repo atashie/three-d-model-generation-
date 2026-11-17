@@ -335,6 +335,8 @@ def test_same_inputs_give_the_same_bytes(tmp_path, image, mask):
     "unknown", "yes", "no", "null", "~", "1.0", "2026-11-16", " lead", "trail ", "a\nb",
     "a\r\nb", "x\x85y", "x\u2028y", "tab\tx", "caf\u00e9 \u65e5\u672c", "#c", "a: b", "- x",
     "'q'", '"d"', "\ufeffbom", "x" * 300 + " y" * 200, "\x00", "\x1b[0m", "<<", "&a", "*a",
+    # Floats in YAML 1.1 need a signed exponent, so the dumper writes these unquoted.
+    "1.0e5", "0.0e0", "1e5", "-2.5E10", "1.0e+5", "60", "60.0", "true",
 ])
 def test_awkward_text_round_trips(tmp_path, image, text):
     job = new_job(_jobs(tmp_path), "g", "flat-icon", image, origin="generated",
@@ -466,6 +468,88 @@ def test_save_refuses_a_generated_field_change(tmp_path, image):
     job["source"]["prompt"] = "something else"
     with pytest.raises(JobError, match="source cannot change"):
         save_job(_jobs(tmp_path) / "r", job)
+
+
+def test_real_floats_still_round_trip_as_numbers(base):
+    for value in (1e-05, 1e20, 5e-324, 0.1 + 0.2, -0.0, 123456789012345678.0):
+        job = parse_job(dump_job(_set(base, "stages.colored_flat.width_mm", value)))
+        assert job["stages"]["colored_flat"]["width_mm"] == value
+
+
+@pytest.mark.parametrize(("path", "value", "match"), [
+    ("stages.colored_flat.width_mm", 0.0, "width_mm must be a finite number above 0"),
+    ("stages.colored_flat.thickness_mm", -1.0, "thickness_mm must be a finite number"),
+    ("stages.colors.width_mm", 0.0, "width_mm must be a finite number above 0"),
+])
+def test_save_runs_the_stage_limits(tmp_path, base, path, value, match):
+    folder = _jobs(tmp_path) / "r"
+    data = (folder / JOB_FILE).read_bytes()
+    with pytest.raises(JobError, match=re.escape(match)):
+        save_job(folder, _set(base, path, value))
+    assert (folder / JOB_FILE).read_bytes() == data
+
+
+def test_save_runs_flats_smooth_px_limit(tmp_path, image):
+    folder = _jobs(tmp_path) / "s"
+    job = new_job(_jobs(tmp_path), "s", "flat-icon", image)
+    with pytest.raises(JobError, match="smooth_px must be 0"):
+        save_job(folder, _set(job, "stages.flat.smooth_px", -1.0))
+    assert save_job(folder, _set(job, "stages.flat.smooth_px", 0.0))["revision"] == 2
+
+
+def test_save_refuses_a_mask_that_is_not_a_mask_of_the_image(tmp_path, image):
+    # A mask change made without set_mask: the file is there with its hash, but it is not
+    # a black/white image of the source image's size.
+    folder = _jobs(tmp_path) / "r"
+    job = new_job(_jobs(tmp_path), "r", "flat-icon", image)
+    small = folder / "source" / "small.png"
+    Image.new("L", (5, 5), 255).save(small)
+    job["source"]["mask"] = {"file": "source/small.png",
+                             "sha256": hashlib.sha256(small.read_bytes()).hexdigest()}
+    job["stages"]["select"]["mask"] = "source/small.png"
+    with pytest.raises(JobError, match="mask size"):
+        save_job(folder, job)
+
+
+def test_save_accepts_a_good_mask_placed_by_hand(tmp_path, image, mask):
+    folder = _jobs(tmp_path) / "r"
+    job = new_job(_jobs(tmp_path), "r", "flat-icon", image)
+    placed = folder / "source" / "hand.png"
+    placed.write_bytes(mask.read_bytes())
+    job["source"]["mask"] = {"file": "source/hand.png",
+                             "sha256": hashlib.sha256(placed.read_bytes()).hexdigest()}
+    job["stages"]["select"]["mask"] = "source/hand.png"
+    assert save_job(folder, job)["revision"] == 2
+
+
+def _junction(link, target):
+    subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], check=True,
+                   capture_output=True)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions are a Windows feature")
+def test_set_mask_and_save_refuse_a_junction_source_folder(tmp_path, image, mask):
+    folder = _jobs(tmp_path) / "r"
+    job = new_job(_jobs(tmp_path), "r", "flat-icon", image)
+    real = tmp_path / "real-source"
+    (folder / "source").rename(real)
+    _junction(folder / "source", real)
+    with pytest.raises(JobError, match="is a link"):
+        set_mask(folder, mask)
+    with pytest.raises(JobError, match="is a link"):
+        save_job(folder, _set(job, "stages.flat.width_mm", 60.0))
+    assert sorted(p.name for p in real.iterdir()) == ["roadie.png"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions are a Windows feature")
+def test_set_mask_and_save_refuse_a_junction_job_folder(tmp_path, image, mask):
+    job = new_job(tmp_path / "elsewhere", "r", "flat-icon", image)
+    _jobs(tmp_path).mkdir()
+    _junction(_jobs(tmp_path) / "r", tmp_path / "elsewhere" / "r")
+    with pytest.raises(JobError, match="is a link"):
+        set_mask(_jobs(tmp_path) / "r", mask)
+    with pytest.raises(JobError, match="is a link"):
+        save_job(_jobs(tmp_path) / "r", _set(job, "stages.flat.width_mm", 60.0))
 
 
 def test_save_refuses_a_mask_whose_file_is_not_there(tmp_path, image):
@@ -717,6 +801,7 @@ def _write(tmp_path, text):
     (lambda t: t.replace("    width_mm: null", "    width_mm: 1_000.0", 1), "must be a number"),
     (lambda t: t.replace("    width_mm: null", "    width_mm: 60.", 1), "must be a number"),
     (lambda t: t.replace("    width_mm: null", "    width_mm: 6e1", 1), "must be a number"),
+    (lambda t: t.replace("    width_mm: null", "    width_mm: 6.0e1", 1), "must be a number"),
     (lambda t: t.replace("    width_mm: null", "    width_mm: .inf", 1), "must be a number"),
     (lambda t: t.replace("skip_tree_check: false", "skip_tree_check: no"), "true or false"),
     (lambda t: t.replace("skip_tree_check: false", "skip_tree_check: False"),
@@ -742,7 +827,8 @@ def test_yaml_11_forms_in_text_stay_text(tmp_path, image):
     assert back["source"]["prompt"] == "1:30" and back["source"]["edits"] == "yes"
 
 
-@pytest.mark.parametrize("text", ["60.0", "-0.5", "0.1", "1.0e+20", "1.0e-05", "5.0e-324"])
+@pytest.mark.parametrize("text", ["60.0", "-0.5", "0.1", "1.0e+20", "1.0e-05", "5.0e-324",
+                                  "1.5E+3"])
 def test_plain_decimal_floats_are_numbers(base, text):
     data = dump_job(base).decode().replace("    width_mm: null", f"    width_mm: {text}", 1)
     assert parse_job(data.encode())["stages"]["colored_flat"]["width_mm"] == float(text)
