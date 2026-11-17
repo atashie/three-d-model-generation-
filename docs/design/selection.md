@@ -24,8 +24,8 @@ are the source of truth; this note says why they are the way they are.
   piece; Oddie from its transparency, one 298,172 px piece).
 - **Only the image's name and hashes are recorded,** not a copy. Replaying a run needs
   the source image (guide: `docs/guide/input-interpretation.md`). The restructure design
-  (decision 5) will keep each finished print's source in a git-ignored
-  `prints/<name>/source/`; that is not built yet.
+  (decision 5) keeps each finished print's source in a git-ignored
+  `prints/<name>/source/` (`tdmg finish`, restructure Task 9, 2026-11-17).
 
 ## Review findings that still constrain the code
 

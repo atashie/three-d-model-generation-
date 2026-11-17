@@ -42,6 +42,8 @@ uv run tdmg job run NAME --slicer-dir artifacts/tools/orcaslicer-2.5.0   # run t
 uv run tdmg job status NAME               # each stage: done, stale or not run; what waits for you
 uv run tdmg job confirm NAME --subject print --face down --owner-said "THE OWNER'S WORDS"
                                           # record the owner's words (selection|colors|print)
+uv run tdmg finish NAME --public no --purge-owner-said "THE OWNER'S WORDS" --slicer-dir artifacts/tools/orcaslicer-2.5.0
+                                          # rebuild and check, copy into prints/NAME/, then delete jobs/NAME/
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 

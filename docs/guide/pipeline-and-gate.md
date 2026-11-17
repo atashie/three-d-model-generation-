@@ -85,7 +85,7 @@ hash for `slice.json`, which holds the G-code hashes. A known limit: a stage's s
 trusts its record's own output hashes and does not hash the files again, so a hand edit
 to a stage's file (for example `flat/model.stl`) does not make the stage stale; a
 confirmation that covers the file does go stale (below), `confirm` refuses it, and the
-rebuild proof of `tdmg finish` (not built yet) will catch the rest. These checks guard
+rebuild proof of `tdmg finish` (below) catches the rest. These checks guard
 against accidental edits and edits by an agent or tool, not against an adversary:
 `state.json` and `job.yaml` are plain files. A rerun goes into `<stage>.new/`
 and replaces the old folder only once its
@@ -116,15 +116,45 @@ records name (the stage record that made it, and for a printable file the slice 
 links), a face that was not sliced, and a verdict that is not PRINTABLE unless
 `--accept-not-certified` is given, which is then recorded. `--date` is checked against
 this machine's date. A print confirmation is not permission to purge the job: `tdmg
-finish` (not built yet) asks the owner for that separately. Entries are only ever added by tdmg's own
+finish` asks the owner for that separately. Entries are only ever added by tdmg's own
 writes (`job set` and `confirm` cannot change or remove one); a hand edit of `job.yaml`
-can still remove or reword entries, and `jobs/` is not in git, so `tdmg finish` (Task 9)
-copies the confirming entry verbatim into the library. `job status` and `job run` hash
+can still remove or reword entries, and `jobs/` is not in git, so `tdmg finish` copies
+the confirming entry verbatim into the library. `job status` and `job run` hash
 the covered files again each time and show each confirmation as current or stale (a
 covered file changed, went missing or cannot be read, or the slice identity or a verdict
 changed); a rerun that writes the same bytes leaves it current. A current confirmation
 whose stages are stale reads "current (stages stale: a rerun decides)", and a print on
 another face than tdmg chose reads "printed face X; tdmg chose Y".
+
+**Finishing a print (restructure Task 9).** `tdmg finish NAME --public yes|no
+--purge-owner-said TEXT [--confirmation N] [--dry-run] --slicer-dir DIR
+[--prusaslicer-dir DIR]` moves a confirmed print into the library, `prints/NAME/`, and
+then deletes `jobs/NAME/` (code: `src/tdmg/library.py`). The steps: (1) the name is a job
+name, no folder on the way is a symlink or junction, the job and `prints/` do not
+overlap, and `prints/NAME` does not exist yet; the job's lock is held throughout. (2)
+Every stage is done and current; the print confirmation is current (the only one, the
+latest of several with the same route and face, or `--confirmation N` when they differ);
+the git tree is clean outside `jobs/` and `prints/`, since the commit pins the code. (3)
+`prints/.staging-NAME/` gets `job.yaml`, `source/` (the image and its mask), the
+confirmed route's printable files only, `provenance.json` (commit, `uv.lock` hash, Python,
+platform and library versions, the rules the records name with their kind and
+validation, profile and slicer pin hashes, algorithm ids, every check result and verdict,
+and every current print confirmation verbatim) and `card.md` (what to print and how,
+filaments, size, layers, the historical verdict and its warnings, what was not checked,
+the owner's words and the public answer). (4) The job is rebuilt in a scratch folder from
+`job.yaml` and `source/` only, and every file of every stage folder is compared with the
+job's: only the slicers' timestamp line of each G-code and `slice.json`'s hashes of those
+G-code files may differ, the fields measured in
+`research/verification/2026-11-16-repeatability/README.md`; the rebuilt slice identity and
+verdicts must equal the confirmed ones, so a hand-edited verdict is caught. A difference
+stops `finish` (exit 1) with nothing published or deleted. (5) The printable files go to
+`files/` (tracked) or, with `--public no`, `private/` (git-ignored, like `source/`). (6)
+The staging folder is renamed to `prints/NAME`; `purge.json` (the owner's words, the date
+and every file of the job with its SHA-256) is written, then `COMPLETE` (the SHA-256 of
+every other file) last. (7) Exactly `jobs/NAME/` is deleted, without following links, and
+checked to be gone. `--dry-run` does steps 1 to 4 and says what 5 to 7 would do, changing
+nothing. After an interruption, run the same command again: it continues where it stopped,
+never publishes twice, and deletes the job only when `prints/NAME/COMPLETE` verifies.
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 

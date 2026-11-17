@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-16 (restructure Task 8: `tdmg job confirm`).
+**Last updated:** 2026-11-17 (restructure Task 9: `tdmg finish`).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -50,6 +50,16 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   stale, re-hashing the covered files each time. `state.json` (now `tdmg.jobstate/2`)
   holds each stage record's hash, so a hand-edited record makes its stage stale. A print
   confirmation is not permission to purge.
+- **`tdmg finish NAME --public yes|no --purge-owner-said TEXT [--confirmation N]
+  [--dry-run] --slicer-dir DIR`** (restructure Task 9, `src/tdmg/library.py`): checks the
+  paths (no links), every stage done, a current print confirmation and a clean git tree;
+  stages `prints/.staging-NAME/` (`job.yaml`, `source/`, the confirmed route's printable
+  files, `provenance.json`, `card.md`); rebuilds the job in a scratch folder and compares
+  every file, allowing only the measured G-code timestamp lines and `slice.json`'s G-code
+  hashes; renames it to `prints/NAME`, writes `purge.json` then `COMPLETE`; deletes
+  `jobs/NAME`. Printable files in `files/` (public) or `private/` (git-ignored). Resumes
+  after an interruption. Tested with fake slicers only: **not yet run on a real job** (that
+  is Task 14, Roadie).
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
@@ -73,7 +83,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–8 done; next Task 9 (`tdmg finish`) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–9 done; next Task 10 (`tdmg library check` and `verify`) |
 
 ## Machines
 
@@ -87,9 +97,10 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-16, PC, restructure Task 8 review fixes):**
-  `uv run pytest -q` gave 3171 passed and 9 skipped (8 real-slicer tests; one symlink
-  test, since this account cannot create symlinks); `ruff check`, `gen_docs.py --check` and
+- **Latest local validation (2026-11-17, PC, restructure Task 9):** `uv run pytest -q`
+  gave 3222 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
+  account cannot create symlinks; the junction tests ran); `tests/test_finish.py` also
+  passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the
   PC. A session started before the install needs a restart or that folder on PATH; in
@@ -127,8 +138,9 @@ has been measured with calipers, and strength is not judged.
    (recipe registry: `in progress` status, stages, outputs by route, output classes and
    `resolve`), Task 5 (`.gitignore` for `jobs/` and the library's private parts),
    Task 6 (`job.yaml` and `tdmg job new`), Task 7 (`tdmg job set`, `job run`, `job
-   status`), Task 8 (`tdmg job confirm`; not yet reviewed by Codex). Next: Task 9
-   (`tdmg finish`).
+   status`), Task 8 (`tdmg job confirm`), Task 9 (`tdmg finish`; tested with fake
+   slicers and temporary git repositories, not run on a real job; not yet reviewed by
+   Codex). Next: Task 10 (`tdmg library check` and `verify`).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -187,9 +199,17 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–4 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
-  Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 and 4 are not. Next is Task 5,
-  `.gitignore`.
+- **State:** Tasks 0–9 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
+  Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 onwards are not. Next is
+  Task 10, `tdmg library check` and `verify`.
+- **Task 9 decisions:** the purge record is its own file, `purge.json`, written after the
+  publish and before `COMPLETE`, so `COMPLETE` is last and lists it, and `provenance.json`
+  stays the file that was staged and checked. The rebuild compares every file of every
+  stage folder (not only the records and printable files); only the slice.json rows of
+  the repeatability record's table may differ, so the "inferred, not measured" `.failed`
+  forms (top-level `plate_1.gcode.failed`, `face-up/plate_1.gcode.failed`, a top-level
+  PrusaSlicer `.failed`) still stop a finish when their hash differs. `--dry-run` needs
+  `--public` but not the purge words.
 - **Task 3 did:** design notes `docs/design/{selection,flat,color,slicing,calibration}.md`
   with an index; removed the five uncited records in commit `814a962` (listed in
   `research/README.md`); replaced CLAUDE.md rule 6; cut this page to current state.

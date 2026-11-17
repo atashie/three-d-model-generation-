@@ -6,7 +6,8 @@ for review) and `strip` (the two calibration strips, built, gated and sliced); `
 `check` follow. `job new` starts a job: a folder in jobs/ with the source image and
 job.yaml (tdmg.jobs); `job set` changes its parameters, `job run` runs its stages,
 `job status` shows where it stands and `job confirm` records the owner's confirmation
-(tdmg.job_runner)."""
+(tdmg.job_runner). `finish` moves a confirmed print into the library, prints/, and purges
+the job (tdmg.library)."""
 
 import inspect
 from pathlib import Path
@@ -66,9 +67,11 @@ from tdmg.jobs import (
     new_job,
     unset_required,
 )
+from tdmg.library import LibraryError, RebuildDiffers, finish
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, CLASSES, RECIPES, class_of, class_status
+from tdmg.records import RecordError
 from tdmg.rules import load_rules
 from tdmg.selection import (
     SelectionError,
@@ -1149,7 +1152,7 @@ def job_confirm(
     show a confirmation as stale when a covered file changes.
 
     A print confirmation is not permission to purge the job: tdmg finish
-    (not built yet) asks the owner for that separately.
+    asks the owner for that separately (--purge-owner-said).
 
     Refused: empty words; a stage not done (print needs every stage);
     a color plan not ready; a file differing from its records; for print,
@@ -1177,6 +1180,89 @@ def job_confirm(
     for path, digest in job["confirmations"][-1]["covers"].items():
         typer.echo(f"  covers {path} {digest}")
     typer.echo(f"wrote {folder / JOB_FILE}")
+
+
+
+@app.command("finish")
+def finish_command(
+    name: Annotated[str, typer.Argument(help="Job name (the job in JOBS_DIR/NAME).")],
+    public: Annotated[str | None, typer.Option(
+        "--public", metavar="yes|no",
+        help="The owner's answer: may the design be public? yes: the printable files go "
+             "to files/ (tracked in git); no: to private/ (git-ignored). Required.")] = None,
+    purge_owner_said: Annotated[str | None, typer.Option(
+        "--purge-owner-said",
+        help="The owner's own words, verbatim, giving permission to delete the job's "
+             "working data. Never words the owner did not say. Required, except with "
+             "--dry-run.")] = None,
+    confirmation: Annotated[int | None, typer.Option(
+        "--confirmation", metavar="N",
+        help="The print confirmation to finish (its number in tdmg job status); needed "
+             "when current print confirmations differ in route or face.")] = None,
+    dry_run: Annotated[bool, typer.Option(
+        "--dry-run", help="Check, stage and rebuild, say what would be published and "
+                          "deleted, and change nothing.")] = False,
+    slicer_dir: SlicerDir = None,
+    prusaslicer_dir: PrusaDir = None,
+    jobs_dir: JobsDir = None,
+    prints_dir: Annotated[Path | None, typer.Option(
+        "--prints-dir", help="The library folder; default prints/ in the source "
+                             "checkout.")] = None,
+) -> None:
+    """Finish a confirmed print: copy it into the library, prove it
+    rebuilds, publish it as PRINTS_DIR/NAME, then delete JOBS_DIR/NAME.
+
+    Steps: (1) check the name and that no folder is a link; (2) check
+    every stage is done and current, the print confirmation is current,
+    and the git tree is clean; (3) stage PRINTS_DIR/.staging-NAME with
+    job.yaml, source/, the confirmed route's printable files,
+    provenance.json and card.md; (4) rebuild the job from job.yaml and
+    source/ in a scratch folder and compare every file (only the
+    G-code timestamp lines and slice.json's hashes of those G-code
+    files may differ); (5) printable files in files/ or private/ by
+    --public; (6) rename the staging folder to PRINTS_DIR/NAME, write
+    purge.json, then COMPLETE (every file's SHA-256) last; (7) delete
+    exactly JOBS_DIR/NAME.
+
+    Run it again after an interruption: it continues from the step it
+    stopped at, never publishes twice, and deletes the job only once
+    PRINTS_DIR/NAME has COMPLETE and every hash in it matches.
+
+    Give the same --prusaslicer-dir as tdmg job run (it is part of the
+    slice stage's key), and --slicer-dir for the rebuild.
+
+    Exit codes:
+      0  finished (or the dry run passed, or it was already finished)
+      1  the rebuild does not match the job: nothing is published or
+         deleted, and the staging folder is removed
+      2  refused (bad name, a link, an existing print, a stage not done,
+         no current print confirmation, a dirty git tree, no --public,
+         no purge words) or an I/O failure; the job is not deleted
+    """
+    answer = None if public is None else {"yes": True, "no": False}.get(public.lower())
+    if public is not None and answer is None:
+        typer.echo(f"error: --public must be yes or no, not {public!a}", err=True)
+        raise typer.Exit(2)
+    try:
+        finish(name, public=answer, purge_owner_said=purge_owner_said,
+               confirmation=confirmation, dry_run=dry_run,
+               machine=Machine(slicer_dir, prusaslicer_dir), jobs_dir=jobs_dir,
+               prints_dir=prints_dir, say=typer.echo)
+    except RebuildDiffers as e:
+        typer.echo("error: the rebuild does not match the job; nothing was published or "
+                   "deleted (the staging folder is removed):", err=True)
+        for d in e.differences:
+            typer.echo(f"  {d}", err=True)
+        raise typer.Exit(1) from None
+    except (LibraryError, JobError, RecordError) as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    except Exception as e:  # noqa: BLE001 - a bug: say so, and exit 2 like any refusal
+        typer.echo(f"error: unexpected {type(e).__name__} in tdmg finish: {e}", err=True)
+        raise typer.Exit(2) from None
 
 
 if __name__ == "__main__":
