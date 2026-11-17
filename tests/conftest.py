@@ -347,3 +347,74 @@ def owner_selection(owner_selection_dir):
         rgb = np.array(Image.open(d / "cutout.png").convert("RGBA"))[..., :3]
         return rgb, mask
     return load
+
+
+# --- building an owner colored plan -----------------------------------------------------
+
+@dataclass(frozen=True)
+class OwnerPlan:
+    """How one owner colored plan is rebuilt: the owner selection it starts from, tdmg
+    colors' width and flags, tdmg flat --colors' parameters, and the model.3mf SHA-256 the
+    rebuild must give."""
+    selection: str
+    colors_width_mm: float
+    colors_flags: dict
+    thickness_mm: float
+    width_mm: float
+    printer: str
+    model_sha256: str
+
+
+# Roadie, outline dropped: the plan the owner printed (first AMS print, 2026-11-15). Its
+# legacy folder artifacts/colored-runs/roadie-tol30-60-drop-v3-f64/ is deleted after
+# tdmg finish roadie-drop (docs/design/jobs.md), so the slicer tests rebuild it. The
+# parameters are that folder's records: colors.json (width 60, every setting a default or
+# a rule: outlines drop, colors 4, extract 6; no config) and colored.json identity.params
+# (thickness 3, width 60, bambu-a1). Today's code rebuilt the printed model.3mf byte for
+# byte from them (research/verification/2026-11-16-repeatability/README.md, "The printed
+# Roadie file"), which is the SHA-256 below.
+OWNER_PLANS = {
+    "roadie-drop": OwnerPlan(
+        selection="roadie-tol30", colors_width_mm=60.0, colors_flags={},
+        thickness_mm=3.0, width_mm=60.0, printer="bambu-a1",
+        model_sha256="ec2961184e1b235fb4f051c00824095f9642128a565a829e4f1527b1a4f822d7"),
+}
+
+
+@pytest.fixture(scope="session")
+def owner_colored_plan(owner_selection_dir, tmp_path_factory):
+    """A function name -> the owner colored plan's folder (colored.json, model.3mf,
+    palette.json and the body STLs), rebuilt once per session in a temporary folder from
+    the owner selection (owner_selection_dir, which skips when no source is present) by
+    tdmg colors and tdmg flat --colors with the recorded parameters (OWNER_PLANS). It
+    fails when the rebuilt model.3mf is not the recorded one (the tests would test another
+    plan). It reads nothing in artifacts/colored-runs/."""
+    from tdmg.colored_flat import make_colored_flat
+    from tdmg.colors import make_colors
+    from tdmg.profiles import load_printer
+    from tdmg.rules import load_rules
+
+    done: dict[str, Path | str] = {}   # the folder, or why the rebuild failed
+
+    def get(name: str) -> Path:
+        if name not in done:
+            p = OWNER_PLANS[name]
+            sel = owner_selection_dir(p.selection, stacklevel=2)
+            root = tmp_path_factory.mktemp(f"owner-plan-{name}")
+            colors = root / "colors"
+            make_colors(sel, colors, width_mm=p.colors_width_mm,
+                        flags={"colors": None, "edges": None, "base": None,
+                               **p.colors_flags},
+                        config_path=None, rules=load_rules(),
+                        printer=load_printer("bambu-a1"))
+            plan = root / "colored"
+            make_colored_flat(sel, colors, plan, thickness_mm=p.thickness_mm,
+                              width_mm=p.width_mm, printer=p.printer)
+            got = hashlib.sha256((plan / "model.3mf").read_bytes()).hexdigest()
+            done[name] = plan if got == p.model_sha256 else (
+                f"owner plan {name}: the rebuilt model.3mf has SHA-256 {got}, not the "
+                f"recorded {p.model_sha256}")
+        if isinstance(done[name], str):
+            pytest.fail(done[name], pytrace=False)
+        return done[name]
+    return get

@@ -972,18 +972,14 @@ def test_warnings_do_not_block_printable(colored, orca, tmp_path, monkeypatch):
     assert f["warnings"] and all(w["status"] != "PASS" for w in f["warnings"])
 
 
-ROADIE_DROP = (Path(__file__).resolve().parents[1]
-               / "artifacts/colored-runs/roadie-tol30-60-drop-v3-f64")
-
-
 @pytest.mark.slicer
 @pytest.mark.skipif(not (os.environ.get("TDMG_ORCASLICER_DIR")
-                         and os.environ.get("TDMG_PRUSASLICER_DIR")
-                         and (ROADIE_DROP / "colored.json").is_file()),
-                    reason="needs both slicers and the owner's Roadie drop plan "
-                           "(artifacts/colored-runs, git-ignored)")
-def test_the_roadie_drop_plan_is_printable_face_up(tmp_path):
-    rec = cs.make_color_slice(ROADIE_DROP, tmp_path / "s", face="up")
+                         and os.environ.get("TDMG_PRUSASLICER_DIR")),
+                    reason="needs both slicers (TDMG_ORCASLICER_DIR, TDMG_PRUSASLICER_DIR)")
+def test_the_roadie_drop_plan_is_printable_face_up(owner_colored_plan, tmp_path):
+    # The printed Roadie drop plan, rebuilt from the owner selection (conftest
+    # owner_colored_plan; it skips when the git-ignored owner images are absent).
+    rec = cs.make_color_slice(owner_colored_plan("roadie-drop"), tmp_path / "s", face="up")
     assert list(rec["faces"]) == ["up"]
     up = rec["faces"]["up"]
     assert up["certification"] == "PRINTABLE", up["certification"]

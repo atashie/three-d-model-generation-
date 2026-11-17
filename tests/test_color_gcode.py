@@ -657,19 +657,20 @@ def test_the_real_flush_position_off_the_bed_passes():
 
 # --- Real slicer ---------------------------------------------------------------------------
 
-REPO = Path(__file__).resolve().parents[1]
-OWNER_PLAN = REPO / "artifacts/colored-runs/roadie-tol30-60-drop-v3-f64"
-
-
-def owner_or_synthetic_shells():
-    """The owner's Roadie drop plan, when its artifacts are here (git-ignored, not in CI);
-    otherwise a small synthetic plan (tests/test_threemf.gated_shells)."""
-    if (OWNER_PLAN / "palette.json").is_file():
+def owner_or_synthetic_shells(owner_colored_plan):
+    """The owner's Roadie drop plan, rebuilt from the owner selection (conftest
+    owner_colored_plan), when the git-ignored owner images are here (not in CI); otherwise
+    a small synthetic plan (tests/test_threemf.gated_shells)."""
+    try:
+        plan = owner_colored_plan("roadie-drop")
+    except pytest.skip.Exception:
+        plan = None
+    if plan is not None:
         from tdmg.checks import merge_exact
-        pal = json.loads((OWNER_PLAN / "palette.json").read_text("utf-8"))
+        pal = json.loads((plan / "palette.json").read_text("utf-8"))
         shells = []
         for s in sorted(pal["shells"], key=lambda s: s["shell"]):
-            m = merge_exact(trimesh.load(io.BytesIO((OWNER_PLAN / f"{s['body']}.stl")
+            m = merge_exact(trimesh.load(io.BytesIO((plan / f"{s['body']}.stl")
                                                     .read_bytes()), file_type="stl",
                                          process=False))
             shells.append(Shell(s["body"], s["role"], s["index"], s["hex"],
@@ -724,8 +725,8 @@ def slice_colors(shells, tmp_path):
 @pytest.mark.skipif(not os.environ.get("TDMG_ORCASLICER_DIR"),
                     reason="TDMG_ORCASLICER_DIR is not set to a verified OrcaSlicer install")
 @pytest.mark.parametrize("face", ["up", "down"])
-def test_the_real_slicer_passes_all_three_checks(face, tmp_path):
-    kind, shells = owner_or_synthetic_shells()
+def test_the_real_slicer_passes_all_three_checks(face, owner_colored_plan, tmp_path):
+    kind, shells = owner_or_synthetic_shells(owner_colored_plan)
     if face == "down":
         shells = turn_over(shells)
     gcode, stats, st = slice_colors(shells, tmp_path)
