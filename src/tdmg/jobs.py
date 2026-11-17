@@ -12,8 +12,11 @@
   `source` is fixed;
 - `stages`: every stage of the recipe with all of its parameters (STAGE_FIELDS);
 - `confirmations`: the owner's confirmations, oldest first (plan Task 8; validated by
-  _validate_confirmation, made by tdmg.job_runner.confirm). Append-only: save_job refuses
-  a change that edits or removes an earlier entry, since each holds the owner's words;
+  _validate_confirmation, made by tdmg.job_runner.confirm). Append-only on tdmg's own
+  writes: save_job refuses a change that edits or removes an earlier entry, since each
+  holds the owner's words. That is all it can enforce: a hand edit of job.yaml can remove
+  or reword entries, and jobs/ is not in git, so nothing keeps the old text. Task 9's
+  finish copies the confirming entry verbatim into the library, where it is kept;
 - `revision`: 1 when made, bumped by every change (save_job).
 
 **Confirmation entries.** Every entry has `subject` (SUBJECTS), `owner_said` (the owner's
@@ -119,6 +122,7 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 SUBJECTS = ("selection", "colors", "print")
 # The stage a non-print subject needs, and the files it covers (stage folder / file name).
 SUBJECT_STAGE = {"selection": "select", "colors": "colors"}
+# The stage record first, then the preview it names in its outputs.
 SUBJECT_FILES = {"selection": ("select/selection.json", "select/preview.png"),
                  "colors": ("colors/colors.json", "colors/regions.png")}
 # The stages whose folder holds the printable files (the one in the recipe: R1 flat, R2
@@ -129,6 +133,9 @@ PRINT_KEYS = ("route", "face", "slice_id", "verdicts", "accept_not_certified")
 PRINTABLE = "PRINTABLE"
 VERDICTS = (PRINTABLE, "NOT CERTIFIED")
 FACED_ROUTES = ("ams",)          # routes printed on a chosen face; the others have none
+# Covered print files that are not printed models, so have no verdict (the palette says
+# which shell is which color). Every other covered print file has a verdict.
+NOT_MODELS = {"ams": ("palette.json",)}
 CONFIRM_FACES = ("up", "down")
 DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 # PyYAML folds long lines at this width; wide enough that no value is folded.
@@ -583,6 +590,11 @@ def _validate_print(where: str, entry: dict, rid: str) -> None:
         if path not in covers:
             raise JobError(f"{where}.verdicts: {path!a} is not a covered file")
         _field(f"{where}.verdicts[{path}]", verdict, _choice(VERDICTS))
+    models = sorted(p for p in covers
+                    if p.partition("/")[2] not in NOT_MODELS.get(route.name, ()))
+    if sorted(verdicts) != models:
+        raise JobError(f"{where}.verdicts must name exactly {', '.join(models)} (the "
+                       "printed model files)")
     accept = entry["accept_not_certified"]
     _field(f"{where}.accept_not_certified", accept, _boolean)
     needed = any(v != PRINTABLE for v in verdicts.values())

@@ -47,7 +47,9 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   entry adds the route, face, slice identity and verdicts. Refuses blank words, stages not
   done, files that differ from their records, faces not sliced, and a verdict not
   PRINTABLE without `--accept-not-certified`. Status shows each confirmation current or
-  stale, re-hashing the covered files each time.
+  stale, re-hashing the covered files each time. `state.json` (now `tdmg.jobstate/2`)
+  holds each stage record's hash, so a hand-edited record makes its stage stale. A print
+  confirmation is not permission to purge.
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
@@ -85,8 +87,8 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-16, PC, restructure Task 8):**
-  `uv run pytest -q` gave 3159 passed and 9 skipped (8 real-slicer tests; one symlink
+- **Latest local validation (2026-11-16, PC, restructure Task 8 review fixes):**
+  `uv run pytest -q` gave 3171 passed and 9 skipped (8 real-slicer tests; one symlink
   test, since this account cannot create symlinks); `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the

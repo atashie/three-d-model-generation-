@@ -1129,7 +1129,8 @@ def job_confirm(
              "slice verdict is not PRINTABLE. Recorded in the confirmation.")] = False,
     date: Annotated[str | None, typer.Option(
         "--date", help="The date the owner gave the words, YYYY-MM-DD (their local "
-                       "date); default today's local date. Not after today.")] = None,
+                       "date); default today's date on this machine. Checked against "
+                       "this machine's date: not after today.")] = None,
     prusaslicer_dir: PrusaDir = None,
     jobs_dir: JobsDir = None,
 ) -> None:
@@ -1147,8 +1148,11 @@ def job_confirm(
     a new one never changes an earlier one. tdmg job status and job run
     show a confirmation as stale when a covered file changes.
 
+    A print confirmation is not permission to purge the job: tdmg finish
+    (not built yet) asks the owner for that separately.
+
     Refused: empty words; a stage not done (print needs every stage);
-    a color plan not ready; a file differing from its record; for print,
+    a color plan not ready; a file differing from its records; for print,
     a face not sliced, ams without --face, and a verdict that is not
     PRINTABLE without --accept-not-certified.
 

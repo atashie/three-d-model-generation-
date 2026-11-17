@@ -16,18 +16,20 @@ entries and job_status reports them. This module only reads files.
   faces.<face>.verdict; glue, each plate's verdict in glue.plates. slice.json's own bytes
   are not covered: they hold G-code hashes, and G-code holds the time of slicing.
 
-Before anything is covered, each file on disk must be the one its record names: a
+Before anything is covered, each file on disk must be the one its records name: a
 non-print file must match its record's `outputs` hash (preview.png in selection.json,
-regions.png in colors.json); a print file must match the slice record's links
-(links.model_stl_sha256 for R1 and for each glue plate, links.model_3mf_sha256 and
-links.palette_sha256 for ams). So a verdict is never bound to a file other than the one
-sliced, and a hand-edited file is refused.
+regions.png in colors.json); a print file must match the `outputs` hash of the record that
+made it (flat.json, colored.json) and the slice record's links (links.model_stl_sha256 for
+R1 and for each glue plate, links.model_3mf_sha256 and links.palette_sha256 for ams). So a
+verdict is never bound to a file other than the one made and sliced, and a hand-edited
+file is refused. (job run's state.json also holds each record's hash, so a hand-edited
+record makes its stage stale, and print needs every stage done.)
 
 **Staleness** (current_problem) is computed each time, never stored: an entry is stale
-when a covered file is missing or its SHA-256 differs from the entry's, or, for print,
-when what the entry covers would now be different: the slice record's identity, a
-verdict, the set of glue plates, or a printable file no longer matching the slice
-record. A rerun that writes the same bytes leaves the entry current.
+when a covered file is missing, cannot be read, or its SHA-256 differs from the entry's,
+or, for print, when what the entry covers would now be different: the slice record's
+identity, a verdict, the set of glue plates, or a printable file no longer matching the
+records. A rerun that writes the same bytes leaves the entry current.
 """
 
 from __future__ import annotations
@@ -42,10 +44,8 @@ from tdmg.jobs import JobError
 from tdmg.recipes import recipe
 
 SLICE_RECORD = "slice/slice.json"
-# The record that names each non-print subject's other file in its `outputs`.
-SUBJECT_RECORD = {"selection": ("select/selection.json", "select/preview.png"),
-                  "colors": ("colors/colors.json", "colors/regions.png")}
-COLORED_RECORD = "colored_flat/colored.json"
+# The record of the stage that makes the printable files, by stage.
+PRINT_RECORDS = {"flat": "flat.json", "colored_flat": "colored.json"}
 # The slice record's identity field, by whether the recipe is multicolor (R2) or not (R1).
 IDENTITY_FIELD = {False: "slice_id", True: "colorslice_id"}
 
@@ -87,7 +87,7 @@ def _must_match(rel: str, digest: str, want, what: str) -> None:
 
 def subject_covers(folder: Path, subject: str) -> dict[str, str]:
     """{path: SHA-256} for a selection or colors confirmation, checked against the record."""
-    record_rel, other = SUBJECT_RECORD[subject]
+    record_rel, other = jobs.SUBJECT_FILES[subject]     # the record, then its preview
     covers = {rel: sha256_file(folder, rel) for rel in jobs.SUBJECT_FILES[subject]}
     record = _json(folder, record_rel)
     name = other.rpartition("/")[2]
@@ -137,6 +137,11 @@ def print_cover(folder: Path, job: dict, route_name: str, face: str | None) -> P
         except ValueError as e:
             raise JobError(str(e)) from None
     covers = {f"{stage}/{n}": sha256_file(folder, f"{stage}/{n}") for n in names}
+    made_rel = f"{stage}/{PRINT_RECORDS[stage]}"
+    made = _json(folder, made_rel)
+    for n in names:
+        _must_match(f"{stage}/{n}", covers[f"{stage}/{n}"], _get(made, "outputs", n),
+                    made_rel)
     verdicts: dict[str, str] = {}
     if route.name == "single":
         rel = f"{stage}/model.stl"
@@ -182,7 +187,11 @@ def current_problem(folder: Path, job: dict, entry: dict) -> str | None:
         path = folder / rel
         if not path.is_file():
             return f"{rel} is missing"
-        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            return f"cannot read {rel}: {e.strerror or e}"
+        if hashlib.sha256(data).hexdigest() != digest:
             return f"{rel} changed"
     if entry["subject"] != "print":
         return None
@@ -190,6 +199,8 @@ def current_problem(folder: Path, job: dict, entry: dict) -> str | None:
         now = print_cover(folder, job, entry["route"], entry["face"])
     except JobError as e:
         return str(e)
+    except OSError as e:
+        return f"cannot read {e.filename or 'a record'}: {e.strerror or e}"
     if sorted(now.covers) != sorted(entry["covers"]):
         return "the glue plates changed"
     if now.slice_id != entry["slice_id"]:

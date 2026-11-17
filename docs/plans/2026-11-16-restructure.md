@@ -335,6 +335,23 @@ and public answer, and the source hash and origin.
 - interruption after each step, then resume;
 - `--dry-run` changes nothing.
 
+**Note added 2026-11-16 (after the Task 8 review):**
+- `finish` uses the one current `print` confirmation (`tdmg job status` lists them,
+  numbered from 1). If more than one `print` entry is current and they differ in route or
+  face, `finish` requires `--confirmation N` (that number) and refuses without it.
+- The library holds only the confirmed route's printable files (single: `model.stl`;
+  ams: `model.3mf` and `palette.json`; glue: the glue plates), not the recipe's other
+  routes: the simpler choice, and the only files the owner confirmed. This narrows step
+  3's "the recipe's outputs".
+- The card names the confirmed route and face, says only that route was confirmed, and
+  notes "printed face X; tdmg chose Y" when the owner's face differs from the slice
+  record's `preferred_face`.
+- The confirming entry is copied verbatim from `job.yaml` into the library
+  (`provenance.json` or the card): `job.yaml` is git-ignored and can be hand-edited, so
+  the library copy is the lasting record of the owner's words.
+- `state.json` holds `slice.json`'s SHA-256, which varies with the G-code timestamps:
+  leave `state.json` out of the rebuild comparison.
+
 ### Task 10: `tdmg library check` and `tdmg library verify`
 
 - **`check [NAME]`:** each entry has `COMPLETE`, every hash in `provenance.json`

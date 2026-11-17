@@ -29,7 +29,7 @@ Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous
 | `docs/plans/2026-11-13-color-slicing.md` | cited |  | doc | 4 |  | 4 |  | 11 |  |  |  | 5 |  | 30 |  |
 | `docs/plans/2026-11-14-test-strip.md` | cited |  | doc | 4 |  | 3 |  | 2 |  |  |  | 4 |  | 7 |  |
 | `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc | 2 |  | 2 |  | 7 |  |  |  | 4 |  | 3 |  |
-| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 3 |  |  |  | 2 | 1 | 4 | 1 |
+| `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 4 |  |  |  | 2 | 1 | 4 | 1 |
 | `docs/plans/2026-11-16-restructure.md` | cited | active work, stays where it is | doc, status | 2 |  | 1 |  |  |  |  |  | 1 | 3 | 3 |  |
 | `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 1 | 4 |  |
 | `research/reviews/2026-11-09-codex` | cited |  | doc | 2 |  |  | 2 |  |  |  |  | 2 |  | 2 |  |
@@ -100,7 +100,7 @@ Linked from kept records: `research/verification/2026-11-10-subject-selection`.
 
 - `docs/PLAN.md` (doc): lines 132
 - `docs/design/slicing.md` (doc): lines 103
-- `docs/guide/pipeline-and-gate.md` (doc): lines 160
+- `docs/guide/pipeline-and-gate.md` (doc): lines 173
 - `docs/plans/2026-11-10-flat-geometry.md` (record): lines 444
 - `docs/plans/2026-11-10-slicer-check.md` (record): lines 228
 - `src/tdmg/printed.py` (code): lines 22
@@ -204,7 +204,7 @@ Linked from kept records: `docs/plans/2026-11-11-color-design.md`, `research/rev
 ### `docs/plans/2026-11-13-color-slicing.md`
 
 - `docs/design/slicing.md` (doc): lines 54, 105
-- `docs/guide/pipeline-and-gate.md` (doc): lines 414
+- `docs/guide/pipeline-and-gate.md` (doc): lines 427
 - `docs/plans/2026-11-11-color-design.md` (record): lines 70
 - `docs/print-types/attributes/color-multi.md` (doc): lines 130, 369
 - `research/reviews/2026-11-13-color-slicing/README.md` (record): lines 3
@@ -228,7 +228,7 @@ Linked from kept records: `docs/plans/2026-11-11-color-design.md`, `research/rev
 ### `docs/plans/2026-11-14-test-strip.md`
 
 - `docs/design/calibration.md` (doc): lines 10
-- `docs/guide/pipeline-and-gate.md` (doc): lines 636
+- `docs/guide/pipeline-and-gate.md` (doc): lines 649
 - `docs/plans/2026-11-16-restructure.md` (record): lines 43
 - `docs/print-types/attributes/color-multi.md` (doc): lines 28, 209
 - `research/reviews/2026-11-14-test-strips/README.md` (record): lines 3
@@ -244,7 +244,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 ### `docs/plans/2026-11-16-face-down-default.md`
 
 - `docs/design/slicing.md` (doc): lines 106
-- `docs/guide/pipeline-and-gate.md` (doc): lines 173, 447
+- `docs/guide/pipeline-and-gate.md` (doc): lines 186, 460
 - `docs/print-types/attributes/color-multi.md` (doc): lines 139
 - `research/reviews/2026-11-16-face-down/README.md` (record): lines 3
 - `research/reviews/2026-11-16-face-down/prompt.md` (record): lines 3
@@ -264,11 +264,12 @@ Active work, stays where it is.
 
 - `.gitignore` (config): lines 13
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 119
+- `docs/STATUS.md` (status): lines 121
 - `docs/design/README.md` (doc): lines 25
 - `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/prompt.md` (record): lines 1
+- `src/tdmg/confirmations.py` (code): lines 2
 - `src/tdmg/job_runner.py` (code): lines 2
 - `src/tdmg/jobs.py` (code): lines 2
 - `src/tdmg/recipes.py` (code): lines 9
@@ -280,7 +281,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 Active work, stays where it is.
 
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 74, 120, 188
+- `docs/STATUS.md` (status): lines 76, 122, 190
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
 - `tests/test_recipes.py` (test): lines 41
@@ -290,7 +291,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `resear
 ### `research/experiments/2026-11-g3-local-vs-hosted`
 
 - `docs/PLAN.md` (doc): lines 337, 478, 482, 484
-- `docs/STATUS.md` (status): lines 73
+- `docs/STATUS.md` (status): lines 75
 - `docs/plans/2026-11-10-flat-geometry.md` (record): lines 195
 - `docs/reference/dependencies.md` (doc): lines 16
 - `reports/Image to printable 3D model landscape.md` (record): lines 365
@@ -415,7 +416,7 @@ Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`.
 ### `research/verification/2026-11-08-stack-smoke`
 
 - `docs/PLAN.md` (doc): lines 7
-- `docs/STATUS.md` (status): lines 80
+- `docs/STATUS.md` (status): lines 82
 - `docs/print-types/attributes/color-single.md` (doc): lines 40
 - `docs/print-types/attributes/geometry-flat.md` (doc): lines 68
 - `docs/reference/dependencies.md` (doc): lines 73
@@ -526,7 +527,7 @@ Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/
 
 - `docs/PLAN.md` (doc): lines 361
 - `docs/design/slicing.md` (doc): lines 109
-- `docs/guide/pipeline-and-gate.md` (doc): lines 209
+- `docs/guide/pipeline-and-gate.md` (doc): lines 222
 - `docs/plans/2026-11-11-portability-check.md` (record): lines 16, 130
 - `docs/print-types/recipes/r1-flat-single.md` (doc): lines 75
 - `profiles/slicers/prusaslicer-2.9.7.yaml` (profile): lines 4, 21, 56
@@ -560,7 +561,7 @@ Linked from kept records: `docs/plans/2026-11-12-color-3mf.md`, `docs/plans/2026
 ### `research/verification/2026-11-12-color-geometry`
 
 - `docs/design/color.md` (doc): lines 69, 112
-- `docs/guide/pipeline-and-gate.md` (doc): lines 405
+- `docs/guide/pipeline-and-gate.md` (doc): lines 418
 - `docs/plans/2026-11-12-color-geometry.md` (record): lines 101, 173, 379
 - `docs/print-types/attributes/color-multi.md` (doc): lines 111, 372
 - `research/reviews/2026-11-12-color-3mf/README.md` (record): lines 58
@@ -572,7 +573,7 @@ Linked from kept records: `docs/plans/2026-11-12-color-geometry.md`, `research/r
 ### `research/verification/2026-11-13-a1-profile-include`
 
 - `docs/design/slicing.md` (doc): lines 110
-- `docs/guide/pipeline-and-gate.md` (doc): lines 240, 252
+- `docs/guide/pipeline-and-gate.md` (doc): lines 253, 265
 - `docs/plans/2026-11-13-color-slicing.md` (record): lines 212
 - `docs/print-types/attributes/color-multi.md` (doc): lines 378
 - `profiles/slicers/orcaslicer-2.5.0.yaml` (profile): lines 7, 87
@@ -590,7 +591,7 @@ Linked from kept records: `docs/plans/2026-11-13-color-slicing.md`, `research/re
 ### `research/verification/2026-11-13-color-slicing`
 
 - `docs/design/slicing.md` (doc): lines 111
-- `docs/guide/pipeline-and-gate.md` (doc): lines 619
+- `docs/guide/pipeline-and-gate.md` (doc): lines 632
 - `docs/plans/2026-11-13-color-slicing.md` (record): lines 147, 223, 270
 - `docs/plans/2026-11-14-test-strip.md` (record): lines 362
 - `docs/print-types/attributes/color-multi.md` (doc): lines 187, 381
@@ -609,7 +610,7 @@ Linked from kept records: `docs/plans/2026-11-13-color-slicing.md`, `docs/plans/
 ### `research/verification/2026-11-14-test-strips`
 
 - `docs/design/calibration.md` (doc): lines 70
-- `docs/guide/pipeline-and-gate.md` (doc): lines 703
+- `docs/guide/pipeline-and-gate.md` (doc): lines 716
 - `docs/plans/2026-11-14-test-strip.md` (record): lines 147, 413, 488, 496, 501, 548
 - `docs/print-types/attributes/color-multi.md` (doc): lines 243, 385
 - `research/reviews/2026-11-14-test-strips/README.md` (record): lines 137
@@ -625,7 +626,7 @@ Linked from kept records: `docs/plans/2026-11-14-test-strip.md`, `research/revie
 - `README.md` (doc): lines 7
 - `docs/design/calibration.md` (doc): lines 72
 - `docs/design/slicing.md` (doc): lines 112
-- `docs/guide/pipeline-and-gate.md` (doc): lines 450, 610, 624
+- `docs/guide/pipeline-and-gate.md` (doc): lines 463, 623, 637
 - `docs/plans/2026-11-16-face-down-default.md` (record): lines 13, 135, 149
 - `docs/plans/2026-11-16-restructure.md` (record): lines 27
 - `docs/print-types/attributes/color-multi.md` (doc): lines 34, 142, 198
@@ -715,7 +716,7 @@ Linked from kept records: `research/reviews/2026-11-09-codex`.
 
 - `README.md` (doc): lines 51
 - `docs/PLAN.md` (doc): lines 336
-- `docs/STATUS.md` (status): lines 81
+- `docs/STATUS.md` (status): lines 83
 - `docs/plans/2026-11-16-restructure.md` (record): lines 109
 - `docs/reference/dependencies.md` (doc): lines 15
 - `research/reviews/2026-11-09-pc/README.md` (record): lines 4
@@ -733,7 +734,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `docs/plans`
 
 - `README.md` (doc): lines 63
-- `docs/STATUS.md` (status): lines 69
+- `docs/STATUS.md` (status): lines 71
 - `docs/design/README.md` (doc): lines 6
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 51, 182
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 151
@@ -754,7 +755,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 
 - `README.md` (doc): lines 67
 - `docs/PLAN.md` (doc): lines 164, 197
-- `docs/STATUS.md` (status): lines 8, 68, 184
+- `docs/STATUS.md` (status): lines 8, 70, 186
 - `docs/design/README.md` (doc): lines 6
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 181
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 112, 151
@@ -771,13 +772,13 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `research/reviews`
 
 - `CLAUDE.md` (doc): lines 42
-- `docs/STATUS.md` (status): lines 207
+- `docs/STATUS.md` (status): lines 209
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232
 
 ### `research/verification`
 
-- `docs/STATUS.md` (status): lines 194
+- `docs/STATUS.md` (status): lines 196
 - `docs/plans/2026-11-16-restructure.md` (record): lines 117
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 40, 51, 214, 232, 279, 280
 
@@ -874,8 +875,8 @@ References this script could not tie to one record: a built path that stops at a
 | `README.md` | 67 | `research/README.md` | names no record in the tree |
 | `docs/PLAN.md` | 165 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 8 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 68 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 193 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 70 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 195 | `research/README.md` | names no record in the tree |
 | `docs/design/README.md` | 23 | `research/README.md` | names no record in the tree |
 | `docs/design/flat.md` | 80 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `docs/design/flat.md` | 86 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
@@ -895,7 +896,7 @@ References this script could not tie to one record: a built path that stops at a
 | `docs/plans/2026-11-16-restructure.md` | 107 | `research/reviews/2026-11-10-flat` | names no record in the tree |
 | `docs/plans/2026-11-16-restructure.md` | 108 | `research/verification/2026-11-10-flat-geometry` | names no record in the tree |
 | `docs/plans/2026-11-16-restructure.md` | 159 | `research/README.md` | names no record in the tree |
-| `docs/plans/2026-11-16-restructure.md` | 406 | `research/reviews/2026-11-16-restructure/` | names no record in the tree |
+| `docs/plans/2026-11-16-restructure.md` | 423 | `research/reviews/2026-11-16-restructure/` | names no record in the tree |
 | `research/README.md` | 27 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `research/README.md` | 28 | `research/reviews/2026-11-10-selection/` | names no record in the tree |
 | `research/README.md` | 29 | `research/reviews/2026-11-10-slicer/` | names no record in the tree |

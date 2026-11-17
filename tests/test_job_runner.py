@@ -247,18 +247,24 @@ def test_nothing_changed_runs_nothing_and_keeps_state_bytes(tmp_path, slicers):
                                            for s in ("select", "flat", "slice")}
     assert _mtimes(folder) == before
     assert (folder / STATE_FILE).read_bytes() == state
-    # state.json: canonical JSON of the keys only.
+    # state.json: canonical JSON of the keys and the SHA-256 of each stage record.
     parsed = json.loads(state)
     assert job_runner.canonical_json(parsed) == state
     assert parsed == {"schema": job_runner.STATE_SCHEMA,
-                      "stages": {s: {"key": k} for s, k in _keys(
-                          folder, Machine(None, slicers[1])).items()}}
+                      "stages": {s: {"key": k, "record_sha256": _sha_file(
+                          folder / s / job_runner.STAGE_RECORDS[s])}
+                          for s, k in _keys(folder, Machine(None, slicers[1])).items()}}
 
 
 def test_same_job_elsewhere_gives_the_same_state_bytes(tmp_path, slicers):
+    """Except the slice record's hash: slice.json holds G-code hashes, and G-code holds the
+    time of slicing (job_runner docstring)."""
     a = _r1(tmp_path / "a", slicers, "one")
     b = _r1(tmp_path / "b", slicers, "two")
-    assert (a / STATE_FILE).read_bytes() == (b / STATE_FILE).read_bytes()
+    sa, sb = (json.loads((f / STATE_FILE).read_bytes()) for f in (a, b))
+    for state in (sa, sb):
+        del state["stages"]["slice"]["record_sha256"]
+    assert sa == sb
 
 
 def test_a_parameter_change_reruns_that_stage_and_later_ones_only(tmp_path, slicers):
@@ -531,6 +537,12 @@ def test_status_checks_the_record_links(tmp_path, slicers):
     rec = json.loads(path.read_bytes())
     rec["links"]["flat_record_sha256"] = "0" * 64
     path.write_bytes(json.dumps(rec).encode())
+    st = job_status(folder, Machine(None, slicers[1])).stages[-1]
+    assert st.state == "stale" and st.note == "its record changed since tdmg job run wrote it"
+    # With state.json holding the edited record's hash, the links are what is checked.
+    state = json.loads((folder / STATE_FILE).read_bytes())
+    state["stages"]["slice"]["record_sha256"] = _sha_file(path)
+    (folder / STATE_FILE).write_bytes(json.dumps(state).encode())
     st = job_status(folder, Machine(None, slicers[1])).stages[-1]
     assert st.state == "stale" and "links.flat_record_sha256 does not match" in st.note
     assert _stage_lines(_run(folder, *slicers).output)["slice"] == "ran"

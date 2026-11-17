@@ -2,9 +2,10 @@
 fake slicers of tests/test_slice.py.
 
 The fake OrcaSlicer's G-code has no layers, so every slice it gives is NOT CERTIFIED. To
-test a PRINTABLE slice, _printable rewrites slice.json's verdicts in place: the slice
-stage stays done (its state checks the record's algorithm, key and links, not its bytes),
-and confirm then reads PRINTABLE, as it would from a real slice.
+test a PRINTABLE slice, _printable rewrites slice.json's verdicts in place and stores the
+new record's SHA-256 in state.json, as job run would have after a real PRINTABLE slice:
+so the slice stage stays done, and confirm reads PRINTABLE. (Without the state.json
+update the stage is stale: "its record changed since tdmg job run wrote it".)
 """
 
 import datetime
@@ -14,11 +15,20 @@ from pathlib import Path
 
 import pytest
 import test_slice
+import yaml
 from test_colored_flat import five_stripes
 from test_job_runner import R1_SELECT, _invoke, _new, _plain, _run, _set
 
-from tdmg import job_runner, jobs
-from tdmg.job_runner import LOCK_FILE, Machine, confirm, confirm_date, job_status
+from tdmg import confirmations, job_runner, jobs
+from tdmg.job_runner import (
+    LOCK_FILE,
+    STATE_FILE,
+    STATE_SCHEMA,
+    Machine,
+    confirm,
+    confirm_date,
+    job_status,
+)
 from tdmg.jobs import JobError, load_job, save_job
 
 fake = test_slice.fake
@@ -82,7 +92,17 @@ def _printable(folder: Path) -> None:
             plate["verdict"] = "PRINTABLE"
     else:
         rec["verdict"] = "PRINTABLE"
+    _write_record(folder, "slice", rec)
+
+
+def _write_record(folder: Path, stage: str, rec: dict) -> None:
+    """Write a stage record and record its SHA-256 in state.json (module docstring)."""
+    path = folder / stage / job_runner.STAGE_RECORDS[stage]
     path.write_bytes(json.dumps(rec).encode())
+    state_path = folder / STATE_FILE
+    state = json.loads(state_path.read_bytes())
+    state["stages"][stage]["record_sha256"] = _sha(path)
+    state_path.write_bytes(json.dumps(state).encode())
 
 
 def _status(folder) -> str:
@@ -369,7 +389,7 @@ def test_a_file_that_differs_from_its_record_is_refused(tmp_path, slicers):
     result = _confirm(folder, "--subject", "print", "--owner-said", WORDS,
                       "--accept-not-certified")
     assert result.exit_code == 2
-    assert "flat/model.stl on disk is not the file slice/slice.json names" in \
+    assert "flat/model.stl on disk is not the file flat/flat.json names" in \
         _plain(result.output)
 
 
@@ -383,7 +403,10 @@ def test_bad_dates_are_refused(value, match):
         confirm_date(value, today=datetime.date(2026, 11, 16))
 
 
-def test_the_default_date_is_today_local():
+def test_the_default_date_is_this_machines_local_date():
+    before = datetime.date.today().isoformat()
+    got = confirm_date(None)
+    assert got in (before, datetime.date.today().isoformat())   # midnight may pass
     assert confirm_date(None, today=datetime.date(2026, 11, 16)) == "2026-11-16"
     assert confirm_date("2026-11-16", today=datetime.date(2026, 11, 16)) == "2026-11-16"
 
@@ -483,3 +506,160 @@ def test_a_glue_entry_must_cover_the_base_plate(tmp_path):
 
 def test_the_status_line_without_confirmations():
     assert job_runner.CONFIRM_NOTE == "confirmations: none"
+
+
+# --- review fixes (I-1, M-1, M-2, M-3, M-7, M-11) -------------------------------------------
+
+def test_a_forged_slice_record_is_stale_and_confirm_refuses(tmp_path, slicers):
+    """The review's P1: model.stl edited, slice.json's link and verdict edited to match."""
+    folder = _r1(tmp_path, slicers)
+    stl = folder / "flat" / "model.stl"
+    stl.write_bytes(stl.read_bytes() + b"\n")
+    path = folder / "slice" / "slice.json"
+    rec = json.loads(path.read_bytes())
+    rec["links"]["model_stl_sha256"] = _sha(stl)
+    rec["verdict"] = "PRINTABLE"
+    path.write_bytes(json.dumps(rec).encode())
+    status = job_status(folder, _machine(folder))
+    slice_ = status.stages[-1]
+    assert slice_.state == "stale"
+    assert slice_.note == "its record changed since tdmg job run wrote it"
+    result = _confirm(folder, "--subject", "print", "--owner-said", WORDS)
+    out = _plain(result.output)
+    assert result.exit_code == 2 and "stage slice is stale" in out
+    assert load_job(folder)["confirmations"] == []
+
+
+def test_a_printable_file_must_match_the_record_that_made_it(tmp_path, slicers):
+    """Even with the slice record's link matching, flat.json's outputs must too."""
+    folder = _r1(tmp_path, slicers)
+    stl = folder / "flat" / "model.stl"
+    stl.write_bytes(stl.read_bytes() + b"\n")
+    rec = json.loads((folder / "slice" / "slice.json").read_bytes())
+    rec["links"]["model_stl_sha256"] = _sha(stl)
+    _write_record(folder, "slice", rec)
+    with pytest.raises(JobError, match="flat/model.stl on disk is not the file "
+                                       "flat/flat.json names"):
+        confirmations.print_cover(folder, load_job(folder), "single", None)
+
+
+def test_state_json_holds_each_record_hash(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    state = json.loads((folder / STATE_FILE).read_bytes())
+    assert state["schema"] == STATE_SCHEMA == "tdmg.jobstate/2"
+    for stage, entry in state["stages"].items():
+        record = folder / stage / job_runner.STAGE_RECORDS[stage]
+        assert entry == {"key": entry["key"], "record_sha256": _sha(record)}
+
+
+def test_an_old_state_file_makes_its_stages_rerun(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    path = folder / STATE_FILE
+    state = json.loads(path.read_bytes())
+    old = {"schema": "tdmg.jobstate/1",
+           "stages": {s: {"key": e["key"]} for s, e in state["stages"].items()}}
+    path.write_bytes(json.dumps(old).encode())
+    status = job_status(folder, _machine(folder))
+    assert status.stages[0].state == "stale"
+    assert "an older tdmg" in status.stages[0].note
+    result = _run(folder, *slicers)
+    assert "select: ran" in result.output
+    assert json.loads(path.read_bytes())["schema"] == "tdmg.jobstate/2"
+
+
+def test_status_notes_a_printed_face_tdmg_did_not_choose(tmp_path, slicers):
+    folder = _r2(tmp_path, slicers)
+    rec = json.loads((folder / "slice" / "slice.json").read_bytes())
+    for face in rec["faces"].values():
+        face["verdict"] = "PRINTABLE"
+    rec["preferred_face"] = "down"
+    rec["print"] = "print face down"
+    _write_record(folder, "slice", rec)
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS, "--face",
+                    "up").exit_code == 0
+    status = _status(folder)
+    assert "printed face up; tdmg chose down" in status
+    # A print of another face than tdmg's choice does not answer the print wait.
+    assert "to print (files in colored_flat/)" in status
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS, "--face",
+                    "down").exit_code == 0
+    status = _status(folder)
+    assert "to print (files in colored_flat/)" not in status
+    assert status.count("tdmg chose") == 1
+
+
+def test_a_glue_confirmation_does_not_answer_the_ams_wait(tmp_path, slicers):
+    folder = _r2(tmp_path, slicers)
+    assert _confirm(folder, "--subject", "print", "--route", "glue", "--owner-said", WORDS,
+                    "--accept-not-certified").exit_code == 0
+    assert "no face is PRINTABLE" in _status(folder)       # the ams wait (fake slicer)
+
+
+def test_a_stale_entry_waits_unless_a_matching_one_is_current(tmp_path, slicers):
+    folder = _r2(tmp_path, slicers)
+    _printable(folder)
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS, "--face",
+                    "down").exit_code == 0
+    assert _confirm(folder, "--subject", "print", "--route", "glue", "--owner-said",
+                    WORDS).exit_code == 0
+    plate = next((folder / "colored_flat").glob("glue-base.stl"))
+    plate.write_bytes(plate.read_bytes() + b"\n")
+    status = _status(folder)
+    # The ams entry is current, but it does not stand in for the stale glue entry.
+    assert "confirmation 2 (print (glue)) is stale" in status
+
+
+def test_current_with_stale_stages_says_a_rerun_decides(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS,
+                    "--accept-not-certified").exit_code == 0
+    _set(folder, "flat.width_mm=50")
+    assert "current (stages stale: a rerun decides)" in _status(folder)
+
+
+def test_verdicts_must_name_exactly_the_printed_models(tmp_path):
+    folder = _new(tmp_path, "roadie-drop", colors=True)
+    job = load_job(folder)
+    both = {"colored_flat/model.3mf": "PRINTABLE", "colored_flat/palette.json": "PRINTABLE"}
+    with pytest.raises(JobError, match="verdicts must name exactly colored_flat/model.3mf"):
+        jobs.validate_job({**job, "confirmations": [_entry(verdicts=both)]})
+    glue = _entry(route="glue", face=None,
+                  covers={"colored_flat/glue-base.stl": "0" * 64,
+                          "colored_flat/glue-color-1-ff0000.stl": "1" * 64},
+                  verdicts={"colored_flat/glue-base.stl": "PRINTABLE"})
+    with pytest.raises(JobError, match="verdicts must name exactly"):
+        jobs.validate_job({**job, "confirmations": [glue]})
+
+
+def test_an_unreadable_covered_file_makes_the_entry_stale(tmp_path, slicers, monkeypatch):
+    folder = _r1(tmp_path, slicers)
+    assert _confirm(folder, "--subject", "selection", "--owner-said", "yes").exit_code == 0
+    real = Path.read_bytes
+
+    def read_bytes(self):
+        if self.name == "preview.png":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    [c] = job_status(folder, _machine(folder)).confirmations
+    assert c.problem.startswith("cannot read select/preview.png: Permission denied")
+
+
+def test_a_hand_edit_of_job_yaml_is_not_prevented(tmp_path, slicers):
+    """Documented limit (I-2): append-only holds for tdmg's own writes only."""
+    folder = _r1(tmp_path, slicers)
+    confirm(folder, "selection", "yes", machine=_machine(folder))
+    confirm(folder, "selection", "yes again", machine=_machine(folder))
+    path = folder / "job.yaml"
+    data = yaml.safe_load(path.read_bytes())
+    data["confirmations"].pop(0)
+    path.write_bytes(yaml.safe_dump(data, sort_keys=False).encode())
+    assert [e["owner_said"] for e in load_job(folder)["confirmations"]] == ["yes again"]
+
+
+def test_the_help_says_a_print_confirmation_is_not_purge_permission():
+    out = _plain(_invoke("job", "confirm", "--help").output)
+    assert "A print confirmation is not permission to purge the job" in out
+    assert "The owner's own words, verbatim" in out
+    assert "Checked against this machine's date" in out

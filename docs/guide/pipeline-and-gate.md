@@ -78,11 +78,16 @@ profiles it uses (and, for `select`, the image and mask hashes), kept in
 input record changed. A stage whose record names another algorithm, or whose links do not
 match the upstream records, is stale too; `--rerun STAGE` runs a stage again anyway (after
 a code change that kept the algorithm id). While `job run` or `job set` works on a job it
-holds `jobs/NAME/.lock`. A known limit: a stage's state trusts its record's own output
-hashes and does not hash the files again, so a hand edit to a stage's file (for example
-`flat/model.stl`) does not make the stage stale; a confirmation that covers the file does
-go stale (below), and the rebuild proof of `tdmg finish` (not built yet) will catch the
-rest. A rerun goes into `<stage>.new/`
+holds `jobs/NAME/.lock`. `state.json` also holds the SHA-256 of each stage record as
+`job run` wrote it, so a hand-edited record (a `slice.json` changed to say PRINTABLE, for
+example) makes its stage stale. `state.json` is the same for the same job except that
+hash for `slice.json`, which holds the G-code hashes. A known limit: a stage's state
+trusts its record's own output hashes and does not hash the files again, so a hand edit
+to a stage's file (for example `flat/model.stl`) does not make the stage stale; a
+confirmation that covers the file does go stale (below), `confirm` refuses it, and the
+rebuild proof of `tdmg finish` (not built yet) will catch the rest. These checks guard
+against accidental edits and edits by an agent or tool, not against an adversary:
+`state.json` and `job.yaml` are plain files. A rerun goes into `<stage>.new/`
 and replaces the old folder only once its
 record is written, so a failed rerun keeps the old results. The run stops at a required
 parameter not set, at a stage that fails, and after a color plan that is not ready; it
@@ -106,12 +111,20 @@ for R1, `flat/model.stl`; `ams` for R2, the default, `colored_flat/model.3mf` an
 every glue plate). A print entry also holds the slice record's identity (`slice_id` or
 `colorslice_id`, not `slice.json`'s bytes, which change with the G-code timestamps) and
 the verdict of each printed file. `confirm` refuses: a stage not done (`print` needs
-every stage), a color plan that is not ready, a file that differs from the one its record
-names, a face that was not sliced, and a verdict that is not PRINTABLE unless
-`--accept-not-certified` is given, which is then recorded. Entries are only ever added.
-`job status` and `job run` hash the covered files again each time and show each
-confirmation as current or stale (a covered file changed or went missing, or the slice
-identity or a verdict changed); a rerun that writes the same bytes leaves it current.
+every stage), a color plan that is not ready, a file that differs from the one its
+records name (the stage record that made it, and for a printable file the slice record's
+links), a face that was not sliced, and a verdict that is not PRINTABLE unless
+`--accept-not-certified` is given, which is then recorded. `--date` is checked against
+this machine's date. A print confirmation is not permission to purge the job: `tdmg
+finish` (not built yet) asks the owner for that separately. Entries are only ever added by tdmg's own
+writes (`job set` and `confirm` cannot change or remove one); a hand edit of `job.yaml`
+can still remove or reword entries, and `jobs/` is not in git, so `tdmg finish` (Task 9)
+copies the confirming entry verbatim into the library. `job status` and `job run` hash
+the covered files again each time and show each confirmation as current or stale (a
+covered file changed, went missing or cannot be read, or the slice identity or a verdict
+changed); a rerun that writes the same bytes leaves it current. A current confirmation
+whose stages are stale reads "current (stages stale: a rerun decides)", and a print on
+another face than tdmg chose reads "printed face X; tdmg chose Y".
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 

@@ -40,11 +40,17 @@ changed. A code change that keeps the algorithm id is not seen: `tdmg job run NA
 --rerun STAGE` reruns a stage (and, through the record hashes, whatever its new record
 changes downstream). Machine paths are not part of a key.
 
-**state.json** (STATE_SCHEMA) holds `{"schema", "stages": {stage: {"key": ...}}}`, the key
-each stage folder was last made with, as canonical JSON written with an atomic rename
-(tdmg.records.replace_file). It holds no hashes of the stage's own outputs (slice records
-hold G-code hashes, and G-code holds the time of slicing), so the same job gives the same
-bytes.
+**state.json** (STATE_SCHEMA, tdmg.jobstate/2) holds `{"schema", "stages": {stage: {"key":
+..., "record_sha256": ...}}}`: the key each stage folder was last made with, and the
+SHA-256 of the stage record job run found in it once the swap was done. It is canonical
+JSON written with an atomic rename (tdmg.records.replace_file). A stage whose record's
+bytes differ from record_sha256 is stale ("its record changed since tdmg job run wrote
+it"), so a hand-edited record (a slice.json made to say PRINTABLE, say) is never taken as
+done. The same job gives the same state.json bytes except for the slice stage's
+record_sha256: slice.json holds G-code hashes, and G-code holds the time of slicing. So
+Task 9's rebuild comparison must leave state.json out. A tdmg.jobstate/1 file (keys only,
+from before) is still read; each of its stages is stale until it runs again, since its
+record's hash was never stored.
 
 **Reruns.** A stage runs when its folder has no record, when its key differs from
 state.json's, when its record's algorithm or links disagree with this code and the
@@ -59,9 +65,12 @@ is put back, other `.old/` and `.new/` folders deleted.
 
 **Known limit.** A stage's state trusts each record's own `outputs` hashes and does not
 hash the output files again, so a hand edit to a stage's file (flat/model.stl, say) does
-not make the stage stale. A confirmation covering the file does go stale (its files are
-hashed again on every status), and confirm refuses a file that differs from its record;
-Task 9's rebuild catches the rest.
+not make the stage stale; a hand edit to the record itself does (state.json's
+record_sha256). A confirmation covering the file does go stale (its files are hashed
+again on every status), and confirm refuses a printable file that differs from the
+record that made it or from the slice record's links; Task 9's rebuild catches the rest.
+These checks guard against accidental edits, and edits by an agent or a tool, not
+against an adversary: state.json and job.yaml are plain files that can be edited too.
 
 **Lock.** job run, job set and job confirm hold LOCK_FILE in the job folder (an exclusive
 create, removed when done), so two of them cannot change a job at once.
@@ -139,7 +148,8 @@ from tdmg.slicing import PRINT_THIS, SLICE_ALGORITHM_VERSION, make_slice
 from tdmg.slicing import RECORD_NAME as SLICE_RECORD
 
 STATE_FILE = "state.json"
-STATE_SCHEMA = "tdmg.jobstate/1"
+STATE_SCHEMA = "tdmg.jobstate/2"
+OLD_STATE_SCHEMA = "tdmg.jobstate/1"         # keys only; read, never written
 KEY_SCHEMA = "tdmg.jobkey/2"
 LOCK_FILE = ".lock"
 NEW_SUFFIX = ".new"
@@ -339,8 +349,13 @@ def stage_key(job: dict, stage: str, record_hashes: dict[str, str], machine: Mac
     return _sha(canonical_json(body))
 
 
+def _hex(v) -> bool:
+    return isinstance(v, str) and jobs.HEX64.fullmatch(v) is not None
+
+
 def load_state(folder: Path, job: dict) -> dict:
-    """state.json, checked; an empty state when there is none yet."""
+    """state.json, checked, as tdmg.jobstate/2; an empty state when there is none yet. A
+    tdmg.jobstate/1 file's entries get record_sha256 None: not stored, so stale."""
     path = folder / STATE_FILE
     if not path.exists():
         return {"schema": STATE_SCHEMA, "stages": {}}
@@ -350,18 +365,30 @@ def load_state(folder: Path, job: dict) -> dict:
         state = None
     stages = recipe(job["recipe"]).stages
     ok = (isinstance(state, dict) and set(state) == {"schema", "stages"}
-          and state["schema"] == STATE_SCHEMA and isinstance(state["stages"], dict)
-          and all(s in stages and isinstance(v, dict) and set(v) == {"key"}
-                  and isinstance(v["key"], str) and jobs.HEX64.fullmatch(v["key"])
-                  for s, v in state["stages"].items()))
+          and state["schema"] in (OLD_STATE_SCHEMA, STATE_SCHEMA)
+          and isinstance(state["stages"], dict))
+    if ok:
+        old = state["schema"] == OLD_STATE_SCHEMA
+        want = {"key"} if old else {"key", "record_sha256"}
+        ok = all(s in stages and isinstance(v, dict) and set(v) == want and _hex(v["key"])
+                 and (old or _hex(v["record_sha256"]))
+                 for s, v in state["stages"].items())
     if not ok:
         raise JobError(f"{path} is not a {STATE_SCHEMA} file; delete it to run every stage "
                        "again")
+    if state["schema"] == OLD_STATE_SCHEMA:
+        state = {"schema": STATE_SCHEMA,
+                 "stages": {s: {"key": v["key"], "record_sha256": None}
+                            for s, v in state["stages"].items()}}
     return state
 
 
 def _write_state(folder: Path, state: dict) -> None:
-    replace_file(folder, STATE_FILE, canonical_json(state))
+    """Write state.json as tdmg.jobstate/2. An entry read from a tdmg.jobstate/1 file (no
+    record hash) is left out: its stage stays stale until it runs again, as it was."""
+    stages = {s: v for s, v in state["stages"].items() if v["record_sha256"] is not None}
+    replace_file(folder, STATE_FILE, canonical_json({"schema": STATE_SCHEMA,
+                                                     "stages": stages}))
 
 
 # --- records and their links ----------------------------------------------------------------
@@ -438,9 +465,15 @@ def _judge(job: dict, stage: str, rec: Record | None, key: str | None, state: di
                        f"{expected}")
     if key is None:
         return STALE, "an earlier stage has no record"
-    if state["stages"].get(stage, {}).get("key") != key:
+    entry = state["stages"].get(stage, {})
+    if entry.get("key") != key:
         return STALE, ("its parameters, inputs, rules or profiles changed since it ran, or "
                        "it was not run by tdmg job run")
+    if entry["record_sha256"] is None:
+        return STALE, ("its record's hash was not stored (state.json from an older tdmg); "
+                       "the next run reruns it")
+    if entry["record_sha256"] != rec.sha256:
+        return STALE, "its record changed since tdmg job run wrote it"
     problem = links_problem(stage, rec.data, upstream)
     if problem:
         return STALE, problem
@@ -464,10 +497,18 @@ class ConfirmationStatus:
     number: int                      # 1-based, in job.yaml order
     entry: dict
     problem: str | None              # why stale; None when current
+    stages_stale: bool = False       # a stage it rests on is not done: a rerun decides
+    chosen_face: str | None = None   # tdmg's preferred face, when the owner printed another
 
     @property
     def current(self) -> bool:
         return self.problem is None
+
+
+def _same_print(entry: dict, route: str | None, face: str | None) -> bool:
+    """Whether a print entry is of this route (None: any) and face (None: any)."""
+    return ((route is None or entry["route"] == route)
+            and (face is None or entry["face"] == face))
 
 
 @dataclass
@@ -484,9 +525,22 @@ class Status:
     def all_done(self) -> bool:
         return all(s.state == DONE for s in self.stages)
 
-    def current(self, subject: str) -> bool:
-        """Whether a current confirmation of `subject` exists."""
-        return any(c.current and c.entry["subject"] == subject for c in self.confirmations)
+    def current(self, subject: str, route: str | None = None, face: str | None = None
+                ) -> bool:
+        """Whether a current confirmation of `subject` exists; for print, of this route
+        and face when given."""
+        return any(c.current and c.entry["subject"] == subject
+                   and (subject != "print" or _same_print(c.entry, route, face))
+                   for c in self.confirmations)
+
+    def matched(self, c: ConfirmationStatus) -> bool:
+        """Whether a current confirmation stands in for `c`: same subject, and for print
+        the same route and face."""
+        e = c.entry
+        return any(o.current and o.entry["subject"] == e["subject"]
+                   and (e["subject"] != "print" or (o.entry["route"], o.entry["face"])
+                        == (e["route"], e["face"]))
+                   for o in self.confirmations)
 
 
 def job_status(folder: str | Path, machine: Machine | None = None, *,
@@ -519,9 +573,19 @@ def job_status(folder: str | Path, machine: Machine | None = None, *,
         earlier_done = earlier_done and verdict == DONE
         out.append(st)
     status = Status(job["name"], job["recipe"], job["revision"], out, jobs.unset_required(job))
-    status.confirmations = [
-        ConfirmationStatus(i, entry, confirmations.current_problem(folder, job, entry))
-        for i, entry in enumerate(job["confirmations"], start=1)]
+    by = {s.stage: s for s in out}
+    slice_rec = records["slice"].data if "slice" in records else {}
+    preferred = slice_rec.get("preferred_face") if isinstance(slice_rec, dict) else None
+    for i, entry in enumerate(job["confirmations"], start=1):
+        subject = entry["subject"]
+        rests_on = [s.stage for s in out] if subject == "print" else \
+            [jobs.SUBJECT_STAGE[subject]]
+        chosen = None
+        if subject == "print" and entry["face"] and preferred and preferred != entry["face"]:
+            chosen = preferred
+        status.confirmations.append(ConfirmationStatus(
+            i, entry, confirmations.current_problem(folder, job, entry),
+            stages_stale=any(by[s].state != DONE for s in rests_on), chosen_face=chosen))
     status.waits = _waits(job, status)
     return status
 
@@ -548,19 +612,24 @@ def _waits(job: dict, status: Status) -> list[str]:
                 waits.append(f"the color plan is not ready ({s.record['not_ready_reason']}): "
                              "choose merges from colors/regions.png and set them, e.g. "
                              f"tdmg job set {job['name']} \"colors.merge=[[FROM, INTO]]\"")
-    if "slice" in by and by["slice"].state == DONE and not status.current("print"):
-        rec = by["slice"].record
-        if "faces" in rec:                      # a colored slice: its own instructions
+    # The print instructions wait until a current print confirmation answers them: R1's
+    # single route; R2's ams route, on tdmg's chosen face when it chose one.
+    rec = by["slice"].record if "slice" in by and by["slice"].state == DONE else None
+    colored = rec is not None and "faces" in rec
+    if rec is not None and not status.current("print", "ams" if colored else "single",
+                                              rec.get("preferred_face") if colored else None):
+        if colored:                             # a colored slice: its own instructions
             waits.append(f"to print (files in colored_flat/): {rec['print']}"
                          if rec["print"] != NO_FACE_PRINTABLE else rec["print"])
         elif rec["verdict"] == "PRINTABLE":
             waits.append(f"to print (model.stl is in flat/): {PRINT_THIS}")
         else:
             waits.append("not PRINTABLE: do not print it; see slice/slice.json")
-    # A stale confirmation waits only while no later one of its subject is current (an
-    # older entry stays in job.yaml for good: it is the owner's words).
+    # A stale confirmation waits only while no current one stands in for it: the same
+    # subject and, for print, the same route and face (Status.matched). The stale entry
+    # stays in job.yaml for good: it is the owner's words.
     for c in status.confirmations:
-        if not c.current and not status.current(c.entry["subject"]):
+        if not c.current and not status.matched(c):
             waits.append(f"confirmation {c.number} ({confirmations.describe(c.entry)}) is "
                          "stale: ask the owner to confirm again (tdmg job confirm)")
     return waits
@@ -598,9 +667,16 @@ def confirmation_line(c: ConfirmationStatus) -> str:
     '...: STALE (why)'."""
     e = c.entry
     words = json.dumps(e["owner_said"], ensure_ascii=True)
-    state = CURRENT if c.current else f"STALE ({c.problem})"
+    if not c.current:
+        state = f"STALE ({c.problem})"
+    elif c.stages_stale:
+        state = f"{CURRENT} (stages stale: a rerun decides)"
+    else:
+        state = CURRENT
+    chosen = f"; printed face {e['face']}; tdmg chose {c.chosen_face}" if c.chosen_face \
+        else ""
     return (f"{c.number}. {confirmations.describe(e)}, {e['date']}, revision "
-            f"{e['revision']}, {words}: {state}")
+            f"{e['revision']}, {words}: {state}{chosen}")
 
 
 def status_lines(status: Status) -> list[str]:
@@ -758,12 +834,12 @@ def _run_locked(folder: Path, job: dict, machine: Machine, rerun: set[str]
                     f"could not replace {folder / stage} ({_error_text(e)}): close programs "
                     f"using {stage}/; the new results are discarded on the next run")))
                 break
-            state["stages"][stage] = {"key": key}
-            _write_state(folder, state)
             rec = _record(folder, stage)
             if rec is None:
                 events.append(RunEvent(stage, "failed", f"{stage} record unreadable"))
                 break
+            state["stages"][stage] = {"key": key, "record_sha256": rec.sha256}
+            _write_state(folder, state)
             events.append(RunEvent(stage, "ran"))
         records[stage] = rec
         why = _stops_after(stage, rec.data)
@@ -878,7 +954,9 @@ def _set_locked(folder: Path, parsed, targets) -> tuple[dict, bool]:
 
 def confirm_date(value: str | None, today: datetime.date | None = None) -> str:
     """The confirmation's date: `value` (YYYY-MM-DD, not after today), or today's local
-    date. Local, not UTC: the owner gives their words on their own calendar day."""
+    date. Local, not UTC: the owner gives their words on their own calendar day. "Today"
+    is this machine's date (its clock and time zone), so a machine set wrong can refuse a
+    real date or default to a wrong one."""
     today = datetime.date.today() if today is None else today
     if value is None:
         return today.isoformat()
