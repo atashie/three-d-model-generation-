@@ -1197,7 +1197,11 @@ def test_a_path_over_the_limit_gets_the_hint(tmp_path):
 
 
 def test_job_new_checks_the_checkouts_library_with_jobs_dir(tmp_path, monkeypatch):
+    """The real default (conftest replaces it in every other test)."""
+    from conftest import REAL_DEFAULT_LIBRARY
+
     import tdmg.cli
+    monkeypatch.setattr(tdmg.cli, "default_library", REAL_DEFAULT_LIBRARY)
     image = _png(tmp_path / "in" / "roadie.png", roadie_like())
     root = tmp_path / "checkout"
     (root / "prints" / R1).mkdir(parents=True)

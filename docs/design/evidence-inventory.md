@@ -519,7 +519,7 @@ Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 18
 - `rules/color.yaml` (rule): lines 25, 37, 57, 62, 77, 82, 96, 111, 116, 121, 135, 140
 - `src/tdmg/color.py` (code): lines 7
-- `tests/conftest.py` (test): lines 2, 15
+- `tests/conftest.py` (test): lines 2, 19
 - `tests/test_rules.py` (test): lines 84
 
 Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-16-restructure-design`.
@@ -858,7 +858,7 @@ A line in a machine-read file that puts a root word (research, reports, research
 
 | File | Line | Text |
 |---|---|---|
-| `tests/conftest.py` | 22 | `RESEARCH / "results.txt").read_text(encoding="utf-` |
+| `tests/conftest.py` | 46 | `RESEARCH / "results.txt").read_text(encoding="utf-` |
 | `tests/test_color_glue.py` | 42 | `plans' test thickness.` |
 | `tests/test_color_slice.py` | 812 | `plans' case (plan amendment): face down FAILs F3,` |
 | `tests/test_color_slice.py` | 1087 | `plans" in text` |

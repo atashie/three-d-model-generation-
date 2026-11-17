@@ -924,9 +924,7 @@ def job_new(
                  "edits": edits}
     try:
         where = default_jobs_dir() if jobs_dir is None else jobs_dir
-        library = prints_dir
-        if library is None and REPO_ROOT is not None:
-            library = REPO_ROOT / "prints"   # the checkout's library, even with --jobs-dir
+        library = default_library() if prints_dir is None else prints_dir
         job = new_job(where, name, output_class, image, colors=colors, mask=mask,
                       origin=origin, generated=generated, width_mm=width_mm,
                       thickness_mm=thickness_mm, prints_dir=library)
@@ -950,6 +948,13 @@ def job_new(
         typer.echo("the print library was not checked for this name (tdmg is not running "
                    "from a source checkout; give --prints-dir to check one)")
     typer.echo(f"wrote {folder / JOB_FILE}")
+
+
+def default_library() -> Path | None:
+    """The print library tdmg job new checks when --prints-dir is not given: the
+    checkout's prints/, even with --jobs-dir; None outside a checkout. (Tests point it at a
+    temporary folder: tests/conftest.py.)"""
+    return None if REPO_ROOT is None else REPO_ROOT / "prints"
 
 
 JobsDir = Annotated[Path | None, typer.Option(

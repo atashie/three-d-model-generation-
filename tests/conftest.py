@@ -4,6 +4,7 @@ tests that need them skip when they are absent and fail when they differ from th
 """
 
 import hashlib
+import os
 import re
 from pathlib import Path
 
@@ -11,9 +12,32 @@ import numpy as np
 import pytest
 from PIL import Image
 
+import tdmg.cli
+import tdmg.library
+
 ROOT = Path(__file__).resolve().parents[1]
 RESEARCH = ROOT / "research" / "verification" / "2026-11-11-color-palette"
 SELECTIONS = ROOT / "artifacts" / "selection-runs"
+# Real default library functions, for the tests of that default (the fixture below
+# replaces them in every test).
+REAL_DEFAULT_LIBRARY = tdmg.cli.default_library
+REAL_DEFAULT_PRINTS_DIR = tdmg.library.default_prints_dir
+# Set by tests/test_suite_independence.py: a fake checkout whose prints/ already holds the
+# job names the tests use, standing in for the checkout after real prints are finished.
+FAKE_CHECKOUT_ENV = "TDMG_TEST_FAKE_CHECKOUT"
+
+
+@pytest.fixture(autouse=True)
+def _library_outside_the_checkout(tmp_path_factory, monkeypatch):
+    """No test reads or writes the checkout's prints/: tdmg job new's default library and
+    tdmg finish's default prints folder are a fresh, empty temporary folder. So finished
+    prints in the checkout (prints/roadie-drop/, say) cannot change what a test sees."""
+    library = tmp_path_factory.mktemp("prints-library")
+    monkeypatch.setattr(tdmg.cli, "default_library", lambda: library)
+    monkeypatch.setattr(tdmg.library, "default_prints_dir", lambda: library)
+    fake = os.environ.get(FAKE_CHECKOUT_ENV)
+    if fake:                    # the checkout, as tdmg sees it, holds those prints
+        monkeypatch.setattr(tdmg.cli, "REPO_ROOT", Path(fake))
 
 
 @pytest.fixture(scope="session")
