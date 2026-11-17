@@ -11,6 +11,7 @@ The pipeline is deterministic code. Machine learning appears only where no rule 
 ## Start here
 
 - New to 3D printing files? Read [docs/guide/00-start-here.md](docs/guide/00-start-here.md).
+- To make a print with Claude Code, share an image: Claude follows the [make-print skill](.claude/skills/make-print/SKILL.md) (job, reviews, slice, print, finish).
 - The design and its reasons: [docs/PLAN.md](docs/PLAN.md).
 - Choosing what in an image becomes the model (`tdmg select`): [input interpretation](docs/guide/input-interpretation.md).
 - What each command checks, and what "printable" means: [pipeline and gate](docs/guide/pipeline-and-gate.md).

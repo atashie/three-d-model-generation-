@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-17 (restructure Task 10: `tdmg library check` and `verify`).
+**Last updated:** 2026-11-17 (restructure Task 12: the make-print skill).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -75,6 +75,15 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   changed (commit, versions, rules, algorithms, profiles, PrusaSlicer configured or not);
   exit 0 identical, 1 differs, 2 cannot run. Tested with fake slicers only: **not yet run
   on a real entry** (there is none until Task 14).
+- **The make-print skill** (restructure Task 12,
+  [`.claude/skills/make-print/SKILL.md`](../.claude/skills/make-print/SKILL.md)): the
+  conversation Claude follows when the owner shares an image, from `tdmg job new` to
+  `tdmg finish` and `tdmg library check`, with the hard rules (only the owner's own words
+  in a confirmation or the purge permission). `tests/test_make_print_skill.py` checks
+  that every `tdmg` command, flag and `job set` key in it exists in the CLI, and that the
+  same slicer folders are given throughout. Its steps up to the colors stage were run
+  once on a scratch job with a test image (2026-11-17, PC); the rest has not been run
+  with the owner yet (first: Roadie, Task 14).
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
@@ -98,7 +107,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–11 done; next Task 12 (the make-print skill) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–12 done; next Task 13 (legacy inventory) |
 
 ## Machines
 
@@ -158,7 +167,8 @@ has been measured with calipers, and strength is not judged.
    Codex), Task 10 (`tdmg library check` and `verify`; fake slicers only, not yet
    reviewed), Task 11 (owner-image test fixtures build their selection in a temporary
    folder from `prints/<entry>/`, then `jobs/<job>/`, then `artifacts/selection-runs/`;
-   skip naming each path). Next: Task 12 (the make-print skill).
+   skip naming each path), Task 12 (the make-print skill). Next: Task 13 (legacy
+   inventory).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -217,9 +227,16 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–11 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
+- **State:** Tasks 0–12 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
   Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 onwards are not. Next is
-  Task 12, the make-print skill.
+  Task 13, the legacy inventory.
+- **Task 12:** the skill asks the public question, runs `finish --dry-run` and shows what
+  would be deleted, and only then asks for the purge permission, so the owner sees the
+  list before giving it. `job set` reads values as YAML, so the skill puts
+  `select.instructions` in YAML single quotes (words with a colon are refused
+  otherwise; checked on the scratch job). For R2 it sets `colors.width_mm` first and
+  `colored_flat.thickness_mm` only after the colors confirmation, so `job run` stops
+  before building from colors the owner has not seen.
 - **Task 11:** `tests/conftest.py` maps `roadie-tol30` to the library entry and job
   `roadie-drop` (then its legacy folder) and `oddie` to its legacy folder only. A built
   selection must have band-survival.txt's `selection_id`; a rebuilt one (library or job)
