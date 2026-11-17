@@ -78,7 +78,11 @@ profiles it uses (and, for `select`, the image and mask hashes), kept in
 input record changed. A stage whose record names another algorithm, or whose links do not
 match the upstream records, is stale too; `--rerun STAGE` runs a stage again anyway (after
 a code change that kept the algorithm id). While `job run` or `job set` works on a job it
-holds `jobs/NAME/.lock`. A rerun goes into `<stage>.new/` and replaces the old folder only once its
+holds `jobs/NAME/.lock`. A known limit: status trusts each stage record's own output
+hashes and does not hash the files again, so a hand edit to a stage's file (for example
+`flat/model.stl`) is not seen; confirmations (`tdmg job confirm`) and the rebuild proof
+of `tdmg finish` will catch it; neither is built yet. A rerun goes into `<stage>.new/`
+and replaces the old folder only once its
 record is written, so a failed rerun keeps the old results. The run stops at a required
 parameter not set, at a stage that fails, and after a color plan that is not ready; it
 then prints one line per stage (done, stale or not run, with the verdict) and what waits

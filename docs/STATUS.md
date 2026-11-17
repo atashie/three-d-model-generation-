@@ -77,9 +77,8 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-16, PC, restructure Task 7 review fixes):**
-  `uv run pytest -q` gave 3110 passed, 9 skipped and 1 doc failure, fixed and rerun (3111
-  passed in all; 8 skips are real-slicer tests, one is a symlink
+- **Latest local validation (2026-11-16, PC, restructure Task 7 re-review minors):**
+  `uv run pytest -q` gave 3114 passed and 9 skipped (8 real-slicer tests; one symlink
   test, since this account cannot create symlinks); `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the

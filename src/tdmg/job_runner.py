@@ -56,6 +56,11 @@ A stage that fails before its record exists leaves its old folder and state.json
 were. A run left half way is tidied by the next run: an `<stage>.old/` with no `<stage>/`
 is put back, other `.old/` and `.new/` folders deleted.
 
+**Known limit.** Status trusts each record's own `outputs` hashes and does not hash the
+output files again, so a hand edit to a stage's file (flat/model.stl, say) is not seen
+here; Task 8's confirmations (which hash the files they cover) and Task 9's rebuild catch
+it.
+
 **Lock.** job run and job set hold LOCK_FILE in the job folder (an exclusive create,
 removed when done), so two of them cannot change a job at once.
 
@@ -472,6 +477,9 @@ def job_status(folder: str | Path, machine: Machine | None = None, *,
         verdict, note = _judge(job, stage, rec, key, state, upstream)
         if rec is None and (folder / stage).exists():
             note = "its folder has no record (an interrupted run)"
+        elif rec is None and (folder / f"{stage}{OLD_SUFFIX}").is_dir():
+            note = (f"an interrupted swap left {stage}{OLD_SUFFIX}; the next run restores "
+                    "and reruns it")
         if verdict == DONE and not earlier_done:
             verdict, note = STALE, "an earlier stage is not done"
         st = StageStatus(stage, verdict, note, rec.data if verdict == DONE else None)
@@ -567,7 +575,7 @@ def job_lock(folder: Path) -> Iterator[None]:
     """Hold folder/LOCK_FILE (an exclusive create) while changing a job; removed after."""
     path = folder / LOCK_FILE
     try:
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0))
     except FileExistsError:
         raise JobError(f"job {folder.name} is locked: {path} exists. Another tdmg job run or "
                        "job set is using the job, or one stopped without removing the "
@@ -637,14 +645,15 @@ def run_job(folder: str | Path, machine: Machine | None = None, *,
     folder = Path(folder)
     machine = Machine() if machine is None else machine
     check_not_linked(folder)
-    job = load_job(folder)
-    stages = recipe(job["recipe"]).stages
-    rerun = set(rerun)
-    unknown = sorted(rerun - set(stages))
-    if unknown:
-        raise JobError(f"--rerun {unknown[0]}: recipe {job['recipe']} has no such stage "
-                       f"(stages: {', '.join(stages)})")
+    load_job(folder)                    # refuse a bad job before taking the lock
     with job_lock(folder):
+        job = load_job(folder)          # read again under the lock: what this run uses
+        stages = recipe(job["recipe"]).stages
+        rerun = set(rerun)
+        unknown = sorted(rerun - set(stages))
+        if unknown:
+            raise JobError(f"--rerun {unknown[0]}: recipe {job['recipe']} has no such "
+                           f"stage (stages: {', '.join(stages)})")
         events = _run_locked(folder, job, machine, rerun)
     return events, job_status(folder, machine, job=job)
 

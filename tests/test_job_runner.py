@@ -753,3 +753,46 @@ def test_every_parameter_maps_as_the_stage_commands(tmp_path, slicers, case):
     assert result.exit_code == max(codes)
     for stage in stages:
         assert_same_outputs(folder / stage, hand / stage)
+
+
+# --- re-review minors ------------------------------------------------------------------------
+
+def test_run_reads_job_yaml_under_the_lock(tmp_path, slicers, monkeypatch):
+    """A change saved just before the lock is taken is the one the run uses."""
+    folder = _new(tmp_path, "roadie")
+    _set(folder, *R1_SELECT, "flat.width_mm=60", "flat.thickness_mm=3")
+    real = job_runner.job_lock
+
+    @job_runner.contextmanager
+    def late_change(f):
+        job = jobs.load_job(f)
+        job["stages"]["flat"]["thickness_mm"] = 2.0
+        jobs.save_job(f, job)
+        with real(f):
+            yield
+    monkeypatch.setattr(job_runner, "job_lock", late_change)
+    run_job(folder, Machine(*slicers))
+    assert json.loads((folder / "flat" / "flat.json").read_bytes())["params"][
+        "thickness_mm"] == 2.0
+
+
+def test_the_lock_file_holds_the_pid_in_binary(tmp_path, monkeypatch):
+    folder = _new(tmp_path, "roadie")
+    seen = {}
+
+    def peek(*a):
+        seen["lock"] = (folder / ".lock").read_bytes()
+        raise JobError("stop here")
+    monkeypatch.setitem(job_runner.RUNNERS, "select", peek)
+    run_job(folder, Machine())
+    assert seen["lock"] == f"pid {job_runner.os.getpid()}\n".encode("ascii")
+    assert not (folder / ".lock").exists()
+
+
+def test_status_names_an_interrupted_swap(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    (folder / "flat").rename(folder / "flat.old")
+    flat = job_status(folder, Machine(None, slicers[1])).stages[1]
+    assert flat.state == "not run"
+    assert flat.note == ("an interrupted swap left flat.old; the next run restores and "
+                         "reruns it")
