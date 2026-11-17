@@ -222,8 +222,10 @@ words and dates, are in [docs/design/](design/README.md).
   Task 12, the make-print skill.
 - **Task 11:** `tests/conftest.py` maps `roadie-tol30` to the library entry and job
   `roadie-drop` (then its legacy folder) and `oddie` to its legacy folder only. A built
-  selection must have band-survival.txt's `selection_id` and results.txt's mask/cutout
-  hashes; a present source that differs is passed over with a warning, and the test
+  selection must have band-survival.txt's `selection_id`; a rebuilt one (library or job)
+  the mask/cutout pixel hashes of `research/verification/2026-11-17-owner-fixture-pixels/`
+  (PNG bytes vary with Pillow/zlib), the legacy copy results.txt's file hashes. A
+  present source that a stage refuses or that that differs is passed over with a warning, and the test
   fails when none matches. On the PC (2026-11-17) the owner tests use the legacy folders
   (no `prints/` or `jobs/` yet); a one-off check with a job made from the owner's
   `roadie.png` and the recorded controls rebuilt `selection.json` byte for byte by both

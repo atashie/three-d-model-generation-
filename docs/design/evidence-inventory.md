@@ -10,7 +10,7 @@ Each number in the summary's category columns is the number of lines in files of
 
 What is recognised: paths written from the repository root (`research/...`, with `/` or a backslash, `%20` or spaces), `./` and `../` paths, Markdown links, Python paths built from string literals, globs, and review names found by a short pattern list ("Codex" with a date beside it). A numbered name ("Codex review 3") counts only through a path written on the same line; without one it is listed under *Review mentions not tied to a record*. Names are looked for only in machine-read files. Lines there that mention a root word but give no reference are listed under *Unparsed mentions*. Free prose ("the research record", "the review") can still be missed, so read the uncited list before anything is deleted.
 
-Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 2. Uncited with no references: 0.
+Records: 46. Counted as cited: 44 (42 by path, 0 by name only, 2 by an ambiguous name only). Uncited: 2. Uncited with no references: 0.
 
 ## Summary
 
@@ -30,7 +30,7 @@ Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous
 | `docs/plans/2026-11-14-test-strip.md` | cited |  | doc | 4 |  | 3 |  | 2 |  |  |  | 4 |  | 7 |  |
 | `docs/plans/2026-11-16-face-down-default.md` | cited |  | doc | 2 |  | 2 |  | 7 |  |  |  | 4 |  | 3 |  |
 | `docs/plans/2026-11-16-restructure-design.md` | cited | active work, stays where it is | doc, status | 2 |  |  |  | 5 |  |  |  | 2 | 1 | 4 | 1 |
-| `docs/plans/2026-11-16-restructure.md` | cited | active work, stays where it is | doc, status | 2 |  | 1 |  |  |  |  |  | 1 | 3 | 3 |  |
+| `docs/plans/2026-11-16-restructure.md` | cited | active work, stays where it is | doc, status | 3 |  | 1 |  |  |  |  |  | 1 | 3 | 4 |  |
 | `research/experiments/2026-11-g3-local-vs-hosted` | cited |  | doc, status | 2 |  |  |  | 2 |  |  |  | 5 | 1 | 4 |  |
 | `research/reviews/2026-11-09-codex` | cited |  | doc | 2 |  |  | 2 |  |  |  |  | 2 |  | 2 |  |
 | `research/reviews/2026-11-10-thin-walls` | cited |  | doc | 2 |  | 1 |  |  |  |  |  | 1 |  | 2 |  |
@@ -47,7 +47,7 @@ Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous
 | `research/verification/2026-11-10-outline-smoothing` | cited |  | doc | 2 | 1 |  |  |  |  |  |  | 4 |  | 2 |  |
 | `research/verification/2026-11-10-subject-selection` | cited |  | doc | 2 | 2 | 1 |  |  |  |  |  | 4 |  | 7 |  |
 | `research/verification/2026-11-10-thin-walls` | cited |  | doc | 3 |  | 2 |  | 2 |  |  |  | 4 |  | 4 |  |
-| `research/verification/2026-11-11-color-palette` | cited |  | doc | 4 | 12 | 3 |  | 1 |  |  |  | 3 |  | 6 |  |
+| `research/verification/2026-11-11-color-palette` | cited |  | doc | 5 | 12 | 3 |  | 1 |  |  |  | 3 |  | 8 |  |
 | `research/verification/2026-11-11-prusaslicer-windows` | cited |  | doc | 4 | 1 | 4 | 3 | 2 |  |  |  | 4 |  | 5 |  |
 | `research/verification/2026-11-12-color-3mf` | cited |  | doc | 4 |  | 1 |  | 4 |  |  |  | 2 |  | 8 |  |
 | `research/verification/2026-11-12-color-geometry` | cited |  | doc | 3 |  |  |  | 1 |  |  |  | 5 |  | 5 |  |
@@ -56,6 +56,7 @@ Records: 45. Counted as cited: 43 (41 by path, 0 by name only, 2 by an ambiguous
 | `research/verification/2026-11-14-test-strips` | cited |  | doc | 3 | 2 |  |  | 1 |  |  |  | 4 |  | 11 |  |
 | `research/verification/2026-11-15-first-ams-print` | cited |  | doc | 3 |  | 1 |  | 1 |  |  |  | 9 |  | 5 |  |
 | `research/verification/2026-11-16-repeatability` | cited | active work, stays where it is | doc | 1 |  | 3 |  | 3 | 1 |  |  | 2 |  | 1 |  |
+| `research/verification/2026-11-17-owner-fixture-pixels` | cited |  | status |  |  | 3 |  |  |  |  |  |  | 1 |  |  |
 | `research_notes/Image to printable 3D model landscape` | cited | kept in place (design section 6) | doc | 1 | 28 |  |  |  |  |  |  | 4 |  | 2 |  |
 | `research/reviews/2026-11-09-pc` | possibly cited (ambiguous name) |  |  | 1 |  |  | 1 |  |  |  |  |  |  | 1 |  |
 | `research/reviews/2026-11-16-restructure-design` | possibly cited (ambiguous name) | active work, stays where it is |  | 1 |  | 4 |  | 5 |  |  |  |  |  | 1 |  |
@@ -285,9 +286,10 @@ Active work, stays where it is.
 - `docs/STATUS.md` (status): lines 101, 148, 220
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
+- `research/verification/2026-11-17-owner-fixture-pixels/README.md` (record): lines 3
 - `tests/test_recipes.py` (test): lines 41
 
-Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `research/verification/2026-11-16-repeatability`.
+Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `research/verification/2026-11-16-repeatability`, `research/verification/2026-11-17-owner-fixture-pixels`.
 
 ### `research/experiments/2026-11-g3-local-vs-hosted`
 
@@ -517,12 +519,13 @@ Linked from kept records: `docs/plans/2026-11-10-thin-wall-policy.md`, `research
 - `research/reviews/2026-11-11-color-palette/prompt.md` (record): lines 3
 - `research/reviews/2026-11-16-restructure-design/README.md` (record): lines 23
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 18
+- `research/verification/2026-11-17-owner-fixture-pixels/README.md` (record): lines 14, 69
 - `rules/color.yaml` (rule): lines 25, 37, 57, 62, 77, 82, 96, 111, 116, 121, 135, 140
 - `src/tdmg/color.py` (code): lines 7
-- `tests/conftest.py` (test): lines 4, 50
+- `tests/conftest.py` (test): lines 4, 53
 - `tests/test_rules.py` (test): lines 84
 
-Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-16-restructure-design`.
+Linked from kept records: `docs/plans/2026-11-11-color-palette.md`, `docs/plans/2026-11-16-restructure.md`, `research/reviews/2026-11-11-color-palette`, `research/reviews/2026-11-16-restructure-design`, `research/verification/2026-11-17-owner-fixture-pixels`.
 
 ### `research/verification/2026-11-11-prusaslicer-windows`
 
@@ -647,11 +650,16 @@ Active work, stays where it is.
 - `scripts/repeat_runs.py` (script): lines 63
 - `src/tdmg/job_runner.py` (code): lines 31
 - `src/tdmg/library.py` (code): lines 112, 246
-- `tests/conftest.py` (test): lines 71
+- `tests/conftest.py` (test): lines 76
 - `tests/test_finish.py` (test): lines 6
 - `tests/test_job_runner.py` (test): lines 6
 
 Linked from kept records: `docs/plans/2026-11-16-restructure.md`.
+
+### `research/verification/2026-11-17-owner-fixture-pixels`
+
+- `docs/STATUS.md` (status): lines 226
+- `tests/conftest.py` (test): lines 17, 54, 116
 
 ### `research_notes/Image to printable 3D model landscape`
 
@@ -777,13 +785,13 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `research/reviews`
 
 - `CLAUDE.md` (doc): lines 42
-- `docs/STATUS.md` (status): lines 271
+- `docs/STATUS.md` (status): lines 273
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232
 
 ### `research/verification`
 
-- `docs/STATUS.md` (status): lines 258
+- `docs/STATUS.md` (status): lines 260
 - `docs/plans/2026-11-16-restructure.md` (record): lines 117
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 40, 51, 214, 232, 279, 280
 
@@ -859,8 +867,8 @@ A line in a machine-read file that puts a root word (research, reports, research
 
 | File | Line | Text |
 |---|---|---|
-| `tests/conftest.py` | 98 | `RESEARCH / "results.txt").read_text(encoding="utf-` |
-| `tests/conftest.py` | 100 | `RESEARCH / "band-survival.txt").read_text(encoding` |
+| `tests/conftest.py` | 133 | `RESEARCH / "results.txt").read_text(encoding="utf-` |
+| `tests/conftest.py` | 134 | `RESEARCH / "band-survival.txt"` |
 | `tests/test_color_glue.py` | 42 | `plans' test thickness.` |
 | `tests/test_color_slice.py` | 812 | `plans' case (plan amendment): face down FAILs F3,` |
 | `tests/test_color_slice.py` | 1087 | `plans" in text` |
@@ -882,7 +890,7 @@ References this script could not tie to one record: a built path that stops at a
 | `docs/PLAN.md` | 165 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 8 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 95 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 257 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 259 | `research/README.md` | names no record in the tree |
 | `docs/design/README.md` | 23 | `research/README.md` | names no record in the tree |
 | `docs/design/flat.md` | 80 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `docs/design/flat.md` | 86 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |
