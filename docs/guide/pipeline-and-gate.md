@@ -195,7 +195,8 @@ rebuild's allowance, which `finish` records), each stage's algorithm, verdicts a
 checks (status, rule, threshold), the slice identity, and the confirmed printable files
 (by SHA-256, so byte for byte) and their verdicts. The stages' other files and the
 checks' measured values cannot be compared (the library does not keep them), and it says
-so. A stage the current code refuses is a difference (exit 1); a pinned slicer that cannot
+so. A stage that fails is a difference (exit 1): "refused by the current code", or
+"failed (possibly the environment)" for an I/O or slicer error; a pinned slicer that cannot
 be used on this machine, or a temporary folder inside `prints/` or `jobs/`, is exit 2. It also lists what changed since the historical run: code commit, versions,
 libraries, rules (with each changed value), algorithm ids and profiles, and whether
 PrusaSlicer was configured then (the slice results depend on it). It writes nothing into

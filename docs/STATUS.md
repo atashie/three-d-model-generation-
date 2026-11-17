@@ -113,8 +113,8 @@ has been measured with calipers, and strength is not judged.
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
 - **Latest local validation (2026-11-17, PC, restructure Task 10):** `uv run pytest -q`
-  gave 3289 passed and 12 skipped (after the Task 10 review fixes) (8 real-slicer tests; four symlink tests, since this
-  account cannot create symlinks; the junction tests ran); `tests/test_library.py` (44
+  gave 3292 passed and 12 skipped (after the Task 10 re-review minors) (8 real-slicer tests; four symlink tests, since this
+  account cannot create symlinks; the junction tests ran); `tests/test_library.py` (47
   tests) also passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the
@@ -226,7 +226,9 @@ words and dates, are in [docs/design/](design/README.md).
   it cannot compare the stages' other files or the checks' measured values, and says so.
   A stage the current code refuses exits 1; a slicer missing on this machine exits 2. OS
   files (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) are damage with their own
-  message. `uv.lock` is hashed as git's blob at HEAD.
+  message. `uv.lock` is hashed as git's blob at HEAD. After the re-review, a reformatted
+  current `slice.json` is a difference, and a stage failing with an I/O or slicer error is
+  worded "failed (possibly the environment)" (still exit 1).
 - **Task 9 decisions:** the purge record is its own file, `purge.json`, written after the
   publish and before `COMPLETE`, so `COMPLETE` is last and lists it, and `provenance.json`
   stays the file that was staged and checked (accepted after the spec review; dated

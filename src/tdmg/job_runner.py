@@ -700,6 +700,7 @@ class RunEvent:
     stage: str
     action: str                  # "ran", "kept", "waits" or "failed"
     message: str = ""
+    error: tuple[str, ...] = ()  # a failed stage: its exception's class and base names
 
 
 @contextmanager
@@ -822,7 +823,8 @@ def _run_locked(folder: Path, job: dict, machine: Machine, rerun: set[str]
                     raise JobError(f"{stage} wrote no {STAGE_RECORDS[stage]}")
             except STAGE_ERRORS as e:
                 _remove(new)
-                events.append(RunEvent(stage, "failed", _error_text(e)))
+                events.append(RunEvent(stage, "failed", _error_text(e),
+                                       _error_names(e)))
                 break
             # No key may stand over a folder it does not describe, whatever stops the swap.
             if state["stages"].pop(stage, None) is not None:
@@ -832,7 +834,8 @@ def _run_locked(folder: Path, job: dict, machine: Machine, rerun: set[str]
             except OSError as e:
                 events.append(RunEvent(stage, "failed", (
                     f"could not replace {folder / stage} ({_error_text(e)}): close programs "
-                    f"using {stage}/; the new results are discarded on the next run")))
+                    f"using {stage}/; the new results are discarded on the next run"),
+                    _error_names(e)))
                 break
             rec = _record(folder, stage)
             if rec is None:
@@ -848,6 +851,12 @@ def _run_locked(folder: Path, job: dict, machine: Machine, rerun: set[str]
                                    why))
             break
     return events
+
+
+def _error_names(e: Exception) -> tuple[str, ...]:
+    """The names of the exception's class and its bases (RunEvent.error), so a reader can
+    tell an OSError of any kind, or a SlicerError, from a refusal of the input."""
+    return tuple(c.__name__ for c in type(e).__mro__)
 
 
 def _error_text(e: Exception) -> str:

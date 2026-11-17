@@ -181,10 +181,12 @@ its pin exactly when it was: prusaslicer_then) and said, with a note when this r
 differs. Before the run, the pinned slicers are looked up as the slice stage does
 (_check_slicers); one that cannot be used on this machine is the environment, not the
 code: CannotVerify, exit 2, as are a missing entry, one that does not check, and a missing
-source. A stage the current code then refuses (run_job's failed event: its input is no
-longer accepted) is a difference: "refused by the current code", exit 1, like any other
-difference; none exit 0. A refusal that is in fact an I/O failure inside the stage is
-reported the same way; the message is the stage's own.
+source. A stage that then fails (run_job's failed event) is a difference, exit 1, like
+any other; none exit 0. Its words come from the exception class the event carries
+(RunEvent.error): an OSError or a SlicerError (a crash, a timeout, a changed install;
+MACHINE_ERRORS) is "failed (possibly the environment)", any other "refused by the current
+code" (its input is no longer accepted). The current slice.json must also be in tdmg's
+record form, as in the rebuild, so the same content in other bytes is a difference.
 """
 
 from __future__ import annotations
@@ -2263,8 +2265,17 @@ def verify(name: str, *, machine: Machine | None = None, prints_dir: Path | None
             events, status = run_job(scratch, machine)
         except JobError as e:
             raise CannotVerify(f"the job cannot run: {e}") from None
-        refused = {ev.stage: ev.message for ev in events if ev.action == "failed"}
+        refused = {ev.stage: (f"failed (possibly the environment): {ev.message}"
+                              if set(ev.error) & set(MACHINE_ERRORS) else
+                              f"refused by the current code: {ev.message}")
+                   for ev in events if ev.action == "failed"}
         return compare_with_provenance(scratch, prov, status, refused, say)
+
+
+# The exception classes (in RunEvent.error, with their bases) of a stage failure that may
+# come from the machine rather than the code: an I/O failure, or the slicer (a crash, a
+# timeout, a changed install). Any other failure is the current code refusing the input.
+MACHINE_ERRORS = ("OSError", "SlicerError")
 
 
 def _dumps(value) -> str:
@@ -2284,15 +2295,19 @@ def slice_digests(slice_dir: Path, record_bytes: bytes) -> dict:
 
 
 def gcode_digest(name: str, data: bytes) -> bytes:
-    """A G-code file's bytes with its timestamp line (GCODE_TIMESTAMPS) made empty, when
-    that line has the measured form; else the bytes as they are."""
+    """A G-code file's bytes with its timestamp line (GCODE_TIMESTAMPS) replaced by
+    TIMESTAMP_MARK, when that line has the measured form; else the bytes as they are. A
+    marker, not an empty line, so a file with an empty line there does not match."""
     line_no, pattern = GCODE_TIMESTAMPS[name]
     lines = data.split(b"\n")
     i = line_no - 1
     if i < len(lines) and pattern.fullmatch(
             lines[i].rstrip(b"\r").decode("utf-8", "replace")) is not None:
-        lines[i] = b""
+        lines[i] = TIMESTAMP_MARK
     return b"\n".join(lines)
+
+
+TIMESTAMP_MARK = b"<timestamp>"
 
 
 def _slice_differences(scratch: Path, rec: dict, data: bytes, h: dict, say) -> list[str]:
@@ -2304,6 +2319,9 @@ def _slice_differences(scratch: Path, rec: dict, data: bytes, h: dict, say) -> l
         return []
     now = slice_digests(scratch / "slice", data)
     out = gcode_binding_problems(scratch / "slice", rec, f"slice/{SLICE_RECORD}")
+    if record_text(rec) != data:          # equal content then means equal bytes
+        out.append(f"slice/{SLICE_RECORD}: not in tdmg's record form (the same content in "
+                   "other bytes is not the historical record)")
     if now["record_masked_sha256"] != h["record_masked_sha256"]:
         out.append(f"slice/{SLICE_RECORD}: differs from the historical record beyond its "
                    f"G-code hash fields (the measured volatile fields, {REPEATABILITY})")
@@ -2325,7 +2343,7 @@ def compare_with_provenance(scratch: Path, prov: dict, status,
                             say: Callable[[str], None] | None = None) -> list[str]:
     """The differences between a run of the entry's job (scratch) and provenance.json, over
     the historical and the current stages: a stage the current code refused (refused:
-    stage -> message, from run_job's failed events); each stage done; each stage record's
+    stage -> what to say, from run_job's failed events); each stage done; each stage record's
     SHA-256 (slice.json's with its G-code hash fields masked, and each G-code file's with
     its timestamp line blanked: slice_digests) and algorithm; each stage's verdicts and
     checks (status, rule, threshold); and, from the confirmation, the slice record's
@@ -2343,7 +2361,7 @@ def compare_with_provenance(scratch: Path, prov: dict, status,
             continue
         h = hist[stage] if isinstance(hist[stage], dict) else {}
         if stage in refused:
-            out.append(f"stage {stage}: refused by the current code: {refused[stage]}")
+            out.append(f"stage {stage}: {refused[stage]}")
             continue
         if s.state != DONE:
             out.append(f"stage {stage} is {s.state} now" + (f" ({s.note})" if s.note
@@ -2363,7 +2381,10 @@ def compare_with_provenance(scratch: Path, prov: dict, status,
                        f"{rec.get('algorithm')}")
         out += _verdict_differences(stage, h.get("verdicts"), verdicts_in(rec))
         out += _check_differences(stage, h.get("checks"), check_results(rec))
-    if any(s.state != DONE for s in status.stages) or set(hist) != set(now):
+    if set(hist) != set(now):
+        return [*out, ("the printable files cannot be compared: the stages are not the "
+                      "historical run's")]
+    if any(s.state != DONE for s in status.stages):
         return [*out, "the printable files cannot be compared: a stage is not done"]
     entry = (prov.get("confirmation") or {}).get("entry") or {}
     covers = entry.get("covers") if isinstance(entry.get("covers"), dict) else {}

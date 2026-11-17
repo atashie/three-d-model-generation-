@@ -396,6 +396,10 @@ changed rule value.
   git's blob at HEAD in finish and verify. A stage the current code refuses exits 1; a
   slicer that cannot be used on this machine exits 2. Files an operating system adds
   (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) stay damage, with their own message.
+- After the re-review (2026-11-17): the current `slice.json` must be in tdmg's record form;
+  the G-code digest puts the marker `<timestamp>` where the timestamp line was; a stage
+  failing with an OSError or SlicerError is worded "failed (possibly the environment)",
+  any other "refused by the current code" (both exit 1).
 
 ### Task 11: owner-image test fixtures
 
