@@ -129,15 +129,26 @@ def write_outputs(out_dir: str | Path, files: dict[str, bytes], record_name: str
                 f.write(data)
     except FileExistsError:
         raise RecordError(busy) from None
+    # os.replace overwrites on Windows too, but two writers cannot both get here: the
+    # second one has already failed on its first "xb" file above.
+    replace_file(out, record_name, record_bytes)
+
+
+def replace_file(folder: str | Path, name: str, data: bytes) -> None:
+    """Write `data` to folder/name through a temporary file in the same folder and
+    os.replace, so a reader sees the old bytes or the new ones, never a part. An existing
+    file is replaced. `name` must be a plain file name. On a failure no .tmp file is left.
+    """
+    if not _plain(name):
+        raise RecordError(f"output name {name!r} is not a plain file name")
+    out = Path(folder)
     tmp = None
     try:
         with tempfile.NamedTemporaryFile(dir=out, delete=False, suffix=".tmp",
-                                         prefix=f".{Path(record_name).stem}-") as f:
+                                         prefix=f".{Path(name).stem}-") as f:
             tmp = f.name
-            f.write(record_bytes)        # closing flushes, so a full disk can fail there too
-        # os.replace overwrites on Windows too, but two writers cannot both get here: the
-        # second one has already failed on its first "xb" file above.
-        os.replace(tmp, out / record_name)
+            f.write(data)                # closing flushes, so a full disk can fail there too
+        os.replace(tmp, out / name)
     except BaseException:
         if tmp is not None:
             Path(tmp).unlink(missing_ok=True)   # no stray .tmp; the folder stays incomplete

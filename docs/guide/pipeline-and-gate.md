@@ -52,6 +52,18 @@ valid solid can still include an unwanted background.
   clearance and the skin depth, and writes a form for the owner to fill in after printing
   (the last section).
 
+**Jobs (2026-11-16, restructure Task 6).** `tdmg job new NAME --class C --image PATH`
+starts a job: it makes `jobs/NAME/` (git-ignored), copies the image (and an
+owner-corrected `--mask`) to `jobs/NAME/source/`, and writes `job.yaml`. The file names
+the output class and the recipe it resolves to (`--colors` for the multicolor one), the
+source image's SHA-256 and origin (`--origin photo|drawing|generated|unknown`; for a
+generated image, what the owner knows of its prompt, generator and so on, else
+`unknown`), and every stage's parameters. A parameter left at null takes the stage
+command's own default; `--width-mm` and `--thickness-mm` have no default and may be left
+unset for now. A class with no usable recipe, an existing job, and an image that
+`tdmg select` cannot read are refused. Nothing is run yet: the stages are still run with
+the commands above. Outside a source checkout, give `--jobs-dir`.
+
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 
 Every check returns **PASS**, **FAIL**, or **UNKNOWN**, with the measured value, the threshold, and the rule it came from. A check that cannot be measured is UNKNOWN; it never passes silently. Each recipe declares the checks it requires. The verdict is **PRINTABLE** only if all of them pass. Otherwise it is **NOT CERTIFIED**, with the reasons.

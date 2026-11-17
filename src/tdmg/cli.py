@@ -3,7 +3,8 @@ selection for review), `flat` (flat geometry from a selection, gated on the writ
 STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checked for
 portability with the pinned PrusaSlicer). R2 adds `colors` (the color plan of a selection,
 for review) and `strip` (the two calibration strips, built, gated and sliced); `make` and
-`check` follow."""
+`check` follow. `job new` starts a job: a folder in jobs/ with the source image and
+job.yaml (tdmg.jobs)."""
 
 import inspect
 from pathlib import Path
@@ -43,6 +44,15 @@ from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
 from tdmg.colors import ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
+from tdmg.jobs import (
+    DEFAULT_ORIGIN,
+    JOB_FILE,
+    ORIGINS,
+    JobError,
+    default_jobs_dir,
+    new_job,
+    unset_required,
+)
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME, PRUSA_GCODE_NOTE
 from tdmg.profiles import load_printer, printer_ids
 from tdmg.recipes import ATTRIBUTE_LABELS, CLASSES, RECIPES, class_of, class_status
@@ -820,6 +830,95 @@ def _colors_lines(rec: dict) -> list[str]:
                  f"{rec['cleanup']['passes']} passes")
     lines.append(f"colors_id {rec['colors_id']}")
     return lines
+
+
+job_app = typer.Typer(help="Jobs: one print's working folder in jobs/ and its job.yaml.",
+                      no_args_is_help=True)
+app.add_typer(job_app, name="job")
+
+
+def _origin_help(field: str) -> str:
+    return f"For --origin generated: {field}. Recorded verbatim; default unknown."
+
+
+@job_app.command("new")
+def job_new(
+    name: Annotated[str, typer.Argument(
+        help="Job name: lowercase letters, digits and hyphens, at most 63 characters.")],
+    output_class: Annotated[str, typer.Option(
+        "--class", help=f"Output class: {', '.join(CLASSES)} (see tdmg recipes).")],
+    image: Annotated[Path, typer.Option("--image", help="The source image (PNG or JPEG).")],
+    colors: Annotated[bool, typer.Option(
+        "--colors", help="A multicolor print: the class's multicolor recipe.")] = False,
+    mask: Annotated[Path | None, typer.Option(
+        "--mask", help="An owner-corrected black/white selection mask, the image's size; "
+                       "copied to source/ and used by the select stage.")] = None,
+    origin: Annotated[str, typer.Option(
+        "--origin", help=f"Where the image came from: {', '.join(ORIGINS)}.")
+    ] = DEFAULT_ORIGIN,
+    prompt: Annotated[str | None, typer.Option(
+        "--prompt", help=_origin_help("the prompt"))] = None,
+    generator: Annotated[str | None, typer.Option(
+        "--generator", help=_origin_help("the generator"))] = None,
+    generator_version: Annotated[str | None, typer.Option(
+        "--generator-version", help=_origin_help("the generator's version"))] = None,
+    settings: Annotated[str | None, typer.Option(
+        "--settings", help=_origin_help("the generator's settings"))] = None,
+    references: Annotated[str | None, typer.Option(
+        "--references", help=_origin_help("the reference inputs"))] = None,
+    chosen: Annotated[str | None, typer.Option(
+        "--chosen", help=_origin_help("which candidate was chosen"))] = None,
+    edits: Annotated[str | None, typer.Option(
+        "--edits", help=_origin_help("edits made after generation"))] = None,
+    width_mm: Annotated[float | None, typer.Option(
+        "--width-mm", help="Width of the selection in the model, in mm; can be left "
+                           "unset for now.")] = None,
+    thickness_mm: Annotated[float | None, typer.Option(
+        "--thickness-mm", help="Thickness of the flat solid, in mm; can be left unset "
+                               "for now.")] = None,
+    jobs_dir: Annotated[Path | None, typer.Option(
+        "--jobs-dir", help="Folder that holds the jobs; default jobs/ in the source "
+                           "checkout (required when tdmg is installed from a wheel).")
+    ] = None,
+) -> None:
+    """Start a job: make JOBS_DIR/NAME/ with the image (and mask) in
+    source/ and job.yaml, every stage's parameters at their defaults.
+
+    The class resolves to one recipe; a class with no recipe that is
+    implemented or in progress is refused. Nothing is run yet.
+
+    Exit codes:
+      0  job made
+      2  refused (bad name, existing job, class not ready, image
+         missing or unreadable, bad mask); nothing is written; or
+         an I/O failure while writing, which can leave a folder
+         without job.yaml: such a folder is incomplete
+    """
+    generated = {"prompt": prompt, "generator": generator, "version": generator_version,
+                 "settings": settings, "references": references, "chosen": chosen,
+                 "edits": edits}
+    try:
+        where = default_jobs_dir() if jobs_dir is None else jobs_dir
+        job = new_job(where, name, output_class, image, colors=colors, mask=mask,
+                      origin=origin, generated=generated, width_mm=width_mm,
+                      thickness_mm=thickness_mm)
+    except JobError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:              # unreadable input, unwritable output, disk full ...
+        _os_error(e)
+        raise typer.Exit(2) from None
+    r = next(x for x in RECIPES if x.id == job["recipe"])
+    folder = where / job["name"]
+    typer.echo(f"job {job['name']}: class {job['class']}, recipe {r.id} ({r.name})")
+    typer.echo(f"stages: {', '.join(r.stages)}")
+    typer.echo(f"source: {job['source']['file']} (origin {job['source']['origin']})")
+    if job["source"]["mask"] is not None:
+        typer.echo(f"mask: {job['source']['mask']['file']}")
+    unset = unset_required(job)
+    if unset:
+        typer.echo(f"not set yet (needed before those stages run): {', '.join(unset)}")
+    typer.echo(f"wrote {folder / JOB_FILE}")
 
 
 if __name__ == "__main__":

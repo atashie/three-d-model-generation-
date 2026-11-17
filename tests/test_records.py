@@ -13,6 +13,7 @@ from tdmg.records import (
     environment,
     png_bytes,
     record_text,
+    replace_file,
     write_outputs,
 )
 
@@ -207,3 +208,17 @@ def test_subfolders_n_a_name_that_is_both_a_file_and_a_folder_is_refused(tmp_pat
         write_outputs(out, {"c/s": b"1", "c/s/base/p.gcode": b"2"}, "rec.json", RECORD,
                       subfolders=3)
     assert not out.exists()
+
+
+def test_replace_file_replaces_atomically_and_leaves_no_tmp(tmp_path):
+    (tmp_path / "job.yaml").write_bytes(b"old")
+    replace_file(tmp_path, "job.yaml", b"new")
+    assert (tmp_path / "job.yaml").read_bytes() == b"new"
+    assert [p.name for p in tmp_path.iterdir()] == ["job.yaml"]
+
+
+@pytest.mark.parametrize("name", ["", ".", "..", "a/b", "a\\b"])
+def test_replace_file_refuses_a_name_that_is_not_plain(tmp_path, name):
+    with pytest.raises(RecordError, match="not a plain file name"):
+        replace_file(tmp_path, name, b"x")
+    assert list(tmp_path.iterdir()) == []
