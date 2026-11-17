@@ -180,15 +180,23 @@ copying `prints/` to another machine, where they should have come along: then a 
 one is exit 1. A file in them that is missing or different is damage. An entry without
 `COMPLETE`, a leftover `prints/.staging-NAME/`, or an entry whose job (or its tombstone)
 is still in `jobs/` is incomplete: an interrupted `finish`; run `tdmg finish NAME` again.
+A file the operating system adds when a folder is opened or copied (`.DS_Store` from the
+macOS Finder, `._*` AppleDouble files on FAT, exFAT or network drives, `Thumbs.db` and
+`desktop.ini` from Windows Explorer) also makes the entry damaged, since it is not the
+entry's; the message names it and says that deleting it is safe. Check catches damage
+and accidental edits, not deliberate ones: an edit with `STAGED` and `COMPLETE` both
+written again to agree passes, and only git history (or `verify`) shows it.
 Exit 1 on damage or an incomplete entry; 2 when it cannot check. `tdmg library verify NAME
 --slicer-dir DIR [--prusaslicer-dir DIR]` runs the entry's `job.yaml` and `source/` again
 under the current code and rules, in a scratch folder, and compares it with
-`provenance.json`: every stage done, each stage record's SHA-256 (not `slice.json`'s,
-whose G-code hashes change with the timestamp), each stage's algorithm, verdicts and
+`provenance.json`: every stage done, each stage record's SHA-256 (for `slice.json`, with
+its G-code hash fields masked, and each G-code file without its timestamp line: the
+rebuild's allowance, which `finish` records), each stage's algorithm, verdicts and
 checks (status, rule, threshold), the slice identity, and the confirmed printable files
 (by SHA-256, so byte for byte) and their verdicts. The stages' other files and the
 checks' measured values cannot be compared (the library does not keep them), and it says
-so. It also lists what changed since the historical run: code commit, versions,
+so. A stage the current code refuses is a difference (exit 1); a pinned slicer that cannot
+be used on this machine, or a temporary folder inside `prints/` or `jobs/`, is exit 2. It also lists what changed since the historical run: code commit, versions,
 libraries, rules (with each changed value), algorithm ids and profiles, and whether
 PrusaSlicer was configured then (the slice results depend on it). It writes nothing into
 `prints/` and never rewrites the historical verdict. Exit 0 when identical, 1 when it

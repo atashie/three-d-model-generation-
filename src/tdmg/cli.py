@@ -1334,7 +1334,9 @@ def library_check(
     An entry without COMPLETE, a leftover .staging-NAME folder, or an
     entry whose job (or its .purging- tombstone) is still in the jobs
     folder is incomplete: an interrupted tdmg finish; run tdmg finish
-    NAME again.
+    NAME again. A file the operating system adds (.DS_Store, ._*,
+    Thumbs.db, desktop.ini) is damage, said as such: deleting it is
+    safe.
 
     Exit codes:
       0  every entry is complete and every hash matches. source/ or
@@ -1391,14 +1393,15 @@ def library_verify(
     differs from the historical run that provenance.json records.
 
     Compared: every stage done; each stage record's SHA-256 (byte for
-    byte; not slice.json's, whose G-code hashes change with the
-    slicer's timestamp); each stage's algorithm, verdicts and checks
-    (status, rule, threshold); the slice record's identity; the
-    confirmed route's printable files (SHA-256, so byte for byte) and
-    their verdicts. Not compared: the stages' other files (the job's
-    own were purged) and the checks' measured values (provenance.json
-    does not hold them). It also says what changed since then: code
-    commit, versions, libraries, rules, algorithm ids, profiles.
+    byte; slice.json with its G-code hash fields masked, and each G-code
+    file without its timestamp line, as finish's rebuild compares them);
+    each stage's algorithm, verdicts and checks (status, rule,
+    threshold); the slice record's identity; the confirmed route's
+    printable files (SHA-256, so byte for byte) and their verdicts. Not
+    compared: the stages' other files (the job's own were purged) and
+    the checks' measured values (provenance.json does not hold them). It
+    also says what changed since then: code commit, versions, key
+    libraries, rules, algorithm ids, profiles.
 
     The slice stage's results depend on whether PrusaSlicer is
     configured; verify says which the historical run had. Give the
@@ -1409,10 +1412,12 @@ def library_verify(
     Exit codes:
       0  identical under the comparison rule
       1  it differs (information, not an error: the code or the rules
-         may have changed; see what changed)
+         may have changed; see what changed), including a stage the
+         current code refuses
       2  cannot run: no such entry, the entry does not check (tdmg
-         library check), the source is not on this machine, or a stage
-         could not run (a slicer folder not given, say)
+         library check), the source is not on this machine, the pinned
+         slicer cannot be used on this machine, or the temporary folder
+         is inside prints/ or jobs/
     """
     try:
         differences = verify(name, machine=Machine(slicer_dir, prusaslicer_dir),

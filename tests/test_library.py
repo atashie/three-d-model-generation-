@@ -3,8 +3,11 @@ by tdmg finish with the fake slicers (tests/test_finish.py's helpers), in tempor
 folders only."""
 
 import json
+import os
 import shutil
+import subprocess
 import sys
+import tempfile
 
 import pytest
 import test_finish
@@ -12,11 +15,13 @@ import test_slice
 from test_finish import (
     R1,
     R2,
+    STAMP_A,
     STAMP_B,
     Crash,
     _call,
     _crash,
     _finish,
+    _job,
     _ready,
     _stamp,
     _tree,
@@ -25,8 +30,15 @@ from test_job_runner import _invoke, _plain
 
 import tdmg
 from tdmg import library
-from tdmg.flat import THIN_RULE
-from tdmg.library import COMPLETE_FILE, complete_bytes
+from tdmg.flat import THIN_RULE, FlatError
+from tdmg.job_runner import Machine, job_status
+from tdmg.library import (
+    COMPLETE_FILE,
+    PURGE_FILE,
+    STAGED_FILE,
+    STAGED_SCHEMA,
+    complete_bytes,
+)
 from tdmg.records import replace_file
 from tdmg.rules import load_rules
 
@@ -325,5 +337,220 @@ def test_verify_cannot_run_without_a_slicer(tmp_path, tmp_path_factory, slicers,
     r = _invoke("library", "verify", R1, "--prints-dir", entry.parent, "--prusaslicer-dir",
                 slicers[1])
     out = _plain(r.output)
-    assert r.exit_code == 2 and "stage slice failed" in out
+    assert r.exit_code == 2 and "the slicer cannot be used on this machine" in out
+    assert "no slicer folder" in out and "a slicer folder not given, say" not in out
     assert _snapshot(entry.parent) == before
+
+
+# --- review regressions (2026-11-17; the reviewer's probes P1-P11) ------------------------------
+
+def _rewrite_both(entry):
+    """STAGED and COMPLETE written again over whatever the entry now holds."""
+    (entry / COMPLETE_FILE).unlink()
+    replace_file(entry, STAGED_FILE, library._manifest(entry, STAGED_SCHEMA,
+                                                       (STAGED_FILE, PURGE_FILE)))
+    replace_file(entry, COMPLETE_FILE, complete_bytes(entry))
+
+
+def test_known_limit_a_coordinated_rewrite_of_both_manifests_passes(
+        tmp_path, tmp_path_factory, slicers, repo):
+    """P1: check guards against damage and accidental edits, not an adversary: an edit with
+    STAGED and COMPLETE both written again passes (the module docstring says so)."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    (entry / "card.md").write_text("# edited\n", encoding="utf-8")
+    _rewrite_both(entry)
+    r, out = _check(entry.parent)
+    assert r.exit_code == 0 and f"{R1}: ok" in out
+
+
+def test_verify_catches_an_edited_provenance_that_check_cannot(tmp_path, tmp_path_factory,
+                                                               slicers, repo):
+    """P2: provenance.json edited and both manifests written again passes check (the
+    known limit), but verify reports the verdicts and checks against a run (M6: as JSON)."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    prov = json.loads((entry / "provenance.json").read_text(encoding="utf-8"))
+    prov["confirmation"]["entry"]["verdicts"] = {"edited": "PASS"}
+    prov["stages"]["flat"]["checks"] = []
+    (entry / "provenance.json").write_text(json.dumps(prov), encoding="utf-8")
+    _rewrite_both(entry)
+    assert _check(entry.parent)[0].exit_code == 0
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 1, r.output
+    assert 'were {"edited": "PASS"}, now {"flat/model.stl": "NOT CERTIFIED"}' in out
+    assert "flat check F1.finite at $.checks[0]: new now (PASS)" in out
+
+
+def test_a_case_renamed_file_or_entry(tmp_path, tmp_path_factory, slicers, repo):
+    """P4 and M4: the names on disk are what check reports."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    os.rename(entry / "card.md", entry / "Card.md")
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1 and "card.md: listed in COMPLETE but missing" in out
+    assert "Card.md: not listed in COMPLETE" in out
+    os.rename(entry / "Card.md", entry / "card.md")
+    os.rename(entry, entry.parent / "Roadie")
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1 and "Roadie: DAMAGED not a library entry" in out
+    # Named in lower case, it is still reported under its name on disk, on any file system.
+    r, out = _check(entry.parent, R1)
+    assert r.exit_code == 1 and "Roadie: DAMAGED not a library entry" in out
+    assert f"{R1}: ok" not in out
+    r = _invoke("library", "verify", R1, "--prints-dir", entry.parent)
+    out = _plain(r.output)
+    assert r.exit_code == 2 and "the folder is named Roadie on disk" in out
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junctions (mklink /J)")
+def test_a_junction_in_an_entry_is_damage_in_checks_words(tmp_path, tmp_path_factory,
+                                                          slicers, repo):
+    """P6 and M3: a link is damage, said in library check's words, not finish's."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    subprocess.run(["cmd", "/c", "mklink", "/J", str(entry / "jn"), str(target)], check=True,
+                   capture_output=True)
+    r, out = _check(entry.parent)
+    os.rmdir(entry / "jn")
+    assert r.exit_code == 1 and f"{R1}: DAMAGED" in out and "is a link" in out
+    assert "finish" not in out
+
+
+def test_an_entry_copied_under_another_name(tmp_path, tmp_path_factory, slicers, repo):
+    """P7."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    shutil.copytree(entry, entry.parent / "other")
+    r, out = _check(entry.parent, "other")
+    assert r.exit_code == 1 and "other: DAMAGED" in out
+
+
+def test_an_unreadable_file_marks_its_entry_and_check_goes_on(tmp_path, tmp_path_factory,
+                                                              slicers, repo, monkeypatch):
+    """M3: one entry that cannot be read is DAMAGED; the others are still checked."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    shutil.copytree(entry, entry.parent / "aaa-copy")
+    real = library._read
+
+    def unreadable(path):
+        if path.parent.name == "aaa-copy" and path.name == "card.md":
+            raise library._unreadable(path, PermissionError(13, "Permission denied"))
+        return real(path)
+    monkeypatch.setattr(library, "_read", unreadable)
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1, r.output
+    assert "aaa-copy: DAMAGED" in out and "cannot read" in out and "Permission denied" in out
+    assert f"{R1}: ok" in out and "2 checked" in out
+    assert "nothing of the job is deleted" not in out
+
+
+@pytest.mark.parametrize("junk", [".DS_Store", "._card.md", "Thumbs.db", "desktop.ini",
+                                  "private/.DS_Store"])
+def test_files_the_os_adds_are_damage_with_a_plain_message(tmp_path, tmp_path_factory,
+                                                           slicers, repo, junk):
+    """I2: strict, but the message says what the file is and that deleting it is safe."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    (entry / junk).write_bytes(b"\0")
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1 and f"{R1}: DAMAGED" in out
+    assert f"{junk}: a file the operating system adds" in out
+    assert "deleting it is safe" in out
+
+
+def test_verify_refuses_a_scratch_folder_inside_the_library(tmp_path, tmp_path_factory,
+                                                            slicers, repo, monkeypatch):
+    """P8 and M7."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    inside = entry.parent / "tmp"
+    inside.mkdir()
+    before = _snapshot(entry.parent)
+    monkeypatch.setattr(tempfile, "tempdir", str(inside))
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 2 and "is inside the library" in out
+    assert _snapshot(entry.parent) == before
+
+
+def test_verify_removes_its_scratch_folder(tmp_path, tmp_path_factory, slicers, repo,
+                                           monkeypatch):
+    """P9: the scratch folder goes, whether verify passes or a bug stops it."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    base = tmp_path / "tmpbase"
+    base.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(base))
+    assert _verify(entry, slicers)[0].exit_code == 0 and list(base.iterdir()) == []
+
+    def boom(*a, **k):
+        raise RuntimeError("bug")
+    monkeypatch.setattr(library, "compare_with_provenance", boom)
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 2 and "unexpected RuntimeError" in out
+    assert list(base.iterdir()) == []
+
+
+def test_verify_r2_with_a_new_timestamp_is_judged_as_the_rebuild_is(
+        tmp_path, tmp_path_factory, slicers, fake, prusa, repo):
+    """P10: the fake R2 slice quarantines face-up's G-code (face-up/plate_1.gcode.failed),
+    a form the repeatability record lists as inferred, not measured, so its hash in
+    slice.json is not masked: with another timestamp slice.json differs, as finish's
+    rebuild says (test_finish.test_unmeasured_gcode_hash_fields_are_not_ignored). The
+    G-code files themselves differ in the timestamp line only."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers, "r2")
+    _stamp(fake, prusa, STAMP_B)
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 1, r.output
+    assert "slice/slice.json: differs from the historical record" in out
+    assert "beyond its timestamp line" not in out
+
+
+def test_verify_catches_a_gcode_body_change(tmp_path, tmp_path_factory, slicers, fake, prusa,
+                                            repo):
+    """P11 and I1: the G-code is compared (but its timestamp line), and slice.json (but its
+    G-code hash fields)."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    prov = json.loads((entry / "provenance.json").read_bytes())
+    assert "plate_1.gcode" in prov["stages"]["slice"]["gcode_sha256_without_timestamp"]
+    assert library._hex(prov["stages"]["slice"]["record_masked_sha256"])
+    fake(layers="auto", generated_at=STAMP_A, gcode_text="G28\nG1 X99 Y99\nG1 X0 Y0\n")
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 1, r.output
+    assert "slice/plate_1.gcode: differs from the historical G-code beyond its timestamp " \
+        "line" in out
+
+
+def test_a_stage_refused_by_the_current_code_is_a_difference(tmp_path, tmp_path_factory,
+                                                             slicers, repo, monkeypatch):
+    """M1: a stage the current code refuses (its input, not the machine) exits 1."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+
+    def refuse(*a, **k):
+        raise FlatError("thickness_mm 3 is no longer allowed")
+    monkeypatch.setitem(tdmg.job_runner.RUNNERS, "flat", refuse)
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 1, r.output
+    assert "stage flat: refused by the current code: thickness_mm 3 is no longer allowed" \
+        in out
+    assert "stage slice is not run now" in out
+
+
+def test_stages_of_the_historical_run_not_run_now(tmp_path, tmp_path_factory, slicers,
+                                                  repo):
+    """M2: compared over the historical and the current stages."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    prov = json.loads((entry / "provenance.json").read_bytes())
+    prov["stages"]["colors"] = {"record_sha256": "0" * 64}
+    folder = _job(tmp_path / "again", tmp_path_factory, slicers)
+    status = job_status(folder, Machine(*slicers))
+    out = library.compare_with_provenance(folder, prov, status)
+    assert "stage colors: in the historical run, not now" in out
+
+
+def test_uv_lock_is_hashed_from_git(tmp_path, tmp_path_factory, slicers, repo):
+    """M5: uv.lock's SHA-256 is git's blob at HEAD, so line endings in the working copy do
+    not count as a change."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    prov = json.loads((entry / "provenance.json").read_bytes())
+    blob = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", "HEAD:uv.lock"],
+                          capture_output=True, check=True).stdout
+    assert prov["code"]["uv_lock_sha256"] == library._sha(blob)
+    (repo / "uv.lock").write_bytes(blob.replace(b"\n", b"\r\n"))
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 0, r.output
+    assert "uv.lock" not in out

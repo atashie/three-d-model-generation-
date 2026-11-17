@@ -389,6 +389,13 @@ changed rule value.
   and verdicts, the confirmation's identity, file hashes and verdicts); `slice.json`'s
   hash is not compared (it covers G-code hashes). Exit 0 identical, 1 differs, 2 cannot
   run.
+- After the review (2026-11-17): `provenance.json`'s slice stage also holds
+  `record_masked_sha256` (slice.json with `VOLATILE_FIELDS` masked) and
+  `gcode_sha256_without_timestamp` (each G-code file with its timestamp line blanked), and
+  verify compares them, so a G-code body change is a difference; `uv.lock` is hashed as
+  git's blob at HEAD in finish and verify. A stage the current code refuses exits 1; a
+  slicer that cannot be used on this machine exits 2. Files an operating system adds
+  (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) stay damage, with their own message.
 
 ### Task 11: owner-image test fixtures
 

@@ -113,8 +113,8 @@ has been measured with calipers, and strength is not judged.
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
 - **Latest local validation (2026-11-17, PC, restructure Task 10):** `uv run pytest -q`
-  gave 3271 passed and 12 skipped (8 real-slicer tests; four symlink tests, since this
-  account cannot create symlinks; the junction tests ran); `tests/test_library.py` (26
+  gave 3289 passed and 12 skipped (after the Task 10 review fixes) (8 real-slicer tests; four symlink tests, since this
+  account cannot create symlinks; the junction tests ran); `tests/test_library.py` (44
   tests) also passed under `CI=true GITHUB_ACTIONS=true`; `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the
@@ -220,9 +220,13 @@ words and dates, are in [docs/design/](design/README.md).
   Task 11, the owner-image test fixtures.
 - **Task 10 decisions** (dated note in the plan's Task 10): "source unavailable" alone
   exits 0, since it is the normal state of every clone; `--require-private` makes it a
-  failure for a copied `prints/`. `verify` cannot compare `slice.json` byte for byte (its
-  hash in `provenance.json` covers G-code hashes), the stages' other files or the checks'
-  measured values; it says so on every run.
+  failure for a copied `prints/`. After the spec review, `provenance.json` also holds
+  `slice.json`'s hash with its G-code hash fields masked and each G-code file's hash without
+  its timestamp line, and `verify` compares them (a G-code body change is a difference);
+  it cannot compare the stages' other files or the checks' measured values, and says so.
+  A stage the current code refuses exits 1; a slicer missing on this machine exits 2. OS
+  files (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) are damage with their own
+  message. `uv.lock` is hashed as git's blob at HEAD.
 - **Task 9 decisions:** the purge record is its own file, `purge.json`, written after the
   publish and before `COMPLETE`, so `COMPLETE` is last and lists it, and `provenance.json`
   stays the file that was staged and checked (accepted after the spec review; dated
