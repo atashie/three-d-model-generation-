@@ -72,9 +72,13 @@ strict YAML rules as `job.yaml`. `select.mask=PATH` copies a corrected mask into
 functions with the same arguments as the stage commands above, so the files are the same
 as a run by hand (except the time of slicing in the G-code and its hashes). A stage runs
 again only when its folder has no record or its input key changed: the SHA-256 of its
-parameters and the keys of the stages before it (and, for `select`, the image and mask
-hashes), kept in `jobs/NAME/state.json`. A changed parameter reruns that stage and the
-ones after it. A rerun goes into `<stage>.new/` and replaces the old folder only once its
+parameters, of the upstream records it reads, its algorithm id, the rule values and the
+profiles it uses (and, for `select`, the image and mask hashes), kept in
+`jobs/NAME/state.json`. A changed parameter reruns that stage, and each later stage whose
+input record changed. A stage whose record names another algorithm, or whose links do not
+match the upstream records, is stale too; `--rerun STAGE` runs a stage again anyway (after
+a code change that kept the algorithm id). While `job run` or `job set` works on a job it
+holds `jobs/NAME/.lock`. A rerun goes into `<stage>.new/` and replaces the old folder only once its
 record is written, so a failed rerun keeps the old results. The run stops at a required
 parameter not set, at a stage that fails, and after a color plan that is not ready; it
 then prints one line per stage (done, stale or not run, with the verdict) and what waits

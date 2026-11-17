@@ -43,9 +43,16 @@ from tdmg.color_slicing import (
 )
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
-from tdmg.colors import ColorsError, extracted_text, make_colors
+from tdmg.colors import COLORS_PRINTER, ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
-from tdmg.job_runner import Machine, job_status, run_job, set_parameters, status_lines
+from tdmg.job_runner import (
+    Machine,
+    job_status,
+    run_job,
+    set_parameters,
+    status_lines,
+    yaml_value,
+)
 from tdmg.jobs import (
     DEFAULT_ORIGIN,
     JOB_FILE,
@@ -770,7 +777,7 @@ def colors(
              "outlines": outlines}
     try:
         rec = make_colors(selection, out, width_mm=width_mm, flags=flags, config_path=config,
-                          rules=load_rules(), printer=load_printer("bambu-a1"))
+                          rules=load_rules(), printer=load_printer(COLORS_PRINTER))
     except ColorsError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -987,7 +994,7 @@ def job_set(
     typer.echo(f"job {name}: revision {job['revision']}")
     for a in assignments:
         stage, key = a.partition("=")[0].split(".", 1)
-        typer.echo(f"  {stage}.{key} = {job['stages'][stage][key]!r}")
+        typer.echo(f"  {stage}.{key}={yaml_value(job['stages'][stage][key])}")
     typer.echo(f"wrote {folder / JOB_FILE}")
 
 
@@ -1016,14 +1023,20 @@ def job_run(
     name: Annotated[str, typer.Argument(help="Job name.")],
     slicer_dir: SlicerDir = None,
     prusaslicer_dir: PrusaDir = None,
+    rerun: Annotated[list[str] | None, typer.Option(
+        "--rerun", metavar="STAGE",
+        help="Run this stage again even when it is done (after a code change that kept "
+             "its algorithm id); a stage after it runs again when the new record "
+             "differs. Repeatable.")] = None,
     jobs_dir: JobsDir = None,
 ) -> None:
     """Run every stage of the job that is not done, in order, into
     JOBS_DIR/NAME/<stage>/, then print the status.
 
-    A stage runs when its folder has no record or its input key (its
-    parameters, the keys of the stages before it, and for select the
-    source and mask hashes) differs from state.json's. It runs into
+    A stage runs when its folder has no record or its input key differs
+    from state.json's. The key covers its parameters, the hashes of the
+    records it reads, its algorithm id, the rules and the profiles (and
+    for select the source and mask hashes). It runs into
     <stage>.new/, which replaces the old folder only once its record
     is written: a stage that fails keeps its old results. The run stops
     at a required parameter not set, at a stage that fails, and after a
@@ -1038,12 +1051,16 @@ def job_run(
     """
     try:
         folder = _job_folder(name, jobs_dir)
-        events, status = run_job(folder, Machine(slicer_dir, prusaslicer_dir))
+        events, status = run_job(folder, Machine(slicer_dir, prusaslicer_dir),
+                                 rerun=rerun or ())
     except JobError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
     except OSError as e:
         _os_error(e)
+        raise typer.Exit(2) from None
+    except Exception as e:  # noqa: BLE001 - a bug: say so, and exit 2 like any refusal
+        typer.echo(f"error: unexpected {type(e).__name__} in tdmg job run: {e}", err=True)
         raise typer.Exit(2) from None
     for ev in events:
         text = {"ran": "ran", "kept": "done, not run again", "waits": "waits",
@@ -1066,6 +1083,10 @@ def job_status_command(
 ) -> None:
     """Print each stage's state (done, stale or not run), the verdicts
     and what waits for the owner, without running anything.
+
+    The slice stage's key depends on whether PrusaSlicer is configured
+    (--prusaslicer-dir or $TDMG_PRUSASLICER_DIR): give the same as to
+    tdmg job run, or the slice shows as stale.
 
     Exit codes:
       0  status printed

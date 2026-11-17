@@ -94,6 +94,9 @@ from tdmg.smoothing import (
 COLORS_ALGORITHM_VERSION = "colors-2"
 RECORD_SCHEMA = "tdmg.colors/4"
 RECORD_NAME = "colors.json"
+# The printer profile tdmg colors plans for (its palette cap and nozzle); tdmg job run uses
+# the same one.
+COLORS_PRINTER = "bambu-a1"
 OUTPUT_FILES = ("labels.png", "regions.png")
 LABELS_OUTSIDE = 255   # labels.png value outside the mask; palette indices are below it
 REVIEW = "Open regions.png to check the colors before building geometry."

@@ -243,8 +243,14 @@ fields, the round-trip, refusals, and byte-identical rewrites.
   besides `job new` and `job confirm`; hand edits are read back through the strict
   loader.
 - Each stage runs into `jobs/NAME/<stage>/`. The stage's **input key** is the SHA-256
-  of its parameters plus the input keys of the stages before it. It is stored in
-  `jobs/NAME/state.json`.
+  of its parameters, the SHA-256 of each upstream record it reads (the selection, colors,
+  flat or colored record), its algorithm ids, the rule values and the
+  profiles it uses (printer profile; slicer pins), plus the image and mask hashes for
+  `select`. It is stored in `jobs/NAME/state.json`. (Amended 2026-11-16 after the Task 7
+  quality review: the first version chained the keys of earlier stages, which missed an
+  upstream record rebuilt to other bytes.) A stage is also stale when its record's
+  algorithm or links disagree with this code and the upstream records; `--rerun STAGE`
+  forces a rerun.
 - A stage reruns only when its key changed or its folder has no record. It reruns into
   a fresh folder, and the old folder is replaced only after the new record exists.
 - Status output, one line per stage: done, stale or not run, the verdict (for

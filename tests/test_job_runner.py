@@ -30,11 +30,11 @@ from tdmg.job_runner import (
     STATE_FILE,
     Machine,
     colors_config,
-    input_keys,
     job_status,
     parse_value,
     run_job,
     set_parameters,
+    stage_key,
 )
 from tdmg.jobs import JobError, load_job
 
@@ -225,6 +225,14 @@ def _r1(tmp_path, slicers, name="roadie"):
     return folder
 
 
+def _keys(folder: Path, machine: Machine) -> dict[str, str]:
+    """Each stage's key from the records now on disk."""
+    job = load_job(folder)
+    hashes = {s: job_runner._sha((folder / s / job_runner.STAGE_RECORDS[s]).read_bytes())
+              for s in job["stages"]}
+    return {s: stage_key(job, s, hashes, machine) for s in job["stages"]}
+
+
 def _mtimes(folder: Path) -> dict[str, int]:
     return {s: (folder / s / job_runner.STAGE_RECORDS[s]).stat().st_mtime_ns
             for s in ("select", "flat", "slice")}
@@ -243,8 +251,8 @@ def test_nothing_changed_runs_nothing_and_keeps_state_bytes(tmp_path, slicers):
     parsed = json.loads(state)
     assert job_runner.canonical_json(parsed) == state
     assert parsed == {"schema": job_runner.STATE_SCHEMA,
-                      "stages": {s: {"key": k} for s, k in input_keys(
-                          load_job(folder), Machine(None, slicers[1])).items()}}
+                      "stages": {s: {"key": k} for s, k in _keys(
+                          folder, Machine(None, slicers[1])).items()}}
 
 
 def test_same_job_elsewhere_gives_the_same_state_bytes(tmp_path, slicers):
@@ -261,7 +269,7 @@ def test_a_parameter_change_reruns_that_stage_and_later_ones_only(tmp_path, slic
     status = _plain(_invoke("job", "status", folder.name, "--jobs-dir", folder.parent,
                             "--prusaslicer-dir", slicers[1]).output)
     assert "select: done" in status and "flat: stale" in status
-    assert "slice: stale (its parameters or an earlier stage changed" in status
+    assert "slice: stale (an earlier stage is not done)" in status
     result = _run(folder, *slicers)
     assert _stage_lines(result.output) == {"select": "done, not run again", "flat": "ran",
                                            "slice": "ran"}
@@ -348,9 +356,8 @@ def test_a_color_plan_that_is_not_ready_stops_the_run(tmp_path, slicers):
 
 def test_configuring_prusaslicer_makes_the_slice_stale(tmp_path, slicers):
     folder = _r1(tmp_path, slicers)
-    job = load_job(folder)
-    with_prusa = input_keys(job, Machine(None, slicers[1]))
-    without = input_keys(job, Machine())
+    with_prusa = _keys(folder, Machine(None, slicers[1]))
+    without = _keys(folder, Machine())
     assert with_prusa["flat"] == without["flat"] and with_prusa["slice"] != without["slice"]
     assert job_status(folder, Machine()).stages[-1].state == "stale"
 
@@ -495,3 +502,254 @@ def test_run_job_is_the_same_from_python(tmp_path, slicers):
     events, status = run_job(folder, Machine(slicers[0], slicers[1]))
     assert [(e.stage, e.action) for e in events] == [("select", "ran"), ("flat", "waits")]
     assert [s.state for s in status.stages] == ["done", "not run", "not run"]
+
+
+# --- review fixes: lineage, the swap window, code and rule changes, the lock -----------------
+
+def _sha_file(path: Path) -> str:
+    return job_runner._sha(path.read_bytes())
+
+
+def test_a_rebuilt_upstream_record_reruns_what_read_it(tmp_path, slicers, monkeypatch):
+    """Review probe (critical 1): flat rebuilt to other bytes (as after a code change), so
+    the slice made from the old flat.json must not stay done."""
+    folder = _r1(tmp_path, slicers)
+    real = job_runner.make_flat
+    monkeypatch.setattr(job_runner, "make_flat",
+                        lambda sel, w, t, out, **kw: real(sel, w, t * 0.5, out, **kw))
+    shutil.rmtree(folder / "flat")
+    events, _ = run_job(folder, Machine(*slicers))
+    assert [(e.stage, e.action) for e in events] == [("select", "kept"), ("flat", "ran"),
+                                                     ("slice", "ran")]
+    links = json.loads((folder / "slice" / "slice.json").read_bytes())["links"]
+    assert links["flat_record_sha256"] == _sha_file(folder / "flat" / "flat.json")
+
+
+def test_status_checks_the_record_links(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    path = folder / "slice" / "slice.json"
+    rec = json.loads(path.read_bytes())
+    rec["links"]["flat_record_sha256"] = "0" * 64
+    path.write_bytes(json.dumps(rec).encode())
+    st = job_status(folder, Machine(None, slicers[1])).stages[-1]
+    assert st.state == "stale" and "links.flat_record_sha256 does not match" in st.note
+    assert _stage_lines(_run(folder, *slicers).output)["slice"] == "ran"
+
+
+def test_a_crash_after_the_swap_leaves_no_key_over_the_new_folder(tmp_path, slicers,
+                                                                  monkeypatch):
+    """Review probe (critical 2): stopped after new -> final, before the new key; the
+    owner reverts the parameter: the folder holds 2 mm results, so it must not be done."""
+    folder = _r1(tmp_path, slicers)                     # 3 mm
+    _set(folder, "flat.thickness_mm=2")
+    real = job_runner._swap
+
+    def swap_then_stop(f, stage):
+        real(f, stage)
+        raise KeyboardInterrupt
+    with monkeypatch.context() as m, pytest.raises(KeyboardInterrupt):
+        m.setattr(job_runner, "_swap", swap_then_stop)
+        run_job(folder, Machine(*slicers))
+    assert not (folder / ".lock").exists()
+    assert json.loads((folder / "flat" / "flat.json").read_bytes())["params"][
+        "thickness_mm"] == 2.0
+    _set(folder, "flat.thickness_mm=3")
+    flat = job_status(folder, Machine(None, slicers[1])).stages[1]
+    assert flat.state == "stale"
+    events, _ = run_job(folder, Machine(*slicers))
+    assert ("flat", "ran") in [(e.stage, e.action) for e in events]
+    assert json.loads((folder / "flat" / "flat.json").read_bytes())["params"][
+        "thickness_mm"] == 3.0
+
+
+def test_a_crash_before_the_swap_keeps_the_old_folder_done(tmp_path, slicers, monkeypatch):
+    """The reviewer's first probe: state.json cannot be written at all. The swap never
+    happens, so after the revert the old (3 mm) folder is rightly done."""
+    folder = _r1(tmp_path, slicers)
+    _set(folder, "flat.thickness_mm=2")
+
+    def boom(f, s):
+        raise KeyboardInterrupt
+    with monkeypatch.context() as m, pytest.raises(KeyboardInterrupt):
+        m.setattr(job_runner, "_write_state", boom)
+        run_job(folder, Machine(*slicers))
+    _set(folder, "flat.thickness_mm=3")
+    st = job_status(folder, Machine(None, slicers[1]))
+    assert [s.state for s in st.stages] == ["done", "done", "done"], [
+        s.note for s in st.stages]
+    assert json.loads((folder / "flat" / "flat.json").read_bytes())["params"][
+        "thickness_mm"] == 3.0
+
+
+def test_a_swap_that_fails_is_reported_and_redone(tmp_path, slicers, monkeypatch):
+    folder = _r1(tmp_path, slicers)
+    _set(folder, "flat.thickness_mm=2")
+
+    def locked(f, stage):
+        raise PermissionError(13, "Access is denied", str(f / stage))
+    with monkeypatch.context() as m:
+        m.setattr(job_runner, "_swap", locked)
+        result = _run(folder, *slicers)
+    assert result.exit_code == 2
+    assert "close programs using flat/" in _plain(result.output)
+    assert "flat" not in json.loads((folder / STATE_FILE).read_bytes())["stages"]
+    assert _stage_lines(_run(folder, *slicers).output)["flat"] == "ran"
+
+
+def test_an_unexpected_error_exits_2_and_frees_the_lock(tmp_path, slicers, monkeypatch):
+    folder = _new(tmp_path, "roadie")
+
+    def bug(*a):
+        raise RuntimeError("boom")
+    monkeypatch.setitem(job_runner.RUNNERS, "select", bug)
+    result = _run(folder, *slicers)
+    assert result.exit_code == 2
+    assert "unexpected RuntimeError in tdmg job run: boom" in _plain(result.output)
+    assert not (folder / ".lock").exists()
+
+
+def test_a_new_algorithm_makes_the_stage_stale(tmp_path, slicers, monkeypatch):
+    folder = _r1(tmp_path, slicers)
+    out = _plain(_invoke("job", "status", folder.name, "--jobs-dir", folder.parent,
+                         "--prusaslicer-dir", slicers[1]).output)
+    assert "(flat-3, tdmg " in out and "(selection-1, tdmg " in out
+    monkeypatch.setattr(job_runner, "FLAT_ALGORITHM_VERSION", "flat-99")
+    stages = job_status(folder, Machine(None, slicers[1])).stages
+    assert stages[1].state == "stale"
+    assert stages[1].note == "made by algorithm flat-3; this tdmg has flat-99"
+
+
+def test_a_rule_or_profile_change_makes_stages_stale(tmp_path, slicers, monkeypatch):
+    folder = _r1(tmp_path, slicers)
+    with monkeypatch.context() as m:
+        m.setattr(job_runner, "rules_sha256", lambda: "f" * 64)
+        assert {s.state for s in job_status(folder, Machine(None, slicers[1])).stages} == {
+            "stale"}
+    with monkeypatch.context() as m:
+        m.setattr(job_runner, "_printer_sha", lambda pid: "e" * 64)
+        states = [s.state for s in job_status(folder, Machine(None, slicers[1])).stages]
+        assert states == ["done", "stale", "stale"]
+
+
+def test_rerun_runs_a_done_stage_again(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    result = _invoke("job", "run", folder.name, "--jobs-dir", folder.parent, "--slicer-dir",
+                     slicers[0], "--prusaslicer-dir", slicers[1], "--rerun", "flat")
+    # flat gives the same bytes, so slice's key is unchanged.
+    assert _stage_lines(result.output) == {"select": "done, not run again", "flat": "ran",
+                                           "slice": "done, not run again"}
+    result = _invoke("job", "run", folder.name, "--jobs-dir", folder.parent,
+                     "--rerun", "colors")
+    assert result.exit_code == 2 and "--rerun colors" in _plain(result.output)
+
+
+def test_the_lock_refuses_a_second_writer(tmp_path, slicers):
+    folder = _new(tmp_path, "roadie")
+    (folder / ".lock").write_bytes(b"pid 1\n")
+    result = _run(folder, *slicers)
+    assert result.exit_code == 2
+    out = _plain(result.output)
+    assert "job roadie is locked" in out and ".lock" in out and "delete" in out
+    result = _invoke("job", "set", "roadie", "flat.width_mm=60", "--jobs-dir", folder.parent)
+    assert result.exit_code == 2 and "is locked" in _plain(result.output)
+    (folder / ".lock").unlink()
+    _set(folder, "flat.width_mm=60")
+    assert not (folder / ".lock").exists()
+
+
+def test_set_echoes_values_as_yaml(tmp_path):
+    folder = _new(tmp_path, "roadie")
+    out = _set(folder, "flat.width_mm=60", "select.keep_at=[[1, 2]]",
+               "select.instructions=null").output
+    assert "flat.width_mm=60.0" in out and "select.keep_at=[[1, 2]]" in out
+    assert "select.instructions=null" in out
+
+
+def test_an_empty_mask_value_says_how(tmp_path):
+    folder = _new(tmp_path, "roadie")
+    result = _invoke("job", "set", "roadie", "select.mask=", "--jobs-dir", folder.parent)
+    assert result.exit_code == 2 and "select.mask=none to remove" in _plain(result.output)
+
+
+def test_colors_errors_name_job_yaml():
+    e = job_runner._colors_error(job_runner.ColorsError(
+        "config file colors-config.yaml: merge: bad; command-line flags: colors: bad"))
+    assert str(e) == "job.yaml stages.colors: merge: bad; job.yaml stages.colors: colors: bad"
+
+
+# --- every parameter, against the stage commands ---------------------------------------------
+
+FULL = {
+    "r1": {"colors": False,
+           "set": [*R1_SELECT, "select.tolerance=40", "select.alpha_min=200",
+                   "flat.width_mm=60", "flat.thickness_mm=3", "flat.printer=bambu-a1",
+                   "flat.smooth_px=2", "slice.timeout_s=90", "slice.skip_tree_check=true"],
+           "hand": [("select", "IMAGE", "--out", "H/select", *R1_HAND_SELECT, "--tolerance",
+                     "40", "--alpha-min", "200"),
+                    ("flat", "H/select", "--width-mm", "60", "--thickness-mm", "3",
+                     "--printer", "bambu-a1", "--smooth-px", "2", "--out", "H/flat"),
+                    ("slice", "H/flat", "--out", "H/slice", "--timeout-s", "90",
+                     "--skip-tree-check", "SLICERS")]},
+    "r2": {"colors": True,
+           "set": ["select.alpha_min=200", "colors.width_mm=60", "colors.colors=3",
+                   "colors.extract=5", "colors.edges=furry", "colors.base=0",
+                   "colors.outlines=drop", "colors.outline_color=none",
+                   "colors.merge=[[3, 2]]", "colors.outline_width_mm=0.6",
+                   "colored_flat.thickness_mm=3", "colored_flat.width_mm=60",
+                   "colored_flat.printer=bambu-a1", "slice.timeout_s=90",
+                   "slice.skip_tree_check=true", "slice.face=up"],
+           "hand": [("select", "IMAGE", "--out", "H/select", "--alpha-min", "200"),
+                    ("colors", "H/select", "--width-mm", "60", "--colors", "3", "--extract",
+                     "5", "--edges", "furry", "--base", "0", "--outlines", "drop",
+                     "--config", "CONFIG", "--out", "H/colors"),
+                    ("flat", "H/select", "--colors", "H/colors", "--thickness-mm", "3",
+                     "--width-mm", "60", "--printer", "bambu-a1", "--out", "H/colored_flat"),
+                    ("slice", "H/colored_flat", "--out", "H/slice", "--timeout-s", "90",
+                     "--skip-tree-check", "--face", "up", "SLICERS")]},
+}
+# Left at null in the R2 case: the select controls that need a colour seed (remove_at,
+# keep_at, tolerance) and the mask; the R1 case covers them.
+R2_UNSET = ("instructions", "remove_at", "keep_at", "tolerance", "mask")
+
+
+@pytest.mark.parametrize("case", sorted(FULL))
+def test_every_parameter_maps_as_the_stage_commands(tmp_path, slicers, case):
+    orca, proot = slicers
+    spec = FULL[case]
+    folder = _new(tmp_path, f"full-{case}", colors=spec["colors"])
+    _set(folder, *spec["set"])
+    job = load_job(folder)
+    for stage, params in job["stages"].items():     # every parameter set, none default
+        for key, value in params.items():
+            if key == "mask" or (case == "r2" and stage == "select" and key in R2_UNSET):
+                continue
+            unset = value is None or value is False or value == []
+            assert not unset, f"{stage}.{key} left at its default"
+    result = _run(folder, orca, proot)
+    stages = list(job["stages"])
+    assert _stage_lines(result.output) == {s: "ran" for s in stages}, result.output
+    hand = tmp_path / "hand"
+    config = tmp_path / "cfg.yaml"
+    cfg = colors_config(job["stages"]["colors"]) if "colors" in job["stages"] else None
+    if cfg is not None:
+        config.write_bytes(cfg)
+    codes = []
+    for step in spec["hand"]:
+        args = []
+        for a in step:
+            if a == "SLICERS":
+                args += ["--slicer-dir", orca, "--prusaslicer-dir", proot]
+            elif a == "IMAGE":
+                args.append(folder / "source" / "roadie.png")
+            elif a == "CONFIG":
+                args.append(config)
+            elif a.startswith("H/"):
+                args.append(hand / a[2:])
+            else:
+                args.append(a)
+        r = _invoke(*args)
+        assert r.exit_code in (0, 1), r.output
+        codes.append(r.exit_code)
+    assert result.exit_code == max(codes)
+    for stage in stages:
+        assert_same_outputs(folder / stage, hand / stage)

@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-16 (restructure Task 7: `tdmg job set`, `job run`, `job status`).
+**Last updated:** 2026-11-16 (restructure Task 7 and its review fixes: `tdmg job set`, `job run`, `job status`).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -36,9 +36,10 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   `tdmg job status NAME`** (restructure Task 7, `src/tdmg/job_runner.py`): set
   parameters (strict YAML values); run each stage not done into `jobs/NAME/<stage>/`,
   driven as the stage commands drive it (tests show the files equal a run by hand,
-  except G-code timestamps and their hashes); input keys in `state.json`; a rerun goes
-  into `<stage>.new/` and replaces the old folder only when its record exists. No
-  confirmations yet (Task 8).
+  except G-code timestamps and their hashes); input keys (parameters, upstream record
+  hashes, algorithm ids, rules, profiles) in `state.json`; a rerun goes into
+  `<stage>.new/` and replaces the old folder only when its record exists; `--rerun
+  STAGE`; a per-job `.lock`. No confirmations yet (Task 8).
 - **`tdmg strip OUT`** (R2 step 5, part 1): the two calibration strips and the results
   form. See [calibration](design/calibration.md).
 
@@ -76,8 +77,9 @@ has been measured with calipers, and strength is not judged.
   `04806a8` (restructure Task 2; run 43973575937, all three OSes). Earlier in the
   restructure, `5216570` (run 43946283675) failed on a doc test; `f17d56f` fixed it
   (run 43946335668 passed). The Task 3 commits are not pushed.
-- **Latest local validation (2026-11-16, PC, restructure Task 7):**
-  `uv run pytest -q` gave 3096 passed and 9 skipped (8 real-slicer tests; one symlink
+- **Latest local validation (2026-11-16, PC, restructure Task 7 review fixes):**
+  `uv run pytest -q` gave 3110 passed, 9 skipped and 1 doc failure, fixed and rerun (3111
+  passed in all; 8 skips are real-slicer tests, one is a symlink
   test, since this account cannot create symlinks); `ruff check`, `gen_docs.py --check` and
   `evidence_inventory.py --check` passed.
 - **Antigravity** (`agy` 1.5.9, Gemini) at `C:\Users\arikt\AppData\Local\agy\bin` on the

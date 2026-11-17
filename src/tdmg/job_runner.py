@@ -11,74 +11,101 @@ null parameter passed as "not given", never as a resolved default:
   select_from_mask on the job's mask file, else select_subject; then write_selection. The
   image is the job's source file, so the record's source name is its file name;
 - flat: make_flat(select/, width_mm, thickness_mm, smooth_px=..., printer only if set);
-- colors: make_colors with rules and the bambu-a1 profile, as tdmg colors. The five keys
-  tdmg colors takes as flags (COLOR_FLAG_KEYS) are passed as flags; the three it takes only
-  from its config file (outline_color, merge, outline_width_mm) are written to a config
-  file (colors_config: canonical YAML of the set ones only, in a temporary folder) passed as
-  config_path, and no file when none is set. So colors.json equals that of `tdmg colors
-  SEL --width-mm W [flags] [--config FILE]` with FILE holding colors_config's bytes: its
-  `settings.sources` says "flag" for the first five and "config" for the other three, and
-  `settings.config_sha256` is the SHA-256 of colors_config's bytes (null without one);
+- colors: make_colors with the rules and tdmg.colors.COLORS_PRINTER, as tdmg colors. The
+  five keys tdmg colors takes as flags (COLOR_FLAG_KEYS) are passed as flags; the three it
+  takes only from its config file (outline_color, merge, outline_width_mm) are written to a
+  config file (colors_config: canonical YAML of the set ones only, in a temporary folder)
+  passed as config_path, and no file when none is set. So colors.json equals that of
+  `tdmg colors SEL --width-mm W [flags] [--config FILE]` with FILE holding colors_config's
+  bytes: its `settings.sources` says "flag" for the first five and "config" for the other
+  three, and `settings.config_sha256` is the SHA-256 of colors_config's bytes (null
+  without one);
 - colored_flat: make_colored_flat(select/, colors/, thickness_mm, width_mm, printer);
 - slice: make_slice on flat/ (R1), or make_color_slice on colored_flat/ (R2, face auto
   when null), with timeout_s, check_tree = not skip_tree_check, and the slicer folders.
 
-**Input keys.** A stage's input key is the SHA-256 of the canonical JSON (tdmg.records) of:
-KEY_SCHEMA, the recipe, the stage, its parameters as in job.yaml, and the input keys of
-every stage before it (so a change reruns that stage and every later one). The select
-stage adds the source image's and the mask's SHA-256; the slice stage adds whether
-PrusaSlicer is configured (--prusaslicer-dir or $TDMG_PRUSASLICER_DIR), since that turns
-F6.portability from UNKNOWN into a check. Machine paths are not part of a key: the slicers
-are verified against their pins. The code version is not part of a key either: after a
-code change, rerun a stage by changing it, or delete its folder.
+**Input keys.** A stage's input key (stage_key) is the SHA-256 of the canonical JSON
+(tdmg.records) of: KEY_SCHEMA, the recipe, the stage, its parameters as in job.yaml; the
+SHA-256 of each upstream record it reads (STAGE_INPUTS: selection.json, colors.json,
+flat.json, colored.json; these are byte-for-byte repeatable, research/verification/
+2026-11-16-repeatability/README.md); the stage's algorithm ids (STAGE_ALGORITHMS); the
+SHA-256 of the rule values (id, default, unit, range of every rule); and the SHA-256 of the
+profiles it uses (the printer profile; for slice the OrcaSlicer pin, and the PrusaSlicer pin
+when configured). The select stage adds the source image's and the mask's SHA-256; the
+slice stage adds whether PrusaSlicer is configured (--prusaslicer-dir or
+$TDMG_PRUSASLICER_DIR), since that turns F6.portability from UNKNOWN into a check. So a
+stage is stale when its parameters, what it read, its algorithm, a rule or a profile
+changed. A code change that keeps the algorithm id is not seen: `tdmg job run NAME
+--rerun STAGE` reruns a stage (and, through the record hashes, whatever its new record
+changes downstream). Machine paths are not part of a key.
 
 **state.json** (STATE_SCHEMA) holds `{"schema", "stages": {stage: {"key": ...}}}`, the key
 each stage folder was last made with, as canonical JSON written with an atomic rename
-(tdmg.records.replace_file). It holds no hashes of outputs (slice records hold G-code
-hashes, and G-code holds the time of slicing), so the same job gives the same bytes.
+(tdmg.records.replace_file). It holds no hashes of the stage's own outputs (slice records
+hold G-code hashes, and G-code holds the time of slicing), so the same job gives the same
+bytes.
 
-**Reruns.** A stage runs when its folder has no record, or when its key differs from
-state.json's. It runs into `<stage>.new/`; only after its record exists is the old
-folder renamed to `<stage>.old/`, the new one to `<stage>/`, the old one deleted and
-state.json written. A stage that fails leaves its old folder and state.json as they were.
-A run left half way (an `<stage>.new/` or `<stage>.old/`) is tidied up by the next run:
-an `<stage>.old/` with no `<stage>/` is put back first.
+**Reruns.** A stage runs when its folder has no record, when its key differs from
+state.json's, when its record's algorithm or links disagree with this code and the
+upstream records, or when --rerun names it. It runs into `<stage>.new/`. Once its record
+exists: the stage's entry is removed from state.json (written), the old folder is renamed
+to `<stage>.old/` and the new one to `<stage>/`, the old one deleted, and the new key
+written. So whatever stops the swap leaves no key over the wrong folder; later stages keep
+their entries, since their keys hold the hash of the upstream record they were made from.
+A stage that fails before its record exists leaves its old folder and state.json as they
+were. A run left half way is tidied by the next run: an `<stage>.old/` with no `<stage>/`
+is put back, other `.old/` and `.new/` folders deleted.
 
-**Status:** per stage done (record present, key current and every earlier stage done),
-stale (record present, but a parameter or an earlier stage changed since) or not run;
-the verdict of a done stage; confirmations (none yet: tdmg job confirm is plan Task 8);
-and what waits for the owner (unset required parameters, previews to check, a color plan
-that is not ready).
+**Lock.** job run and job set hold LOCK_FILE in the job folder (an exclusive create,
+removed when done), so two of them cannot change a job at once.
+
+**Status:** per stage done (record present, key current, record algorithm and links
+agreeing, every earlier stage done), stale or not run; the verdict, algorithm and tdmg
+version of a done stage; confirmations (none yet: tdmg job confirm is plan Task 8); and
+what waits for the owner (unset required parameters, previews to check, a color plan that
+is not ready).
 """
 
 from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import os
 import shutil
 import tempfile
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
 
+import tdmg.slicing
 from tdmg import jobs
 from tdmg.color_config import KEYS as COLOR_KEYS
-from tdmg.color_slicing import DEFAULT_FACE, FACES, NO_FACE_PRINTABLE, make_color_slice
+from tdmg.color_slicing import (
+    COLORSLICE_ALGORITHM,
+    DEFAULT_FACE,
+    FACES,
+    NO_FACE_PRINTABLE,
+    make_color_slice,
+)
+from tdmg.colored_flat import ALGORITHM as COLORFLAT_ALGORITHM
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
+from tdmg.colors import COLORS_ALGORITHM_VERSION, COLORS_PRINTER, ColorsError, make_colors
 from tdmg.colors import RECORD_NAME as COLORS_RECORD
-from tdmg.colors import ColorsError, make_colors
-from tdmg.flat import FlatError, make_flat
+from tdmg.flat import FLAT_ALGORITHM_VERSION, FlatError, make_flat
 from tdmg.jobs import JobError, check_not_linked, check_source, load_job
 from tdmg.portability import PRUSA_ENV_VAR
 from tdmg.profiles import load_printer
 from tdmg.recipes import recipe
 from tdmg.records import RecordError, canonical_json, replace_file
 from tdmg.rules import load_rules
+from tdmg.selection import ALGORITHM_VERSION as SELECTION_ALGORITHM
 from tdmg.selection import (
     SelectionError,
     SelectionSpec,
@@ -89,12 +116,13 @@ from tdmg.selection import (
     write_selection,
 )
 from tdmg.slicer import SlicerError
-from tdmg.slicing import PRINT_THIS, make_slice
+from tdmg.slicing import PRINT_THIS, SLICE_ALGORITHM_VERSION, make_slice
 from tdmg.slicing import RECORD_NAME as SLICE_RECORD
 
 STATE_FILE = "state.json"
 STATE_SCHEMA = "tdmg.jobstate/1"
-KEY_SCHEMA = "tdmg.jobkey/1"
+KEY_SCHEMA = "tdmg.jobkey/2"
+LOCK_FILE = ".lock"
 NEW_SUFFIX = ".new"
 OLD_SUFFIX = ".old"
 STAGE_RECORDS = {"select": "selection.json", "flat": "flat.json", "colors": COLORS_RECORD,
@@ -103,8 +131,8 @@ STAGE_RECORDS = {"select": "selection.json", "flat": "flat.json", "colors": COLO
 # its config file only.
 COLOR_FLAG_KEYS = ("colors", "extract", "edges", "base", "outlines")
 COLOR_CONFIG_KEYS = tuple(k for k in COLOR_KEYS if k not in COLOR_FLAG_KEYS)
-COLORS_PRINTER = "bambu-a1"                 # tdmg colors' profile
 COLORS_CONFIG_NAME = "colors-config.yaml"
+FLAT_PRINTER = inspect.signature(make_flat).parameters["printer"].default
 # What a stage may raise for a refused input or a failed write; the run stops there.
 STAGE_ERRORS = (JobError, SelectionError, FlatError, ColorsError, SlicerError, RecordError,
                 ValidationError, OSError)
@@ -167,17 +195,28 @@ def _run_flat(folder, job, p, inputs, out, machine) -> dict:
                      smooth_px=p["smooth_px"], **chosen)
 
 
+def _colors_error(e: ColorsError) -> ColorsError:
+    """make_colors' message, naming job.yaml instead of the temporary config file and
+    "command-line flags" (both are job.yaml stages.colors here)."""
+    text = str(e).replace(f"config file {COLORS_CONFIG_NAME}", "job.yaml stages.colors")
+    text = text.replace(COLORS_CONFIG_NAME, "job.yaml stages.colors")
+    return ColorsError(text.replace("command-line flags", "job.yaml stages.colors"))
+
+
 def _run_colors(folder, job, p, inputs, out, machine) -> dict:
     flags = {k: p[k] for k in COLOR_FLAG_KEYS}
     config = colors_config(p)
     kw = {"width_mm": p["width_mm"], "flags": flags, "rules": load_rules(),
           "printer": load_printer(COLORS_PRINTER)}
-    if config is None:
-        return make_colors(inputs["select"], out, config_path=None, **kw)
-    with tempfile.TemporaryDirectory(prefix="tdmg-colors-") as tmp:
-        path = Path(tmp) / COLORS_CONFIG_NAME
-        path.write_bytes(config)
-        return make_colors(inputs["select"], out, config_path=path, **kw)
+    try:
+        if config is None:
+            return make_colors(inputs["select"], out, config_path=None, **kw)
+        with tempfile.TemporaryDirectory(prefix="tdmg-colors-") as tmp:
+            path = Path(tmp) / COLORS_CONFIG_NAME
+            path.write_bytes(config)
+            return make_colors(inputs["select"], out, config_path=path, **kw)
+    except ColorsError as e:
+        raise _colors_error(e) from None
 
 
 def _run_colored_flat(folder, job, p, inputs, out, machine) -> dict:
@@ -198,27 +237,86 @@ def _run_slice(folder, job, p, inputs, out, machine) -> dict:
 
 RUNNERS = {"select": _run_select, "flat": _run_flat, "colors": _run_colors,
            "colored_flat": _run_colored_flat, "slice": _run_slice}
-# The stage folders each stage reads.
+# The stage folders each stage reads (those in the recipe).
 STAGE_INPUTS = {"select": (), "flat": ("select",), "colors": ("select",),
                 "colored_flat": ("select", "colors"), "slice": ("flat", "colored_flat")}
 
 
+def _inputs(job: dict, stage: str) -> tuple[str, ...]:
+    stages = recipe(job["recipe"]).stages
+    return tuple(s for s in STAGE_INPUTS[stage] if s in stages)
+
+
+def stage_algorithms(job: dict, stage: str) -> list[str]:
+    """The algorithm ids of a stage; the first is the one its record names."""
+    if stage == "slice":
+        if "colored_flat" in recipe(job["recipe"]).stages:
+            return [COLORSLICE_ALGORITHM, SLICE_ALGORITHM_VERSION]   # glue plates: slice
+        return [SLICE_ALGORITHM_VERSION]
+    return [{"select": SELECTION_ALGORITHM, "flat": FLAT_ALGORITHM_VERSION,
+             "colors": COLORS_ALGORITHM_VERSION,
+             "colored_flat": COLORFLAT_ALGORITHM}[stage]]
+
+
 # --- input keys and state.json ----------------------------------------------------------
 
-def input_keys(job: dict, machine: Machine) -> dict[str, str]:
-    """Each stage's input key, in recipe order (module docstring)."""
-    keys: dict[str, str] = {}
-    for stage in recipe(job["recipe"]).stages:
-        body = {"schema": KEY_SCHEMA, "recipe": job["recipe"], "stage": stage,
-                "params": job["stages"][stage], "before": dict(keys)}
-        if stage == "select":
-            mask = job["source"]["mask"]
-            body["source"] = {"sha256": job["source"]["sha256"],
-                              "mask_sha256": None if mask is None else mask["sha256"]}
-        if stage == "slice":
-            body["prusaslicer_configured"] = machine.prusaslicer_configured()
-        keys[stage] = _sha(canonical_json(body))
-    return keys
+def rules_sha256() -> str:
+    """SHA-256 of every rule's id, default, unit and range (the values a stage uses)."""
+    values = {rid: {"default": r.default, "unit": r.unit,
+                    "range": None if r.range is None else list(r.range)}
+              for rid, r in load_rules().items()}
+    return _sha(canonical_json(values))
+
+
+def _model_sha(model) -> str:
+    return _sha(canonical_json(model.model_dump(mode="json")))
+
+
+def _printer_sha(printer_id: str) -> str | None:
+    """The profile's SHA-256; None when it cannot be loaded (the stage then refuses it)."""
+    try:
+        return _model_sha(load_printer(printer_id))
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+
+
+def stage_profiles(job: dict, stage: str, machine: Machine) -> dict:
+    p = job["stages"][stage]
+    if stage == "flat":
+        printer = p["printer"] or FLAT_PRINTER
+        return {"printer": printer, "printer_sha256": _printer_sha(printer)}
+    if stage in ("colors", "colored_flat"):
+        # colored_flat without a printer takes the plan's, which is COLORS_PRINTER.
+        printer = (p["printer"] if stage == "colored_flat" else None) or COLORS_PRINTER
+        return {"printer": printer, "printer_sha256": _printer_sha(printer)}
+    if stage == "slice":
+        # Looked up at call time, so a test's replacement pin is the one hashed.
+        out = {"orcaslicer_pin_sha256": _model_sha(tdmg.slicing.load_pin())}
+        if machine.prusaslicer_configured():
+            out["prusaslicer_pin_sha256"] = _model_sha(tdmg.slicing.load_prusa_pin())
+        return out
+    return {}
+
+
+def stage_key(job: dict, stage: str, record_hashes: dict[str, str], machine: Machine,
+              rules: str | None = None) -> str | None:
+    """The stage's input key (module docstring); None when an upstream record it reads is
+    missing (record_hashes: stage -> SHA-256 of its record file)."""
+    inputs = {s: record_hashes.get(s) for s in _inputs(job, stage)}
+    if any(v is None for v in inputs.values()):
+        return None
+    body = {"schema": KEY_SCHEMA, "recipe": job["recipe"], "stage": stage,
+            "params": job["stages"][stage], "inputs": inputs,
+            "algorithms": stage_algorithms(job, stage),
+            "rules_sha256": rules_sha256() if rules is None else rules,
+            "profiles": stage_profiles(job, stage, machine)}
+    if stage == "select":
+        mask = job["source"]["mask"]
+        body["source"] = {"sha256": job["source"]["sha256"],
+                          "mask_sha256": None if mask is None else mask["sha256"]}
+    if stage == "slice":
+        body["prusaslicer_configured"] = machine.prusaslicer_configured()
+    return _sha(canonical_json(body))
 
 
 def load_state(folder: Path, job: dict) -> dict:
@@ -246,6 +344,91 @@ def _write_state(folder: Path, state: dict) -> None:
     replace_file(folder, STATE_FILE, canonical_json(state))
 
 
+# --- records and their links ----------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Record:
+    raw: bytes
+    data: dict
+
+    @property
+    def sha256(self) -> str:
+        return _sha(self.raw)
+
+
+def _record(folder: Path, stage: str) -> Record | None:
+    """The stage's record, or None when it is missing or is not a JSON object."""
+    path = folder / stage / STAGE_RECORDS[stage]
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    try:
+        data = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return Record(raw, data) if isinstance(data, dict) else None
+
+
+def _get(data, *path):
+    for p in path:
+        if not isinstance(data, dict):
+            return None
+        data = data.get(p)
+    return data
+
+
+def links_problem(stage: str, rec: dict, upstream: dict[str, Record]) -> str | None:
+    """Why the record's links disagree with the upstream records now on disk, or None:
+    flat.json's selection.selection_id; colors.json's input.selection_json_sha256;
+    colored.json's identity.selection_id and identity.colors_id; slice.json's
+    links.flat_record_sha256 and links.selection_id (R1) or links.colored_record_sha256
+    (R2)."""
+    checks = []
+    if stage == "flat":
+        checks.append((("selection", "selection_id"),
+                       _get(upstream["select"].data, "selection_id")))
+    elif stage == "colors":
+        checks.append((("input", "selection_json_sha256"), upstream["select"].sha256))
+    elif stage == "colored_flat":
+        checks.append((("identity", "selection_id"),
+                       _get(upstream["select"].data, "selection_id")))
+        checks.append((("identity", "colors_id"), _get(upstream["colors"].data, "colors_id")))
+    elif stage == "slice" and "colored_flat" in upstream:
+        checks.append((("links", "colored_record_sha256"), upstream["colored_flat"].sha256))
+    elif stage == "slice":
+        checks.append((("links", "flat_record_sha256"), upstream["flat"].sha256))
+        checks.append((("links", "selection_id"),
+                       _get(upstream["flat"].data, "selection", "selection_id")))
+    for path, want in checks:
+        got = _get(rec, *path)
+        if got != want:
+            return (f"its record's {'.'.join(path)} does not match the "
+                    f"{'/'.join(sorted(upstream))} record now on disk")
+    return None
+
+
+def _judge(job: dict, stage: str, rec: Record | None, key: str | None, state: dict,
+           upstream: dict[str, Record], forced: bool = False) -> tuple[str, str]:
+    """(DONE, "") or (STALE / NOT_RUN, why), from this stage alone."""
+    if rec is None:
+        return NOT_RUN, ""
+    expected = stage_algorithms(job, stage)[0]
+    if rec.data.get("algorithm") != expected:
+        return STALE, (f"made by algorithm {rec.data.get('algorithm')}; this tdmg has "
+                       f"{expected}")
+    if key is None:
+        return STALE, "an earlier stage has no record"
+    if state["stages"].get(stage, {}).get("key") != key:
+        return STALE, ("its parameters, inputs, rules or profiles changed since it ran, or "
+                       "it was not run by tdmg job run")
+    problem = links_problem(stage, rec.data, upstream)
+    if problem:
+        return STALE, problem
+    if forced:
+        return STALE, "--rerun asked for it"
+    return DONE, ""
+
+
 # --- status -------------------------------------------------------------------------------
 
 @dataclass
@@ -270,40 +453,31 @@ class Status:
         return all(s.state == DONE for s in self.stages)
 
 
-def _record(folder: Path, stage: str) -> dict | None:
-    path = folder / stage / STAGE_RECORDS[stage]
-    if not path.is_file():
-        return None
-    try:
-        return json.loads(path.read_bytes())
-    except (ValueError, UnicodeDecodeError):
-        return None
-
-
 def job_status(folder: str | Path, machine: Machine | None = None, *,
                job: dict | None = None) -> Status:
     """Each stage's state, without running anything."""
     folder = Path(folder)
     machine = Machine() if machine is None else machine
     job = load_job(folder) if job is None else job
-    keys = input_keys(job, machine)
     state = load_state(folder, job)
+    rules = rules_sha256()
+    records: dict[str, Record] = {}
     out = []
     earlier_done = True
     for stage in recipe(job["recipe"]).stages:
         rec = _record(folder, stage)
-        if rec is None:
-            note = ("its folder has no record (an interrupted run)"
-                    if (folder / stage).exists() else "")
-            st = StageStatus(stage, NOT_RUN, note)
-        elif state["stages"].get(stage, {}).get("key") != keys[stage]:
-            st = StageStatus(stage, STALE, "its parameters or an earlier stage changed "
-                                           "since it ran")
-        elif not earlier_done:
-            st = StageStatus(stage, STALE, "an earlier stage is not done")
-        else:
-            st = StageStatus(stage, DONE, record=rec)
-        earlier_done = earlier_done and st.state == DONE
+        upstream = {s: records[s] for s in _inputs(job, stage) if s in records}
+        key = stage_key(job, stage, {s: r.sha256 for s, r in upstream.items()}, machine,
+                        rules)
+        verdict, note = _judge(job, stage, rec, key, state, upstream)
+        if rec is None and (folder / stage).exists():
+            note = "its folder has no record (an interrupted run)"
+        if verdict == DONE and not earlier_done:
+            verdict, note = STALE, "an earlier stage is not done"
+        st = StageStatus(stage, verdict, note, rec.data if verdict == DONE else None)
+        if rec is not None:
+            records[stage] = rec
+        earlier_done = earlier_done and verdict == DONE
         out.append(st)
     status = Status(job["name"], job["recipe"], job["revision"], out, jobs.unset_required(job))
     status.waits = _waits(job, status)
@@ -343,7 +517,8 @@ def _waits(job: dict, status: Status) -> list[str]:
 
 
 def stage_line(s: StageStatus) -> str:
-    """'stage: done - verdict ...', 'stage: stale (why)' or 'stage: not run'."""
+    """'stage: done - verdict ... (algorithm, tdmg version)', 'stage: stale (why)' or
+    'stage: not run'."""
     head = f"{s.stage}: {s.state}"
     if s.state != DONE:
         return head + (f" ({s.note})" if s.note else "")
@@ -365,7 +540,7 @@ def stage_line(s: StageStatus) -> str:
             detail += f"; glue route {'printable' if route['printable'] else 'not printable'}"
     else:
         detail = f"verdict {rec['verdict']}"
-    return f"{head} - {detail}"
+    return f"{head} - {detail} ({rec.get('algorithm')}, tdmg {rec.get('tdmg_version')})"
 
 
 def status_lines(status: Status) -> list[str]:
@@ -387,6 +562,26 @@ class RunEvent:
     message: str = ""
 
 
+@contextmanager
+def job_lock(folder: Path) -> Iterator[None]:
+    """Hold folder/LOCK_FILE (an exclusive create) while changing a job; removed after."""
+    path = folder / LOCK_FILE
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise JobError(f"job {folder.name} is locked: {path} exists. Another tdmg job run or "
+                       "job set is using the job, or one stopped without removing the "
+                       f"file; if none is running, delete {path}") from None
+    try:
+        os.write(fd, f"pid {os.getpid()}\n".encode("ascii"))
+    finally:
+        os.close(fd)
+    try:
+        yield
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def _plain_folder(path: Path) -> None:
     if path.is_symlink() or path.is_junction():
         raise JobError(f"{path} is a link (symlink or junction); a job's stage folders must "
@@ -403,8 +598,8 @@ def _remove(path: Path) -> None:
 
 def _tidy(folder: Path, stage: str) -> Path:
     """Undo what an interrupted run left: an `<stage>.old` with no `<stage>` is put back
-    (the swap stopped half way, and state.json still holds that folder's key); any other
-    `<stage>.old` and any `<stage>.new` are deleted. Returns `<stage>.new`, now absent."""
+    (the swap stopped half way); any other `<stage>.old` and any `<stage>.new` are
+    deleted. Returns `<stage>.new`, now absent."""
     final, new, old = (folder / stage, folder / f"{stage}{NEW_SUFFIX}",
                        folder / f"{stage}{OLD_SUFFIX}")
     for path in (final, new, old):
@@ -432,35 +627,54 @@ def _stops_after(stage: str, rec: dict) -> str | None:
     return None
 
 
-def run_job(folder: str | Path, machine: Machine | None = None
-            ) -> tuple[list[RunEvent], Status]:
+def run_job(folder: str | Path, machine: Machine | None = None, *,
+            rerun: Iterable[str] = ()) -> tuple[list[RunEvent], Status]:
     """Run every stage that is not done, in order (module docstring); return what happened
-    and the status after. Stops at a stage whose required parameters are unset, at a stage
-    that fails (refused input or a failed write: its old folder and state stay), and after a
-    color plan that is not ready."""
+    and the status after. `rerun` names stages to run again even when done. Stops at a
+    stage whose required parameters are unset, at a stage that fails (refused input or a
+    failed write: its old folder and state stay), and after a color plan that is not
+    ready. Holds the job's lock (job_lock)."""
     folder = Path(folder)
     machine = Machine() if machine is None else machine
     check_not_linked(folder)
     job = load_job(folder)
+    stages = recipe(job["recipe"]).stages
+    rerun = set(rerun)
+    unknown = sorted(rerun - set(stages))
+    if unknown:
+        raise JobError(f"--rerun {unknown[0]}: recipe {job['recipe']} has no such stage "
+                       f"(stages: {', '.join(stages)})")
+    with job_lock(folder):
+        events = _run_locked(folder, job, machine, rerun)
+    return events, job_status(folder, machine, job=job)
+
+
+def _run_locked(folder: Path, job: dict, machine: Machine, rerun: set[str]
+                ) -> list[RunEvent]:
     check_source(folder, job)
-    keys = input_keys(job, machine)
     state = load_state(folder, job)
     unset = jobs.unset_required(job)
+    rules = rules_sha256()
     events: list[RunEvent] = []
     stages = recipe(job["recipe"]).stages
     for stage in stages:
         _tidy(folder, stage)
+    records: dict[str, Record] = {}
     for i, stage in enumerate(stages):
         missing = [k for k in unset if k.startswith(f"{stage}.")]
         if missing:
             events.append(RunEvent(stage, "waits", f"{', '.join(missing)} not set"))
             break
+        upstream = {s: records[s] for s in _inputs(job, stage)}
+        key = stage_key(job, stage, {s: r.sha256 for s, r in upstream.items()}, machine,
+                        rules)
         rec = _record(folder, stage)
-        if rec is not None and state["stages"].get(stage, {}).get("key") == keys[stage]:
+        verdict, _ = _judge(job, stage, rec, key, state, upstream, stage in rerun)
+        if verdict == DONE:
             events.append(RunEvent(stage, "kept"))
         else:
             new = _tidy(folder, stage)
-            inputs = {s: folder / s for s in STAGE_INPUTS[stage] if s in stages[:i]}
+            inputs = {s: folder / s for s in _inputs(job, stage)}
             try:
                 RUNNERS[stage](folder, job, job["stages"][stage], inputs, new, machine)
                 if not (new / STAGE_RECORDS[stage]).is_file():
@@ -469,17 +683,30 @@ def run_job(folder: str | Path, machine: Machine | None = None
                 _remove(new)
                 events.append(RunEvent(stage, "failed", _error_text(e)))
                 break
-            _swap(folder, stage)
-            state["stages"][stage] = {"key": keys[stage]}
+            # No key may stand over a folder it does not describe, whatever stops the swap.
+            if state["stages"].pop(stage, None) is not None:
+                _write_state(folder, state)
+            try:
+                _swap(folder, stage)
+            except OSError as e:
+                events.append(RunEvent(stage, "failed", (
+                    f"could not replace {folder / stage} ({_error_text(e)}): close programs "
+                    f"using {stage}/; the new results are discarded on the next run")))
+                break
+            state["stages"][stage] = {"key": key}
             _write_state(folder, state)
             rec = _record(folder, stage)
+            if rec is None:
+                events.append(RunEvent(stage, "failed", f"{stage} record unreadable"))
+                break
             events.append(RunEvent(stage, "ran"))
-        why = _stops_after(stage, rec)
+        records[stage] = rec
+        why = _stops_after(stage, rec.data)
         if why:
             events.append(RunEvent(stages[i + 1] if i + 1 < len(stages) else stage, "waits",
                                    why))
             break
-    return events, job_status(folder, machine, job=job)
+    return events
 
 
 def _error_text(e: Exception) -> str:
@@ -497,6 +724,13 @@ def _error_text(e: Exception) -> str:
 VALUE_HELP = ("values are read as YAML: 60, 0.5, true, null (clears a parameter), text, "
               "or a flow list such as [[60, 396], [470, 470]]; quote text that would read "
               "as a number, true/false or null")
+
+
+def yaml_value(value) -> str:
+    """A value as job set reads it back: YAML flow style, one line (60.0, null, [[1, 2]])."""
+    text = yaml.safe_dump(value, default_flow_style=True, width=jobs.YAML_WIDTH,
+                          allow_unicode=False).strip()
+    return text[:-3].rstrip() if text.endswith("\n...") else text
 
 
 def parse_value(raw: str):
@@ -534,8 +768,10 @@ def set_parameters(folder: str | Path, assignments: list[str]) -> tuple[dict, bo
     `select.mask=PATH` gives the job an owner-corrected mask (tdmg.jobs.set_mask; PATH is a
     file on this machine, copied into source/), and `select.mask=none` (or null) removes it;
     it must be the only assignment. Every other change is checked and written in one
-    revision by tdmg.jobs.save_job (types, the stage's range checks)."""
+    revision by tdmg.jobs.save_job (types, the stage's range checks). Holds the job's lock
+    (job_lock)."""
     folder = Path(folder)
+    check_not_linked(folder)
     job = load_job(folder)
     if not assignments:
         raise JobError("give at least one STAGE.KEY=VALUE")
@@ -544,11 +780,20 @@ def set_parameters(folder: str | Path, assignments: list[str]) -> tuple[dict, bo
     repeated = sorted({t for t in targets if targets.count(t) > 1})
     if repeated:
         raise JobError(f"{', '.join(repeated)} given more than once")
+    with job_lock(folder):
+        return _set_locked(folder, parsed, targets)
+
+
+def _set_locked(folder: Path, parsed, targets) -> tuple[dict, bool]:
+    job = load_job(folder)
     if "select.mask" in targets:
         if len(parsed) > 1:
             raise JobError("set select.mask on its own (it copies a file into source/)")
-        raw = parsed[0][2]
-        mask = None if raw.strip().lower() in MASK_CLEAR else Path(raw)
+        raw = parsed[0][2].strip()
+        if not raw:
+            raise JobError("select.mask needs a value: select.mask=PATH (a black/white mask "
+                           "file), or select.mask=none to remove the mask")
+        mask = None if raw.lower() in MASK_CLEAR else Path(raw)
         new = jobs.set_mask(folder, mask)
         return new, new["revision"] != job["revision"]
     new = copy.deepcopy(job)
