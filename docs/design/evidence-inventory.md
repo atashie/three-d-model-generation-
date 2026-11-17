@@ -785,7 +785,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 
 ### `research/reviews`
 
-- `CLAUDE.md` (doc): lines 42
+- `CLAUDE.md` (doc): lines 43
 - `docs/STATUS.md` (status): lines 302
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232

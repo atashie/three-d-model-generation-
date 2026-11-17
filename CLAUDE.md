@@ -35,6 +35,7 @@ TDMG_ORCASLICER_DIR=artifacts/tools/orcaslicer-2.5.0 TDMG_PRUSASLICER_DIR=artifa
 - On Windows (measured 2026-11-10, OrcaSlicer 2.5.0 portable), Python receives the full 32-bit code as unsigned (−50 → 4294967246, −6 → 4294967290, −3 → 4294967293). A slicer exit of 0 does not mean the mesh is valid: an open cube sliced to 10 of 100 layers with exit 0. See `research/verification/2026-11-10-orcaslicer-windows/`.
 - M5 Mac, 2026-11-09: trimesh `is_watertight` and lib3mf `IsManifoldAndOriented` both pass two solids touching at one vertex; check vertex-manifoldness separately (`tdmg.checks` does).
 - Under `GITHUB_ACTIONS`, Rich styles Typer usage errors with escape codes and a box, even with `NO_COLOR` set. CLI tests normalise the output with `_plain()`. Reproduce it locally with `CI=true GITHUB_ACTIONS=true uv run pytest` (verified 2026-11-10 on the PC).
+- On Windows (measured 2026-11-17, the PC, typer 0.28), Click expands `$VAR`, `%VAR%`, `~` and globs in every `sys.argv` argument, even inside shell single quotes, so `tdmg` runs `app(windows_expand_args=False)` from `tdmg.cli:main`. CliRunner tests do not go through `sys.argv`; `tests/test_entry_point.py` does. In Git Bash an argument starting with `/` is converted to a Windows path unless `MSYS_NO_PATHCONV=1` is set.
 - The package reads `rules/` and `profiles/` from the checkout; a built wheel carries copies in `tdmg/_data/` (CI tests this).
 
 ## Review practice
