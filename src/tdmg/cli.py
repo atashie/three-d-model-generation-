@@ -4,7 +4,8 @@ STL) and `slice` (the flat STL sliced with the pinned OrcaSlicer, F6, and checke
 portability with the pinned PrusaSlicer). R2 adds `colors` (the color plan of a selection,
 for review) and `strip` (the two calibration strips, built, gated and sliced); `make` and
 `check` follow. `job new` starts a job: a folder in jobs/ with the source image and
-job.yaml (tdmg.jobs)."""
+job.yaml (tdmg.jobs); `job set` changes its parameters, `job run` runs its stages and
+`job status` shows where it stands (tdmg.job_runner)."""
 
 import inspect
 from pathlib import Path
@@ -44,12 +45,14 @@ from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
 from tdmg.colors import ColorsError, extracted_text, make_colors
 from tdmg.flat import FlatError, make_flat
+from tdmg.job_runner import Machine, job_status, run_job, set_parameters, status_lines
 from tdmg.jobs import (
     DEFAULT_ORIGIN,
     JOB_FILE,
     ORIGINS,
     JobError,
     default_jobs_dir,
+    job_dir,
     new_job,
     unset_required,
 )
@@ -832,7 +835,8 @@ def _colors_lines(rec: dict) -> list[str]:
     return lines
 
 
-job_app = typer.Typer(help="Jobs: one print's working folder in jobs/ and its job.yaml.",
+job_app = typer.Typer(help="Jobs: one print's working folder in jobs/, its job.yaml and "
+                           "its stages.",
                       no_args_is_help=True)
 app.add_typer(job_app, name="job")
 
@@ -919,6 +923,164 @@ def job_new(
     if unset:
         typer.echo(f"not set yet (needed before those stages run): {', '.join(unset)}")
     typer.echo(f"wrote {folder / JOB_FILE}")
+
+
+JobsDir = Annotated[Path | None, typer.Option(
+    "--jobs-dir", help="Folder that holds the jobs; default jobs/ in the source checkout.")]
+SlicerDir = Annotated[Path | None, typer.Option(
+    "--slicer-dir", help="OrcaSlicer folder from scripts/setup_orcaslicer.py; default "
+                         "$TDMG_ORCASLICER_DIR (needed when the slice stage runs).")]
+PrusaDir = Annotated[Path | None, typer.Option(
+    "--prusaslicer-dir", help="PrusaSlicer folder from scripts/setup_prusaslicer.py, for "
+                              "F6.portability; default $TDMG_PRUSASLICER_DIR. Whether it "
+                              "is configured is part of the slice stage's input key.")]
+
+
+def _job_folder(name: str, jobs_dir: Path | None) -> Path:
+    where = default_jobs_dir() if jobs_dir is None else jobs_dir
+    folder = job_dir(where, name)
+    if not folder.is_dir():
+        raise JobError(f"no job {name} in {where} (start one with tdmg job new)")
+    return folder
+
+
+@job_app.command("set")
+def job_set(
+    name: Annotated[str, typer.Argument(help="Job name.")],
+    assignments: Annotated[list[str], typer.Argument(
+        metavar="STAGE.KEY=VALUE...",
+        help="Parameters to set, e.g. flat.width_mm=60 or "
+             "\"select.keep_at=[[470, 470]]\".")],
+    jobs_dir: JobsDir = None,
+) -> None:
+    """Set stage parameters in job.yaml (one new revision for all of
+    them).
+
+    VALUE is read as YAML, by job.yaml's strict rules: a number (60 is
+    60.0 where the stage takes a float), true or false, null or ~ (clear
+    the parameter: the stage command's default applies), text, or a flow
+    list ([[60, 396], [470, 470]] for remove_at and keep_at, [[1, 2]] for
+    colors.merge). Quote text that would read as a number, a boolean or
+    null. none is text (colors.outline_color takes it), except in
+    select.mask=none.
+
+    select.mask=PATH copies an owner-corrected black/white mask into
+    source/ and uses it; select.mask=none removes it. Set it on its own.
+
+    Exit codes:
+      0  job.yaml written, or nothing changed
+      2  refused (unknown stage or parameter, a value of the wrong
+         type or out of range); job.yaml is not changed
+    """
+    try:
+        folder = _job_folder(name, jobs_dir)
+        job, changed = set_parameters(folder, assignments)
+    except JobError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    if not changed:
+        typer.echo(f"job {name}: nothing changed (revision {job['revision']})")
+        return
+    typer.echo(f"job {name}: revision {job['revision']}")
+    for a in assignments:
+        stage, key = a.partition("=")[0].split(".", 1)
+        typer.echo(f"  {stage}.{key} = {job['stages'][stage][key]!r}")
+    typer.echo(f"wrote {folder / JOB_FILE}")
+
+
+def _stage_failed(stage: str, rec: dict) -> bool:
+    """Whether the stage command would exit 1 on this record."""
+    if stage == "colors":
+        return not rec["ready"]
+    if stage == "colored_flat":
+        checks = [c for b in rec["bodies"] for c in b["checks"]]
+        checks += [c for cs in rec["assembly"].values() for c in cs]
+        return any(c["status"] == "FAIL" for c in checks)
+    if stage == "slice" and "faces" in rec:
+        return _color_failed(rec)
+    if stage in ("flat", "slice"):
+        return any(c["status"] == "FAIL" for c in rec["checks"])
+    return False
+
+
+def _status_output(status) -> None:
+    for line in status_lines(status):
+        typer.echo(line)
+
+
+@job_app.command("run")
+def job_run(
+    name: Annotated[str, typer.Argument(help="Job name.")],
+    slicer_dir: SlicerDir = None,
+    prusaslicer_dir: PrusaDir = None,
+    jobs_dir: JobsDir = None,
+) -> None:
+    """Run every stage of the job that is not done, in order, into
+    JOBS_DIR/NAME/<stage>/, then print the status.
+
+    A stage runs when its folder has no record or its input key (its
+    parameters, the keys of the stages before it, and for select the
+    source and mask hashes) differs from state.json's. It runs into
+    <stage>.new/, which replaces the old folder only once its record
+    is written: a stage that fails keeps its old results. The run stops
+    at a required parameter not set, at a stage that fails, and after a
+    color plan that is not ready.
+
+    Exit codes:
+      0  every stage done, and no stage would have exited 1
+      1  a stage's checks FAILed or its plan is not ready (as the
+         stage command's exit 1), or a stage waits for a parameter
+      2  refused: a bad job, a changed source file, or a stage that
+         refused its input or could not write (as its exit 2)
+    """
+    try:
+        folder = _job_folder(name, jobs_dir)
+        events, status = run_job(folder, Machine(slicer_dir, prusaslicer_dir))
+    except JobError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    for ev in events:
+        text = {"ran": "ran", "kept": "done, not run again", "waits": "waits",
+                "failed": "failed"}[ev.action]
+        typer.echo(f"{ev.stage}: {text}" + (f": {ev.message}" if ev.message else ""))
+    _status_output(status)
+    if any(ev.action == "failed" for ev in events):
+        raise typer.Exit(2)
+    failed = any(s.state == "done" and _stage_failed(s.stage, s.record)
+                 for s in status.stages)
+    if failed or not status.all_done:
+        raise typer.Exit(1)
+
+
+@job_app.command("status")
+def job_status_command(
+    name: Annotated[str, typer.Argument(help="Job name.")],
+    prusaslicer_dir: PrusaDir = None,
+    jobs_dir: JobsDir = None,
+) -> None:
+    """Print each stage's state (done, stale or not run), the verdicts
+    and what waits for the owner, without running anything.
+
+    Exit codes:
+      0  status printed
+      2  the job cannot be read
+    """
+    try:
+        folder = _job_folder(name, jobs_dir)
+        status = job_status(folder, Machine(None, prusaslicer_dir))
+    except JobError as e:
+        typer.echo(f"error: {e}", err=True)
+        raise typer.Exit(2) from None
+    except OSError as e:
+        _os_error(e)
+        raise typer.Exit(2) from None
+    _status_output(status)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,8 @@ as a float is a float in the job: an integer written by hand (60) is read as 60.
 the records hash 60 and 60.0 differently.
 
 Slicer folders are not parameters: they are absolute paths on one machine, so they come
-from the environment when a stage runs, not from job.yaml.
+from `tdmg job run`'s options or the environment when a stage runs (tdmg.job_runner), not
+from job.yaml.
 
 Reading is strict: unknown and missing keys, wrong types, YAML anchors, aliases, merge
 keys, duplicate keys and explicit tags (!!str) are refused, and every path must be

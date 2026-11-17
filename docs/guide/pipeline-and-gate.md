@@ -61,8 +61,29 @@ generated image, what the owner knows of its prompt, generator and so on, else
 `unknown`), and every stage's parameters. A parameter left at null takes the stage
 command's own default; `--width-mm` and `--thickness-mm` have no default and may be left
 unset for now. A class with no usable recipe, an existing job, and an image that
-`tdmg select` cannot read are refused. Nothing is run yet: the stages are still run with
-the commands above. Outside a source checkout, give `--jobs-dir`.
+`tdmg select` cannot read are refused. Outside a source checkout, give `--jobs-dir`.
+
+**Running a job (restructure Task 7).** `tdmg job set NAME STAGE.KEY=VALUE ...` changes
+parameters (for example `flat.width_mm=60`, `"select.keep_at=[[470, 470]]"`,
+`"colors.merge=[[1, 2]]"`, `null` to go back to the default); values are read by the same
+strict YAML rules as `job.yaml`. `select.mask=PATH` copies a corrected mask into
+`source/` (`select.mask=none` removes it). `tdmg job run NAME --slicer-dir DIR
+[--prusaslicer-dir DIR]` runs each stage into `jobs/NAME/<stage>/`, calling the same
+functions with the same arguments as the stage commands above, so the files are the same
+as a run by hand (except the time of slicing in the G-code and its hashes). A stage runs
+again only when its folder has no record or its input key changed: the SHA-256 of its
+parameters and the keys of the stages before it (and, for `select`, the image and mask
+hashes), kept in `jobs/NAME/state.json`. A changed parameter reruns that stage and the
+ones after it. A rerun goes into `<stage>.new/` and replaces the old folder only once its
+record is written, so a failed rerun keeps the old results. The run stops at a required
+parameter not set, at a stage that fails, and after a color plan that is not ready; it
+then prints one line per stage (done, stale or not run, with the verdict) and what waits
+for the owner (parameters to set, `preview.png` and `regions.png` to check). `tdmg job
+status NAME` prints the same without running. For the colors stage, the five keys `tdmg
+colors` takes as flags are passed as flags, and `outline_color`, `merge` and
+`outline_width_mm` through a config file holding only those, so `colors.json` records
+them with source `config` (details in `src/tdmg/job_runner.py`). Confirmations
+(`tdmg job confirm`) are not built yet.
 
 There are no loops or bases yet. The only 3MF output is the multicolor `model.3mf`.
 

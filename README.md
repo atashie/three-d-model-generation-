@@ -36,7 +36,10 @@ uv run tdmg slice FLAT_DIR --out DIR --slicer-dir artifacts/tools/orcaslicer-2.5
 uv run tdmg strip OUT --slicer-dir artifacts/tools/orcaslicer-2.5.0     # the two calibration test strips
                                           # + results-template.md, the form to fill in after printing
 uv run tdmg job new NAME --class flat-icon --image PATH [--colors]   # start a job in jobs/NAME/:
-                                          # the image in source/ and job.yaml; nothing is run yet
+                                          # the image in source/ and job.yaml
+uv run tdmg job set NAME flat.width_mm=60 flat.thickness_mm=3   # change the job's parameters
+uv run tdmg job run NAME --slicer-dir artifacts/tools/orcaslicer-2.5.0   # run the stages not done
+uv run tdmg job status NAME               # each stage: done, stale or not run; what waits for you
 uv run python scripts/gen_docs.py         # regenerate the generated docs
 ```
 
