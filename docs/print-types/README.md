@@ -22,6 +22,15 @@ The categories you started with map onto these attributes:
 | Multicolor | C2, C3 or C4 |
 | Single colors printed on several plates, then combined | C1 per part · L2 |
 
+## Output classes
+
+A job names an **output class**, the kind of print the owner asks for: `flat-icon`
+(flat single-color R1 or multicolor R2; in progress), `figurine` and `flexi` (planned;
+their recipes are not built). `tdmg job new --class flat-icon [--colors]` picks the
+recipe. The class table is generated from `src/tdmg/recipes.py`:
+[recipes.md, Output classes](recipes.md#output-classes). A new class needs its own
+recipe, stages and checks; checks a class cannot measure are UNKNOWN, never PASS.
+
 ## Two levels of pages
 
 - **Attribute pages** (`attributes/`) hold the rules and failure modes of one attribute value, whatever it is combined with. For example, `geometry-flat.md` covers every flat print.

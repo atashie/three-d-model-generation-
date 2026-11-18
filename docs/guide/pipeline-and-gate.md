@@ -171,6 +171,14 @@ library was not checked). A known limit: a file written into `jobs/.purging-NAME
 the final check and before the deletion is deleted without being listed; nothing else
 knows that path while it exists, and `job new` refuses the name.
 
+The first real run, with the pinned slicers, was Roadie (outline dropped) on 2026-11-17:
+the rebuild matched, `prints/roadie-drop/` was published (public) and the job purged;
+`library check` was ok and `library verify` identical
+(`research/verification/2026-11-17-first-finish/`). Library entries are stored without
+line-ending conversion (`.gitattributes`: `prints/** -text`): with Git for Windows'
+default `core.autocrlf=true`, a text checkout changed the entry's text files and `check`
+called a fresh clone's entry damaged.
+
 **Checking the library (restructure Task 10).** `tdmg library check [NAME]` checks every
 entry of `prints/` (or one): `COMPLETE` is present and in form, every file is the one it
 lists (SHA-256), no listed file is missing and no unlisted file or folder is there;

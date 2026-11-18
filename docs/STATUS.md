@@ -175,10 +175,8 @@ has been measured with calipers, and strength is not judged.
    (recipe registry: `in progress` status, stages, outputs by route, output classes and
    `resolve`), Task 5 (`.gitignore` for `jobs/` and the library's private parts),
    Task 6 (`job.yaml` and `tdmg job new`), Task 7 (`tdmg job set`, `job run`, `job
-   status`), Task 8 (`tdmg job confirm`), Task 9 (`tdmg finish`; tested with fake
-   slicers and temporary git repositories, not run on a real job; not yet reviewed by
-   Codex), Task 10 (`tdmg library check` and `verify`; fake slicers only, not yet
-   reviewed), Task 11 (owner-image test fixtures build their selection in a temporary
+   status`), Task 8 (`tdmg job confirm`), Task 9 (`tdmg finish`), Task 10 (`tdmg library check` and
+   `verify`; both first run on a real job in Task 14), Task 11 (owner-image test fixtures build their selection in a temporary
    folder from `prints/<entry>/`, then `jobs/<job>/`, then `artifacts/selection-runs/`;
    skip naming each path), Task 12 (the make-print skill), Task 13 (legacy inventory
    `docs/design/jobs.md`; owner 2026-11-17: Roadie drop folders deleted after its finish,

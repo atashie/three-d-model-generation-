@@ -10,10 +10,29 @@ OrcaSlicer check (`tdmg slice`). For flat multicolor prints, a color plan (`tdmg
 its colored STL bodies and a multicolor `model.3mf` with their gate (`tdmg flat
 --colors`), and a multicolor slice check (`tdmg slice`) exist. `tdmg strip` makes two
 calibration test strips for setting the glue clearance and the skin depth once printed.
-Nothing multicolor has been printed. Keychain loops and bases, and every other print type, are not built yet.
+One multicolor figure (Roadie) has been printed on the AMS and finished into the
+library (`prints/roadie-drop/`). Keychain loops and bases, and every other print type,
+are not built yet.
 See [current status](../STATUS.md) and [pipeline and gate](pipeline-and-gate.md).
 
 You give it an image. It gives back a file your printer can print, plus a report. The report says which checks passed, which failed, which could not be measured, and where every threshold came from. The tool says **PRINTABLE** only when every check required for that kind of print passes.
+
+## Making a print with Claude
+
+You share an image with Claude Code; Claude follows the
+[make-print skill](../../.claude/skills/make-print/SKILL.md). In short:
+1. **A job** (`jobs/NAME/`, not in git) holds the image, its settings (`job.yaml`) and
+   one folder per stage. Claude runs `tdmg job new`, `job set` and `job run`.
+2. **You review** what was made (the selection preview, then the color plan) and say in
+   your own words when it is right; Claude records those words with `tdmg job confirm`.
+3. **Claude builds and slices it** and tells you the verdict, which file to print and
+   which face goes on the bed. You slice and print in Bambu Studio.
+4. **You tell Claude how it came out.** Those words are the print confirmation.
+5. **`tdmg finish`** copies the printable file, a card, the job record and the source
+   image into the library (`prints/NAME/`), proves it rebuilds from those files alone,
+   and, only with your separate permission, deletes the job. You decide whether the
+   printable file is public (committed) or private (kept on this disk only). The source
+   image is never committed.
 
 ## The few ideas you need
 
@@ -62,6 +81,7 @@ So every multicolor print also comes with a short palette list (`palette.json`) 
 
 ## How the repo is organized
 
+- `jobs/` holds the jobs in progress (not in git); `prints/` is the library of finished prints, one folder per print with a `card.md` that says how to print it.
 - `rules/` holds every design number, with the evidence behind it. [Reference table](../reference/rules.md).
 - `profiles/printers/bambu-a1.yaml` holds your printer's limits.
 - [Print types](../print-types/README.md) explains the four attributes that describe a print, and the recipes we build.
