@@ -55,3 +55,13 @@ def test_private_and_working_paths_are_ignored(path):
 @pytest.mark.parametrize("path", TRACKED)
 def test_library_card_config_and_public_files_are_not_ignored(path):
     assert not _ignored(path)
+
+
+@pytest.mark.parametrize("path", TRACKED)
+def test_library_files_have_no_line_ending_conversion(path):
+    # COMPLETE lists each file's SHA-256; with core.autocrlf=true (Git for Windows' default)
+    # a text checkout would add CR bytes and `tdmg library check` would call the entry
+    # damaged (seen in a fresh clone on the PC, 2026-11-17).
+    r = subprocess.run(["git", "check-attr", "text", "--", path], cwd=REPO_ROOT,
+                       check=True, capture_output=True, text=True)
+    assert r.stdout.strip().endswith(": text: unset"), r.stdout

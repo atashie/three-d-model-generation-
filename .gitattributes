@@ -1,1 +1,3 @@
 tests/data/orca_input_prototype/* -text
+# Library entries are checked byte for byte against COMPLETE: no line-ending conversion.
+prints/** -text
