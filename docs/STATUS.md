@@ -254,7 +254,7 @@ words and dates, are in [docs/design/](design/README.md).
 - **State:** Tasks 0–15 of `docs/plans/2026-11-16-restructure.md` are done (2026-11-17):
   docs, a Codex review of the built change (10 findings, all fixed; record
   `research/reviews/2026-11-16-restructure/README.md`), and CI green on three OSes at
-  `14e92b7` (red on Windows from Task 9 until then: three path tests assumed this PC's
+  `14e92b7` and again at `e6b0a28` (the review fixes) (red on Windows from Task 9 until then: three path tests assumed this PC's
   long-path and ACL behaviour). The restructure is complete; Oddie is the next job to
   finish whenever the owner wants it in the library.
 - **Task 12:** the skill asks the public question, runs `finish --dry-run` and shows what
