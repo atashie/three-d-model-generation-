@@ -167,32 +167,18 @@ has been measured with calipers, and strength is not judged.
 
 ## Next steps, in order
 
-1. **The owner prints figures** (R2 step 5, part 2). For an AMS print: `tdmg slice
-   COLORED_DIR`, then follow its "chosen:" line and print instructions. Record each
-   print. The first glue print is also the first test of the 0.2 mm glue gap: record how
-   the pieces fit and the filament.
-2. **Repository restructure** (owner's goal, 2026-11-16: any image in, a confirmed
-   printable file out, for several output classes; per-job data purged once the owner
-   confirms a final file). Design `docs/plans/2026-11-16-restructure-design.md` (draft 2,
-   approved: "proceed with draft 2"); plan `docs/plans/2026-11-16-restructure.md`, Tasks
-   0 to 15, run with subagents task by task. Done: Task 0 (repeat runs: 119 of 159 files
-   identical, the rest differ only in G-code timestamp lines; the printed Roadie
-   `model.3mf` rebuilds identically), Task 1 (evidence inventory), Task 2 (tag
-   `pre-restructure`; record paths beside name citations), Task 3 (design notes), Task 4
-   (recipe registry: `in progress` status, stages, outputs by route, output classes and
-   `resolve`), Task 5 (`.gitignore` for `jobs/` and the library's private parts),
-   Task 6 (`job.yaml` and `tdmg job new`), Task 7 (`tdmg job set`, `job run`, `job
-   status`), Task 8 (`tdmg job confirm`), Task 9 (`tdmg finish`), Task 10 (`tdmg library check` and
-   `verify`; both first run on a real job in Task 14), Task 11 (owner-image test fixtures build their selection in a temporary
-   folder from `prints/<entry>/`, then `jobs/<job>/`, then `artifacts/selection-runs/`;
-   skip naming each path), Task 12 (the make-print skill), Task 13 (legacy inventory
-   `docs/design/jobs.md`; owner 2026-11-17: Roadie drop folders deleted after its finish,
-   other Roadie variants kept as open legacy, old exploratory runs deleted (139 entries,
-   done), environments kept), Task 14 (Roadie finished 2026-11-17: `prints/roadie-drop/`,
-   public; job purged on the owner's "yes"; library check ok, verify identical; the 21
-   Roadie-drop legacy paths deleted; record `research/verification/2026-11-17-first-finish/`).
-   Task 15 (docs, glossary, a Codex review of the built change with its 10 findings
-   fixed, CI green on three OSes). Done.
+1. **The owner prints figures** (R2 step 5, part 2), now through jobs: share an image
+   and Claude follows the make-print skill (`tdmg job new` … `tdmg finish`). Oddie (the
+   owner's preferred plan: outline kept, blues and greens merged) is the obvious next
+   job; its legacy folders stay in `artifacts/` until then (`docs/design/jobs.md`). The
+   first glue print is also the first test of the 0.2 mm glue gap: record how the
+   pieces fit and the filament.
+2. **Repository restructure: done** (2026-11-17; plan
+   `docs/plans/2026-11-16-restructure.md`, Tasks 0–15; see "Handoff: the restructure").
+   Deferred from its quality review: one git process per path in `unignored_paths`,
+   output hashing on every `job status`, overlapping `library check` messages
+   (`research/reviews/2026-11-16-restructure/README.md`). The optional test-suite
+   speed-up (about 12 minutes; share built R2 jobs across tests) is not started.
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
