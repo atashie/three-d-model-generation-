@@ -1,0 +1,83 @@
+{
+  "colorflat_id": "ec79a684fddc7733f2d7065d9db3155a2d8b5aeacd2d46d863637abcb5e4616f",
+  "encoding": "one mesh object with one closed shell per body (base first, then inlays by palette index), vertices separate per shell; one m:colorgroup with one m:color per body; each triangle carries pid and p1 of its body's color",
+  "model_3mf_sha256": "ec2961184e1b235fb4f051c00824095f9642128a565a829e4f1527b1a4f822d7",
+  "note": "Colors are named by palette index and hex, not by AMS slot: assign a filament to each color in the slicer. The shells touch along their shared walls; each is closed on its own.",
+  "object_name": "model",
+  "schema": "tdmg.palette/1",
+  "shells": [
+    {
+      "body": "ams-base",
+      "color_3mf": "#F60606FF",
+      "hex": "#f60606",
+      "index": 0,
+      "role": "base",
+      "shell": 0,
+      "top_area_mm2": 447.2200320180564,
+      "triangles": [
+        0,
+        64184
+      ],
+      "vertices": [
+        0,
+        32094
+      ],
+      "volume_mm3": 2090.5247451128275
+    },
+    {
+      "body": "ams-color-1-f5f5f5",
+      "color_3mf": "#F5F5F5FF",
+      "hex": "#f5f5f5",
+      "index": 1,
+      "role": "inlay",
+      "shell": 1,
+      "top_area_mm2": 211.51398602788686,
+      "triangles": [
+        64184,
+        83732
+      ],
+      "vertices": [
+        32094,
+        41882
+      ],
+      "volume_mm3": 126.90837144518616
+    },
+    {
+      "body": "ams-color-2-f0f10a",
+      "color_3mf": "#F0F10AFF",
+      "hex": "#f0f10a",
+      "index": 2,
+      "role": "inlay",
+      "shell": 2,
+      "top_area_mm2": 96.33230080275825,
+      "triangles": [
+        83732,
+        89860
+      ],
+      "vertices": [
+        41882,
+        44948
+      ],
+      "volume_mm3": 57.79937129469112
+    },
+    {
+      "body": "ams-color-3-451812",
+      "color_3mf": "#451812FF",
+      "hex": "#451812",
+      "index": 3,
+      "role": "inlay",
+      "shell": 3,
+      "top_area_mm2": 4.180637878293055,
+      "triangles": [
+        89860,
+        90940
+      ],
+      "vertices": [
+        44948,
+        45490
+      ],
+      "volume_mm3": 2.5083823282793256
+    }
+  ],
+  "unit": "millimeter"
+}

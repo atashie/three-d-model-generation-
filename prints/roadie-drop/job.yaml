@@ -1,0 +1,54 @@
+class: flat-icon
+confirmations:
+- accept_not_certified: false
+  covers:
+    colored_flat/model.3mf: ec2961184e1b235fb4f051c00824095f9642128a565a829e4f1527b1a4f822d7
+    colored_flat/palette.json: 2d96bbaa5582a8b6d15856d51fbf9c9ef861b1f3adb0ef1cfd4aa232ad1f9170
+  date: '2026-11-16'
+  face: down
+  owner_said: done, and the newly printed items look great
+  revision: 2
+  route: ams
+  slice_id: a24d9028d2840f77852d247896462ae9981a9d08590eee687892edee6c499d18
+  subject: print
+  verdicts:
+    colored_flat/model.3mf: PRINTABLE
+name: roadie-drop
+recipe: R2
+revision: 3
+schema: tdmg.job/2
+source:
+  file: source/roadie.png
+  mask: null
+  origin: drawing
+  sha256: ed33495f5fa84f7cb818268fbac75391c8d8163aaec1422c271ac9af9b5673bf
+stages:
+  colored_flat:
+    printer: null
+    thickness_mm: 3.0
+    width_mm: 60.0
+  colors:
+    base: null
+    colors: null
+    edges: null
+    extract: null
+    merge: null
+    outline_color: null
+    outline_width_mm: null
+    outlines: null
+    width_mm: 60.0
+  select:
+    alpha_min: null
+    instructions: Use only the roadrunner bird. Ignore the grey circular background.
+    keep_at:
+    - - 470
+      - 470
+    mask: null
+    remove_at:
+    - - 60
+      - 396
+    tolerance: 30.0
+  slice:
+    face: null
+    skip_tree_check: false
+    timeout_s: null

@@ -60,8 +60,9 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   entry against `purge.json`, renames `jobs/NAME` to `jobs/.purging-NAME`, checks it holds
   exactly what was listed, and deletes it. Printable files in `files/` (public) or
   `private/` (git-ignored). Resumes after an interruption. Spec-review fixes done
-  (2026-11-17). Tested with fake slicers only: **not yet run on a real job** (that
-  is Task 14, Roadie).
+  (2026-11-17). First run on a real job 2026-11-17 (Roadie, Task 14): rebuild
+  matched, published `prints/roadie-drop/`, job purged
+  (`research/verification/2026-11-17-first-finish/`).
 - **`tdmg library check [NAME]`** and **`tdmg library verify NAME --slicer-dir DIR`**
   (restructure Task 10, `src/tdmg/library.py`): check verifies every entry's files
   against `COMPLETE` (none changed, missing or extra) and its records against each other
@@ -73,8 +74,8 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   scratch folder, compares with `provenance.json` (record hashes but `slice.json`'s,
   algorithms, verdicts, checks, slice identity, printable-file hashes) and lists what
   changed (commit, versions, rules, algorithms, profiles, PrusaSlicer configured or not);
-  exit 0 identical, 1 differs, 2 cannot run. Tested with fake slicers only: **not yet run
-  on a real entry** (there is none until Task 14).
+  exit 0 identical, 1 differs, 2 cannot run. Both run on `prints/roadie-drop` with the
+  real slicers (2026-11-17): check ok, verify identical.
 - **The make-print skill** (restructure Task 12,
   [`.claude/skills/make-print/SKILL.md`](../.claude/skills/make-print/SKILL.md)): the
   conversation Claude follows when the owner shares an image, from `tdmg job new` to
@@ -85,8 +86,8 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   STAGE.KEY the text names exists, that each `job set` line is accepted by a temporary
   job, and that commands carrying the owner's words start with `MSYS_NO_PATHCONV=1` and
   single-quote them. Its steps up to the colors stage were run once on a scratch job
-  with a test image (2026-11-17, PC); the rest has not been run with the owner yet
-  (first: Roadie, Task 14).
+  with a test image (2026-11-17, PC); the job, confirmation and finish steps were run
+  with the owner for Roadie (Task 14, 2026-11-17).
 - **Owner's words verbatim on Windows** (Task 12 quality review, measured 2026-11-17 on
   the PC): Click expanded every argument on Windows (`$HOME`, `%USERNAME%`, `~`, globs),
   even inside shell single quotes. The `tdmg` script and `python -m tdmg.cli` now call
@@ -119,7 +120,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–12 done; next Task 13 (legacy inventory) |
+| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–14 done; next Task 15 (docs, Codex review, CI) |
 
 ## Machines
 
@@ -182,8 +183,10 @@ has been measured with calipers, and strength is not judged.
    skip naming each path), Task 12 (the make-print skill), Task 13 (legacy inventory
    `docs/design/jobs.md`; owner 2026-11-17: Roadie drop folders deleted after its finish,
    other Roadie variants kept as open legacy, old exploratory runs deleted (139 entries,
-   done), environments kept). Next: Task 14 (Roadie: the first finished print; first move
-   the two tests that read Roadie drop's colored build to a kept plan).
+   done), environments kept), Task 14 (Roadie finished 2026-11-17: `prints/roadie-drop/`,
+   public; job purged on the owner's "yes"; library check ok, verify identical; the 21
+   Roadie-drop legacy paths deleted; record `research/verification/2026-11-17-first-finish/`).
+   Next: Task 15 (docs, glossary, a Codex review of the whole restructure, CI).
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -242,9 +245,11 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–12 of `docs/plans/2026-11-16-restructure.md` are done, on `main`.
-  Tasks 0–2 and the tag `pre-restructure` are pushed; Tasks 3 onwards are not. Next is
-  Task 13, the legacy inventory.
+- **State:** Tasks 0–14 of `docs/plans/2026-11-16-restructure.md` are done and pushed.
+  Next is Task 15: docs (`pipeline-and-gate.md`, `00-start-here.md`, README,
+  `print-types/README.md`, glossary), a Codex review in
+  `research/reviews/2026-11-16-restructure/`, and CI on three OSes (not yet seen
+  green after `04806a8`).
 - **Task 12:** the skill asks the public question, runs `finish --dry-run` and shows what
   would be deleted, and only then asks for the purge permission, so the owner sees the
   list before giving it. `job set` reads values as YAML, so the skill puts
@@ -261,8 +266,8 @@ words and dates, are in [docs/design/](design/README.md).
   fails when none matches. On the PC (2026-11-17) the owner tests use the legacy folders
   (no `prints/` or `jobs/` yet); a one-off check with a job made from the owner's
   `roadie.png` and the recorded controls rebuilt `selection.json` byte for byte by both
-  the library and the job path. After Task 14 deletes Roadie's legacy folders, Roadie's
-  owner tests need `prints/roadie-drop/source/` (git-ignored) or skip.
+  the library and the job path. Since Task 14 Roadie's legacy folders are gone and its
+  owner tests build from `prints/roadie-drop/source/` (git-ignored) or skip.
 - **Task 10 decisions** (dated note in the plan's Task 10): "source unavailable" alone
   exits 0, since it is the normal state of every clone; `--require-private` makes it a
   failure for a copied `prints/`. After the spec review, `provenance.json` also holds

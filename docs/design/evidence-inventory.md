@@ -266,7 +266,7 @@ Active work, stays where it is.
 - `.claude/skills/make-print/SKILL.md` (doc): lines 17
 - `.gitignore` (config): lines 13
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 168
+- `docs/STATUS.md` (status): lines 169
 - `docs/design/README.md` (doc): lines 26
 - `docs/design/jobs.md` (doc): lines 16
 - `docs/plans/2026-11-16-restructure.md` (record): lines 9, 172
@@ -285,7 +285,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`, `research/revi
 Active work, stays where it is.
 
 - `docs/PLAN.md` (doc): lines 163
-- `docs/STATUS.md` (status): lines 122, 169, 245
+- `docs/STATUS.md` (status): lines 123, 170, 248
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 4, 52
 - `research/verification/2026-11-16-repeatability/README.md` (record): lines 3
 - `research/verification/2026-11-17-owner-fixture-pixels/README.md` (record): lines 3
@@ -296,7 +296,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure-design.md`, `resear
 ### `research/experiments/2026-11-g3-local-vs-hosted`
 
 - `docs/PLAN.md` (doc): lines 337, 478, 482, 484
-- `docs/STATUS.md` (status): lines 121
+- `docs/STATUS.md` (status): lines 122
 - `docs/design/jobs.md` (doc): lines 37
 - `docs/plans/2026-11-10-flat-geometry.md` (record): lines 195
 - `docs/reference/dependencies.md` (doc): lines 16
@@ -422,7 +422,7 @@ Linked from kept records: `docs/plans/2026-11-16-face-down-default.md`.
 ### `research/verification/2026-11-08-stack-smoke`
 
 - `docs/PLAN.md` (doc): lines 7
-- `docs/STATUS.md` (status): lines 128
+- `docs/STATUS.md` (status): lines 129
 - `docs/print-types/attributes/color-single.md` (doc): lines 40
 - `docs/print-types/attributes/geometry-flat.md` (doc): lines 68
 - `docs/reference/dependencies.md` (doc): lines 73
@@ -662,7 +662,7 @@ Linked from kept records: `docs/plans/2026-11-16-restructure.md`.
 
 ### `research/verification/2026-11-17-owner-fixture-pixels`
 
-- `docs/STATUS.md` (status): lines 258
+- `docs/STATUS.md` (status): lines 263
 - `tests/conftest.py` (test): lines 17, 54, 116
 
 ### `research_notes/Image to printable 3D model landscape`
@@ -733,7 +733,7 @@ Linked from kept records: `research/reviews/2026-11-09-codex`.
 
 - `README.md` (doc): lines 57
 - `docs/PLAN.md` (doc): lines 336
-- `docs/STATUS.md` (status): lines 129
+- `docs/STATUS.md` (status): lines 130
 - `docs/design/jobs.md` (doc): lines 39
 - `docs/plans/2026-11-16-restructure.md` (record): lines 109
 - `docs/reference/dependencies.md` (doc): lines 15
@@ -752,7 +752,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `docs/plans`
 
 - `README.md` (doc): lines 69
-- `docs/STATUS.md` (status): lines 117
+- `docs/STATUS.md` (status): lines 118
 - `docs/design/README.md` (doc): lines 6
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 51, 191
 - `docs/plans/2026-11-16-restructure.md` (record): lines 92, 151
@@ -773,7 +773,7 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 
 - `README.md` (doc): lines 73
 - `docs/PLAN.md` (doc): lines 164, 197
-- `docs/STATUS.md` (status): lines 8, 116, 241
+- `docs/STATUS.md` (status): lines 8, 117, 244
 - `docs/design/README.md` (doc): lines 6
 - `docs/design/jobs.md` (doc): lines 29
 - `docs/plans/2026-11-16-restructure-design.md` (record): lines 44, 45, 190
@@ -791,13 +791,13 @@ A mention of a whole folder, such as `research/reviews/`, not one record.
 ### `research/reviews`
 
 - `CLAUDE.md` (doc): lines 43
-- `docs/STATUS.md` (status): lines 305
+- `docs/STATUS.md` (status): lines 310
 - `docs/plans/2026-11-11-color-palette.md` (record): lines 556
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 232
 
 ### `research/verification`
 
-- `docs/STATUS.md` (status): lines 292
+- `docs/STATUS.md` (status): lines 297
 - `docs/plans/2026-11-16-restructure.md` (record): lines 117
 - `research/reviews/2026-11-16-restructure-design/antigravity-review.txt` (record): lines 7, 17, 21, 22, 40, 51, 214, 232, 279, 280
 
@@ -895,8 +895,11 @@ References this script could not tie to one record: a built path that stops at a
 | `README.md` | 73 | `research/README.md` | names no record in the tree |
 | `docs/PLAN.md` | 165 | `research/README.md` | names no record in the tree |
 | `docs/STATUS.md` | 8 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 116 | `research/README.md` | names no record in the tree |
-| `docs/STATUS.md` | 291 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 65 | `research/verification/2026-11-17-first-finish/` | names no record in the tree |
+| `docs/STATUS.md` | 117 | `research/README.md` | names no record in the tree |
+| `docs/STATUS.md` | 188 | `research/verification/2026-11-17-first-finish/` | names no record in the tree |
+| `docs/STATUS.md` | 251 | `research/reviews/2026-11-16-restructure/` | names no record in the tree |
+| `docs/STATUS.md` | 296 | `research/README.md` | names no record in the tree |
 | `docs/design/README.md` | 24 | `research/README.md` | names no record in the tree |
 | `docs/design/flat.md` | 80 | `research/reviews/2026-11-10-flat/` | names no record in the tree |
 | `docs/design/flat.md` | 86 | `research/reviews/2026-11-10-smoothing/` | names no record in the tree |

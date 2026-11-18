@@ -1,0 +1,13 @@
+{
+  "files": {
+    "STAGED": "6996b94a4f5f729071d7b436184d84ac237cee88b441df0171d61795a7dfa283",
+    "card.md": "6486c67eb0080bc3a8303fb711f14d91d39ae454e6c48118e479311569b40e7e",
+    "files/model.3mf": "ec2961184e1b235fb4f051c00824095f9642128a565a829e4f1527b1a4f822d7",
+    "files/palette.json": "2d96bbaa5582a8b6d15856d51fbf9c9ef861b1f3adb0ef1cfd4aa232ad1f9170",
+    "job.yaml": "1c05562a521d85df12dcd72f35902fdc37ab9e7d61046c7ffba6485417403eef",
+    "provenance.json": "2a1347e236e2ce433efda8339719ec8d83912391bd80025df1ac00bef37be8a5",
+    "purge.json": "431eac8572f68ea9b228f733c01f282e7de01382dd685dadfb9a045c9b5266bb",
+    "source/roadie.png": "ed33495f5fa84f7cb818268fbac75391c8d8163aaec1422c271ac9af9b5673bf"
+  },
+  "schema": "tdmg.complete/1"
+}
