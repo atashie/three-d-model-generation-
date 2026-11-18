@@ -123,7 +123,9 @@ Commands (they call the same functions as today's stage commands, which stay):
 The source is never deleted by a purge: `finish` moves it to the library. Abandoning a
 job needs the owner's explicit word and keeps `source/` unless told otherwise.
 Calibration strips run as jobs too (`jobs/strip-<date>/`); a printed result goes to
-`docs/evidence/`.
+`docs/evidence/`. *(Amended 2026-11-17, after the Codex review of the built change: not
+built. `tdmg strip` stays its own command, not a job class, and printed results are
+recorded under `research/verification/` like every record; there is no `docs/evidence/`.)*
 
 ## 4. Confirmations
 

@@ -34,14 +34,18 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   every stage's parameters (null = the stage command's default).
 - **`tdmg job set NAME STAGE.KEY=VALUE ...`, `tdmg job run NAME --slicer-dir DIR`,
   `tdmg job status NAME`** (restructure Task 7, `src/tdmg/job_runner.py`): set
-  parameters (strict YAML values); run each stage not done into `jobs/NAME/<stage>/`,
+  parameters (strict YAML values; `--text STAGE.KEY 'WORDS'` stores owner words exactly,
+  with no YAML reading); run each stage not done into `jobs/NAME/<stage>/`,
   driven as the stage commands drive it (tests show the files equal a run by hand,
-  except G-code timestamps and their hashes); input keys (parameters, upstream record
-  hashes, algorithm ids, rules, profiles) in `state.json`; a rerun goes into
+  except G-code timestamps and their hashes); input keys (`tdmg.jobkey/3`: parameters, upstream
+  record hashes, algorithm ids, rules, profiles, and a fingerprint of tdmg's own `.py`
+  files and `uv.lock`, so any code change makes every stage stale; a rerun that writes
+  the same bytes keeps the confirmations) in `state.json`; a stage whose recorded output
+  files are missing or changed, or a changed source, is stale; a rerun goes into
   `<stage>.new/` and replaces the old folder only when its record exists; `--rerun
   STAGE`; a per-job `.lock`.
 - **`tdmg job confirm NAME --subject selection|colors|print --owner-said TEXT [--face
-  up|down] [--route single|ams|glue] [--date YYYY-MM-DD] [--accept-not-certified]`**
+  up|down] [--route single|ams|glue] [--date YYYY-MM-DD] [--accept-not-certified] [--corrects N]`**
   (restructure Task 8): appends the owner's verbatim words to `job.yaml` (now
   `tdmg.job/2`; `/1` still read) with the date, revision and covered file hashes; a print
   entry adds the route, face, slice identity and verdicts. Refuses blank words, stages not
@@ -49,7 +53,9 @@ Phase 1 (R1, flat single-color) and R2 (flat multicolor) are under way. The comm
   PRINTABLE without `--accept-not-certified`. Status shows each confirmation current or
   stale, re-hashing the covered files each time. `state.json` (now `tdmg.jobstate/2`)
   holds each stage record's hash, so a hand-edited record makes its stage stale. A print
-  confirmation is not permission to purge.
+  confirmation is not permission to purge. `--corrects N` records a correction of a
+  misrecorded entry: the earlier entry is kept verbatim but is never current and never
+  copied into a library entry as the owner's words (Codex review, 2026-11-17).
 - **`tdmg finish NAME --public yes|no --purge-owner-said TEXT [--confirmation N]
   [--dry-run] --slicer-dir DIR`** (restructure Task 9, `src/tdmg/library.py`): checks the
   paths (no links), every stage done, a current print confirmation and a clean git tree;
@@ -120,7 +126,7 @@ has been measured with calipers, and strength is not judged.
 | R1 (flat single-color) | **In progress.** select, flat, slice work. Roadie and Oddie at 60 × 3 mm are PRINTABLE (2026-11-11; again with the A1's own start code, 2026-11-13). One owner print (Roadie, Bambu Studio's slice): "it looks great", by eye. **Not built:** keychain loop or base, text, 3MF for R1, manifest |
 | R2 (flat multicolor) | **In progress, step 5 part 2.** All four owner plans PRINTABLE face up; the two outline-dropped plans PRINTABLE face down (chosen by default). Printed: Roadie, outline dropped, face down "look great" (face up smeared). Skin depth 0.6 mm calibrated. No glue print; no glue route fully PRINTABLE |
 | Photo-to-3D backend (R4) | TripoSR CPU test done (32–35 s/model; raw meshes fail topology). MakerLab STLs inspected. No backend chosen. `research/experiments/2026-11-g3-local-vs-hosted/` |
-| Restructure | **In progress** (plan `docs/plans/2026-11-16-restructure.md`). Tasks 0–14 done; next Task 15 (docs, Codex review, CI) |
+| Restructure | **Done** (plan `docs/plans/2026-11-16-restructure.md`, Tasks 0–15, 2026-11-17). First library entry `prints/roadie-drop/` |
 
 ## Machines
 
@@ -150,7 +156,8 @@ has been measured with calipers, and strength is not judged.
   `artifacts/flat-runs/`, `artifacts/colors-runs/` (the approved plans are `*-f64`;
   configs in `configs/`; the previews the owner approved in `artifacts/colors-review-3/`),
   `artifacts/colored-runs/`, `artifacts/slice-runs/`. The printed
-  Roadie AMS file is `artifacts/colored-runs/roadie-tol30-60-drop-v3-f64/model.3mf`.
+  Roadie AMS file is now the library's `prints/roadie-drop/files/model.3mf` (its legacy
+  folder was deleted after the finish, 2026-11-17).
 - **Environments:** the core `.venv` uses Python 3.13. TripoSR uses
   `artifacts/triposr-py311` (3.11.15), with sources in `artifacts/TripoSR` and
   `artifacts/torchmcubes` and weights in `artifacts/triposr-data`. Do not recreate
@@ -184,7 +191,8 @@ has been measured with calipers, and strength is not judged.
    done), environments kept), Task 14 (Roadie finished 2026-11-17: `prints/roadie-drop/`,
    public; job purged on the owner's "yes"; library check ok, verify identical; the 21
    Roadie-drop legacy paths deleted; record `research/verification/2026-11-17-first-finish/`).
-   Next: Task 15 (docs, glossary, a Codex review of the whole restructure, CI).
+   Task 15 (docs, glossary, a Codex review of the built change with its 10 findings
+   fixed, CI green on three OSes). Done.
 3. **Outline-kept plans fail face down (open):** up to 1.18 mm of the outer edge is
    unprinted on the first layer (Roadie keep; Oddie keep 0.64 mm). `auto` prints them
    face up for now. Cause not investigated.
@@ -243,11 +251,12 @@ words and dates, are in [docs/design/](design/README.md).
 
 ## Handoff: the restructure
 
-- **State:** Tasks 0–14 of `docs/plans/2026-11-16-restructure.md` are done and pushed.
-  Next is Task 15: docs (`pipeline-and-gate.md`, `00-start-here.md`, README,
-  `print-types/README.md`, glossary), a Codex review in
-  `research/reviews/2026-11-16-restructure/`, and CI on three OSes (not yet seen
-  green after `04806a8`).
+- **State:** Tasks 0–15 of `docs/plans/2026-11-16-restructure.md` are done (2026-11-17):
+  docs, a Codex review of the built change (10 findings, all fixed; record
+  `research/reviews/2026-11-16-restructure/README.md`), and CI green on three OSes at
+  `14e92b7` (red on Windows from Task 9 until then: three path tests assumed this PC's
+  long-path and ACL behaviour). The restructure is complete; Oddie is the next job to
+  finish whenever the owner wants it in the library.
 - **Task 12:** the skill asks the public question, runs `finish --dry-run` and shows what
   would be deleted, and only then asks for the purge permission, so the owner sees the
   list before giving it. `job set` reads values as YAML, so the skill puts

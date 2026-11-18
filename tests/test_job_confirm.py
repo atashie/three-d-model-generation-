@@ -383,14 +383,17 @@ def test_a_file_that_differs_from_its_record_is_refused(tmp_path, slicers):
     (folder / "select" / "preview.png").write_bytes(b"edited")
     result = _confirm(folder, "--subject", "selection", "--owner-said", "yes")
     out = _plain(result.output)
+    # A changed output makes its stage stale first (the Codex review of the restructure,
+    # finding 5), so confirm refuses at the stage.
     assert result.exit_code == 2
-    assert "select/preview.png on disk is not the file select/selection.json names" in out
+    assert "stage select is stale (its output preview.png changed since the stage made " \
+        "it)" in out
     (folder / "flat" / "model.stl").write_bytes(b"solid x\nendsolid x\n")
     result = _confirm(folder, "--subject", "print", "--owner-said", WORDS,
                       "--accept-not-certified")
-    assert result.exit_code == 2
-    assert "flat/model.stl on disk is not the file flat/flat.json names" in \
-        _plain(result.output)
+    assert result.exit_code == 2 and "cannot confirm print" in _plain(result.output)
+    flat = job_status(folder, _machine(folder)).stages[1]
+    assert flat.note == "its output model.stl changed since the stage made it"
 
 
 @pytest.mark.parametrize(("value", "match"), [
@@ -526,7 +529,8 @@ def test_a_forged_slice_record_is_stale_and_confirm_refuses(tmp_path, slicers):
     assert slice_.note == "its record changed since tdmg job run wrote it"
     result = _confirm(folder, "--subject", "print", "--owner-said", WORDS)
     out = _plain(result.output)
-    assert result.exit_code == 2 and "stage slice is stale" in out
+    # flat is stale first: its output model.stl changed (Codex review, finding 5).
+    assert result.exit_code == 2 and "stage flat is stale" in out
     assert load_job(folder)["confirmations"] == []
 
 
@@ -663,3 +667,87 @@ def test_the_help_says_a_print_confirmation_is_not_purge_permission():
     assert "A print confirmation is not permission to purge the job" in out
     assert "The owner's own words, verbatim" in out
     assert "Checked against this machine's date" in out
+
+
+# --- corrections (the Codex review of the restructure, finding 9) -------------------------------
+
+def test_a_correction_makes_the_corrected_entry_not_current(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    assert _confirm(folder, "--subject", "selection", "--owner-said", "yse").exit_code == 0
+    first = load_job(folder)["confirmations"][0]
+    result = _confirm(folder, "--subject", "selection", "--owner-said", "yes",
+                      "--corrects", "1")
+    assert result.exit_code == 0, result.output
+    job = load_job(folder)
+    assert job["confirmations"][0] == first                           # kept verbatim
+    assert job["confirmations"][0]["owner_said"] == "yse"
+    assert "corrects" not in job["confirmations"][0]
+    assert job["confirmations"][1]["corrects"] == 1
+    status = job_status(folder, _machine(folder))
+    assert [c.current for c in status.confirmations] == [False, True]
+    assert status.confirmations[0].problem == "corrected by confirmation 2"
+    text = _status(folder)
+    assert '1. selection, ' in text and 'STALE (corrected by confirmation 2)' in text
+    assert "corrects confirmation 1" in text
+    assert "is stale: ask the owner" not in text
+
+
+def test_a_correction_of_a_print_entry_with_another_face_does_not_wait(tmp_path, slicers):
+    folder = _r2(tmp_path, slicers)
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS, "--face", "up",
+                    "--accept-not-certified").exit_code == 0
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS, "--face", "down",
+                    "--accept-not-certified", "--corrects", "1").exit_code == 0
+    status = job_status(folder, _machine(folder))
+    assert [c.current for c in status.confirmations] == [False, True]
+    assert not any("confirmation 1" in w for w in status.waits)
+
+
+@pytest.mark.parametrize(("corrects", "match"), [
+    ("3", "must be the number of an earlier confirmation (1 to 2), not 3"),
+    ("1", "confirmation 1 is a selection confirmation, not a print one"),
+])
+def test_a_bad_correction_is_refused(tmp_path, slicers, corrects, match):
+    folder = _r1(tmp_path, slicers)
+    assert _confirm(folder, "--subject", "selection", "--owner-said", "yes").exit_code == 0
+    assert _confirm(folder, "--subject", "print", "--owner-said", WORDS,
+                    "--accept-not-certified").exit_code == 0
+    before = (folder / "job.yaml").read_bytes()
+    result = _confirm(folder, "--subject", "print", "--owner-said", WORDS,
+                      "--accept-not-certified", "--corrects", corrects)
+    assert result.exit_code == 2 and match in _plain(result.output), result.output
+    assert (folder / "job.yaml").read_bytes() == before
+
+
+def test_an_entry_is_corrected_once(tmp_path, slicers):
+    folder = _r1(tmp_path, slicers)
+    confirm(folder, "selection", "yse", machine=_machine(folder))
+    confirm(folder, "selection", "yes", corrects=1, machine=_machine(folder))
+    with pytest.raises(JobError, match="already corrected by confirmation 2"):
+        confirm(folder, "selection", "yes!", corrects=1, machine=_machine(folder))
+    confirm(folder, "selection", "yes!", corrects=2, machine=_machine(folder))
+
+
+def _colors_entry(**kw):
+    return {"subject": "colors", "owner_said": "yes", "date": "2026-11-16", "revision": 1,
+            "covers": {"colors/colors.json": "0" * 64, "colors/regions.png": "1" * 64}, **kw}
+
+
+@pytest.mark.parametrize(("entries", "match"), [
+    ([_entry(corrects=0)], "corrects 0: there is no earlier confirmation"),
+    ([_entry(), _entry(corrects=0)], "corrects must be the number of an earlier"),
+    ([_entry(), _entry(corrects=2)], "corrects must be the number of an earlier"),
+    ([_entry(), _entry(corrects=True)], "corrects must be an integer"),
+    ([_colors_entry(), _entry(corrects=1)],
+     "confirmation 1 is a colors confirmation, not a print one"),
+    ([_entry(), _entry(corrects=1), _entry(corrects=1)],
+     "confirmation 1 is already corrected by confirmation 2"),
+])
+def test_corrects_is_validated(tmp_path, entries, match):
+    folder = _new(tmp_path, "roadie-drop", colors=True)
+    job = load_job(folder)
+    jobs.validate_job({**job, "confirmations": [_entry(), _entry(corrects=1)]})
+    jobs.validate_job({**job, "confirmations": [_entry(), _entry(corrects=1),
+                                                _entry(corrects=2)]})
+    with pytest.raises(JobError, match=match):
+        jobs.validate_job({**job, "confirmations": entries})

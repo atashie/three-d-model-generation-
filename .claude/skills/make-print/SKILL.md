@@ -68,8 +68,11 @@ the owner's words, character by character.
   letter as its `\u` code. That is the same text. Do not "correct" the owner's words to
   match.
 - **If a read-back differs:** tell the owner. For a confirmation, record it again with the
-  right words: entries are only ever added, and finish uses the latest current entry with
-  the same route and face (or `--confirmation N`). Never finish on a wrong entry. For
+  right words and `--corrects N`, where N is the wrong entry's number in `tdmg job status`
+  (same subject; for a print, with the `--route` and `--face` the owner printed). The wrong entry
+  is kept, since entries are only ever added, but it is no longer current, so finish never
+  uses it or copies it as the owner's words. Check the status: the wrong entry reads
+  "corrected by confirmation M". Never finish on a wrong entry. For
   `job new`, the origin fields can only be set when the job is made: tell the owner, and
   ask whether to start again under a new name. For the purge words, use the dry run's
   echo before the real run (step 10).
@@ -77,8 +80,9 @@ the owner's words, character by character.
 ## The slicer folders
 
 The pinned slicers are in `artifacts/tools/`. Use the same two folders in every
-`job run`, `job status`, `job confirm` and `finish` of a job. The PrusaSlicer folder is
-part of the slice stage's input key, so a command without it shows the slice as stale.
+`job run`, `job status`, `job confirm` and `finish` of a job. Whether PrusaSlicer is
+configured (and its pin) is part of the slice stage's input key, so a command without
+`--prusaslicer-dir` (and without `$TDMG_PRUSASLICER_DIR`) shows the slice as stale.
 Run these two checks once at the start:
 
 ```bash
@@ -132,15 +136,16 @@ This copies the image to `jobs/NAME/source/` (git-ignored) and writes `jobs/NAME
 Nothing runs yet. Read the `source:` part of `job.yaml` back (see "Check the read-back").
 If it exits 2, tell the owner the message in plain words.
 
-Then record what should become the model. `job set` reads each value as YAML, so the
-words go in YAML double quotes, inside the bash single quotes. In the words, write `"`
-as `\"`, and `'` as `'\''` as usual:
+Then record what should become the model. Give the words with `--text`, which stores
+them exactly as given: `STAGE.KEY=VALUE` reads the value as YAML, which would change
+words with a backslash, a colon or quotes in them. Put the words in bash single quotes as
+usual (`'` as `'\''`):
 
 ```bash
-MSYS_NO_PATHCONV=1 uv run tdmg job set NAME 'select.instructions="THEIR WORDS"'
+MSYS_NO_PATHCONV=1 uv run tdmg job set NAME --text select.instructions 'THEIR WORDS'
 ```
 
-Without the YAML quotes, words with a colon are refused. Check the read-back.
+Check the read-back: it prints the stored words ASCII-escaped, as JSON.
 
 ## Step 4: the selection (what becomes the model)
 
@@ -386,8 +391,11 @@ rebuilds from the library's own files, and then deletes the working folder `jobs
    Check that no `source/` or `private/` path is listed. Ask the owner. With their OK,
    run `git add prints/NAME` (only that folder) and commit. Do not push unless they ask.
 
-If a finish stops part way (a crash, a closed window), run the same command again. It
-continues where it stopped. `tdmg library check` says when an entry is incomplete.
+If a finish stops part way (a crash, a closed window), run the same command again, with
+the same purge words. It continues where it stopped. Before `COMPLETE` is written, the
+resumed run records its own purge words afresh in `purge.json`. Once `COMPLETE` is
+written, `purge.json`'s words stand: a run with other words refuses and deletes nothing.
+`tdmg library check` says when an entry is incomplete.
 
 **Waits for the owner:** public yes or no, the purge permission in their words, and the
 OK to commit.

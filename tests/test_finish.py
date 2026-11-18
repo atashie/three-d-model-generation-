@@ -34,6 +34,7 @@ from test_job_runner import R1_SELECT, _invoke, _plain, _png
 
 import tdmg.color_slicing
 import tdmg.job_runner
+import tdmg.jobs
 from tdmg import library
 from tdmg.job_runner import LOCK_FILE, Machine
 from tdmg.jobs import load_job
@@ -318,7 +319,9 @@ def test_a_stale_confirmation(tmp_path, tmp_path_factory, slicers, repo):
     before = _tree(folder)
     r = _finish(folder, slicers)
     out = _plain(r.output)
-    assert r.exit_code == 2 and "confirmation 1 is stale" in out and "flat/model.stl" in out
+    # The flat stage's output changed, so the stage is stale before the confirmation is
+    # looked at (the Codex review of the restructure, finding 5).
+    assert r.exit_code == 2 and "stage flat is stale" in out and "model.stl changed" in out
     assert _tree(folder) == before
 
 
@@ -772,7 +775,11 @@ def test_interrupted_then_resumed(tmp_path, tmp_path_factory, slicers, repo, mon
         assert (entry / PURGE_FILE).is_file() == (stop != "published")
         assert (entry / COMPLETE_FILE).is_file() == (stop in ("complete", "tombstoned"))
     published = _tree(entry)
-    lines = _call(folder, slicers, purge="the second time")
+    kept = stop in ("complete", "tombstoned")
+    # Before COMPLETE, a resume writes purge.json again with its own words ("the second
+    # time"); once COMPLETE is written, purge.json's words stand: a resume gives the same
+    # words (other words refuse: test_a_resumed_purge_refuses_different_purge_words).
+    lines = _call(folder, slicers, purge=PURGE if kept else "the second time")
     text = "\n".join(lines)
     assert not folder.exists() and not tombstone.exists()
     assert verify_complete(entry) == []
@@ -784,9 +791,7 @@ def test_interrupted_then_resumed(tmp_path, tmp_path_factory, slicers, repo, mon
         for rel in ("job.yaml", "card.md", "provenance.json", "private/model.stl"):
             assert _tree(entry)[rel] == published[rel]                 # never redone
     words = json.loads((entry / PURGE_FILE).read_bytes())["owner_said"]
-    kept = stop in ("complete", "tombstoned")
     assert words == (PURGE if kept else "the second time")
-    assert ("is not recorded" in text) == kept           # said plainly
 
 
 def test_a_purge_stopped_part_way_is_finished(tmp_path, tmp_path_factory, slicers, repo,
@@ -918,16 +923,16 @@ def test_a_file_added_after_the_listing_is_not_deleted(tmp_path, tmp_path_factor
                                                        repo, monkeypatch):
     """Review I2 (probe A): a file written between the listing and the deletion."""
     folder = _ready(tmp_path, tmp_path_factory, slicers)
-    real = library.verify_complete
+    real = library.check_entry      # the check right before the deletion
 
-    def sneaky(entry):
-        out = real(entry)
+    def sneaky(entry, *a):
+        out = real(entry, *a)
         (folder / "late-note.txt").write_bytes(b"written after the listing")
         return out
-    monkeypatch.setattr(library, "verify_complete", sneaky)
+    monkeypatch.setattr(library, "check_entry", sneaky)
     with pytest.raises(LibraryError, match="changed after purge.json listed it"):
         _call(folder, slicers)
-    monkeypatch.setattr(library, "verify_complete", real)
+    monkeypatch.setattr(library, "check_entry", real)
     assert (folder / "late-note.txt").is_file() and (folder / "job.yaml").is_file()
     assert not (folder.parent / f".purging-{R1}").exists()
     assert not (folder / LOCK_FILE).exists()
@@ -986,12 +991,12 @@ def test_a_resumed_publish_refuses_an_edited_entry(tmp_path, tmp_path_factory, s
 
 def test_a_resumed_purge_says_its_answers_are_not_used(tmp_path, tmp_path_factory, slicers,
                                                        repo, monkeypatch):
-    """Review minor (probe C)."""
+    """Review minor (probe C). Other purge words now refuse (the Codex review of the
+    restructure, finding 2: test_a_resumed_purge_refuses_different_purge_words)."""
     folder = _ready(tmp_path, tmp_path_factory, slicers)
     _crash_at(monkeypatch, "purge_job", folder, slicers, public=False)
-    lines = "\n".join(_call(folder, slicers, public=True, purge="DIFFERENT WORDS"))
+    lines = "\n".join(_call(folder, slicers, public=True))
     assert "published with --public no; this run's --public yes is not used" in lines
-    assert "this run's --purge-owner-said is not recorded" in lines
     record = json.loads((tmp_path / "prints" / R1 / PURGE_FILE).read_bytes())
     assert record["owner_said"] == PURGE and not folder.exists()
 
@@ -1267,3 +1272,148 @@ def test_job_new_checks_the_checkouts_library_with_jobs_dir(tmp_path, monkeypatc
     r = _invoke("job", "new", R1, "--class", "flat-icon", "--image", image, "--jobs-dir",
                 tmp_path / "jobs")
     assert r.exit_code == 0 and "library was not checked" in _plain(r.output)
+
+
+# --- the Codex review of the restructure (research/reviews/2026-11-16-restructure/) ------------
+
+def _rewrite_complete(entry):
+    replace_file(entry, COMPLETE_FILE, library.complete_bytes(entry))
+
+
+@pytest.mark.parametrize("stop", ["purge_job", "delete_job"])
+def test_a_resumed_purge_uses_library_checks_full_validator(tmp_path, tmp_path_factory,
+                                                            slicers, repo, monkeypatch,
+                                                            stop):
+    """Finding 1: an entry edited after COMPLETE with only COMPLETE written again fails
+    library check (STAGED differs); the resumed purge must refuse it too, deleting
+    nothing."""
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    _crash_at(monkeypatch, stop, folder, slicers)
+    entry = tmp_path / "prints" / R1
+    card = entry / "card.md"
+    card.write_bytes(card.read_bytes() + b"edited\n")
+    _rewrite_complete(entry)
+    assert library.check_entry(entry).state == library.DAMAGED
+    held = folder if stop == "purge_job" else folder.parent / f".purging-{R1}"
+    before = _tree(held)
+    with pytest.raises(LibraryError, match="COMPLETE's SHA-256 is not STAGED's"):
+        _call(folder, slicers)
+    assert _tree(held) == before
+
+
+def test_a_resumed_purge_refuses_different_purge_words(tmp_path, tmp_path_factory,
+                                                       slicers, repo, monkeypatch):
+    """Finding 2: once COMPLETE is written, purge.json's words are kept; a resume given
+    other words refuses."""
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    _crash_at(monkeypatch, "purge_job", folder, slicers, public=False)
+    before = _tree(folder)
+    with pytest.raises(LibraryError, match="--purge-owner-said differs"):
+        _call(folder, slicers, purge="DIFFERENT WORDS")
+    assert _tree(folder) == before
+    _call(folder, slicers)                      # the same words: the purge ends
+    assert not folder.exists()
+
+
+def test_a_resumed_deletion_refuses_different_purge_words(tmp_path, tmp_path_factory,
+                                                          slicers, repo, monkeypatch):
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    _crash_at(monkeypatch, "delete_job", folder, slicers)
+    tombstone = folder.parent / f".purging-{R1}"
+    before = _tree(tombstone)
+    with pytest.raises(LibraryError, match="--purge-owner-said differs"):
+        _call(folder, slicers, purge="DIFFERENT WORDS")
+    assert _tree(tombstone) == before
+
+
+@pytest.mark.parametrize("public", [True, False])
+def test_finish_refuses_a_prints_folder_git_does_not_ignore(tmp_path, tmp_path_factory,
+                                                           slicers, repo, public):
+    """Finding 3: a --prints-dir inside the checkout whose source/ and private/ git does
+    not ignore: finish refuses before it copies anything."""
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    before = _tree(folder)
+    prints = repo / "other-library"
+    with pytest.raises(LibraryError, match="not ignored by git") as e:
+        _call(folder, slicers, public=public, prints=prints)
+    assert f"other-library/.staging-{R1}/source/roadie.png" in str(e.value)
+    assert ("private/model.stl" in str(e.value)) == (not public)
+    assert not (prints / f".staging-{R1}").exists() and not (prints / R1).exists()
+    assert _tree(folder) == before
+
+
+def test_unignored_paths_outside_a_work_tree_is_empty(tmp_path):
+    assert tdmg.jobs.unignored_paths([tmp_path / "x" / "source" / "a.png"]) == []
+
+
+def test_unignored_paths_inside_a_work_tree(repo):
+    paths = [repo / "prints" / "a" / "source" / "x.png", repo / "elsewhere" / "x.png",
+             repo / "jobs" / "a" / "source" / "x.png"]
+    assert tdmg.jobs.unignored_paths(paths) == ["elsewhere/x.png"]
+    (repo / "prints" / "a" / "source").mkdir(parents=True)
+    (repo / "prints" / "a" / "source" / "x.png").write_bytes(b"x")
+    _git(repo, "add", "-f", "prints/a/source/x.png")
+    # Ignored by a pattern but tracked: not protected.
+    assert tdmg.jobs.unignored_paths(paths) == ["prints/a/source/x.png", "elsewhere/x.png"]
+
+
+def test_job_new_refuses_a_jobs_folder_git_does_not_ignore(tmp_path, repo):
+    image = _png(tmp_path / "in" / "roadie.png", roadie_like())
+    r = _invoke("job", "new", R1, "--class", "flat-icon", "--image", image, "--jobs-dir",
+                repo / "other-jobs")
+    assert r.exit_code == 2, r.output
+    out = _plain(r.output)
+    assert "not ignored by git" in out and f"other-jobs/{R1}/source/roadie.png" in out
+    assert not (repo / "other-jobs").exists()
+    r = _invoke("job", "new", R1, "--class", "flat-icon", "--image", image, "--jobs-dir",
+                repo / "jobs")
+    assert r.exit_code == 0, r.output
+
+
+def test_a_staging_leftover_is_kept_when_the_job_is_not_ready(tmp_path, tmp_path_factory,
+                                                              slicers, repo):
+    """Finding 4: the job's eligibility is checked before a leftover staging folder is
+    removed; a refused finish removes nothing."""
+    folder = _job(tmp_path, tmp_path_factory, slicers)          # no print confirmation
+    staging = tmp_path / "prints" / f".staging-{R1}"
+    staging.mkdir(parents=True)
+    (staging / "card.md").write_text("an earlier run's card")
+    with pytest.raises(LibraryError, match="no current print confirmation"):
+        _call(folder, slicers)
+    assert (staging / "card.md").is_file()
+
+
+def test_a_staging_folder_with_unexpected_files_is_not_removed(tmp_path, tmp_path_factory,
+                                                               slicers, repo, monkeypatch):
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    _crash_at(monkeypatch, "rebuild", folder, slicers)
+    staging = tmp_path / "prints" / f".staging-{R1}"
+    (staging / "my-notes.txt").write_text("saved here by hand")
+    (staging / "source" / "other.png").write_bytes(b"not the job's")
+    before = _tree(staging)
+    with pytest.raises(LibraryError, match="my-notes.txt") as e:
+        _call(folder, slicers)
+    assert "source/other.png" in str(e.value)
+    assert _tree(staging) == before and (folder / "job.yaml").is_file()
+    (staging / "my-notes.txt").unlink()
+    (staging / "source" / "other.png").unlink()
+    lines = "\n".join(_call(folder, slicers))
+    assert "left by an interrupted finish" in lines and not folder.exists()
+
+
+def test_a_corrected_confirmation_is_not_copied_into_provenance(tmp_path, tmp_path_factory,
+                                                                slicers, repo):
+    """Finding 9: an entry corrected by a later one is not current; finish copies only the
+    correction as the owner's words, and the library entry checks ok."""
+    folder = _ready(tmp_path, tmp_path_factory, slicers)
+    _confirm(folder, slicers[1], "--accept-not-certified", "--corrects", "1",
+             words="done, and the newly printed items look great!")
+    _call(folder, slicers)
+    entry = tmp_path / "prints" / R1
+    prov = json.loads((entry / "provenance.json").read_bytes())
+    assert prov["confirmation"]["number"] == 2
+    assert [c["number"] for c in prov["print_confirmations"]] == [2]
+    assert prov["confirmation"]["entry"]["corrects"] == 1
+    assert library.check_entry(entry).state == library.OK
+    card = (entry / "card.md").read_text(encoding="utf-8")
+    assert "items look great!" in card

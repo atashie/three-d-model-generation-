@@ -39,10 +39,12 @@ uv run tdmg strip OUT --slicer-dir artifacts/tools/orcaslicer-2.5.0     # the tw
 uv run tdmg job new NAME --class flat-icon --image PATH [--colors]   # start a job in jobs/NAME/:
                                           # the image in source/ and job.yaml
 uv run tdmg job set NAME flat.width_mm=60 flat.thickness_mm=3   # change the job's parameters
+uv run tdmg job set NAME --text select.instructions 'THE OWNER WORDS'   # text, stored as given
 uv run tdmg job run NAME --slicer-dir artifacts/tools/orcaslicer-2.5.0   # run the stages not done
 uv run tdmg job status NAME               # each stage: done, stale or not run; what waits for you
 uv run tdmg job confirm NAME --subject print --face down --owner-said "THE OWNER'S WORDS"
-                                          # record the owner's words (selection|colors|print)
+                                          # record the owner's words (selection|colors|print);
+                                          # --corrects N when entry N recorded them wrongly
 uv run tdmg finish NAME --public no --purge-owner-said "THE OWNER'S WORDS" --slicer-dir artifacts/tools/orcaslicer-2.5.0
                                           # rebuild and check, copy into prints/NAME/, then delete jobs/NAME/
 uv run tdmg library check [NAME]          # every hash of every library entry; source/ missing is a note

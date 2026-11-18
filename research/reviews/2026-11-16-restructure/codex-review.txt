@@ -1,0 +1,110 @@
+Reviewed `pre-restructure..14e92b7`. No files modified. The strongest findings are gaps in resumed-purge validation, confirmation binding, and privacy outside the default directories.
+
+1. **High — A resumed purge can delete the job while its library entry fails `library check`.**  
+   [src/tdmg/library.py:1693](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/library.py:1693)
+
+   After an interruption following `COMPLETE`, edit `card.md` and regenerate only `COMPLETE`. `_check_entry()` accepts it because it checks `verify_complete()` and `entry_problems()`, but never checks `STAGED`. `_resume_purge()` and `_resume_tombstone()` use this weaker validator before deletion.
+
+   **Reproduced in memory:** the purge validator accepted the altered Roadie entry; `check_entry()` reported `damaged`. No deletion was executed.
+
+   **Change:** share one complete semantic validator between checking and purging, including STAGED consistency. Require it immediately before every deletion, including resumed deletion.
+
+2. **High — Library validation does not bind the published files and confirmation back to `job.yaml`.**  
+   [src/tdmg/library.py:1305](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/library.py:1305)
+
+   `covers={}` passes the type check, making the confirmation-to-file comparison vacuous. The selected confirmation’s number and contents are never compared with the corresponding `job.yaml` entry. Published files also need not equal the confirmed file set.
+
+   **Reproduced in memory:** replaced Roadie’s `model.3mf` with `b'not a printable model'`, updated its provenance digest, cleared provenance’s confirmation covers, and regenerated both manifests. `library check` returned `ok`, with the original `job.yaml` confirmation and purge file list unchanged. This is an internal contradiction, beyond the documented limitation that completely coordinated rewrites cannot be authenticated.
+
+   The purge reader at line 1263 similarly accepts blank historical `owner_said`. Changing it to `""` and refreshing `COMPLETE` passed both validators; resume ignores differing supplied words.
+
+   **Change:** validate persisted records strictly. Require the selected confirmation to equal its numbered job entry; require nonempty, exact route coverage; require published files to equal mapped covers; validate public/folder consistency and purge words. Refuse conflicting resume permission rather than merely printing a note.
+
+3. **High — Accepted custom directories defeat the source/private git protection.**  
+   [src/tdmg/library.py:1507](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/library.py:1507), `.gitignore:17`
+
+   `finish --prints-dir other-library --public no` can write `other-library/NAME/source/` and `private/` inside this public checkout. Neither is ignored. `git_state()` permits an initially empty custom destination and excludes it from the dirty-tree check. The card nevertheless says these files are git-ignored. Custom `--jobs-dir` similarly permits unignored source copies.
+
+   **Ran `git check-ignore`:** default `prints/roadie-drop/source/...` was ignored; alternate and nested library source/private paths were not.
+
+   **Change:** before copying sensitive bytes, enforce the standard checkout locations or verify that every actual source/private destination is ignored and untracked. Cover custom destinations in the gitignore tests.
+
+4. **Medium — Existing staging contents are deleted before job eligibility is checked.**  
+   [src/tdmg/library.py:1589](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/library.py:1589)
+
+   A plain `prints/.staging-NAME/` is treated as disposable solely because of its name. Its contents are recursively removed before `_fresh()` checks the print confirmation, stage currency, or clean tree. An unrelated file saved there—or an unexpected file added during recovery—is deleted even if finish subsequently refuses.
+
+   **Change:** validate the job first. Establish transaction ownership and expected staging contents before cleanup; preserve or quarantine unexpected contents rather than recursively deleting them.
+
+5. **Medium — Stage currency does not establish that the actual source and outputs remain intact.**  
+   [src/tdmg/job_runner.py:546](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/job_runner.py:546), `job_runner.py:457`
+
+   `job_status()` never calls `check_source()`. Replacing or removing the source can therefore leave selection reported as done. Separately, `_judge()` checks record bytes but not the files those records describe. Delete or modify a generated G-code file without changing `slice.json`: `job run` can keep the slice, and its print confirmation remains current because it covers the printable model and slice identity, not that G-code.
+
+   The output-hash limitation is documented; finish’s rebuild catches it later. It still makes earlier status and cached-run results misleading.
+
+   **Change:** validate source bytes during status and validate recorded output existence/hashes before accepting cached stages. Report damaged outputs explicitly.
+
+6. **Medium — Changed implementation or dependencies can reuse old results indefinitely.**  
+   [src/tdmg/job_runner.py:331](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/job_runner.py:331)
+
+   Keys contain algorithm labels, but no implementation or dependency fingerprint. A geometry/check fix that retains its algorithm ID, or a dependency upgrade, leaves existing stages done and confirmations current. The documentation acknowledges manual `--rerun` is necessary; nothing enforces remembering it.
+
+   **In-memory probe:** replacing the slice runner with a different implementation left its key unchanged. The existing algorithm test changes the label, so it cannot detect this omission.
+
+   **Change:** include an implementation/dependency fingerprint, or enforce algorithm-version changes through an automated compatibility guard.
+
+7. **Medium — `verify` uses a weaker equivalence rule than finish and can miss a real byte change.**  
+   [src/tdmg/library.py:2312](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/library.py:2312)
+
+   A valid timestamp line normalizes to literal `<timestamp>`. An actual file containing `<timestamp>` at that position is left unchanged, producing the same digest. Thus a non-timestamp replacement can compare identical.
+
+   **Reproduced:** `compare_file()` rejected this replacement, while `_slice_differences()` returned no differences with matching updated G-code bindings.
+
+   Additionally, line 2320 disables the entire masked-record/G-code comparison when `record_masked_sha256` is absent, treating missing evidence as an older entry without a schema distinction.
+
+   **Change:** distinguish normalized and raw representations using tagged hashing, and require the necessary baseline digests for an “identical” result. Entries lacking evidence should report that the comparison is incomplete.
+
+8. **Medium — The skill’s YAML quoting recipe changes literal owner words.**  
+   [.claude/skills/make-print/SKILL.md:135](C:/Users/arikt/documents/github/three-d-model-generation-/.claude/skills/make-print/SKILL.md:135), `src/tdmg/job_runner.py:886`
+
+   The instructions explain escaping quotes but not backslashes or YAML line folding. An owner’s literal `keep \new` becomes a newline followed by `ew` inside the recommended YAML double quotes. Literal `\t` becomes a tab. Bash single quotes and disabled Click expansion do not prevent YAML decoding.
+
+   **Reproduced through `parse_value()`**, without writing a job.
+
+   **Change:** serialize text mechanically with complete escaping, or provide a literal-text/file input option. Test backslashes, actual newlines, quotes and Unicode through the documented shell-to-CLI path.
+
+9. **Medium — Correcting a misrecorded confirmation leaves the wrong words active.**  
+   [.claude/skills/make-print/SKILL.md:70](C:/Users/arikt/documents/github/three-d-model-generation-/.claude/skills/make-print/SKILL.md:70), `src/tdmg/library.py:569`
+
+   The skill says to append another confirmation when read-back differs. Both entries cover the same files, so both remain current. Finish selects the latest, but copies **all current print confirmations** into provenance—including the known incorrect words still attributed to the owner.
+
+   **Change:** add an explicit correction/supersession record. Preserve the original evidence, but mark the erroneous transcription inactive and link it to its correction.
+
+10. **Low — The surviving documentation still gives contradictory operational facts.**  
+    [docs/STATUS.md:152](C:/Users/arikt/documents/github/three-d-model-generation-/docs/STATUS.md:152)
+
+    STATUS still identifies the printed Roadie file under the deleted legacy `artifacts/colored-runs/...` path; `docs/design/jobs.md` correctly lists that folder as deleted. The design at line 125 says calibration strips run as jobs, while the skill correctly says they do not. The skill at line 80 says the PrusaSlicer *folder* is part of the key; code records configured/not configured and the pin, not the folder.
+
+    **Change:** point STATUS to the library file, explicitly amend the strip-job statement, and describe the actual slicer-key semantics.
+
+The main test gaps are concrete:
+
+- `tests/test_finish.py:975` checks STAGED tampering before COMPLETE, but does not cover the weaker post-COMPLETE path in finding 1.
+- `tests/test_library.py:355` documents coordinated-manifest rewrites, but does not test contradictory job/provenance confirmations or empty coverage.
+- `tests/test_job_runner.py:634` replaces digest functions with constants; it does not establish that every relevant real input contributes to those digests.
+- `tests/test_entry_point.py:87` launches Windows subprocesses with argument lists, not Git Bash. The skill tests inspect quoting syntax and placeholder text, so they miss finding 8.
+- Finish/library lifecycle tests use fake slicers (`tests/test_finish.py:72`) and generally accept NOT CERTIFIED fixtures. The recorded real Roadie run provides one manual successful path, not real-slicer coverage of recovery and tampering cases.
+
+Validation performed:
+
+- Ran `.venv/Scripts/python.exe -B -m tdmg.cli library check roadie-drop`: exit 0.
+- Ran 19 temporary-file-free pytest cases: strict YAML values/refusals; entry-point configuration; G-code allowance; empty-line timestamp handling. All passed.
+- Ran the in-memory probes described above and read-only git/ignore checks.
+- Attempted the requested broader job/finish/library/fixture suites. `uv` failed on denied cache access; direct pytest failed because the read-only environment offered no writable temporary directory. Those suites and real-slicer rebuilds were **not run successfully**.
+
+The three most important changes are:
+
+1. Use the full library validator before every purge, including every resume path.
+2. Strictly bind confirmations, route outputs, public placement and purge permission across all persisted records.
+3. Enforce source/private protection at the actual destination before copying any sensitive files.

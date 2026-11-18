@@ -34,6 +34,20 @@ the slice verdict for it) and `accept_not_certified` (true exactly when a verdic
 PRINTABLE: the owner chose to print a file tdmg did not certify). Whether an entry is still
 current is computed whenever the status is read (tdmg.confirmations), never stored.
 
+An entry may also have `corrects` (CORRECTS_KEY): the number (from 1, in file order) of an
+earlier entry of the same subject whose words were recorded wrongly (tdmg job confirm
+--corrects N). The earlier entry is kept as it is, since entries are append-only; one that
+a later entry corrects is never current (tdmg.job_runner.job_status), so finish neither
+chooses it nor copies it into the library as the owner's words. An entry is corrected at
+most once (correct the correction instead). Entries without the key, from before it
+existed, read as they did.
+
+**Where source bytes go.** job new and set_mask copy the image and the mask into the job's
+source/. When that folder is inside a git work tree, git must ignore it (unignored_paths:
+`git check-ignore`, which also treats a tracked path as not ignored); else they refuse with
+nothing written. The checkout's jobs/ is ignored (.gitignore), so the check matters for a
+--jobs-dir elsewhere in a checkout. Outside a git work tree there is nothing to check.
+
 A stage parameter maps one to one onto the stage command's option of the same name (the
 CLI's snake_case spelling; for `colors`, the keys of tdmg.color_config). The value null
 means "not given": the command's own default applies, exactly as when the option is left
@@ -66,7 +80,9 @@ import copy
 import datetime
 import hashlib
 import math
+import os
 import re
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import ClassVar
@@ -132,6 +148,7 @@ SUBJECT_FILES = {"selection": ("select/selection.json", "select/preview.png"),
 # colored_flat; the slice stage reads it).
 PRINT_STAGES = ("flat", "colored_flat")
 CONFIRM_KEYS = ("subject", "owner_said", "date", "revision", "covers")
+CORRECTS_KEY = "corrects"        # optional: the number of the earlier entry it corrects
 PRINT_KEYS = ("route", "face", "slice_id", "verdicts", "accept_not_certified")
 PRINTABLE = "PRINTABLE"
 VERDICTS = (PRINTABLE, "NOT CERTIFIED")
@@ -491,6 +508,7 @@ def validate_job(job) -> dict:
                        f"confirmation entry; {SCHEMA} does)")
     for i, entry in enumerate(conf):
         _validate_confirmation(f"confirmations[{i}]", entry, rid, rev)
+        _validate_corrects(f"confirmations[{i}]", entry, conf[:i])
     return job
 
 
@@ -534,7 +552,8 @@ def _validate_confirmation(where: str, entry, rid: str, job_revision: int) -> No
         raise JobError(f"{where} must be a mapping, not {type(entry).__name__}")
     subject = entry.get("subject")
     _field(f"{where}.subject", subject, _choice(subjects(rid)))
-    _keys(where, entry, CONFIRM_KEYS + (PRINT_KEYS if subject == "print" else ()))
+    optional = (CORRECTS_KEY,) if CORRECTS_KEY in entry else ()
+    _keys(where, entry, CONFIRM_KEYS + optional + (PRINT_KEYS if subject == "print" else ()))
     _field(f"{where}.owner_said", entry["owner_said"], owner_words_problem)
     _field(f"{where}.date", entry["date"], date_problem)
     rev = entry["revision"]
@@ -555,6 +574,35 @@ def _validate_confirmation(where: str, entry, rid: str, job_revision: int) -> No
             raise JobError(f"{where}.covers must be exactly {', '.join(want)}")
         return
     _validate_print(where, entry, rid)
+
+
+def correction_problem(number, subject: str, earlier: list[dict]) -> str | None:
+    """Why an entry of `subject` cannot correct entry `number` of `earlier` (the entries
+    before it, oldest first), or None."""
+    if _integer(number):
+        return f"must be an integer, not {number!a}"
+    if not earlier:
+        return f"{number}: there is no earlier confirmation to correct"
+    if not 1 <= number <= len(earlier):
+        return (f"must be the number of an earlier confirmation (1 to {len(earlier)}), not "
+                f"{number}")
+    other = earlier[number - 1]["subject"]
+    if other != subject:
+        return (f"{number}: confirmation {number} is a {other} confirmation, not a {subject} "
+                "one")
+    later = [i for i, e in enumerate(earlier, start=1) if e.get(CORRECTS_KEY) == number]
+    if later:
+        return (f"{number}: confirmation {number} is already corrected by confirmation "
+                f"{later[0]}; correct that one instead")
+    return None
+
+
+def _validate_corrects(where: str, entry: dict, earlier: list[dict]) -> None:
+    if CORRECTS_KEY not in entry:
+        return
+    problem = correction_problem(entry[CORRECTS_KEY], entry["subject"], earlier)
+    if problem:
+        raise JobError(f"{where}.{CORRECTS_KEY} {problem}")
 
 
 def _validate_print(where: str, entry: dict, rid: str) -> None:
@@ -758,6 +806,79 @@ def default_jobs_dir() -> Path:
     return paths.REPO_ROOT / "jobs"
 
 
+def _work_tree(path: Path) -> Path | None:
+    """The top of the git work tree that holds path (the nearest folder above it with a
+    .git), or None."""
+    for q in (path, *path.parents):
+        if (q / ".git").exists():
+            return q
+    return None
+
+
+# The longest a git command tdmg runs may take (git status, check-ignore, rev-parse). Not
+# a measured limit: a hand-chosen guard so a git that hangs (a credential or lock prompt,
+# a network drive) stops the command with a message instead of hanging it. These commands
+# normally finish in well under a second.
+GIT_TIMEOUT_S = 120
+
+
+def run_git(top: Path, *args: str) -> subprocess.CompletedProcess:
+    """`git -C top ARGS`, its output captured, with GIT_TIMEOUT_S; raises OSError (no git)
+    or subprocess.TimeoutExpired for the caller to report in its own words."""
+    return subprocess.run(["git", "-C", str(top), *args], capture_output=True, check=False,
+                          timeout=GIT_TIMEOUT_S)
+
+
+def _relative(path: Path, top: Path) -> str:
+    try:
+        return path.relative_to(top).as_posix()
+    except ValueError:                  # another spelling of the same folder (case, 8.3)
+        pass
+    try:
+        return path.resolve().relative_to(top.resolve()).as_posix()
+    except (ValueError, OSError):       # a junction or link that leads out of the tree
+        raise JobError(f"{path} is inside the git work tree {top} but does not resolve to "
+                       "a path in it (a junction or link on the way?); nothing was written"
+                       ) from None
+
+
+def unignored_paths(paths: list[Path]) -> list[str]:
+    """The paths (relative to their git work tree, in the order given) that are inside a
+    git work tree and that git does not ignore: `git check-ignore`, which never calls a
+    tracked path ignored. Paths outside a work tree are not listed. JobError when git cannot
+    answer."""
+    out = []
+    for path in paths:
+        path = Path(os.path.abspath(path))
+        top = _work_tree(path)
+        if top is None:
+            continue
+        rel = _relative(path, top)
+        try:
+            done = run_git(top, "check-ignore", "-q", "--", rel)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise JobError(f"cannot run git check-ignore in {top} ({e}); the source and "
+                           "private files must not go where git would commit them, so "
+                           "nothing was written") from None
+        if done.returncode == 1:
+            out.append(rel)
+        elif done.returncode != 0:
+            err = done.stderr.decode("utf-8", "replace").strip()
+            raise JobError(f"git check-ignore failed in {top} ({err}); nothing was written")
+    return out
+
+
+def check_ignored(paths: list[Path], what: str) -> None:
+    """Refuse to write `what` to paths inside a git work tree that git does not ignore."""
+    bad = unignored_paths(paths)
+    if bad:
+        shown = ", ".join(bad[:6]) + (" ..." if len(bad) > 6 else "")
+        raise JobError(f"{what} would be written where git could commit them (not ignored "
+                       f"by git: {shown}); nothing was written. Use the checkout's jobs/ and "
+                       "prints/ folders (its .gitignore covers them), a folder outside the "
+                       "checkout, or add these paths to .gitignore")
+
+
 def job_dir(jobs_dir: str | Path, name: str) -> Path:
     return Path(jobs_dir) / check_name(name)
 
@@ -791,6 +912,9 @@ def check_source(folder: str | Path, job: dict) -> None:
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
         except FileNotFoundError:
             raise JobError(f"source file {entry['file']} is missing from {folder}") from None
+        except OSError as e:            # a folder in its place, a sharing or access error
+            raise JobError(f"cannot read source file {entry['file']} in {folder} "
+                           f"({e.strerror or e})") from None
         if digest != entry["sha256"]:
             raise JobError(f"source file {entry['file']} has changed: its SHA-256 is "
                            f"{digest}, job.yaml says {entry['sha256']}")
@@ -952,6 +1076,8 @@ def set_mask(folder: str | Path, mask: str | Path | None) -> dict:
         name, write = _mask_destination(folder / SOURCE_DIR, mask.name, digest)
         entry = {"file": f"{SOURCE_DIR}/{name}", "sha256": digest}
         copy_to = (folder / SOURCE_DIR / name, data) if write else None
+        if copy_to is not None:
+            check_ignored([copy_to[0]], "the mask (the owner's source data)")
     new = copy.deepcopy(job)
     new["source"]["mask"] = entry
     new["stages"]["select"]["mask"] = None if entry is None else entry["file"]
@@ -1060,6 +1186,7 @@ def new_job(jobs_dir: str | Path, name: str, output_class: str, image: str | Pat
                         "confirmations": [], "revision": 1})
     check_limits(job)
     record = dump_job(job)
+    check_ignored([folder / rel for rel in files], "the source image (and mask)")
     try:
         write_outputs(folder, files, JOB_FILE, record, create_folder=True, subfolders=True)
     except RecordError as e:

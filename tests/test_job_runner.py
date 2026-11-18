@@ -808,3 +808,180 @@ def test_status_names_an_interrupted_swap(tmp_path, slicers):
     assert flat.state == "not run"
     assert flat.note == ("an interrupted swap left flat.old; the next run restores and "
                          "reruns it")
+
+
+# --- the Codex review of the restructure (research/reviews/2026-11-16-restructure/) ------------
+
+def test_status_reports_a_changed_or_missing_source(tmp_path, slicers):
+    """Finding 5: job status checks the source files against job.yaml."""
+    folder = _r1(tmp_path, slicers)
+    image = folder / "source" / "roadie.png"
+    data = image.read_bytes()
+    image.write_bytes(data + b"changed")
+    stages = job_status(folder, Machine(None, slicers[1])).stages
+    assert stages[0].state == "stale" and "source/roadie.png has changed" in stages[0].note
+    assert [s.state for s in stages[1:]] == ["stale", "stale"]
+    image.unlink()
+    out = _plain(_invoke("job", "status", folder.name, "--jobs-dir", folder.parent,
+                         "--prusaslicer-dir", slicers[1]).output)
+    assert "select: stale (source file source/roadie.png is missing" in out
+    image.write_bytes(data)
+    assert {s.state for s in job_status(folder, Machine(None, slicers[1])).stages} == {"done"}
+
+
+@pytest.mark.parametrize("change", ["delete", "edit"])
+def test_a_missing_or_changed_output_makes_its_stage_stale(tmp_path, slicers, change):
+    """Finding 5: a stage whose record names an output that is missing, or whose hash
+    differs, is not done; job run redoes it."""
+    folder = _r1(tmp_path, slicers)
+    gcode = folder / "slice" / "plate_1.gcode"
+    if change == "delete":
+        gcode.unlink()
+        why = "its output plate_1.gcode is missing"
+    else:
+        gcode.write_bytes(gcode.read_bytes() + b"; edited\n")
+        why = "its output plate_1.gcode changed since the stage made it"
+    stages = job_status(folder, Machine(None, slicers[1])).stages
+    assert stages[2].state == "stale" and stages[2].note == why
+    assert _stage_lines(_run(folder, *slicers).output)["slice"] == "ran"
+    assert job_status(folder, Machine(None, slicers[1])).stages[2].state == "done"
+
+
+def test_the_code_fingerprint_is_part_of_every_key(tmp_path, slicers, monkeypatch):
+    """Finding 6: a change to tdmg's code (or uv.lock) makes every stage stale; a rerun
+    that writes the same bytes keeps the confirmations current."""
+    assert job_runner.KEY_SCHEMA == "tdmg.jobkey/3"
+    folder = _r1(tmp_path, slicers)
+    machine = Machine(None, slicers[1])
+    assert _invoke("job", "confirm", folder.name, "--subject", "selection", "--owner-said",
+                   "yes", "--jobs-dir", folder.parent, "--prusaslicer-dir",
+                   slicers[1]).exit_code == 0
+    # The fake OrcaSlicer's slice is NOT CERTIFIED (tests/test_job_confirm.py's docstring).
+    assert _invoke("job", "confirm", folder.name, "--subject", "print", "--owner-said",
+                   "printed it", "--accept-not-certified", "--jobs-dir", folder.parent,
+                   "--prusaslicer-dir", slicers[1]).exit_code == 0
+    before = _keys(folder, machine)
+    monkeypatch.setattr(job_runner, "code_fingerprint", lambda: "c" * 64)
+    after = _keys(folder, machine)
+    assert all(before[s] != after[s] for s in before)
+    stages = job_status(folder, machine).stages
+    assert {s.state for s in stages} == {"stale"}
+    assert "code" in stages[0].note
+    selection = (folder / "select" / "selection.json").read_bytes()
+    assert set(_stage_lines(_run(folder, *slicers).output).values()) == {"ran"}
+    assert (folder / "select" / "selection.json").read_bytes() == selection
+    status = job_status(folder, machine)
+    assert status.all_done
+    assert [(c.entry["subject"], c.current, c.stages_stale) for c in status.confirmations] \
+        == [("selection", True, False), ("print", True, False)]
+
+
+def test_the_code_fingerprint_hashes_the_package_and_uv_lock(tmp_path):
+    pkg = tmp_path / "pkg"
+    (pkg / "sub").mkdir(parents=True)
+    (pkg / "a.py").write_bytes(b"x = 1\n")
+    (pkg / "sub" / "b.py").write_bytes(b"y = 2\n")
+    (pkg / "notes.txt").write_bytes(b"not code")
+    lock = tmp_path / "uv.lock"
+    lock.write_bytes(b"version = 1\n")
+    fp = job_runner.package_fingerprint
+    first = fp(pkg, lock)
+    assert fp(pkg, lock) == first and len(first) == 64
+    (pkg / "notes.txt").write_bytes(b"changed, not code")
+    assert fp(pkg, lock) == first
+    (pkg / "sub" / "b.py").write_bytes(b"y = 3\n")
+    second = fp(pkg, lock)
+    assert second != first
+    lock.write_bytes(b"version = 2\n")
+    assert fp(pkg, lock) != second
+    assert fp(pkg, None) != fp(pkg, lock)
+    before = fp(pkg, None)
+    (pkg / "sub" / "b.py").rename(pkg / "b2.py")          # a renamed file counts
+    assert fp(pkg, None) != before
+    assert job_runner.code_fingerprint() == job_runner.code_fingerprint()
+
+
+LITERAL = ['keep \\new', 'tab \\t and \\\\ two', 'he said "no": really', "it's: x",
+           "a real\nnewline", "a real\ttab", "two\n\nlines\r\nand CRLF", "--x words",
+           "-x", "--",
+           "Ünïcödé ’quotes’ – dash", "- a dash first", "null", "60", "[1, 2]", "#x"]
+
+
+@pytest.mark.parametrize("words", LITERAL)
+def test_set_text_stores_the_words_exactly(tmp_path, words):
+    """Finding 8: --text STAGE.KEY WORDS stores WORDS as given, with no YAML parsing."""
+    folder = _new(tmp_path, "roadie")
+    result = _invoke("job", "set", folder.name, "--text", "select.instructions", words,
+                     "--jobs-dir", folder.parent)
+    assert result.exit_code == 0, result.output
+    assert load_job(folder)["stages"]["select"]["instructions"] == words
+
+
+def test_status_reports_an_unreadable_source(tmp_path, slicers):
+    """A folder where the source file should be: job status says so (no traceback), and
+    job run refuses."""
+    folder = _r1(tmp_path, slicers)
+    image = folder / "source" / "roadie.png"
+    image.unlink()
+    image.mkdir()
+    result = _invoke("job", "status", folder.name, "--jobs-dir", folder.parent,
+                     "--prusaslicer-dir", slicers[1])
+    out = _plain(result.output)
+    assert result.exit_code == 0, result.output
+    assert "select: stale (cannot read source file source/roadie.png" in out
+    result = _run(folder, *slicers)
+    assert result.exit_code == 2 and "cannot read source file" in _plain(result.output)
+
+
+def test_set_mask_refuses_a_source_folder_git_does_not_ignore(tmp_path):
+    """Finding 3, set_mask's call site: a job inside a git work tree whose source/ git
+    does not ignore gets no mask copy; job.yaml and source/ stay as they were."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not installed")
+    folder = _new(tmp_path, "roadie")              # made outside any work tree
+    mask = tmp_path / "in" / "mask.png"
+    Image.new("L", (200, 200), 255).save(mask)
+    subprocess.run(["git", "init", "-q", str(tmp_path / "jobs")], check=True)
+    before = (folder / "job.yaml").read_bytes()
+    result = _invoke("job", "set", folder.name, f"select.mask={mask}", "--jobs-dir",
+                     folder.parent)
+    out = _plain(result.output)
+    assert result.exit_code == 2, result.output
+    assert "not ignored by git" in out and "roadie/source/mask.png" in out
+    assert not (folder / "source" / "mask.png").exists()
+    assert (folder / "job.yaml").read_bytes() == before
+    (tmp_path / "jobs" / ".gitignore").write_text("roadie/\n")
+    _set(folder, f"select.mask={mask}")             # ignored now: copied
+    assert (folder / "source" / "mask.png").is_file()
+
+
+def test_set_text_is_for_text_parameters_only(tmp_path):
+    folder = _new(tmp_path, "roadie")
+    for key, why in (("flat.width_mm", "must be a number"),
+                     ("select.mask", "select.mask takes a file")):
+        result = _invoke("job", "set", folder.name, "--text", key, "60", "--jobs-dir",
+                         folder.parent)
+        assert result.exit_code == 2 and why in _plain(result.output), result.output
+    result = _invoke("job", "set", folder.name, "--text", "select.instructions", "a",
+                     "select.instructions=b", "--jobs-dir", folder.parent)
+    assert result.exit_code == 2 and "given more than once" in _plain(result.output)
+    result = _invoke("job", "set", folder.name, "--text", "select.instructions", "a b",
+                     "flat.width_mm=60", "--jobs-dir", folder.parent)
+    assert result.exit_code == 0, result.output
+    job = load_job(folder)
+    assert job["stages"]["select"]["instructions"] == "a b"
+    assert job["stages"]["flat"]["width_mm"] == 60.0
+    result = _invoke("job", "set", folder.name, "--jobs-dir", folder.parent)
+    assert result.exit_code == 2 and "--text" in _plain(result.output)
+
+
+def test_set_text_through_the_real_command_line(tmp_path):
+    """The words through a real process (python -m tdmg.cli), as the skill runs them."""
+    folder = _new(tmp_path, "roadie")
+    words = 'keep \\new "x": é $HOME %USERNAME% ~ *.png'
+    proc = subprocess.run([sys.executable, "-m", "tdmg.cli", "job", "set", folder.name,
+                           "--text", "select.instructions", words, "--jobs-dir",
+                           str(folder.parent)], cwd=tmp_path, check=False,
+                          capture_output=True, text=True, encoding="utf-8")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert load_job(folder)["stages"]["select"]["instructions"] == words

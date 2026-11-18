@@ -11,6 +11,7 @@ the job; `library check` checks the library's entries and `library verify` runs 
 under the current code and rules (tdmg.library)."""
 
 import inspect
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -989,10 +990,16 @@ def _job_folder(name: str, jobs_dir: Path | None) -> Path:
 @job_app.command("set")
 def job_set(
     name: Annotated[str, typer.Argument(help="Job name.")],
-    assignments: Annotated[list[str], typer.Argument(
+    assignments: Annotated[list[str] | None, typer.Argument(
         metavar="STAGE.KEY=VALUE...",
         help="Parameters to set, e.g. flat.width_mm=60 or "
-             "\"select.keep_at=[[470, 470]]\".")],
+             "\"select.keep_at=[[470, 470]]\".")] = None,
+    text: Annotated[tuple[str, str] | None, typer.Option(
+        "--text", metavar="STAGE.KEY WORDS",
+        help="Set one text parameter to WORDS exactly as given, with no YAML reading "
+             "(backslashes, quotes and colons stay as they are): the owner's words, "
+             "e.g. --text select.instructions 'THEIR WORDS'. The two values after --text "
+             "are taken as they are, so WORDS may start with - or --.")] = None,
     jobs_dir: JobsDir = None,
 ) -> None:
     """Set stage parameters in job.yaml (one new revision for all of
@@ -1006,6 +1013,10 @@ def job_set(
     null. none is text (colors.outline_color takes it), except in
     select.mask=none.
 
+    --text STAGE.KEY WORDS stores WORDS as text, exactly: YAML is not
+    read, so nothing in the words is turned into a tab, a line break or
+    a number. Use it for the owner's words (select.instructions).
+
     select.mask=PATH copies an owner-corrected black/white mask into
     source/ and uses it; select.mask=none removes it. Set it on its own.
 
@@ -1014,9 +1025,11 @@ def job_set(
       2  refused (unknown stage or parameter, a value of the wrong
          type or out of range); job.yaml is not changed
     """
+    assignments = assignments or []
+    text = [] if text is None or text[0] is None else [text]
     try:
         folder = _job_folder(name, jobs_dir)
-        job, changed = set_parameters(folder, assignments)
+        job, changed = set_parameters(folder, assignments, text)
     except JobError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None
@@ -1030,6 +1043,10 @@ def job_set(
     for a in assignments:
         stage, key = a.partition("=")[0].split(".", 1)
         typer.echo(f"  {stage}.{key}={yaml_value(job['stages'][stage][key])}")
+    for target, _ in text:      # the stored text, ASCII-escaped as JSON, to check
+        stage, key = target.split(".", 1)
+        value = json.dumps(job["stages"][stage][key], ensure_ascii=True)
+        typer.echo(f"  {stage}.{key} (text) = {value}")
     typer.echo(f"wrote {folder / JOB_FILE}")
 
 
@@ -1163,6 +1180,11 @@ def job_confirm(
         "--date", help="The date the owner gave the words, YYYY-MM-DD (their local "
                        "date); default today's date on this machine. Checked against "
                        "this machine's date: not after today.")] = None,
+    corrects: Annotated[int | None, typer.Option(
+        "--corrects", metavar="N",
+        help="This entry corrects confirmation N (its number in tdmg job status), whose "
+             "words were recorded wrongly; same subject. N is kept as it is and is no "
+             "longer current, so finish never uses it.")] = None,
     prusaslicer_dir: PrusaDir = None,
     jobs_dir: JobsDir = None,
 ) -> None:
@@ -1178,7 +1200,9 @@ def job_confirm(
 
     Pass only words the owner gave. Confirmations are only ever added:
     a new one never changes an earlier one. tdmg job status and job run
-    show a confirmation as stale when a covered file changes.
+    show a confirmation as stale when a covered file changes. When the
+    words of an earlier entry were recorded wrongly, record the right
+    ones with --corrects N: entry N is kept, and is no longer current.
 
     A print confirmation is not permission to purge the job: tdmg finish
     asks the owner for that separately (--purge-owner-said).
@@ -1196,7 +1220,7 @@ def job_confirm(
         folder = _job_folder(name, jobs_dir)
         job, _ = confirm(folder, subject, owner_said, date=date, route=route, face=face,
                          accept_not_certified=accept_not_certified,
-                         machine=Machine(None, prusaslicer_dir))
+                         machine=Machine(None, prusaslicer_dir), corrects=corrects)
     except JobError as e:
         typer.echo(f"error: {e}", err=True)
         raise typer.Exit(2) from None

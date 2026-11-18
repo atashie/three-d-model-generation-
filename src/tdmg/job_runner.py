@@ -30,15 +30,22 @@ null parameter passed as "not given", never as a resolved default:
 SHA-256 of each upstream record it reads (STAGE_INPUTS: selection.json, colors.json,
 flat.json, colored.json; these are byte-for-byte repeatable, research/verification/
 2026-11-16-repeatability/README.md); the stage's algorithm ids (STAGE_ALGORITHMS); the
-SHA-256 of the rule values (id, default, unit, range of every rule); and the SHA-256 of the
-profiles it uses (the printer profile; for slice the OrcaSlicer pin, and the PrusaSlicer pin
-when configured). The select stage adds the source image's and the mask's SHA-256; the
-slice stage adds whether PrusaSlicer is configured (--prusaslicer-dir or
-$TDMG_PRUSASLICER_DIR), since that turns F6.portability from UNKNOWN into a check. So a
-stage is stale when its parameters, what it read, its algorithm, a rule or a profile
-changed. A code change that keeps the algorithm id is not seen: `tdmg job run NAME
---rerun STAGE` reruns a stage (and, through the record hashes, whatever its new record
-changes downstream). Machine paths are not part of a key.
+code fingerprint (code_fingerprint: the SHA-256 of every .py file of the tdmg package, by
+its path in the package, and of the checkout's uv.lock when there is one); the SHA-256 of
+the rule values (id, default, unit, range of every rule); and the SHA-256 of the profiles
+it uses (the printer profile; for slice the OrcaSlicer pin, and the PrusaSlicer pin when
+configured). The select stage adds the source image's and the mask's SHA-256; the slice
+stage adds whether PrusaSlicer is configured (--prusaslicer-dir or $TDMG_PRUSASLICER_DIR),
+since that turns F6.portability from UNKNOWN into a check. So a stage is stale when its
+parameters, what it read, its algorithm, tdmg's code or its locked dependencies, a rule or
+a profile changed. The fingerprint is of the files' bytes, so any edit to tdmg's code (a
+comment too) or to uv.lock makes every stage of every job stale; the rerun is cheap when
+it writes the same bytes, since a confirmation is bound to its files' hashes and stays
+current. The bytes are this checkout's, so the same code checked out with other line ends
+(Windows and macOS) gives another fingerprint. A dependency installed outside uv.lock is
+not seen. `tdmg job run NAME --rerun STAGE` still reruns a stage on demand. Machine paths
+are not part of a key. (tdmg.jobkey/2 keys had no fingerprint; every stage of a job keyed
+by /2 is stale once, and runs again.)
 
 **state.json** (STATE_SCHEMA, tdmg.jobstate/2) holds `{"schema", "stages": {stage: {"key":
 ..., "record_sha256": ...}}}`: the key each stage folder was last made with, and the
@@ -63,14 +70,14 @@ A stage that fails before its record exists leaves its old folder and state.json
 were. A run left half way is tidied by the next run: an `<stage>.old/` with no `<stage>/`
 is put back, other `.old/` and `.new/` folders deleted.
 
-**Known limit.** A stage's state trusts each record's own `outputs` hashes and does not
-hash the output files again, so a hand edit to a stage's file (flat/model.stl, say) does
-not make the stage stale; a hand edit to the record itself does (state.json's
-record_sha256). A confirmation covering the file does go stale (its files are hashed
-again on every status), and confirm refuses a printable file that differs from the
-record that made it or from the slice record's links; Task 9's rebuild catches the rest.
-These checks guard against accidental edits, and edits by an agent or a tool, not
-against an adversary: state.json and job.yaml are plain files that can be edited too.
+**Outputs and source.** A stage is done only while every file its record's `outputs`
+names is there with that SHA-256 (outputs_problem): a deleted or hand-edited output
+(flat/model.stl, a G-code file) makes the stage stale, and job run makes it again. A hand
+edit to the record itself makes it stale too (state.json's record_sha256). job status
+checks the source image and mask against job.yaml (tdmg.jobs.check_source): a changed or
+missing source makes the select stage stale, saying why, and job run refuses until it is
+put back. These checks guard against accidental edits, and edits by an agent or a tool,
+not against an adversary: state.json and job.yaml are plain files that can be edited too.
 
 **Lock.** job run, job set and job confirm hold LOCK_FILE in the job folder (an exclusive
 create, removed when done), so two of them cannot change a job at once.
@@ -84,19 +91,29 @@ check with no current confirmation, a color plan that is not ready, stale confir
 
 **Confirm** (confirm, plan Task 8): records the owner's words for one subject, with the
 date, the job revision and the covered hashes (tdmg.confirmations), appended to
-job.yaml's confirmations through save_job, under the lock. It refuses: blank words; a
+job.yaml's confirmations through save_job, under the lock. With `corrects` (--corrects
+N), the entry records that it corrects entry N, whose words were recorded wrongly: N is
+kept, and is no longer current (tdmg.jobs, Confirmation entries). It refuses: blank words; a
 date that is not YYYY-MM-DD or is after today; a subject the recipe has no stage for; a
 stage not done (select for selection; colors, with a ready plan, for colors; every stage
 for print); a covered file that differs from its record; for print, an unknown route, a
 missing or unneeded face, a face that was not sliced, and a verdict that is not PRINTABLE
 unless accept_not_certified (which is then recorded), and accept_not_certified when every
-verdict is PRINTABLE.
+verdict is PRINTABLE; and a --corrects that is not an earlier entry of the same subject,
+or one that is corrected already.
+
+**Set** (set_parameters): STAGE.KEY=VALUE reads VALUE as YAML; `--text STAGE.KEY WORDS`
+(texts) stores WORDS as a string exactly as given, with no YAML reading, so backslashes,
+quotes, colons and line breaks stay as they are (the owner's words: select.instructions).
+A parameter that does not take text refuses it, and select.mask takes a file, so not
+--text.
 """
 
 from __future__ import annotations
 
 import copy
 import datetime
+import functools
 import hashlib
 import inspect
 import json
@@ -112,7 +129,7 @@ import yaml
 from pydantic import ValidationError
 
 import tdmg.slicing
-from tdmg import confirmations, jobs
+from tdmg import confirmations, jobs, paths
 from tdmg.color_config import KEYS as COLOR_KEYS
 from tdmg.color_slicing import (
     COLORSLICE_ALGORITHM,
@@ -150,7 +167,7 @@ from tdmg.slicing import RECORD_NAME as SLICE_RECORD
 STATE_FILE = "state.json"
 STATE_SCHEMA = "tdmg.jobstate/2"
 OLD_STATE_SCHEMA = "tdmg.jobstate/1"         # keys only; read, never written
-KEY_SCHEMA = "tdmg.jobkey/2"
+KEY_SCHEMA = "tdmg.jobkey/3"
 LOCK_FILE = ".lock"
 NEW_SUFFIX = ".new"
 OLD_SUFFIX = ".old"
@@ -298,6 +315,25 @@ def rules_sha256() -> str:
     return _sha(canonical_json(values))
 
 
+def package_fingerprint(package_dir: Path, lock: Path | None) -> str:
+    """SHA-256 of {path in the package: SHA-256} of every .py file under package_dir,
+    with "uv.lock" -> the lock file's SHA-256 (None without one), as canonical JSON."""
+    files = {p.relative_to(package_dir).as_posix(): _sha(p.read_bytes())
+             for p in sorted(package_dir.rglob("*.py")) if p.is_file()}
+    return _sha(canonical_json({"package": files,
+                                "uv.lock": None if lock is None else _sha(lock.read_bytes())}))
+
+
+@functools.cache
+def code_fingerprint() -> str:
+    """The code fingerprint of the running tdmg (module docstring, Input keys): its package
+    folder as imported (a checkout's src/tdmg or a wheel's), and the checkout's uv.lock when
+    there is one. Computed once per process: the code that runs is the code imported."""
+    lock = None if paths.REPO_ROOT is None else paths.REPO_ROOT / "uv.lock"
+    return package_fingerprint(Path(tdmg.__file__).resolve().parent,
+                               lock if lock is not None and lock.is_file() else None)
+
+
 def _model_sha(model) -> str:
     return _sha(canonical_json(model.model_dump(mode="json")))
 
@@ -337,7 +373,7 @@ def stage_key(job: dict, stage: str, record_hashes: dict[str, str], machine: Mac
         return None
     body = {"schema": KEY_SCHEMA, "recipe": job["recipe"], "stage": stage,
             "params": job["stages"][stage], "inputs": inputs,
-            "algorithms": stage_algorithms(job, stage),
+            "algorithms": stage_algorithms(job, stage), "code_sha256": code_fingerprint(),
             "rules_sha256": rules_sha256() if rules is None else rules,
             "profiles": stage_profiles(job, stage, machine)}
     if stage == "select":
@@ -454,8 +490,29 @@ def links_problem(stage: str, rec: dict, upstream: dict[str, Record]) -> str | N
     return None
 
 
-def _judge(job: dict, stage: str, rec: Record | None, key: str | None, state: dict,
-           upstream: dict[str, Record], forced: bool = False) -> tuple[str, str]:
+def outputs_problem(folder: Path, stage: str, rec: dict) -> str | None:
+    """Why the files the record's `outputs` names (name in the stage folder -> SHA-256)
+    are not all there with those hashes, or None. A record without outputs (colors.json of
+    a plan that is not ready) names none."""
+    outputs = rec.get("outputs")
+    if not isinstance(outputs, dict):
+        return None
+    for name, digest in sorted(outputs.items()):
+        path = folder / stage / name
+        if not path.is_file():
+            return f"its output {name} is missing"
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            return f"cannot read its output {name} ({e.strerror or e})"
+        if _sha(data) != digest:
+            return f"its output {name} changed since the stage made it"
+    return None
+
+
+def _judge(folder: Path, job: dict, stage: str, rec: Record | None, key: str | None,
+           state: dict, upstream: dict[str, Record], forced: bool = False
+           ) -> tuple[str, str]:
     """(DONE, "") or (STALE / NOT_RUN, why), from this stage alone."""
     if rec is None:
         return NOT_RUN, ""
@@ -467,14 +524,15 @@ def _judge(job: dict, stage: str, rec: Record | None, key: str | None, state: di
         return STALE, "an earlier stage has no record"
     entry = state["stages"].get(stage, {})
     if entry.get("key") != key:
-        return STALE, ("its parameters, inputs, rules or profiles changed since it ran, or "
-                       "it was not run by tdmg job run")
+        return STALE, ("its parameters, inputs, tdmg's code (or uv.lock), rules or profiles "
+                       "changed since it ran, or it was not run by tdmg job run")
     if entry["record_sha256"] is None:
         return STALE, ("its record's hash was not stored (state.json from an older tdmg); "
                        "the next run reruns it")
     if entry["record_sha256"] != rec.sha256:
         return STALE, "its record changed since tdmg job run wrote it"
-    problem = links_problem(stage, rec.data, upstream)
+    problem = links_problem(stage, rec.data, upstream) or outputs_problem(folder, stage,
+                                                                          rec.data)
     if problem:
         return STALE, problem
     if forced:
@@ -499,6 +557,7 @@ class ConfirmationStatus:
     problem: str | None              # why stale; None when current
     stages_stale: bool = False       # a stage it rests on is not done: a rerun decides
     chosen_face: str | None = None   # tdmg's preferred face, when the owner printed another
+    corrected_by: int | None = None  # the later entry that corrects this one (never current)
 
     @property
     def current(self) -> bool:
@@ -551,16 +610,27 @@ def job_status(folder: str | Path, machine: Machine | None = None, *,
     job = load_job(folder) if job is None else job
     state = load_state(folder, job)
     rules = rules_sha256()
+    try:
+        check_source(folder, job)
+        source_problem = None
+    except JobError as e:
+        source_problem = str(e)
+    stages = recipe(job["recipe"]).stages
+    source_stage = "select" if "select" in stages else stages[0]
     records: dict[str, Record] = {}
     out = []
     earlier_done = True
-    for stage in recipe(job["recipe"]).stages:
+    for stage in stages:
         rec = _record(folder, stage)
         upstream = {s: records[s] for s in _inputs(job, stage) if s in records}
         key = stage_key(job, stage, {s: r.sha256 for s, r in upstream.items()}, machine,
                         rules)
-        verdict, note = _judge(job, stage, rec, key, state, upstream)
-        if rec is None and (folder / stage).exists():
+        verdict, note = _judge(folder, job, stage, rec, key, state, upstream)
+        if source_problem and stage == source_stage:
+            verdict = STALE if verdict == DONE else verdict
+            why = f"{source_problem}; tdmg job run refuses until it is put back"
+            note = f"{why}; {note}" if note else why
+        elif rec is None and (folder / stage).exists():
             note = "its folder has no record (an interrupted run)"
         elif rec is None and (folder / f"{stage}{OLD_SUFFIX}").is_dir():
             note = (f"an interrupted swap left {stage}{OLD_SUFFIX}; the next run restores "
@@ -576,6 +646,10 @@ def job_status(folder: str | Path, machine: Machine | None = None, *,
     by = {s.stage: s for s in out}
     slice_rec = records["slice"].data if "slice" in records else {}
     preferred = slice_rec.get("preferred_face") if isinstance(slice_rec, dict) else None
+    corrected_by = {}
+    for i, entry in enumerate(job["confirmations"], start=1):
+        if entry.get(jobs.CORRECTS_KEY) is not None:
+            corrected_by.setdefault(entry[jobs.CORRECTS_KEY], i)
     for i, entry in enumerate(job["confirmations"], start=1):
         subject = entry["subject"]
         rests_on = [s.stage for s in out] if subject == "print" else \
@@ -583,9 +657,12 @@ def job_status(folder: str | Path, machine: Machine | None = None, *,
         chosen = None
         if subject == "print" and entry["face"] and preferred and preferred != entry["face"]:
             chosen = preferred
+        later = corrected_by.get(i)
+        problem = (f"corrected by confirmation {later}" if later is not None
+                   else confirmations.current_problem(folder, job, entry))
         status.confirmations.append(ConfirmationStatus(
-            i, entry, confirmations.current_problem(folder, job, entry),
-            stages_stale=any(by[s].state != DONE for s in rests_on), chosen_face=chosen))
+            i, entry, problem, stages_stale=any(by[s].state != DONE for s in rests_on),
+            chosen_face=chosen, corrected_by=later))
     status.waits = _waits(job, status)
     return status
 
@@ -628,8 +705,9 @@ def _waits(job: dict, status: Status) -> list[str]:
     # A stale confirmation waits only while no current one stands in for it: the same
     # subject and, for print, the same route and face (Status.matched). The stale entry
     # stays in job.yaml for good: it is the owner's words.
+    # A corrected entry waits for nothing: its correction stands in for it.
     for c in status.confirmations:
-        if not c.current and not status.matched(c):
+        if not c.current and c.corrected_by is None and not status.matched(c):
             waits.append(f"confirmation {c.number} ({confirmations.describe(c.entry)}) is "
                          "stale: ask the owner to confirm again (tdmg job confirm)")
     return waits
@@ -675,8 +753,10 @@ def confirmation_line(c: ConfirmationStatus) -> str:
         state = CURRENT
     chosen = f"; printed face {e['face']}; tdmg chose {c.chosen_face}" if c.chosen_face \
         else ""
+    corrects = (f", corrects confirmation {e[jobs.CORRECTS_KEY]}"
+                if e.get(jobs.CORRECTS_KEY) is not None else "")
     return (f"{c.number}. {confirmations.describe(e)}, {e['date']}, revision "
-            f"{e['revision']}, {words}: {state}{chosen}")
+            f"{e['revision']}, {words}{corrects}: {state}{chosen}")
 
 
 def status_lines(status: Status) -> list[str]:
@@ -811,7 +891,7 @@ def _run_locked(folder: Path, job: dict, machine: Machine, rerun: set[str]
         key = stage_key(job, stage, {s: r.sha256 for s, r in upstream.items()}, machine,
                         rules)
         rec = _record(folder, stage)
-        verdict, _ = _judge(job, stage, rec, key, state, upstream, stage in rerun)
+        verdict, _ = _judge(folder, job, stage, rec, key, state, upstream, stage in rerun)
         if verdict == DONE:
             events.append(RunEvent(stage, "kept"))
         else:
@@ -898,9 +978,17 @@ def parse_value(raw: str):
 def parse_assignment(text: str, job: dict) -> tuple[str, str, str]:
     """(stage, key, raw value) from STAGE.KEY=VALUE, with the stage and key known."""
     target, eq, raw = text.partition("=")
-    stage, dot, key = target.partition(".")
-    if not eq or not dot:
+    if not eq or "." not in target:
         raise JobError(f"{text!a} is not STAGE.KEY=VALUE")
+    stage, key = parse_target(target, job)
+    return stage, key, raw
+
+
+def parse_target(target: str, job: dict) -> tuple[str, str]:
+    """(stage, key) from STAGE.KEY, with the stage and key known."""
+    stage, dot, key = target.partition(".")
+    if not dot:
+        raise JobError(f"{target!a} is not STAGE.KEY")
     stages = recipe(job["recipe"]).stages
     if stage not in stages:
         raise JobError(f"recipe {job['recipe']} has no stage {stage!a} (stages: "
@@ -909,11 +997,24 @@ def parse_assignment(text: str, job: dict) -> tuple[str, str, str]:
     if key not in fields:
         raise JobError(f"stage {stage} has no parameter {key!a} (parameters: "
                        f"{', '.join(fields)})")
-    return stage, key, raw
+    return stage, key
 
 
-def set_parameters(folder: str | Path, assignments: list[str]) -> tuple[dict, bool]:
-    """Apply STAGE.KEY=VALUE assignments; return (the job, whether it changed).
+# A --text value: stored as it is, never read as YAML.
+@dataclass(frozen=True)
+class Text:
+    words: str
+
+
+TEXT_HELP = ("--text stores text as given; give a number, true/false, null or a list as "
+             "STAGE.KEY=VALUE")
+
+
+def set_parameters(folder: str | Path, assignments: list[str],
+                   texts: Iterable[tuple[str, str]] = ()) -> tuple[dict, bool]:
+    """Apply STAGE.KEY=VALUE assignments and (STAGE.KEY, WORDS) texts (--text: WORDS
+    stored as a string, exactly, with no YAML reading); return (the job, whether it
+    changed).
 
     `select.mask=PATH` gives the job an owner-corrected mask (tdmg.jobs.set_mask; PATH is a
     file on this machine, copied into source/), and `select.mask=none` (or null) removes it;
@@ -923,9 +1024,16 @@ def set_parameters(folder: str | Path, assignments: list[str]) -> tuple[dict, bo
     folder = Path(folder)
     check_not_linked(folder)
     job = load_job(folder)
-    if not assignments:
-        raise JobError("give at least one STAGE.KEY=VALUE")
+    texts = list(texts)
+    if not assignments and not texts:
+        raise JobError("give at least one STAGE.KEY=VALUE or --text STAGE.KEY WORDS")
     parsed = [parse_assignment(a, job) for a in assignments]
+    for target, words in texts:
+        stage, key = parse_target(target, job)
+        if (stage, key) == ("select", "mask"):
+            raise JobError("select.mask takes a file: select.mask=PATH (or select.mask=none), "
+                           "not --text")
+        parsed.append((stage, key, Text(words)))
     targets = [f"{s}.{k}" for s, k, _ in parsed]
     repeated = sorted({t for t in targets if targets.count(t) > 1})
     if repeated:
@@ -939,7 +1047,7 @@ def _set_locked(folder: Path, parsed, targets) -> tuple[dict, bool]:
     if "select.mask" in targets:
         if len(parsed) > 1:
             raise JobError("set select.mask on its own (it copies a file into source/)")
-        raw = parsed[0][2].strip()
+        raw = parsed[0][2].strip()      # never a Text: set_parameters refuses that
         if not raw:
             raise JobError("select.mask needs a value: select.mask=PATH (a black/white mask "
                            "file), or select.mask=none to remove the mask")
@@ -948,12 +1056,14 @@ def _set_locked(folder: Path, parsed, targets) -> tuple[dict, bool]:
         return new, new["revision"] != job["revision"]
     new = copy.deepcopy(job)
     for stage, key, raw in parsed:
-        new["stages"][stage][key] = parse_value(raw)
+        new["stages"][stage][key] = raw.words if isinstance(raw, Text) else parse_value(raw)
     try:
         saved = jobs.save_job(folder, new)
     except JobError as e:
         text = str(e)
-        if any(isinstance(new["stages"][s][k], str) for s, k, _ in parsed):
+        if any(isinstance(raw, Text) and f"stages.{s}.{k}" in text for s, k, raw in parsed):
+            text += f" ({TEXT_HELP})"
+        elif any(isinstance(new["stages"][s][k], str) for s, k, _ in parsed):
             text += f" ({VALUE_HELP})"
         raise JobError(text) from None
     return saved, saved["revision"] != job["revision"]
@@ -980,14 +1090,16 @@ def confirm_date(value: str | None, today: datetime.date | None = None) -> str:
 
 def confirm(folder: str | Path, subject: str, owner_said: str, *, date: str | None = None,
             route: str | None = None, face: str | None = None,
-            accept_not_certified: bool = False, machine: Machine | None = None
-            ) -> tuple[dict, dict]:
+            accept_not_certified: bool = False, machine: Machine | None = None,
+            corrects: int | None = None) -> tuple[dict, dict]:
     """Record the owner's confirmation of `subject`; return (the job, the new entry).
 
     `owner_said` is the owner's own words, verbatim; nothing else may be passed. The entry
     (tdmg.jobs module docstring) is appended to job.yaml's confirmations with save_job,
     under the job's lock; refusals are listed in this module's docstring. `machine` matters
-    only for whether PrusaSlicer is configured (part of the slice stage's key)."""
+    only for whether PrusaSlicer is configured (part of the slice stage's key). `corrects`:
+    the number of the earlier entry of this subject whose words were recorded wrongly; that
+    entry is kept and is no longer current."""
     folder = Path(folder)
     machine = Machine() if machine is None else machine
     problem = jobs.owner_words_problem(owner_said)
@@ -1004,13 +1116,17 @@ def confirm(folder: str | Path, subject: str, owner_said: str, *, date: str | No
         raise JobError("--route, --face and --accept-not-certified are for --subject print")
     with job_lock(folder):
         return _confirm_locked(folder, subject, owner_said, day, route, face,
-                               accept_not_certified, machine)
+                               accept_not_certified, machine, corrects)
 
 
 def _confirm_locked(folder: Path, subject: str, owner_said: str, day: str,
-                    route: str | None, face: str | None, accept: bool, machine: Machine
-                    ) -> tuple[dict, dict]:
+                    route: str | None, face: str | None, accept: bool, machine: Machine,
+                    corrects: int | None = None) -> tuple[dict, dict]:
     job = load_job(folder)                  # read again under the lock
+    if corrects is not None:
+        problem = jobs.correction_problem(corrects, subject, job["confirmations"])
+        if problem:
+            raise JobError(f"--corrects {problem}")
     check_source(folder, job)
     status = job_status(folder, machine, job=job)
     by = {s.stage: s for s in status.stages}
@@ -1026,6 +1142,8 @@ def _confirm_locked(folder: Path, subject: str, owner_said: str, day: str,
                        f"({by['colors'].record['not_ready_reason']})")
     entry = {"subject": subject, "owner_said": owner_said, "date": day,
              "revision": job["revision"]}
+    if corrects is not None:
+        entry[jobs.CORRECTS_KEY] = corrects
     if subject != "print":
         entry["covers"] = confirmations.subject_covers(folder, subject)
     else:

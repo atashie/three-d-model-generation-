@@ -95,6 +95,23 @@ def _option_value(rest: list[str], flag: str) -> str | None:
     return None
 
 
+def _set_args(rest: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
+    """(STAGE.KEY=VALUE assignments, (STAGE.KEY, WORDS) of --text) of a job set line's
+    arguments after the job name; other --flags (and their values) are left out."""
+    pairs, texts, i = [], [], 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--text":
+            texts.append((rest[i + 1], rest[i + 2]))
+            i += 3
+        elif tok.startswith("--"):
+            i += 1 if "=" in tok else 2
+        else:
+            pairs.append(tok)
+            i += 1
+    return pairs, texts
+
+
 COMMANDS = _tdmg_commands(SKILL.read_text(encoding="utf-8"))
 
 
@@ -130,10 +147,9 @@ def test_job_set_keys_are_stage_parameters(args):
     path, _, rest = _resolve(args)
     if path != ("job", "set"):
         return
-    pairs = [tok for tok in rest[1:] if not tok.startswith("--")]
-    assert pairs, "job set without STAGE.KEY=VALUE"
-    for pair in pairs:
-        key = pair.split("=", 1)[0]
+    pairs, texts = _set_args(rest[1:])
+    assert pairs or texts, "job set without STAGE.KEY=VALUE or --text STAGE.KEY WORDS"
+    for key in [p.split("=", 1)[0] for p in pairs] + [t for t, _ in texts]:
         stage, _, name = key.partition(".")
         assert stage in jobs.STAGE_FIELDS, f"{key}: no stage {stage!r}"
         assert name in jobs.STAGE_FIELDS[stage], f"{key}: stage {stage} has no {name!r}"
@@ -192,13 +208,27 @@ def _raw_tdmg_lines(text: str) -> list[str]:
 def test_owner_words_are_single_quoted_without_path_conversion(line):
     """Git Bash turns a leading / into a Windows path unless MSYS_NO_PATHCONV=1, and only
     single quotes keep $, ` and ! from the shell."""
-    carries = any(f" {flag} " in line for flag in WORD_FLAGS) or "select.instructions=" in line
+    carries = (any(f" {flag} " in line for flag in WORD_FLAGS)
+               or "select.instructions" in line)
     if not carries:
         return
     assert line.startswith("MSYS_NO_PATHCONV=1 "), line
     for flag in WORD_FLAGS:
         if f" {flag} " in line:
             assert f" {flag} '" in line, f"{flag} words are not in single quotes: {line}"
+    if " --text " in line:
+        assert re.search(r" --text [a-z_]+\.[a-z_]+ '", line), (
+            f"--text words are not in single quotes: {line}")
+
+
+def test_owner_words_in_job_set_use_text():
+    """select.instructions holds the owner's words: given with --text (stored as they
+    are), never as STAGE.KEY=VALUE, which reads YAML (a backslash escape, a colon)."""
+    lines = [line for line in _raw_tdmg_lines(SKILL.read_text(encoding="utf-8"))
+             if "select.instructions" in line]
+    assert lines, "the skill does not record select.instructions"
+    for line in lines:
+        assert "--text select.instructions '" in line and "select.instructions=" not in line
 
 
 def test_every_stage_key_named_in_the_skill_exists():
@@ -219,7 +249,7 @@ def test_job_set_lines_are_accepted(args, tmp_path):
     """Apply the line's assignments to a new job of the recipe they belong to, so every
     value parses and passes the stage's checks (a placeholder path becomes a real file)."""
     _, _, rest = _resolve(args)
-    pairs = [tok for tok in rest[1:] if not tok.startswith("--")]
+    pairs, texts = _set_args(rest[1:])
     image = tmp_path / "img.png"
     Image.new("RGBA", (20, 10), (200, 30, 30, 255)).save(image)
     colors = not any(p.startswith("flat.") for p in pairs)
@@ -228,6 +258,7 @@ def test_job_set_lines_are_accepted(args, tmp_path):
     mask = tmp_path / "mask.png"
     Image.new("L", (20, 10), 255).save(mask)
     pairs = [f"select.mask={mask}" if p.startswith("select.mask=") else p for p in pairs]
-    job, _ = set_parameters(tmp_path / "jobs" / "t1", pairs)
-    if any(p.startswith("select.instructions=") for p in pairs):
-        assert job["stages"]["select"]["instructions"] == "THEIR WORDS"
+    job, _ = set_parameters(tmp_path / "jobs" / "t1", pairs, texts)
+    for target, words in texts:
+        stage, key = target.split(".")
+        assert job["stages"][stage][key] == words

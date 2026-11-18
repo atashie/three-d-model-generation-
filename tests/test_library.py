@@ -39,7 +39,7 @@ from tdmg.library import (
     STAGED_SCHEMA,
     complete_bytes,
 )
-from tdmg.records import replace_file
+from tdmg.records import record_text, replace_file
 from tdmg.rules import load_rules
 
 fake = test_slice.fake
@@ -366,18 +366,24 @@ def test_known_limit_a_coordinated_rewrite_of_both_manifests_passes(
 def test_verify_catches_an_edited_provenance_that_check_cannot(tmp_path, tmp_path_factory,
                                                                slicers, repo):
     """P2: provenance.json edited and both manifests written again passes check (the
-    known limit), but verify reports the verdicts and checks against a run (M6: as JSON)."""
+    known limit), but verify reports the checks against a run (M6: as JSON). An edited
+    confirmation is now caught by check itself: it is no longer job.yaml's entry (the
+    Codex review of the restructure, finding 2)."""
     entry = _entry(tmp_path, tmp_path_factory, slicers)
-    prov = json.loads((entry / "provenance.json").read_text(encoding="utf-8"))
-    prov["confirmation"]["entry"]["verdicts"] = {"edited": "PASS"}
+    original = (entry / "provenance.json").read_bytes()
+    prov = json.loads(original)
     prov["stages"]["flat"]["checks"] = []
     (entry / "provenance.json").write_text(json.dumps(prov), encoding="utf-8")
     _rewrite_both(entry)
     assert _check(entry.parent)[0].exit_code == 0
     r, out = _verify(entry, slicers)
     assert r.exit_code == 1, r.output
-    assert 'were {"edited": "PASS"}, now {"flat/model.stl": "NOT CERTIFIED"}' in out
     assert "flat check F1.finite at $.checks[0]: new now (PASS)" in out
+    prov["confirmation"]["entry"]["verdicts"] = {"edited": "PASS"}
+    (entry / "provenance.json").write_text(json.dumps(prov), encoding="utf-8")
+    _rewrite_both(entry)
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1 and "is not confirmation 1 of job.yaml" in out
 
 
 def test_a_case_renamed_file_or_entry(tmp_path, tmp_path_factory, slicers, repo):
@@ -604,3 +610,135 @@ def test_a_stage_that_fails_on_the_machine_is_worded_so(tmp_path, tmp_path_facto
     assert r.exit_code == 1, r.output
     assert "stage flat: failed (possibly the environment): No space left on device" in out
     assert "refused by the current code" not in out
+
+
+# --- the Codex review of the restructure (research/reviews/2026-11-16-restructure/) ------------
+
+def _edit_provenance(entry, change):
+    prov = json.loads((entry / "provenance.json").read_bytes())
+    change(prov)
+    (entry / "provenance.json").write_bytes(record_text(prov))
+
+
+def _replace_model(prov, entry):
+    model = entry / "private" / "model.stl"
+    model.write_bytes(b"not a printable model")
+    digest = library._sha(model.read_bytes())
+    prov["printable_files"] = {"private/model.stl": digest}
+    prov["confirmation"]["entry"]["covers"] = {}
+
+
+def _other_words(prov, entry):
+    prov["confirmation"]["entry"]["owner_said"] = "words the owner did not say"
+    prov["print_confirmations"][0]["entry"]["owner_said"] = "words the owner did not say"
+
+
+def _other_number(prov, entry):
+    prov["confirmation"]["number"] = 2
+    prov["print_confirmations"][0]["number"] = 2
+
+
+def _extra_printable(prov, entry):
+    (entry / "private" / "extra.stl").write_bytes(b"solid x\n")
+    prov["printable_files"]["private/extra.stl"] = library._sha(b"solid x\n")
+
+
+def _public_mismatch(prov, entry):
+    prov["public"] = True
+
+
+def _other_print_confirmation(prov, entry):
+    other = json.loads(json.dumps(prov["print_confirmations"][0]))
+    other["entry"]["covers"] = {k: "0" * 64 for k in other["entry"]["covers"]}
+    prov["print_confirmations"].append(other)
+
+
+NOT_JOBS = "the confirmation in provenance.json is not confirmation 1 of job.yaml"
+
+
+@pytest.mark.parametrize("change, problem", [
+    (_replace_model, NOT_JOBS),
+    (_other_words, NOT_JOBS),
+    (_other_number, "provenance.json names confirmation 2, which job.yaml does not have"),
+    (_extra_printable, "the printable files are not the confirmed files"),
+    (_public_mismatch, ("provenance.json says public true, but the printable files are in "
+                        "private/")),
+    (_other_print_confirmation, ("the print confirmation in provenance.json is not "
+                                 "confirmation 1 of job.yaml")),
+])
+def test_records_that_contradict_each_other_are_damage(tmp_path, tmp_path_factory, slicers,
+                                                       repo, change, problem):
+    """Finding 2: provenance.json's confirmation must be job.yaml's numbered entry, its
+    covers the printable files, its folder the public answer's, even with every manifest
+    written again to agree."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    _edit_provenance(entry, lambda prov: change(prov, entry))
+    _rewrite_both(entry)
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1, r.output
+    assert f"{R1}: DAMAGED" in out and problem in out, out
+
+
+def test_blank_purge_words_are_damage(tmp_path, tmp_path_factory, slicers, repo):
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+    record = json.loads((entry / PURGE_FILE).read_bytes())
+    record["owner_said"] = " "
+    (entry / PURGE_FILE).write_bytes(record_text(record))
+    replace_file(entry, COMPLETE_FILE, complete_bytes(entry))
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1 and f"{R1}: DAMAGED" in out
+    assert "no tdmg.purge/1 purge.json for job" in out
+
+
+def test_a_literal_timestamp_marker_is_not_a_timestamp():
+    """Finding 7: a G-code file whose timestamp line is the marker itself does not hash as
+    one with a timestamp there; a file without the marker hashes as before."""
+    stamped = f"; HEADER\n; generated by OrcaSlicer 2.5.0 on {STAMP_A}\nG28\n".encode()
+    literal = b"; HEADER\n<timestamp>\nG28\n"
+    escaped = b"; HEADER\n<timestamp><timestamp>\nG28\n"
+    digest = library.gcode_digest
+    assert digest("plate_1.gcode", stamped) != digest("plate_1.gcode", literal)
+    assert digest("plate_1.gcode", literal) != digest("plate_1.gcode", escaped)
+    assert digest("plate_1.gcode", stamped) == b"; HEADER\n<timestamp>\nG28\n"
+    plain = b"; HEADER\n; something else\nG28\n"
+    assert digest("plate_1.gcode", plain) == plain
+
+
+def test_verify_without_masked_slice_hashes_is_incomplete(tmp_path, tmp_path_factory,
+                                                          slicers, repo):
+    """Finding 7: provenance.json without record_masked_sha256 cannot be compared in full:
+    a difference (exit 1), not identical."""
+    entry = _entry(tmp_path, tmp_path_factory, slicers)
+
+    def drop(prov):
+        del prov["stages"]["slice"]["record_masked_sha256"]
+    _edit_provenance(entry, drop)
+    _rewrite_both(entry)
+    assert _check(entry.parent)[0].exit_code == 0
+    r, out = _verify(entry, slicers)
+    assert r.exit_code == 1, r.output
+    assert "the comparison is incomplete" in out
+
+
+def test_a_print_confirmation_stale_at_finish_is_damage(tmp_path, tmp_path_factory, slicers,
+                                                       repo):
+    """Finding 2: every print confirmation provenance.json lists was current when the print
+    was finished; one that was stale (its files are not the job's) is damage."""
+    folder = _job(tmp_path, tmp_path_factory, slicers)
+    test_finish._confirm(folder, slicers[1], "--accept-not-certified", words="first")
+    r = _invoke("job", "set", R1, "flat.thickness_mm=4", "--jobs-dir", folder.parent)
+    assert r.exit_code == 0, r.output                   # a new model: 1 goes stale
+    r = _invoke("job", "run", R1, "--jobs-dir", folder.parent, "--slicer-dir", slicers[0],
+                "--prusaslicer-dir", slicers[1])
+    assert r.exit_code in (0, 1), r.output
+    test_finish._confirm(folder, slicers[1], "--accept-not-certified", words="second")
+    assert _finish(folder, slicers).exit_code == 0
+    entry = tmp_path / "prints" / R1
+    first = library.parse_job((entry / "job.yaml").read_bytes())["confirmations"][0]
+    _edit_provenance(entry, lambda prov: prov["print_confirmations"].insert(
+        0, {"number": 1, "entry": first}))
+    _rewrite_both(entry)
+    r, out = _check(entry.parent)
+    assert r.exit_code == 1, r.output
+    assert ("print confirmation 1 in provenance.json was not current when the print was "
+            "finished") in out

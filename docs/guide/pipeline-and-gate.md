@@ -61,31 +61,42 @@ generated image, what the owner knows of its prompt, generator and so on, else
 `unknown`), and every stage's parameters. A parameter left at null takes the stage
 command's own default; `--width-mm` and `--thickness-mm` have no default and may be left
 unset for now. A class with no usable recipe, an existing job, and an image that
-`tdmg select` cannot read are refused. Outside a source checkout, give `--jobs-dir`.
+`tdmg select` cannot read are refused. Outside a source checkout, give `--jobs-dir`. A
+`--jobs-dir` inside a git work tree must be one git ignores: `job new` (and `job set
+select.mask=PATH`) asks `git check-ignore` about each source file it would write, and
+refuses with nothing written when one is not ignored (or is tracked).
 
 **Running a job (restructure Task 7).** `tdmg job set NAME STAGE.KEY=VALUE ...` changes
 parameters (for example `flat.width_mm=60`, `"select.keep_at=[[470, 470]]"`,
 `"colors.merge=[[1, 2]]"`, `null` to go back to the default); values are read by the same
-strict YAML rules as `job.yaml`. `select.mask=PATH` copies a corrected mask into
+strict YAML rules as `job.yaml`. `--text STAGE.KEY WORDS` stores WORDS as text exactly as
+given, with no YAML reading, so backslashes, quotes, colons and line breaks stay as they
+are: use it for the owner's words (`--text select.instructions 'THEIR WORDS'`). A
+parameter that does not take text refuses it. `select.mask=PATH` copies a corrected mask into
 `source/` (`select.mask=none` removes it). `tdmg job run NAME --slicer-dir DIR
 [--prusaslicer-dir DIR]` runs each stage into `jobs/NAME/<stage>/`, calling the same
 functions with the same arguments as the stage commands above, so the files are the same
 as a run by hand (except the time of slicing in the G-code and its hashes). A stage runs
 again only when its folder has no record or its input key changed: the SHA-256 of its
-parameters, of the upstream records it reads, its algorithm id, the rule values and the
-profiles it uses (and, for `select`, the image and mask hashes), kept in
-`jobs/NAME/state.json`. A changed parameter reruns that stage, and each later stage whose
-input record changed. A stage whose record names another algorithm, or whose links do not
-match the upstream records, is stale too; `--rerun STAGE` runs a stage again anyway (after
-a code change that kept the algorithm id). While `job run` or `job set` works on a job it
-holds `jobs/NAME/.lock`. `state.json` also holds the SHA-256 of each stage record as
-`job run` wrote it, so a hand-edited record (a `slice.json` changed to say PRINTABLE, for
-example) makes its stage stale. `state.json` is the same for the same job except that
-hash for `slice.json`, which holds the G-code hashes. A known limit: a stage's state
-trusts its record's own output hashes and does not hash the files again, so a hand edit
-to a stage's file (for example `flat/model.stl`) does not make the stage stale; a
-confirmation that covers the file does go stale (below), `confirm` refuses it, and the
-rebuild proof of `tdmg finish` (below) catches the rest. These checks guard
+parameters, of the upstream records it reads, its algorithm id, the code fingerprint, the
+rule values and the profiles it uses (and, for `select`, the image and mask hashes), kept
+in `jobs/NAME/state.json`. The code fingerprint is the SHA-256 of every `.py` file of the
+`tdmg` package and of the checkout's `uv.lock` (key schema `tdmg.jobkey/3`), so any change
+to tdmg's code or locked dependencies, even one that keeps the algorithm id, makes every
+stage stale and the next `job run` runs it again; a rerun that writes the same bytes keeps
+the confirmations current, since they are bound to file hashes. A dependency installed
+outside `uv.lock` is not seen. A changed parameter reruns that stage, and each later stage
+whose input record changed. A stage whose record names another algorithm, or whose links
+do not match the upstream records, is stale too; `--rerun STAGE` runs a stage again
+anyway. While `job run` or `job set` works on a job it holds `jobs/NAME/.lock`.
+`state.json` also holds the SHA-256 of each stage record as `job run` wrote it, so a
+hand-edited record (a `slice.json` changed to say PRINTABLE, for example) makes its stage
+stale. `state.json` is the same for the same job except that hash for `slice.json`, which
+holds the G-code hashes. A stage is done only while every file its record's `outputs`
+lists is there with that SHA-256: a deleted or hand-edited output (`flat/model.stl`, a
+G-code file) makes the stage stale, and `job run` makes it again. `job status` also checks
+the source image and mask against `job.yaml`: a changed or missing source makes `select`
+stale, saying why, and `job run` refuses until it is put back. These checks guard
 against accidental edits and edits by an agent or tool, not against an adversary:
 `state.json` and `job.yaml` are plain files. A rerun goes into `<stage>.new/`
 and replaces the old folder only once its
@@ -119,7 +130,11 @@ this machine's date. A print confirmation is not permission to purge the job: `t
 finish` asks the owner for that separately. Entries are only ever added by tdmg's own
 writes (`job set` and `confirm` cannot change or remove one); a hand edit of `job.yaml`
 can still remove or reword entries, and `jobs/` is not in git, so `tdmg finish` copies
-the confirming entry verbatim into the library. `job status` and `job run` hash
+the confirming entry verbatim into the library. Words recorded wrongly are corrected with
+`tdmg job confirm ... --corrects N`: the new entry records `corrects: N`, entry N is kept
+as it was and reads "STALE (corrected by confirmation M)", so `finish` neither chooses it
+nor copies it as the owner's words (it stays in the library's `job.yaml`, with the
+correction). An entry is corrected once; correct the correction instead. `job status` and `job run` hash
 the covered files again each time and show each confirmation as current or stale (a
 covered file changed, went missing or cannot be read, or the slice identity or a verdict
 changed); a rerun that writes the same bytes leaves it current. A current confirmation
@@ -134,9 +149,17 @@ name, no folder on the way is a symlink or junction, the job and `prints/` do no
 overlap, and `prints/NAME` does not exist yet; the job's lock is held throughout. (2)
 Every stage is done and current; the print confirmation is current (the only one, the
 latest of several with the same route and face, or `--confirmation N` when they differ);
-the git tree is clean outside `jobs/` and `prints/`, since the commit pins the code. (3)
+the git tree is clean outside `jobs/` and `prints/`, since the commit pins the code; and
+when `prints/` is inside a git work tree, git ignores every path the source files and
+(with `--public no`) the private printable files would be written to, in the staging
+folder and in the entry (`git check-ignore`; a tracked path is not ignored). The
+checkout's own `prints/` is ignored there by `.gitignore`; another `--prints-dir` inside
+the checkout is refused before anything is copied. A leftover `prints/.staging-NAME/` from
+an interrupted run is removed only after these checks pass, and only when it holds
+nothing but what `finish` writes there; otherwise `finish` names what else is there and
+deletes nothing. (3)
 `prints/.staging-NAME/` gets `job.yaml`, `source/` (the image and its mask), the
-confirmed route's printable files only, `provenance.json` (commit, `uv.lock` hash, Python,
+confirmed route's printable files only, `provenance.json` (commit, `uv.lock` hash, code fingerprint, Python,
 platform and library versions, the rules the records name with their kind and
 validation, profile and slicer pin hashes, algorithm ids, every check result and verdict,
 and every current print confirmation verbatim) and `card.md` (what to print and how,
@@ -152,7 +175,8 @@ stops `finish` (exit 1) with nothing published or deleted. (5) The printable fil
 `STAGED` (the SHA-256 of every staged file) is written and the staging folder renamed to
 `prints/NAME`; `purge.json` (the owner's words, the date and every file of the job with
 its SHA-256) is written, then `COMPLETE` (the SHA-256 of every other file) last. (7)
-Before anything is deleted, `COMPLETE` must verify and the entry must be this job's
+Before anything is deleted, also when resuming, the entry must pass `tdmg library check`'s
+own validator (below) with its `source/` and `private/` present, and so be this job's
 (checked against `purge.json`: provenance, printable files, stage-record hashes,
 `job.yaml` and source). Then `jobs/NAME/` is renamed to `jobs/.purging-NAME/` (on Windows
 this fails at once if a program holds a file in it open), checked to hold exactly what
@@ -164,7 +188,11 @@ the library does not keep that are not stage outputs, `job.yaml`, `state.json` o
 checks the words and prints them back ASCII-escaped, as `purge.json` would hold them, so
 they can be checked first. The real run prints them again before it writes `purge.json`. After an interruption, run the
 same command again: it continues where it stopped, never publishes twice, and deletes
-nothing unless `prints/NAME/COMPLETE` verifies and the entry is this job's. `tdmg job new`
+nothing unless `prints/NAME/COMPLETE` verifies and the entry is this job's. A resumed
+run before `COMPLETE` is written (the publish happened, `COMPLETE` did not) writes
+`purge.json` again with its own `--purge-owner-said` words. Once `COMPLETE` is written it
+covers `purge.json`, whose words are the ones the deletion is recorded with: a resumed run
+given other words refuses, deleting nothing. `tdmg job new`
 refuses a name whose tombstone exists, and a name already in the library (`--prints-dir`,
 default the checkout's `prints/`, even with `--jobs-dir`; outside a checkout it says the
 library was not checked). A known limit: a file written into `jobs/.purging-NAME/` after
@@ -182,7 +210,12 @@ called a fresh clone's entry damaged.
 **Checking the library (restructure Task 10).** `tdmg library check [NAME]` checks every
 entry of `prints/` (or one): `COMPLETE` is present and in form, every file is the one it
 lists (SHA-256), no listed file is missing and no unlisted file or folder is there;
-`STAGED`, `purge.json`, `provenance.json` and `job.yaml` agree with `COMPLETE`. `source/`
+`STAGED`, `purge.json`, `provenance.json` and `job.yaml` agree with `COMPLETE` and with
+each other: the confirmation `provenance.json` names is the entry of `job.yaml` with that
+number (words, files, verdicts), not corrected by a later one, and so is every print
+confirmation it lists, each current when the print was finished; the covered files are
+not empty, and the printable files are exactly the covered ones, in `files/` when it says
+public and `private/` when not; `purge.json`'s words are not blank. `source/`
 and `private/` are git-ignored, so a fresh clone has neither: one of them missing entirely
 is a note ("source unavailable", "private files unavailable"), not damage, and the exit
 code stays 0, since that is the normal state of a clone. Give `--require-private` after
@@ -201,14 +234,18 @@ Exit 1 on damage or an incomplete entry; 2 when it cannot check. `tdmg library v
 under the current code and rules, in a scratch folder, and compares it with
 `provenance.json`: every stage done, each stage record's SHA-256 (for `slice.json`, with
 its G-code hash fields masked, and each G-code file without its timestamp line: the
-rebuild's allowance, which `finish` records), each stage's algorithm, verdicts and
+rebuild's allowance, which `finish` records; an entry without those hashes cannot be
+compared in full and is a difference, exit 1, "the comparison is incomplete"; a G-code
+line that only looks like the marker standing for a timestamp does not match one), each
+stage's algorithm, verdicts and
 checks (status, rule, threshold), the slice identity, and the confirmed printable files
 (by SHA-256, so byte for byte) and their verdicts. The stages' other files and the
 checks' measured values cannot be compared (the library does not keep them), and it says
 so. A stage that fails is a difference (exit 1): "refused by the current code", or
 "failed (possibly the environment)" for an I/O or slicer error; a pinned slicer that cannot
 be used on this machine, or a temporary folder inside `prints/` or `jobs/`, is exit 2. It also lists what changed since the historical run: code commit, versions,
-libraries, rules (with each changed value), algorithm ids and profiles, and whether
+the code fingerprint (when the entry records it), libraries, rules (with each changed
+value), algorithm ids and profiles, and whether
 PrusaSlicer was configured then (the slice results depend on it). It writes nothing into
 `prints/` and never rewrites the historical verdict. Exit 0 when identical, 1 when it
 differs (information, not an error), 2 when it cannot run (the entry does not check, the

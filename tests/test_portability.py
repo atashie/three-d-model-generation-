@@ -413,6 +413,10 @@ OWNER = REPO_ROOT / "artifacts" / "flat-runs"
                                                 ("oddie-60x3-s3", 5033.670898)])
 @pytest.mark.skipif(not OWNER.is_dir(), reason="the owner's flat runs are not on this machine")
 def test_the_volume_bound_covers_the_measured_owner_models(name, reported):
+    if not (OWNER / name / "model.stl").is_file():
+        # The -s3 runs were deleted as superseded in restructure Task 13 (2026-11-17,
+        # docs/design/jobs.md); the reported volumes came from those exact files.
+        pytest.skip(f"{name} is not on this machine")
     stl = (OWNER / name / "model.stl").read_bytes()
     record = json.loads((OWNER / name / "flat.json").read_bytes())["mesh"]
     error = abs(reported - record["volume_mm3"])

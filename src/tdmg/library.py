@@ -27,8 +27,10 @@ and provenance.json stays byte for byte the file that was staged and checked bef
 publish: writing the purge record into provenance.json after COMPLETE would make COMPLETE's
 hash of it wrong, and writing COMPLETE again would break "written last". purge.json says
 what will be deleted (it is written before the deletion); finish checks afterwards that the
-folder is gone. COMPLETE certifies only itself, so before deleting anything finish also
-checks the entry against purge.json (entry_problems).
+folder is gone. COMPLETE certifies only itself, so before every deletion (a resumed one
+too) finish checks the entry with library check's own validator (check_entry: COMPLETE,
+STAGED, entry_problems against purge.json and job.yaml, the source hashes; _check_entry),
+with its source/ and private/ present.
 
 **The steps** (finish):
 1. Names and paths: NAME is a job name (tdmg.jobs.check_name); the job is exactly
@@ -43,6 +45,11 @@ checks the entry against purge.json (entry_problems).
    with the same Machine as job run); one print confirmation is chosen (choose_print) and
    it is current; the git tree of the code checkout is clean outside the jobs and prints
    folders, since the commit pins the code (git_state). Outside a git checkout, refused.
+   When the prints folder is inside a git work tree, git must ignore every path the source
+   files and (not public) the printable files would be written to, in the staging folder
+   and in the entry (tdmg.jobs.check_ignored: `git check-ignore`, and a tracked path is
+   not ignored); else refused before anything is copied. A leftover staging folder is
+   looked at only now (Resume).
 3. Stage PRINTS_DIR/.staging-NAME/: job.yaml, source/ (the image and the mask job.yaml
    names), the printable files of the confirmed route (in files/ or private/),
    provenance.json and card.md. Each file is read once, checked against its hash
@@ -61,9 +68,10 @@ checks the entry against purge.json (entry_problems).
 7. Purge: needs the owner's words (--purge-owner-said, verbatim, not blank; dated with
    today's local date, as confirmations are). Every file and folder under jobs/NAME is
    listed (files with their SHA-256) into purge.json, with the jobs folder; COMPLETE is
-   written. Before anything is deleted: COMPLETE verifies (every hash) and the entry is
-   this job's (entry_problems: provenance.json, the printable files, each stage record's
-   hash, job.yaml and source against purge.json). Then purge_job renames jobs/NAME to its
+   written. Before anything is deleted: the entry checks ok by library check's validator,
+   with its source/ and private/ here (_check_entry), so it is this job's (entry_problems:
+   provenance.json, the printable files, each stage record's hash, job.yaml and source
+   against purge.json; the confirmation against job.yaml). Then purge_job renames jobs/NAME to its
    tombstone JOBS_DIR/.purging-NAME (on Windows this fails at once when a program holds a
    file in it open), checks that the tombstone holds exactly what purge.json lists (a
    file added after the listing: it is renamed back and finish refuses), and deletes it
@@ -79,9 +87,12 @@ so they can be checked before the real run (which prints them again before it wr
 purge.json). It is refused while an earlier finish is unfinished.
 
 **Resume.** Running finish again after an interruption looks at what is on disk:
-- a staging folder (and no entry): the earlier run stopped before the publish. The
-  staging folder holds only copies of the job's files and what finish wrote, so it is
-  removed and steps 3 and 4 run again;
+- a staging folder (and no entry): the earlier run stopped before the publish. Steps 1
+  and 2 run again first (so a job finish would refuse leaves the folder as it is); then it
+  is removed when it holds only what finish writes there (STAGING_FILES and replace_file's
+  temporary names at the top; in source/ files of the job's source/; in files/ and
+  private/ files of the job's print stage folder), and steps 3 and 4 run again. Anything
+  else in it is named and nothing is deleted (_staging_unexpected);
 - PRINTS_DIR/NAME without COMPLETE: the publish happened (the rename comes only after
   the rebuild passed). It is never redone. Steps 1 and 2 run again; every file of the
   entry must be the one STAGED lists (staged_problems: so an edited card or provenance is
@@ -92,11 +103,12 @@ purge.json). It is refused while an earlier finish is unfinished.
 - PRINTS_DIR/NAME with COMPLETE while jobs/NAME still exists: the run stopped after
   COMPLETE and before the rename to the tombstone, so jobs/NAME must hold exactly what
   purge.json lists (a job made again under the same name does not); the entry is checked
-  as in step 7, then the purge runs. purge.json is kept as it is (COMPLETE covers it), and
-  finish says so when this run's --public or purge words differ;
+  as in step 7, then the purge runs. purge.json is kept as it is (COMPLETE covers it):
+  this run's purge words must be its words, else finish refuses and deletes nothing
+  (_same_words); a different --public is not used, and finish says so;
 - the tombstone JOBS_DIR/.purging-NAME with a finished entry: the deletion stopped part
-  way. The entry is checked as in step 7, every file left must be in purge.json with the
-  same SHA-256, and the rest is deleted;
+  way. The entry is checked as in step 7, the purge words must be purge.json's, every
+  file left must be in purge.json with the same SHA-256, and the rest is deleted;
 - COMPLETE and neither jobs/NAME nor a tombstone: already finished; COMPLETE is verified
   and reported.
 Anything else (a staging folder beside an entry, an entry or staging folder whose job is
@@ -134,7 +146,12 @@ PRINTS_DIR (or NAME and its staging folder) is one of:
 - ok: COMPLETE in form; every file it lists present with that SHA-256, none missing, no
   unlisted file and no folder that holds no listed file; STAGED lists the same files
   (but STAGED and purge.json) with the same SHA-256s, so a COMPLETE written again over an
-  edited file is caught; entry_problems against purge.json; job.yaml's source hashes are
+  edited file is caught; entry_problems against purge.json, including the records'
+  agreement (_record_problems: provenance.json's confirmation is job.yaml's entry of that
+  number and no later entry corrects it, as is each print confirmation it lists, each
+  current at the finish by purge.json's hashes; the covers are not empty; the printable
+  files are exactly the covered ones, in files/ when public and private/ when not);
+  purge.json's words not blank; job.yaml's source hashes are
   COMPLETE's and provenance.json's source is job.yaml's. A LOCAL_ONLY folder (source/,
   private/: git-ignored) missing entirely is "unavailable", not damage: a clone has
   neither. A file missing from one that is present is damage (a partial copy);
@@ -167,8 +184,10 @@ Compared with provenance.json (which holds stage-record hashes and extracted che
 verdicts, not the records), over the historical and the current stages: each stage done;
 each stage record's SHA-256, but slice.json's, for which provenance.json holds
 slice_digests (written by finish): the SHA-256 of slice.json with the VOLATILE_FIELDS
-masked, and of each G-code file with its timestamp line blanked (the rebuild's
-allowance), each masked hash bound to its file (gcode_binding_problems); each record's
+masked, and of each G-code file with its timestamp line replaced by a marker (the
+rebuild's allowance; gcode_digest, which escapes a line that only looks like the marker),
+each masked hash bound to its file (gcode_binding_problems), and an entry without those
+hashes a difference ("the comparison is incomplete"), never identical; each record's
 algorithm, verdicts (verdicts_in) and checks (check_results: status, rule, threshold, by
 path and id); from the confirmation, the slice identity, the confirmed printable files'
 SHA-256s (byte for byte; so private/ need not be on this machine) and their verdicts. Not
@@ -176,7 +195,8 @@ compared, and said so (NOT_COMPARED): the stages' other files, the allowed times
 and G-code hash fields, and the checks' measured values. uv.lock is hashed as git's blob
 at HEAD (uv_lock_sha256, in finish too), so line ends do not count. what_changed lists
 the causes outside the outputs: code commit
-(and uncommitted changes), tdmg version, uv.lock, Python, platform, key libraries,
+(and uncommitted changes), tdmg version, uv.lock, the code fingerprint
+(tdmg.job_runner.code_fingerprint; when provenance.json holds it), Python, platform, key libraries,
 rules_sha256 and each used rule's default, unit and range, algorithm ids and profiles.
 Whether PrusaSlicer was configured is read from provenance.json (the slice profiles hold
 its pin exactly when it was: prusaslicer_then) and said, with a note when this run
@@ -219,13 +239,22 @@ from tdmg.job_runner import (
     STATE_FILE,
     ConfirmationStatus,
     Machine,
+    code_fingerprint,
     job_status,
     rules_sha256,
     run_job,
     stage_algorithms,
     stage_profiles,
 )
-from tdmg.jobs import JOB_FILE, SOURCE_DIR, JobError, check_name, load_job, parse_job
+from tdmg.jobs import (
+    CORRECTS_KEY,
+    JOB_FILE,
+    SOURCE_DIR,
+    JobError,
+    check_name,
+    load_job,
+    parse_job,
+)
 from tdmg.portability import PRUSA_FAILED_GCODE_NAME, PRUSA_GCODE_NAME
 from tdmg.recipes import GLUE_FILE, recipe
 from tdmg.records import RecordError, record_text, replace_file, write_outputs
@@ -249,6 +278,11 @@ REPEATABILITY = "research/verification/2026-11-16-repeatability/README.md"
 # Temporary names tdmg.records.replace_file uses in the entry (".<stem>-XXXX.tmp"); a crash
 # can leave one behind, and the resume removes it.
 LEFTOVER_TMP = re.compile(r"\.(COMPLETE|purge)-[^/]*\.tmp")
+# What finish writes into its staging folder (step 3), with the temporary names
+# replace_file uses there: a leftover staging folder holding only these is removed.
+STAGING_FILES = (JOB_FILE, CARD_FILE, PROVENANCE_FILE, STAGED_FILE)
+STAGING_FOLDERS = (SOURCE_DIR, PUBLIC_DIR, PRIVATE_DIR)
+STAGING_TMP = re.compile(r"\.(provenance|STAGED)-[^/]*\.tmp")
 # The installed distributions provenance.json names, with their versions (None when not
 # installed): pyproject.toml's runtime dependencies.
 KEY_LIBRARIES = ("numpy", "scipy", "trimesh", "networkx", "lxml", "manifold3d", "lib3mf",
@@ -428,8 +462,7 @@ class Git:
 
 def _git(top: Path, *args: str) -> bytes:
     try:
-        done = subprocess.run(["git", "-C", str(top), *args], capture_output=True,
-                              check=False, timeout=120)
+        done = jobs.run_git(top, *args)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise LibraryError(f"cannot run git ({e}); finish needs git: the commit pins the "
                            "code") from None
@@ -729,7 +762,7 @@ def provenance(state: State, public: bool, machine: Machine, today: str) -> dict
         "public": public, "printable_folder": folder, "printable_files": printable,
         "source": copy.deepcopy(job["source"]),
         "code": {"git_commit": state.git.commit, "uv_lock_sha256": state.git.uv_lock_sha256,
-                 "tdmg_version": __version__},
+                 "tdmg_version": __version__, "code_sha256": code_fingerprint()},
         "environment": {"python": platform.python_version(),
                         "implementation": platform.python_implementation(),
                         "platform": platform.platform(), "machine": platform.machine(),
@@ -1266,7 +1299,7 @@ def _purge_record(entry: Path, name: str) -> dict | None:
     if not (isinstance(record, dict) and record.get("schema") == PURGE_SCHEMA
             and record.get("name") == name and isinstance(record.get("files"), dict)
             and isinstance(record.get("folders"), list)
-            and isinstance(record.get("owner_said"), str)):
+            and jobs.owner_words_problem(record.get("owner_said")) is None):
         return None
     return record
 
@@ -1278,7 +1311,13 @@ def entry_problems(entry: Path, name: str, record: dict) -> list[str]:
     purge.json, STAGED and the source files; every printable file of provenance.json
     present with its SHA-256 and equal to the confirmed job file; each stage record's hash
     in provenance.json equal to purge.json's hash of the job's record; the entry's job.yaml
-    and source files equal to purge.json's hashes of the job's own copies."""
+    and source files equal to purge.json's hashes of the job's own copies. And the records
+    agree with each other (_record_problems): the confirmation provenance.json names is the
+    entry of job.yaml with that number, a print entry no later one corrects; so is every
+    print confirmation it lists, each current when the print was finished (its covers are
+    purge.json's hashes of the job's files); the confirmed covers are not empty, and the
+    printable files are exactly the covered files, in files/ when provenance.json says
+    public and in private/ when not, with nothing else in either folder."""
     listed = _manifest_files(entry / COMPLETE_FILE, COMPLETE_SCHEMA) or {}
     prov = _json_or_none(_read(entry / PROVENANCE_FILE)) \
         if (entry / PROVENANCE_FILE).is_file() else None
@@ -1304,7 +1343,7 @@ def entry_problems(entry: Path, name: str, record: dict) -> list[str]:
     folder = prov.get("printable_folder")
     covers = ((prov.get("confirmation") or {}).get("entry") or {}).get("covers")
     if not (isinstance(printable, dict) and printable and isinstance(covers, dict)
-            and folder in (PUBLIC_DIR, PRIVATE_DIR)):
+            and covers and folder in (PUBLIC_DIR, PRIVATE_DIR)):
         out.append(f"{PROVENANCE_FILE} names no printable files or confirmation")
     else:
         for rel, digest in printable.items():
@@ -1326,6 +1365,64 @@ def entry_problems(entry: Path, name: str, record: dict) -> list[str]:
             if v.get("record") != rel or v.get("record_sha256") != jobfiles.get(rel):
                 out.append(f"{PROVENANCE_FILE}'s hash of {rel} is not the job's "
                            f"({PURGE_FILE})")
+    return out + _record_problems(prov, job, jobfiles, listed)
+
+
+def _record_problems(prov: dict, job: dict, jobfiles: dict, listed: dict) -> list[str]:
+    """entry_problems' agreement of provenance.json with job.yaml, purge.json and COMPLETE
+    (its docstring)."""
+    out = []
+    entries = job["confirmations"]
+    corrected = {e[CORRECTS_KEY] for e in entries if e.get(CORRECTS_KEY) is not None}
+
+    def problem(n, entry, what) -> str | None:
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= len(entries):
+            return f"{PROVENANCE_FILE} names {what} {n}, which {JOB_FILE} does not have"
+        if entries[n - 1] != entry:
+            return (f"the {what} in {PROVENANCE_FILE} is not confirmation {n} of "
+                    f"{JOB_FILE} (its words, files or verdicts differ)")
+        if entry["subject"] != "print":
+            return f"confirmation {n} of {JOB_FILE} is not a print confirmation"
+        if n in corrected:
+            return (f"confirmation {n} of {JOB_FILE} is corrected by a later entry, so it "
+                    "is not the owner's words")
+        return None
+    conf = prov.get("confirmation") if isinstance(prov.get("confirmation"), dict) else {}
+    found = problem(conf.get("number"), conf.get("entry"), "confirmation")
+    if found:
+        out.append(found)
+    prints = prov.get("print_confirmations")
+    if not isinstance(prints, list) or conf not in prints:
+        out.append(f"{PROVENANCE_FILE}'s print confirmations do not hold the confirmation it "
+                   "names")
+    else:
+        for c in prints:
+            c = c if isinstance(c, dict) else {}
+            n = c.get("number")
+            found = problem(n, c.get("entry"), "print confirmation")
+            if found:
+                out.append(found)
+            elif any(jobfiles.get(rel) != d for rel, d in c["entry"]["covers"].items()):
+                out.append(f"print confirmation {n} in {PROVENANCE_FILE} was not current when "
+                           f"the print was finished (its files are not the job's, "
+                           f"{PURGE_FILE})")
+    printable = prov.get("printable_files")
+    folder, public = prov.get("printable_folder"), prov.get("public")
+    covers = (conf.get("entry") or {}).get("covers") if isinstance(conf.get("entry"),
+                                                                    dict) else None
+    if isinstance(printable, dict) and isinstance(covers, dict):
+        want = {f"{folder}/{rel.partition('/')[2]}" for rel in covers}
+        if set(printable) != want:
+            out.append(f"the printable files are not the confirmed files ({PROVENANCE_FILE} "
+                       f"names {', '.join(sorted(map(_p, printable)))}; the confirmation "
+                       f"covers {', '.join(sorted(map(_p, covers)))})")
+        kept = {rel for rel in listed if rel.split("/")[0] in (PUBLIC_DIR, PRIVATE_DIR)}
+        if kept != set(printable):
+            out.append(f"{COMPLETE_FILE} lists files in {PUBLIC_DIR}/ or {PRIVATE_DIR}/ "
+                       "that are not the printable files, or misses one")
+    if not isinstance(public, bool) or folder != (PUBLIC_DIR if public else PRIVATE_DIR):
+        out.append(f"{PROVENANCE_FILE} says public {json.dumps(public)}, but the printable "
+                   f"files are in {_p(folder)}/")
     return out
 
 
@@ -1586,10 +1683,46 @@ def _locked(run: _Run, held: Path) -> None:
     elif has_entry:
         _resume_publish(run)
     else:
-        if has_staging:
-            _remove_staging(staging)
-            run.say(f"   removed {_p(staging)}, left by an interrupted finish; staging again")
-        _fresh(run)
+        _fresh(run, leftover=has_staging)
+
+
+def _staging_unexpected(staging: Path, state: State) -> list[str]:
+    """What in a leftover staging folder finish does not write there (STAGING_FILES and
+    STAGING_TMP at the top; in source/ only files of the job's source/; in files/ and
+    private/ only files of its print stage's folder; nothing deeper)."""
+    files, folders = _walk(staging)
+    stage = jobs.print_stage(state.job["recipe"])
+    out = []
+    for rel in files:
+        top, _, rest = rel.partition("/")
+        if not rest:
+            ok = rel in STAGING_FILES or STAGING_TMP.fullmatch(rel) is not None
+        elif "/" in rest:
+            ok = False
+        elif top == SOURCE_DIR:
+            ok = (state.folder / SOURCE_DIR / rest).is_file()
+        elif top in (PUBLIC_DIR, PRIVATE_DIR):
+            ok = (state.folder / stage / rest).is_file()
+        else:
+            ok = False
+        if not ok:
+            out.append(_p(rel))
+    out += [f"{_p(rel)}/" for rel in folders if rel not in STAGING_FOLDERS]
+    return out
+
+
+def _private_destinations(run: _Run, state: State) -> list[Path]:
+    """Where step 3 and the publish put the source files and, without --public yes, the
+    printable files: in the staging folder and in the entry."""
+    sources = [state.job["source"]] + ([state.job["source"]["mask"]]
+                                       if state.job["source"]["mask"] else [])
+    names = [rel.partition("/")[2] for rel in state.chosen.entry["covers"]]
+    out = []
+    for root in (run.staging, run.entry):
+        out += [root / src["file"] for src in sources]
+        if not run.public:
+            out += [root / PRIVATE_DIR / name for name in names]
+    return out
 
 
 def _remove_staging(staging: Path) -> None:
@@ -1619,9 +1752,23 @@ def _not_kept_line(run: _Run, files) -> str:
             "; not kept in the library and not stage outputs: " + ", ".join(map(_p, extra)))
 
 
-def _fresh(run: _Run) -> None:
+def _fresh(run: _Run, leftover: bool = False) -> None:
     state = _state(run)
     staging, prints_dir = run.staging, run.prints_dir
+    try:
+        jobs.check_ignored(_private_destinations(run, state),
+                           "the source image and the private printable files")
+    except JobError as e:
+        raise LibraryError(str(e)) from None
+    if leftover:
+        unexpected = _staging_unexpected(staging, state)
+        if unexpected:
+            raise LibraryError(
+                f"{_p(staging)}, left by an interrupted finish, holds what finish does not "
+                f"write there ({', '.join(unexpected[:8])}); nothing was deleted. Move those "
+                "out of it (or delete them), then run finish again")
+        _remove_staging(staging)
+        run.say(f"   removed {_p(staging)}, left by an interrupted finish; staging again")
     made_prints = not prints_dir.exists()
 
     def tidy():
@@ -1685,15 +1832,21 @@ def _purge(run: _Run) -> None:
 
 
 def _check_entry(run: _Run) -> dict:
-    """The entry verifies and is this job's: COMPLETE (every hash) and entry_problems."""
+    """The entry is this job's finished entry, by library check's own validator
+    (check_entry: COMPLETE and every hash, STAGED, entry_problems, the source hashes), with
+    its source/ and private/ present; run right before every deletion. Returns purge.json."""
     record = _purge_record(run.entry, run.name)
     if record is None:
         raise LibraryError(f"{_p(run.entry)} has no {PURGE_SCHEMA} {PURGE_FILE} for job "
-                           f"{run.name}; the job is not deleted")
-    problems = verify_complete(run.entry) or entry_problems(run.entry, run.name, record)
-    if problems:
+                           f"{run.name} (with the owner's words); the job is not deleted")
+    found = check_entry(run.entry)
+    problems = list(found.problems)
+    problems += [f"{top}/ is not in the entry, and the job holds the only other copy"
+                 for top in found.unavailable]
+    if found.state != OK or problems:
         raise LibraryError(f"{_p(run.entry)} does not verify as this job's finished entry "
-                           f"({'; '.join(problems[:6])}); the job is not deleted")
+                           f"(library check: {found.state}: {'; '.join(problems[:6])}); the "
+                           "job is not deleted")
     return record
 
 
@@ -1754,18 +1907,26 @@ def _resume_publish(run: _Run) -> None:
     _purge(run)
 
 
-def _differs_note(run: _Run, record: dict) -> None:
-    """Say plainly where this run's answers differ from the entry's, which are kept."""
+def _differs_note(run: _Run) -> None:
+    """Say plainly where this run's --public differs from the entry's, which is kept."""
     prov = _json_or_none(_read(run.entry / PROVENANCE_FILE)) or {}
     if prov.get("public") != run.public:
         was = "yes" if prov.get("public") else "no"
         run.say(f"   note: the entry was published with --public {was}; this run's "
                 f"--public {'yes' if run.public else 'no'} is not used (a publish is never "
                 "redone)")
+
+
+def _same_words(run: _Run, record: dict) -> None:
+    """Refuse a resumed deletion given purge words other than purge.json's: COMPLETE
+    covers purge.json, so its words are the ones the deletion is recorded with."""
     if run.words is not None and run.words != record["owner_said"]:
-        run.say(f"   note: the earlier run's purge record is kept, with the owner's words "
-                f"{_words(record['owner_said'])}; this run's --purge-owner-said is not "
-                "recorded")
+        raise LibraryError(f"--purge-owner-said differs from the owner's words that "
+                           f"{PURGE_FILE} recorded in the earlier run "
+                           f"({_words(record['owner_said'])}; this run: {_words(run.words)})"
+                           "; nothing was deleted. The deletion is recorded with "
+                           f"{PURGE_FILE}'s words: run finish again with them, if they are "
+                           "the owner's permission")
 
 
 def _resume_purge(run: _Run) -> None:
@@ -1774,13 +1935,14 @@ def _resume_purge(run: _Run) -> None:
     (a job made again under the same name is not)."""
     _same_job(run.folder, run.entry)
     record = _check_entry(run)
+    _same_words(run, record)
     problems = tombstone_problems(run.folder, record, exact=True)
     if problems:
         raise LibraryError(f"{_p(run.folder)} is not the job {PURGE_FILE} lists ("
                            f"{'; '.join(problems[:5])}); it may be a new job of the same "
                            "name. Nothing was deleted")
     run.say(f"6. {_p(run.entry)} is complete and verifies; finishing the interrupted purge")
-    _differs_note(run, record)
+    _differs_note(run)
     _delete(run, record["files"])
 
 
@@ -1788,13 +1950,14 @@ def _resume_tombstone(run: _Run) -> None:
     """The job's tombstone with a finished entry: the deletion stopped part way. Every file
     left must be in purge.json with the same SHA-256; then it is deleted."""
     record = _check_entry(run)
+    _same_words(run, record)
     problems = tombstone_problems(run.tombstone, record, exact=False)
     if problems:
         raise LibraryError(f"{_p(run.tombstone)} holds what {PURGE_FILE} does not list ("
                            f"{'; '.join(problems[:5])}); nothing was deleted")
     run.say(f"6. {_p(run.entry)} is complete and verifies; finishing the deletion of "
             f"{_p(run.tombstone)}")
-    _differs_note(run, record)
+    _differs_note(run)
     delete_job(run.tombstone)
     run.say(f"7. purged {_p(run.folder)}: the owner said {_words(record['owner_said'])}")
 
@@ -2078,6 +2241,9 @@ def what_changed(prov: dict, job: dict, machine: Machine, repo: Path | None) -> 
         out.append(f"code commit: was {code.get('git_commit')}, now {head}")
     differs("tdmg version", code.get("tdmg_version"), __version__)
     differs("uv.lock SHA-256 (git blob at HEAD)", code.get("uv_lock_sha256"), _uv_lock(repo))
+    if "code_sha256" in code:           # recorded from tdmg.jobkey/3 on
+        differs("tdmg code fingerprint (its .py files and uv.lock, as on disk)",
+                code["code_sha256"], code_fingerprint())
     differs("Python", env.get("python"), platform.python_version())
     differs("platform", env.get("platform"), platform.platform())
     was_libs, now_libs = env.get("libraries") or {}, _libraries()
@@ -2302,14 +2468,19 @@ def slice_digests(slice_dir: Path, record_bytes: bytes) -> dict:
 
 def gcode_digest(name: str, data: bytes) -> bytes:
     """A G-code file's bytes with its timestamp line (GCODE_TIMESTAMPS) replaced by
-    TIMESTAMP_MARK, when that line has the measured form; else the bytes as they are. A
-    marker, not an empty line, so a file with an empty line there does not match."""
+    TIMESTAMP_MARK, when that line has the measured form; else the bytes as they are,
+    except that a line there that starts with TIMESTAMP_MARK gets a second one in front.
+    So the line is TIMESTAMP_MARK exactly only where a timestamp was: no file without one
+    hashes as a file with one (a marker, not an empty line, so an empty line does not
+    either), and a file with neither is unchanged."""
     line_no, pattern = GCODE_TIMESTAMPS[name]
     lines = data.split(b"\n")
     i = line_no - 1
-    if i < len(lines) and pattern.fullmatch(
-            lines[i].rstrip(b"\r").decode("utf-8", "replace")) is not None:
-        lines[i] = TIMESTAMP_MARK
+    if i < len(lines):
+        if pattern.fullmatch(lines[i].rstrip(b"\r").decode("utf-8", "replace")) is not None:
+            lines[i] = TIMESTAMP_MARK
+        elif lines[i].startswith(TIMESTAMP_MARK):
+            lines[i] = TIMESTAMP_MARK + lines[i]
     return b"\n".join(lines)
 
 
@@ -2317,12 +2488,12 @@ TIMESTAMP_MARK = b"<timestamp>"
 
 
 def _slice_differences(scratch: Path, rec: dict, data: bytes, h: dict, say) -> list[str]:
-    if "record_masked_sha256" not in h:
-        if say is not None:
-            say("note: provenance.json holds no masked hashes of slice.json and the G-code "
-                "(an entry finished before they were recorded): only the slice record's "
-                "identity, algorithm, verdicts and checks are compared")
-        return []
+    if not (_hex(h.get("record_masked_sha256"))
+            and isinstance(h.get("gcode_sha256_without_timestamp"), dict)):
+        return [(f"slice/{SLICE_RECORD}: {PROVENANCE_FILE} holds no masked hashes of "
+                 "slice.json and the G-code (record_masked_sha256 and "
+                 "gcode_sha256_without_timestamp), so the comparison is incomplete: the "
+                 "slice record and the G-code cannot be compared with the historical run")]
     now = slice_digests(scratch / "slice", data)
     out = gcode_binding_problems(scratch / "slice", rec, f"slice/{SLICE_RECORD}")
     if record_text(rec) != data:          # equal content then means equal bytes
