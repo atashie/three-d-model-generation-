@@ -1091,6 +1091,17 @@ def _windows():
         pytest.skip("Windows only")
 
 
+def _skip_if_readable(path, why):
+    """Skip when the condition under test does not hold on this machine. On the GitHub
+    Windows runner (2026-11-17) the long paths could be read and the denied folder could
+    be listed, so these tests did not raise there; the code handles both cases."""
+    try:
+        os.listdir(str(path)) if path.is_dir() else os.stat(str(path))
+    except OSError:
+        return
+    pytest.skip(f"{why}: it can be read here, so there is nothing to stop on")
+
+
 def test_an_unreadable_folder_stops_the_listing(tmp_path):
     _windows()
     f = _small_job(tmp_path)
@@ -1098,6 +1109,7 @@ def test_an_unreadable_folder_stops_the_listing(tmp_path):
     subprocess.run(["icacls", str(f / "sub"), "/deny", f"{user}:(RD)"], check=True,
                    capture_output=True)
     try:
+        _skip_if_readable(f / "sub", "this account can still list the denied folder")
         with pytest.raises(LibraryError, match="cannot read"):
             library.job_listing(f)
         with pytest.raises(LibraryError, match="cannot read"):
@@ -1120,6 +1132,7 @@ def test_a_path_too_long_stops_the_listing(tmp_path):
     except OSError as e:
         pytest.skip(f"cannot make a long path here ({e})")
     try:
+        _skip_if_readable(deep, "long paths are enabled")
         with pytest.raises(LibraryError, match="characters long"):
             library.job_listing(f)
         assert (f / "job.yaml").is_file()
@@ -1229,6 +1242,7 @@ def test_a_path_over_the_limit_gets_the_hint(tmp_path):
     except OSError as e:
         pytest.skip(f"cannot make a long path here ({e})")
     try:
+        _skip_if_readable(deep / name, "long paths are enabled")
         assert len(str(deep / name)) >= library.WINDOWS_FOLDER_LIMIT
         with pytest.raises(LibraryError, match="not a plain file or folder .*characters long"):
             library.job_listing(f)
