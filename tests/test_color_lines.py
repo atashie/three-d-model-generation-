@@ -615,7 +615,7 @@ def test_draw_matches_a_plain_float_reference():
     ridge = np.array(ring_ridge((10.0, 10.0), 30.0, 0.0, math.pi / 2, 50))
     fine = np.full((50 * S, 50 * S), HOST, np.uint8)
     out = draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
-    cell = (_bridged(ridge, DRAW_W) + 0.5) / 2
+    cell = (_bridged(ridge) + 0.5) / 2
     near = cKDTree(cell).query_ball_point(cell, RIDGE_SMOOTH_PX)
     smooth = np.array([cell[sorted(n)].mean(axis=0) for n in near])
     ii, jj = np.mgrid[0:fine.shape[0], 0:fine.shape[1]]
@@ -625,31 +625,55 @@ def test_draw_matches_a_plain_float_reference():
     assert np.all(np.abs(d[differ] - DRAW_W / 2) < 1e-9)
 
 
-def test_draw_bridges_ridge_gaps_up_to_the_width():
+def test_draw_joins_every_piece_of_a_ridge():
     """find_lines' ridge can break into pieces along a curve (the arc fixture's ridge is 50
-    8-connected pieces, with gaps up to 4.5 px). A gap of at most the drawn width is
-    bridged, so the band is whole and its width holds across the gap; a longer gap stays."""
+    8-connected pieces, with gaps up to 4.5 px). All pieces of one line are joined, with no
+    distance limit: the band is whole and its width holds across a gap, whatever the gap
+    or the drawn width."""
     fine = np.full((60 * S, 200 * S), HOST, np.uint8)
     ridge = straight_ridge()
+    eight = np.ones((3, 3), bool)
     gap = tuple(p for p in ridge if not 190 <= p[1] < 198)        # 189 to 198: 4.5 px gap
     out = draw_lines(fine, S, [(INK, HOST, gap)], DRAW_W)
-    _, n = ndimage.label(out == INK, structure=np.ones((3, 3), bool))
-    assert n == 1
+    assert ndimage.label(out == INK, structure=eight)[1] == 1
     across = (out == INK).sum(axis=0)
     assert np.all(np.abs(across[95 * S:100 * S] - DRAW_W * S) <= 1)
-    # A gap of 5 px (189 to 199 half px; more than 4.9) is not bridged: two pieces.
-    far = tuple(p for p in ridge if not 190 <= p[1] < 199)
-    _, n = ndimage.label(draw_lines(fine, S, [(INK, HOST, far)], DRAW_W) == INK,
-                         structure=np.ones((3, 3), bool))
-    assert n == 2
+    # A 10.5 px gap, more than twice the drawn width, is joined too.
+    far = tuple(p for p in ridge if not 190 <= p[1] < 211)
+    assert ndimage.label(draw_lines(fine, S, [(INK, HOST, far)], DRAW_W) == INK,
+                         structure=eight)[1] == 1
     # The arc fixture's ridge (find_lines) is in pieces; bridged, it is one.
     (line,) = run(quantized(arc_image()), family_rows=(DARK,))
     pieces = np.zeros((400, 400), bool)
     pieces[tuple(np.array(line.ridge).T)] = True
-    assert ndimage.label(pieces, structure=np.ones((3, 3), bool))[1] > 1
+    assert ndimage.label(pieces, structure=eight)[1] == 50
     bridged = np.zeros((400, 400), bool)
-    bridged[tuple(_bridged(np.array(line.ridge), DRAW_W).T)] = True
-    assert ndimage.label(bridged, structure=np.ones((3, 3), bool))[1] == 1
+    bridged[tuple(_bridged(np.array(line.ridge)).T)] = True
+    assert ndimage.label(bridged, structure=eight)[1] == 1
+    # Drawn much narrower than its gaps (2 px), the arc is still one piece.
+    arc_fine = np.full((200 * S, 200 * S), HOST, np.uint8)
+    thin = draw_lines(arc_fine, S, [(INK, HOST, line.ridge)], 2.0)
+    assert ndimage.label(thin == INK, structure=eight)[1] == 1
+
+
+def test_draw_two_lines_are_never_joined():
+    """Two lines (two entries) are drawn on their own: their ridges are never bridged."""
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    a = (INK, HOST, straight_ridge(col1=180))
+    b = (INK, HOST, straight_ridge(col0=200))                     # 10 px further on
+    out = draw_lines(fine, S, [a, b], 2.0)
+    assert ndimage.label(out == INK, structure=np.ones((3, 3), bool))[1] == 2
+
+
+def test_bridged_tie_break_deterministic():
+    """Four pieces at a square's corners, four equally near bridges: the three with the
+    lowest point indices win (0-1, 0-2, 1-3, not 2-3), whatever the input order."""
+    pts = np.array([(0, 0), (0, 4), (4, 0), (4, 4)])
+    a = _bridged(pts)
+    assert np.array_equal(a, _bridged(pts[::-1]))
+    want = [_segment(pts[0], pts[1]), _segment(pts[0], pts[2]), _segment(pts[1], pts[3])]
+    assert np.array_equal(a, np.unique(np.concatenate(want), axis=0))
+    assert not any((p == (4, 2)).all() for p in a)                # no 2-3 bridge
 
 
 def test_bridge_segment_exact():
