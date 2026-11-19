@@ -58,3 +58,20 @@ units converted to mm; ridge spurs near line ends bias the low percentiles down)
   107 and 144–149) are farther apart than 30. At 80, one point removed the whole checker,
   and the legend panel fell away under `keep_at`. 417 kept pixels (0.27%) are greyish
   JPEG fringe along the edge.
+
+## Addendum, 2026-11-19: `find_lines` on the same image (Task 3, commit 2a81caa)
+
+`tdmg.color_lines.find_lines` (exact EDT; elongation defined as length / width, where
+length = area / width) on `roadie-thanksgiving` at 6 colors, family `#ca2116` and
+`#bb4b46`, W = 4.906 px, min_area 91.65 px, min_width 4.787 px, host share 0.9,
+min_elongation 3:
+
+| Line | Host | Area (px) | Width (px) | Length (px) | Length / width |
+|---|---|---|---|---|---|
+| `#f50506` | `#4a1a14` | 264 | 4.47 | 59.0 | 13.2 |
+| `#f50506` | `#4a1a14` | 504 | 4.47 | 112.7 | 25.2 |
+
+These are the prototype's two pieces (264 and 504 px). The prototypes wrote "elongation"
+for area / width (a length in pixels, 60.1 and 114.7 for these pieces), not for length /
+width. On this image the same two lines are found at length / width >= 3 and with no
+elongation limit at all, so the image does not test that limit.

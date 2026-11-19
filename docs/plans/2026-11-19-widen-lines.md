@@ -151,7 +151,9 @@ The algorithm, exactly as in `widen_try5.py` (the design, part 2):
      OUTSIDE, and its count / ring size must be >= `host_share`;
    - **width** = 2 × the 90th percentile of `scipy.ndimage.distance_transform_edt` of the
      component (padded by one False pixel) over the part's pixels;
-   - **elongation** = area / max(width, 1), and it must be >= `min_elongation`.
+   - **elongation** = length / width, with length = area / max(width, 1); it must be
+     >= `min_elongation`. (Corrected in Task 3: area / width alone is a length and never
+     rejects a blob above the island area.)
 5. **ridge** = `stroke_ridge` (from `tdmg.color_outline`) of the part upsampled 2 × 2 (as
    `stroke_band` does); store the nonzero (row, col) in sorted order.
 6. Return the lines sorted by (color, first ridge point).

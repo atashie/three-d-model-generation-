@@ -170,8 +170,8 @@
       locator: "12 extra specks of 13–27 px elsewhere"
       provenance: primary
       validation: untested
-      claim: "Our own software measurement (no print) on roadie-thanksgiving at 60 mm: with no size and length limits, the prototype widen_try4.py also changed 12 specks of 13-27 px (feathers, eye, hat brim). With elongation at least 3, together with the island area and the host share, widen_try5.py keeps only the turkey's lines."
-  notes: "A ratio of length to width, so it does not depend on the print width. The turkey's line pieces had elongation 9-60 in the prototypes, well above 3; the specks that 3 must exclude are also below the island area, so this one image does not separate the two limits. One image."
+      claim: "Our own software measurement (no print) on roadie-thanksgiving at 60 mm: with no size and length limits, the prototype widen_try4.py also changed 12 specks of 13-27 px (feathers, eye, hat brim). Those specks are also below the island area. With the island area and the host share, tdmg.color_lines.find_lines keeps only the turkey's two line pieces, whose length / width is 13.2 and 25.2 (README addendum); they are found with or without this limit."
+  notes: "Elongation is length / width, where length = area / width and width = 2 x the 90th percentile of the distance to the edge: a ratio, so it does not depend on the print width. (The prototypes wrote elongation for area / width, a length in pixels; that is not this ratio.) Its job is to reject round blobs above the island area, which a synthetic test shows (a 97 px dot of width 8 has 1.5). The turkey's line pieces have 13.2 and 25.2; the image's specks are also below the island area, so this one image does not test the limit. One image."
 
 - id: color.outline.keep_area_width_ratio
   kind: hypothesis
