@@ -84,7 +84,8 @@ def test_curved_line_with_family_fringe():
     assert (line.color, line.host) == (ix(q, RED), ix(q, BROWN))
     # The view counts the fringe as red: the part is the arc with its fringe, 6 px wide.
     assert line.width_px == pytest.approx(6.0, abs=0.5)
-    assert line.length_px == pytest.approx(line.area_px / line.width_px)
+    # Its length: the arc's centre line, 140 degrees of a 60 px radius (146.6 px).
+    assert line.length_px == pytest.approx(ARC_R * (ARC_TO - ARC_FROM), rel=0.1)
     # Away from the two end caps, every ridge point is within 1 px of the drawn centre line.
     c = ridge_centres(line)
     d = np.hypot(c[:, 0] - ARC_C[0], c[:, 1] - ARC_C[1]) - ARC_R
@@ -114,7 +115,7 @@ def test_border_strip_between_wide_colors_is_not_a_line():
 
 
 def test_round_dot_is_not_a_line():
-    """A disc 11 px across: area 95 px (above the 64 px island area), removed whole by the
+    """A disc 11 px across: area 97 px (above the 64 px island area), removed whole by the
     12 px opening (width_px 6), but its length is under 3 x its width."""
     yy, xx = np.mgrid[0:60, 0:60]
     rows = np.full((60, 60), BROWN, np.int64)
@@ -167,6 +168,24 @@ def test_line_touching_outside_has_no_host():
     assert run(quantized(rows)) == ()
 
 
+def test_straight_line_fixed_values():
+    """A 4 x 160 px red line in brown: fixed expected values (computed with the first,
+    uncropped implementation, 2a81caa). Width: the exact distances across are 1, 2, 2, 1,
+    so the 90th percentile is 2 and the width 4. The ridge is the two middle half-pixel
+    rows (303, 304) of the 8 half pixels across (300-307); it starts at half pixel 43,
+    1.5 px in from the line's end at column 20, where the end cap's distances fall."""
+    rows = np.full((200, 200), BROWN, np.int64)
+    rows[150:154, 20:180] = RED
+    q = quantized(rows)
+    (line,) = run(q)
+    assert (line.color, line.host, line.area_px) == (ix(q, RED), ix(q, BROWN), 640)
+    assert line.width_px == 4.0
+    assert line.length_px == 160.0
+    assert line.ridge[0] == (303, 43)
+    assert len(line.ridge) == 628
+    assert {r for r, _ in line.ridge} == {303, 304}
+
+
 def test_deterministic_and_sorted():
     rows = arc_image()
     rows[150:154, 20:180] = RED                           # a second, straight line
@@ -209,7 +228,18 @@ def test_turkey_like_at_real_scale():
     assert {(ln.color, ln.host) for ln in lines} == {(ix(q, RED), ix(q, BROWN))}
     for ln in lines:
         assert ln.width_px == pytest.approx(5.0, abs=1.0)
-        assert ln.length_px / ln.width_px >= MIN_ELONGATION
+    # Sorted by first ridge point: the straight line (rows 59-63) comes before the arc.
+    straight, curved = (ridge_centres(ln) for ln in lines)
+    assert straight[:, 0].min() >= 59 and straight[:, 0].max() <= 63
+    assert straight[:, 1].min() >= 40 and straight[:, 1].max() <= 100
+    assert straight[:, 1].max() - straight[:, 1].min() > 50
+    dc = np.hypot(curved[:, 0] - 110, curved[:, 1] - 90) - 40
+    assert np.abs(dc).max() <= 2.5 and curved[:, 0].min() > 110
+    assert curved[:, 1].max() - curved[:, 1].min() > 60
+    for c in (straight, curved):                         # none in the speck or the garnish
+        in_speck = (c[:, 0] >= 39) & (c[:, 0] <= 43) & (c[:, 1] >= 119) & (c[:, 1] <= 123)
+        assert not in_speck.any()
+        assert np.hypot(c[:, 0] - 80, c[:, 1] - 140).min() > 16
 
 
 @pytest.mark.parametrize("kwargs, match", [
@@ -243,6 +273,183 @@ def test_bad_q_and_limits_refused():
         find_lines(np.zeros((4, 4), int), (), LIMITS, 4.0, 0.9, 3.0)
     with pytest.raises(ColorError, match="Limits"):
         find_lines(q, (), {"min_area_px": 1}, 4.0, 0.9, 3.0)
+
+
+def test_strip_along_the_image_edge_is_not_a_line():
+    """The frame beyond the image counts as OUTSIDE: a strip on rows 0-3 of a brown image
+    has half its ring beyond the image, so it is not inside one color."""
+    rows = np.full((40, 100), BROWN, np.int64)
+    rows[0:4, 10:90] = RED
+    assert run(quantized(rows)) == ()
+    rows[0:4] = BROWN                                    # the control: two rows in
+    rows[2:6, 10:90] = RED
+    assert len(run(quantized(rows))) == 1
+
+
+def edge_line(sides) -> np.ndarray:
+    """A 4 px red line on rows 2-5, columns 10-89, in brown; rows 0-1 above it OUTSIDE;
+    beside its ends (rows 2-7, columns 0-9 and 90-99) `sides`. Its 2 px ring (columns
+    8-91, rows 0-7, less the line): 168 px above (OUTSIDE), 24 px beside its ends
+    (`sides`), 160 px below (brown), 352 px in all."""
+    rows = np.full((30, 100), BROWN, np.int64)
+    rows[0:2] = OUTSIDE
+    rows[2:8, :10] = sides
+    rows[2:8, 90:] = sides
+    rows[2:6, 10:90] = RED
+    return rows
+
+
+def test_outside_most_common_is_never_a_host():
+    """OUTSIDE is the most common ring value (192 of 352 px) but below the share; brown
+    (160, 0.45) is above a share of 0.4. Still no line: the host is the most common value,
+    and that is OUTSIDE. With brown beside the ends, brown is most common (184) and is the
+    host."""
+    q = quantized(edge_line(OUTSIDE))
+    assert run(q, host_share=0.4) == ()
+    q = quantized(edge_line(BROWN))
+    assert [(ln.color, ln.host) for ln in run(q, host_share=0.4)] == [
+        (ix(q, RED), ix(q, BROWN))]
+    assert run(q, host_share=0.6) == ()                  # 184 / 352 = 0.52
+
+
+def test_piece_below_the_island_area_is_skipped():
+    rows = np.full((40, 100), BROWN, np.int64)
+    rows[18:22, 10:25] = RED                             # 60 px, below 64
+    assert run(quantized(rows), min_elongation=0.1) == ()
+    rows[18:22, 10:26] = RED                             # 64 px: a line
+    assert len(run(quantized(rows), min_elongation=0.1)) == 1
+
+
+def test_candidate_with_no_other_color_in_its_ring_is_skipped(monkeypatch):
+    """A ring with no pixel of another color (only reachable when the areas surround a
+    candidate; forced here by an opening that keeps all but an inner 10 x 10 square)."""
+    import tdmg.color_lines as cl
+
+    def fake_open(mask, width_px):
+        keep = np.asarray(mask, bool).copy()
+        ys, xs = np.nonzero(keep)
+        cy, cx = (ys.min() + ys.max()) // 2, (xs.min() + xs.max()) // 2
+        keep[cy - 5:cy + 5, cx - 5:cx + 5] = False
+        return keep
+
+    rows = np.full((60, 60), BROWN, np.int64)
+    rows[10:50, 10:50] = RED
+    monkeypatch.setattr(cl, "open_mask", fake_open)
+    assert run(quantized(rows), min_elongation=0.01) == ()
+
+
+# --- The cropped computation equals a plain whole-image one -----------------------------
+
+def reference_find_lines(q, family, limits, width_px, host_share, min_elongation):
+    """The method of tdmg.color_lines written plainly on the whole image, with no crops."""
+    from scipy import ndimage
+
+    from tdmg.color import d2_nearest, open_mask
+    from tdmg.color_outline import stroke_ridge
+
+    labels = np.asarray(q.labels).astype(np.int64)
+    lab = np.asarray(q.lab)
+    nonfam = [i for i in range(len(q.hex)) if i not in family]
+    view = labels.copy()
+    for f in family:
+        view[labels == f] = nonfam[int(np.argmin(((lab[nonfam] - lab[f]) ** 2).sum(1)))]
+    framed = np.pad(view, 2, constant_values=OUTSIDE)
+    out = []
+    for c in nonfam:
+        mine = view == c
+        pieces, n = ndimage.label(mine, structure=ndimage.generate_binary_structure(2, 1))
+        for li in range(1, n + 1):
+            piece = pieces == li
+            if piece.sum() < limits.min_area_px:
+                continue
+            thin = piece & ~open_mask(piece, 2 * width_px)
+            parts, m = ndimage.label(thin, structure=ndimage.generate_binary_structure(2, 2))
+            for pj in range(1, m + 1):
+                part = parts == pj
+                area = int(part.sum())
+                if area < limits.min_area_px:
+                    continue
+                ring = ndimage.binary_dilation(np.pad(part, 2), structure=np.ones((5, 5), bool))
+                values = framed[ring & (framed != c)]
+                if not values.size:
+                    continue
+                vals, counts = np.unique(values, return_counts=True)
+                host = int(vals[np.argmax(counts)])
+                if host == OUTSIDE or counts.max() < host_share * values.size:
+                    continue
+                ty, tx = np.nonzero(part)
+                d = np.sqrt(d2_nearest(~np.pad(piece, 1), ty + 1, tx + 1).astype(float))
+                w = 2.0 * float(np.percentile(d, 90))
+                length = area / max(w, 1.0)
+                if length / max(w, 1.0) < min_elongation:
+                    continue
+                ry, rx = np.nonzero(stroke_ridge(np.repeat(np.repeat(part, 2, 0), 2, 1)))
+                out.append(Line(c, host, area, w, length,
+                                tuple(sorted(zip(ry.tolist(), rx.tolist())))))
+    out.sort(key=lambda ln: (ln.color, ln.ridge[0]))
+    return tuple(out)
+
+
+def irregular_image(seed: int) -> np.ndarray:
+    """Smoothed noise in four colors, with OUTSIDE at one side and random 3-5 px lines."""
+    from scipy import ndimage
+
+    rng = np.random.default_rng(seed)
+    noise = ndimage.gaussian_filter(rng.standard_normal((120, 150)), 6)
+    rows = np.digitize(noise, np.quantile(noise, [0.3, 0.6, 0.85])).astype(np.int64)
+    rows = np.array([BROWN, GREEN, BLACK, DARK])[rows]
+    rows[:, :8] = OUTSIDE
+    for _ in range(12):
+        y, x = int(rng.integers(0, 120)), int(rng.integers(0, 150))
+        dy, dx = (int(v) for v in rng.integers(-60, 60, 2))
+        w = int(rng.integers(3, 6))
+        for t in np.linspace(0, 1, 200):
+            yy, xx = int(y + dy * t) - w // 2, int(x + dx * t) - w // 2
+            rows[max(yy, 0):max(yy + w, 0), max(xx, 0):max(xx + w, 0)] = RED
+    return rows
+
+
+CROP_CASES = [((), 0.6, 1.0), ((DARK,), 0.6, 1.0), ((BLACK,), 0.9, 3.0)]
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+@pytest.mark.parametrize("family_rows, share, elong", CROP_CASES)
+def test_cropped_equals_whole_image(seed, family_rows, share, elong):
+    q = quantized(irregular_image(seed))
+    family = tuple(sorted(ix(q, r) for r in family_rows))
+    got = find_lines(q, family, LIMITS, 4.0, share, elong)
+    assert got == reference_find_lines(q, family, LIMITS, 4.0, share, elong)
+
+
+def test_cropped_equals_whole_image_finds_lines():
+    """The comparison above is not vacuous: each case finds lines (seed 1: 5, 8 and 2)."""
+    q = quantized(irregular_image(1))
+    for family_rows, share, elong in CROP_CASES:
+        family = tuple(sorted(ix(q, r) for r in family_rows))
+        assert len(find_lines(q, family, LIMITS, 4.0, share, elong)) >= 2
+
+
+def comb(n: int, teeth: int) -> np.ndarray:
+    """A red comb in brown: a 40 px spine and 4 px teeth every 10 px, n - 100 px long."""
+    rows = np.full((n, n), BROWN, np.int64)
+    rows[20:60, 20:n - 20] = RED
+    for x in 30 + 10 * np.arange(teeth):
+        rows[60:n - 40, x:x + 4] = RED
+    return rows
+
+
+def test_comb_timing():
+    """A coarse guard: a 1000 x 1000 comb with 96 teeth (the 96 red teeth and the 95 brown
+    gaps between them are lines) took 32 s before the per-candidate crop on the Windows PC
+    (2026-11-19). The limit is generous for slower runners."""
+    import time
+
+    q = quantized(comb(1000, 96))
+    t0 = time.perf_counter()
+    lines = run(q)
+    elapsed = time.perf_counter() - t0
+    assert len(lines) == 191
+    assert elapsed < 10.0
 
 
 def test_every_color_in_the_family_finds_nothing():

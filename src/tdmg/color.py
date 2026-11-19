@@ -388,6 +388,7 @@ RULE_UNITS = {OPENING_RULE: "mm", ISLAND_RULE: "x_nozzle"}
 MAX_CLEAN_PASSES = 100
 
 _FOUR = ndimage.generate_binary_structure(2, 1)  # 4-connectivity: no diagonal neighbours
+FOUR_CONNECTED = _FOUR  # public name for other modules (tdmg.color_lines)
 
 
 def _finite_positive(name: str, value) -> float:
@@ -397,6 +398,10 @@ def _finite_positive(name: str, value) -> float:
     if not math.isfinite(value) or value <= 0:
         raise ColorError(f"{name} must be a finite number above 0, got {value}")
     return value
+
+
+# The public name of the check, for other modules (tdmg.color_lines).
+finite_positive = _finite_positive
 
 
 @dataclass(frozen=True)
