@@ -63,7 +63,8 @@ Slicer folders are not parameters: they are absolute paths on one machine, so th
 from `tdmg job run`'s options or the environment when a stage runs (tdmg.job_runner), not
 from job.yaml.
 
-Reading is strict: unknown and missing keys, wrong types, YAML anchors, aliases, merge
+Reading is strict: unknown and missing keys (but a parameter added after jobs were
+written, ADDED_FIELDS, which reads as null), wrong types, YAML anchors, aliases, merge
 keys, duplicate keys and explicit tags (!!str) are refused, and every path must be
 relative to the job folder (forward slashes, no `..`, no drive letter). Only plain decimal
 numbers are numbers, only true/false are booleans and only null/~/nothing is null: YAML
@@ -352,7 +353,7 @@ def _named(check, name: str):
 # hold machine paths (--slicer-dir, --prusaslicer-dir, --out and the input folders, which
 # the job runner supplies), --config (colors' file keys are parameters here) and flat's
 # --smooth-px under --colors (the stage refuses any value).
-REAL_COLOR_KEYS = ("outline_width_mm",)    # tdmg.color_config's float key
+REAL_COLOR_KEYS = ("outline_width_mm", "line_width_mm")   # tdmg.color_config's float keys
 STAGE_FIELDS: dict[str, dict[str, Field]] = {
     "select": {                                   # tdmg select
         "instructions": Field(_text),
@@ -384,6 +385,11 @@ STAGE_FIELDS: dict[str, dict[str, Field]] = {
         "face": Field(_choice(tuple(FACE_CHOICES))),
     },
 }
+# Parameters added after jobs were written (docs/plans/2026-11-19-widen-lines.md, Task 2).
+# A job.yaml from before them (as prints/roadie-drop's) lacks them; each reads as null (not
+# given, the command's default: thin_lines remove), and dump_job then writes it. Every
+# other parameter must be present.
+ADDED_FIELDS = {"colors": ("thin_lines", "line_width_mm")}
 # tdmg slice refuses --face for a single-color folder, so a single-color recipe's slice
 # stage has no face. A recipe is multicolor when it has a colors stage.
 SINGLE_COLOR_SLICE_SKIPS = ("face",)
@@ -693,6 +699,9 @@ def _validate_stages(rid: str, stages, source: dict) -> None:
     _keys("stages", stages, order)
     for stage in order:
         fields = stage_fields(rid, stage)
+        if isinstance(stages[stage], dict):
+            for key in ADDED_FIELDS.get(stage, ()):
+                stages[stage].setdefault(key, fields[key].default)
         _keys(f"stages.{stage}", stages[stage], tuple(fields))
         for key, f in fields.items():
             value = stages[stage][key]

@@ -33,12 +33,14 @@ from tdmg.color import (
 from tdmg.color_config import (
     FURRY_RULE,
     KEYS,
+    LINE_KEYS,
     SMOOTH_RULE,
     ColorConfig,
     ColorConfigError,
     Source,
     check_base,
     check_extraction_indices,
+    check_line_width_setting,
     check_outline_width_setting,
     palette_cap,
 )
@@ -79,6 +81,9 @@ from tdmg.smoothing import LABELS_METHOD, SmoothingError, check_supersample, sig
 
 EDGE_RULES = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE, "exact": None}
 SETTING_KEYS = KEYS
+# A remove record (thin_lines absent, which means remove) holds every setting but LINE_KEYS
+# (tdmg.color_config.recorded_settings); a widen record holds every setting.
+REMOVE_SETTING_KEYS = tuple(k for k in KEYS if k not in LINE_KEYS)
 SOURCES = get_args(Source)
 # The only methods this code implements. A record naming another version (older or newer)
 # is refused: the rebuild below, and design step 2's fine map, would silently use these.
@@ -93,7 +98,9 @@ class VerifiedColors:
 
     record: colors.json as parsed. labels: (H, W) int32, the palette index per pixel and
     OUTSIDE (-1) outside the mask, as smooth_labels takes it. palette: the record's palette
-    entries. settings: the resolved settings (every key of tdmg.color_config.KEYS).
+    entries. settings: the resolved settings as recorded (record_setting_keys: every key of
+    tdmg.color_config.KEYS, without thin_lines and line_width_mm unless thin_lines is
+    widen; absent, thin_lines means remove).
     base_index: the base color's index. sigma_px and supersample: what smooth_labels needs
     to recompute the fine map. width_mm and mm_per_px: the scale the cleanup used.
     """
@@ -130,8 +137,11 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
        two cleanup rules, the edges preset's rule (none for exact), the two shade rules,
        the thin share when outline_color is auto, and the wide-area ratio
        (color.outline.keep_area_width_ratio) when the family is not empty; each a finite
-       number, and the sigma finite and >= 0. settings.outline_width_mm is wider than the
-       identity's opening width (flat.sliver.opening_width).
+       number, and the sigma finite and >= 0. settings.outline_width_mm, and
+       settings.line_width_mm when present, are wider than the identity's opening width
+       (flat.sliver.opening_width). The settings hold thin_lines and line_width_mm exactly
+       when thin_lines is widen (record_setting_keys), and the record's sources the same
+       keys.
        As when resolving: extract >= colors, and check_extraction_indices against
        extraction.n_extracted (an int 1..extract), outline.family (sorted, distinct indices
        below it) and outline.core.
@@ -247,8 +257,11 @@ def _identity_values(ident: dict, family, printer: PrinterProfile
     edges rule id. family: the record's outline family (whether the keep width is used).
     printer: the identity's profile (settings.colors must be within its palette cap)."""
     settings = ident["settings"]
-    if not isinstance(settings, dict) or set(settings) != set(SETTING_KEYS):
-        raise ColorsError(f"identity.settings must hold exactly {', '.join(SETTING_KEYS)}")
+    keys = record_setting_keys(settings)
+    if not isinstance(settings, dict) or set(settings) != set(keys):
+        raise ColorsError(f"identity.settings must hold exactly {', '.join(keys)}"
+                          + ("" if keys == SETTING_KEYS else
+                             " (thin_lines and line_width_mm only under thin_lines widen)"))
     nulls = [key for key, value in settings.items() if value is None]
     if nulls:
         raise ColorsError(f"identity.settings.{nulls[0]} is null; a resolved setting always "
@@ -286,6 +299,8 @@ def _identity_values(ident: dict, family, printer: PrinterProfile
         raise ColorsError(f"identity.rules: {e}") from None
     try:
         check_outline_width_setting(settings["outline_width_mm"], rules)
+        if "line_width_mm" in settings:
+            check_line_width_setting(settings["line_width_mm"], rules)
     except ColorConfigError as e:
         raise ColorsError(f"identity.settings: {e}") from None
     return settings, width, supersample, sigma, edge_rule
@@ -430,14 +445,23 @@ def _check_palette(palette: list, base_index, base) -> int:
     return want
 
 
+def record_setting_keys(settings) -> tuple[str, ...]:
+    """The setting keys a record holds: every key (SETTING_KEYS) when thin_lines is widen,
+    else every key but thin_lines and line_width_mm (REMOVE_SETTING_KEYS; a record of a
+    remove plan, and every record made before the keys existed, lacks both)."""
+    if isinstance(settings, dict) and settings.get("thin_lines") == "widen":
+        return SETTING_KEYS
+    return REMOVE_SETTING_KEYS
+
+
 def _check_settings_block(block) -> None:
     """The record's settings block, which the rebuild cannot reproduce: exactly settings,
-    sources (one known source per setting key) and config_sha256 (64 lowercase hex digits,
-    or null when no config file was given)."""
+    sources (one known source per setting key: record_setting_keys) and config_sha256 (64
+    lowercase hex digits, or null when no config file was given)."""
     sha = block.get("config_sha256") if isinstance(block, dict) else None
     if (not isinstance(block, dict) or set(block) != {"settings", "sources", "config_sha256"}
             or not isinstance(block["sources"], dict)
-            or set(block["sources"]) != set(SETTING_KEYS)
+            or set(block["sources"]) != set(record_setting_keys(block.get("settings")))
             or not all(v in SOURCES for v in block["sources"].values())
             or not (sha is None or (isinstance(sha, str)
                                     and re.fullmatch("[0-9a-f]{64}", sha)))):

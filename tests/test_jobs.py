@@ -6,6 +6,7 @@ import inspect
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 import yaml
@@ -361,7 +362,8 @@ def test_sizes_are_written_as_floats(tmp_path, image):
 
 
 REAL_PARAMS = [("select", "tolerance"), ("colors", "width_mm"),
-               ("colors", "outline_width_mm"), ("colored_flat", "thickness_mm"),
+               ("colors", "outline_width_mm"), ("colors", "line_width_mm"),
+               ("colored_flat", "thickness_mm"),
                ("colored_flat", "width_mm"), ("slice", "timeout_s")]
 
 
@@ -1007,3 +1009,49 @@ def test_cli_job_new_help():
     assert ", ".join(CLASSES) in text
     assert text.isascii()
     assert "job run" not in text
+
+
+# --- widen lines, Task 2: colors keys added after jobs were written -------------------------
+
+def test_colors_has_the_line_settings(base):
+    colors = base["stages"]["colors"]
+    assert colors["thin_lines"] is None and colors["line_width_mm"] is None
+    assert STAGE_FIELDS["colors"]["line_width_mm"].real
+    assert not STAGE_FIELDS["colors"]["thin_lines"].real
+
+
+def test_a_job_written_before_the_line_settings_still_loads(base):
+    # A job.yaml from before thin_lines and line_width_mm existed (prints/roadie-drop's)
+    # has neither key: each reads as null (not given), so thin_lines is remove.
+    old = dump_job(base).decode()
+    for key in ("thin_lines", "line_width_mm"):
+        line = f"    {key}: null\n"
+        assert old.count(line) == 1
+        old = old.replace(line, "")
+    job = parse_job(old.encode())
+    assert job == base
+    assert dump_job(job) == dump_job(base)      # written back with both keys
+
+
+def test_the_library_job_yaml_still_loads():
+    path = Path(__file__).resolve().parents[1] / "prints" / "roadie-drop" / JOB_FILE
+    data = path.read_bytes()
+    assert b" thin_lines:" not in data and b" line_width_mm:" not in data
+    colors = parse_job(data)["stages"]["colors"]
+    assert colors["thin_lines"] is None and colors["line_width_mm"] is None
+
+
+@pytest.mark.parametrize(("key", "value", "match"), [
+    ("thin_lines", "thin", "thin_lines"),
+    ("thin_lines", "keep", "thin_lines"),
+    ("line_width_mm", "0.5", "line_width_mm"),
+    ("line_width_mm", 0, "line_width_mm"),
+])
+def test_bad_line_settings_are_refused(base, key, value, match):
+    with pytest.raises(JobError, match=match):
+        validate_job(_set(base, f"stages.colors.{key}", value))
+
+
+def test_only_the_added_colors_keys_may_be_missing(base):
+    with pytest.raises(JobError, match="missing key 'outline_width_mm'"):
+        validate_job(_drop(base, "stages.colors.outline_width_mm"))

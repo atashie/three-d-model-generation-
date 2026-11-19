@@ -43,6 +43,7 @@ from tdmg.colors import (
     PREVIEW_SCALE,
     RECORD_SCHEMA,
     ROW_PX,
+    UNRENDERED_FIELDS,
     ColorsError,
     colors_id,
     colors_identity,
@@ -55,6 +56,7 @@ from tdmg.colors import (
 from tdmg.colors_verify import VerifiedColors, verify_colors
 from tdmg.flat import mask_outline, to_model
 from tdmg.profiles import load_printer
+from tdmg.records import canonical_json
 from tdmg.rules import load_rules
 from tdmg.selection import (
     Intake,
@@ -337,8 +339,9 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeyp
     base = done[0]["colors_id"]
     rules = copy.deepcopy(RULES)
     rid = "flat.sliver.opening_width"
-    # Below the default outline_width_mm (0.5 mm), which must stay wider than it.
-    rules[rid] = rules[rid].model_copy(update={"default": 0.42})
+    # Below the default outline_width_mm (0.5 mm) and line_width_mm (0.41 mm), which must
+    # stay wider than it.
+    rules[rid] = rules[rid].model_copy(update={"default": 0.405})
     sigma_rules = copy.deepcopy(RULES)
     sid = "flat.smooth.sigma_px"
     sigma_rules[sid] = sigma_rules[sid].model_copy(update={"default": 2.0})
@@ -358,6 +361,9 @@ def test_colors_id_changes_with_each_identity_input(done, sel, tmp_path, monkeyp
         "outline_color": _id(sel, tmp_path, "none", flags={"outline_color": "none"}),
         "merge": _id(sel, tmp_path, "m", flags={"merge": [[3, 0]]}),
         "outline width": _id(sel, tmp_path, "ow", flags={"outline_width_mm": 0.6}),
+        "thin_lines": _id(sel, tmp_path, "tl", flags={"thin_lines": "widen"}),
+        "line width": _id(sel, tmp_path, "lw", flags={"thin_lines": "widen",
+                                                     "line_width_mm": 0.45}),
         "outline method": _id(sel, tmp_path, "om", monkeypatch=monkeypatch),
     }
     assert base not in ids.values()
@@ -1842,3 +1848,133 @@ def test_verify_colors_refuses_a_png_pillow_will_not_decode(done, sel, tmp_path)
     _edit_record(d, lambda r: r["outputs"].update({"labels.png": digest}))
     with pytest.raises(ColorsError, match="labels.png is not a readable image"):
         verify_colors(d, sel)
+
+
+# --- widen lines, Task 2: thin_lines remove leaves the plan as it was ----------------------
+
+# Computed on 2026-11-19 (Windows PC) with the code of commit 6d22cd5, before the
+# thin_lines and line_width_mm settings existed: `git worktree add <tmp> 6d22cd5`, then,
+# with PYTHONPATH=<tmp>/src, make_colors on this file's `sel` fixture (roadie_like, the
+# default SelectionSpec) at 60 mm with no flags, without a config file ("default") and
+# with a config file holding b"outline_width_mm: 0.6\n" ("config"). "stable" is the
+# SHA-256 of the canonical JSON of colors.json without the UNRENDERED_FIELDS (the
+# software versions, the output file hashes and the fine-map fields), so it does not
+# depend on the environment; BEFORE_THIN_LINES_LABELS is pixels_sha256 of labels.png. On
+# that machine the whole colors.json, labels.png and regions.png were also byte-identical
+# before and after the change (docs/plans/2026-11-19-widen-lines.md, "byte-identical when
+# off").
+BEFORE_THIN_LINES = {
+    "default": {"colors_id": "10a973984603cb6cf8e1fc5a2cd0fee64cb98efbe9a60aa9afce1b98ae1ecb69",
+                "stable": "3219bc289581f4197cec66fb6df35c0b1511d5218b3c2015ed2ed9a411576041"},
+    "config": {"colors_id": "9375b9cdb476a68c4a1c22ca9acbaf8e50e83e2047e2496f49744965124a2a35",
+               "stable": "6fca98549302908f4380d56db63ab365f6c2b66ee750c7cbbf633f5a025c4fd4"},
+}
+BEFORE_THIN_LINES_LABELS = "5dc906ba5124d9cc0cec3cba6493b078dc6c8e7dc7092739e2138adaa64d1d16"
+LINE_KEYS = ("thin_lines", "line_width_mm")
+
+
+def _stable_sha(out):
+    rec = json.loads((out / "colors.json").read_bytes())
+    for field in UNRENDERED_FIELDS:
+        *parents, last = field.split(".")
+        d = rec
+        for p in parents:
+            d = d[p]
+        del d[last]
+    return hashlib.sha256(canonical_json(rec)).hexdigest()
+
+
+@pytest.mark.parametrize("case, text", [
+    ("default", None), ("config", "outline_width_mm: 0.6\n"),
+    # thin_lines: remove written out, or with a line width, is the same plan as leaving
+    # it out (absent means remove). The config file's hash differs, so only the identity
+    # and labels.png are compared for these.
+    ("default", "thin_lines: remove\n"),
+    ("default", "thin_lines: remove\nline_width_mm: 0.5\n"),
+])
+def test_thin_lines_remove_gives_the_plan_from_before_the_setting(sel, tmp_path, case, text):
+    cfg = None
+    if text is not None:
+        cfg = tmp_path / "c.yaml"
+        cfg.write_bytes(text.encode())
+    out = tmp_path / "out"
+    rec = run(sel, out, config_path=cfg)
+    assert rec["colors_id"] == BEFORE_THIN_LINES[case]["colors_id"]
+    labels = np.asarray(Image.open(out / "labels.png"))
+    assert pixels_sha256(labels) == BEFORE_THIN_LINES_LABELS
+    for key in LINE_KEYS:
+        assert key not in rec["identity"]["settings"]
+        assert key not in rec["settings"]["settings"]
+        assert key not in rec["settings"]["sources"]
+    if text is None or "thin_lines" not in text:
+        assert _stable_sha(out) == BEFORE_THIN_LINES[case]["stable"]
+    verify_colors(out, sel)
+
+
+def test_thin_lines_widen_is_recorded_in_the_settings_and_the_identity(sel, tmp_path, done):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_bytes(b"thin_lines: widen\n")
+    out = tmp_path / "out"
+    rec = run(sel, out, config_path=cfg)
+    assert rec["identity"]["settings"]["thin_lines"] == "widen"
+    assert rec["identity"]["settings"]["line_width_mm"] == 0.41
+    assert rec["settings"]["settings"] == rec["identity"]["settings"]
+    assert rec["settings"]["sources"]["thin_lines"] == "config"
+    assert rec["settings"]["sources"]["line_width_mm"] == "rule"
+    assert rec["colors_id"] != done[0]["colors_id"]
+    assert verify_colors(out, sel).settings["thin_lines"] == "widen"
+
+
+def _add_line_keys(r):
+    extra = {"thin_lines": "remove", "line_width_mm": 0.41}
+    r["identity"]["settings"].update(extra)
+    r["settings"]["settings"].update(extra)
+    r["settings"]["sources"].update(thin_lines="config", line_width_mm="rule")
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def _edit_width(width):
+    def change(r):
+        r["identity"]["settings"]["line_width_mm"] = width
+        r["settings"]["settings"]["line_width_mm"] = width
+        r["colors_id"] = colors_id(r["identity"])
+    return change
+
+
+def _drop_width(r):
+    r["identity"]["settings"].pop("line_width_mm")
+    r["settings"]["settings"].pop("line_width_mm")
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def test_verify_colors_refuses_line_keys_under_remove(done, sel, tmp_path):
+    # Absent means remove; written out, the same plan would have a second colors_id.
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, _add_line_keys)
+    with pytest.raises(ColorsError, match="identity.settings must hold exactly"):
+        verify_colors(d, sel)
+
+
+@pytest.fixture(scope="module")
+def widened(sel, tmp_path_factory):
+    folder = tmp_path_factory.mktemp("widen")
+    cfg = folder / "c.yaml"
+    cfg.write_bytes(b"thin_lines: widen\n")
+    run(sel, folder / "out", config_path=cfg)
+    return folder / "out"
+
+
+@pytest.mark.parametrize("change, message", [
+    (_drop_width, "identity.settings must hold exactly"),
+    (lambda r: r["settings"]["sources"].pop("thin_lines"),
+     "settings must hold settings, sources"),
+    (_edit_width(0.4), r"line_width_mm \(0.4 mm\) must be wider"),
+    (_edit_width("0.5"), "identity.settings.line_width_mm is invalid"),
+])
+def test_verify_colors_checks_the_line_keys_under_widen(widened, sel, tmp_path, change,
+                                                        message):
+    d = _copy(widened, tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, sel)
+

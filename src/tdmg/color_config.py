@@ -33,6 +33,13 @@ The keys (Task 7b added extract, outlines, outline_color and merge):
   a finite number wider than the cleanup's opening (flat.sliver.opening_width), since
   cleanup removes strips at or below it (default: the rule color.outline.keep_width,
   source "rule"). It is part of the plan's identity under drop too, where it is unused.
+- thin_lines (docs/plans/2026-11-19-widen-lines.md): remove or widen (default remove).
+  remove is the behaviour from before the key existed: cleanup removes thin drawn lines.
+  widen draws the thin lines that lie inside one other color at line_width_mm.
+- line_width_mm: the width at which widen draws those lines, in mm, a finite number wider
+  than flat.sliver.opening_width (default: the rule color.lines.width, source "rule").
+  Under remove both keys are left out of the record and the identity (recorded_settings),
+  so a remove plan is byte-identical to one made before they existed.
 Extraction indices are the order quantize gives (largest area first), which the preview
 shows. The checks that need the extracted palette (an index below the number of colors the
 image gave, no merge from the outline family) are in check_extraction_indices; it runs
@@ -42,6 +49,8 @@ against `extract` when resolving, after quantize, and after the outline step.
 from __future__ import annotations
 
 import hashlib
+import math
+import numbers
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,12 +71,17 @@ MIN_COLORS = 2
 # tdmg.colors refuses a palette of 255 or more colors, so at most 254 can be stored.
 MAX_EXTRACT = 254
 DEFAULTS = {"edges": "smooth", "base": "auto", "outlines": "drop", "outline_color": "auto",
-            "merge": ()}
+            "merge": (), "thin_lines": "remove"}
 PROFILE_DEFAULT = "colors"                         # defaults to the profile's palette cap
 EXTRACT_RULE = "color.extract.default_count"
+LINE_WIDTH_RULE = "color.lines.width"
 # Keys that default to a rule's value, and the unit each rule must be in.
-RULE_DEFAULTS = {"extract": EXTRACT_RULE, "outline_width_mm": KEEP_WIDTH_RULE}
-RULE_DEFAULT_UNITS = {"extract": "count", "outline_width_mm": "mm"}
+RULE_DEFAULTS = {"extract": EXTRACT_RULE, "outline_width_mm": KEEP_WIDTH_RULE,
+                 "line_width_mm": LINE_WIDTH_RULE}
+RULE_DEFAULT_UNITS = {"extract": "count", "outline_width_mm": "mm", "line_width_mm": "mm"}
+# The keys recorded_settings leaves out of a record unless thin_lines is widen; a record
+# may lack them (absent means remove).
+LINE_KEYS = ("thin_lines", "line_width_mm")
 SMOOTH_RULE = "flat.smooth.sigma_px"
 FURRY_RULE = "color.edges.furry_sigma_px"
 
@@ -75,10 +89,12 @@ Edges = Literal["smooth", "furry", "exact"]
 Index = Annotated[StrictInt, Field(ge=0)]
 Base = Literal["auto"] | Index
 Outlines = Literal["drop", "keep"]
+ThinLines = Literal["remove", "widen"]
 OutlineColor = Literal["auto", "none"] | Annotated[list[Index], Field(min_length=1)]
 MergePair = Annotated[list[Index], Field(min_length=2, max_length=2)]
 # Strict: an int or a float, not a bool or a string; finite and above 0 here, and wider
-# than the opening in check_outline_width_setting (which needs the rules).
+# than the opening in check_outline_width_setting and check_line_width_setting (which
+# need the rules). The type of outline_width_mm and line_width_mm.
 OutlineWidth = Annotated[float, Field(strict=True, allow_inf_nan=False, gt=0)]
 Source = Literal["flag", "config", "profile", "rule", "default"]
 
@@ -98,6 +114,8 @@ class ColorConfig(BaseModel):
     outline_color: OutlineColor | None = None
     merge: list[MergePair] | None = None
     outline_width_mm: OutlineWidth | None = None
+    thin_lines: ThinLines | None = None
+    line_width_mm: OutlineWidth | None = None
 
     @field_validator("colors")
     @classmethod
@@ -208,9 +226,10 @@ def _validate(data: dict, cap: int, where: str) -> ColorConfig:
             elif key == "merge":
                 msg = ("merge must be a list of [from, into] pairs of extraction indices, "
                        f"each 0 or more (got {given!r})")
-            elif key == "outline_width_mm":
-                msg = ("outline_width_mm must be a finite number of mm above 0 "
-                       f"(got {given!r})")
+            elif key in ("outline_width_mm", "line_width_mm"):
+                msg = f"{key} must be a finite number of mm above 0 (got {given!r})"
+            elif key == "thin_lines":
+                msg = f"thin_lines must be remove or widen (got {given!r})"
             else:
                 msg = f"{key}: {err['msg']} (got {err['input']!r})"
             problems.setdefault(key, msg)
@@ -328,6 +347,7 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
                              settings["extract"])
     edge_sigma_px(settings["edges"], rules)
     check_outline_width_setting(settings["outline_width_mm"], rules)
+    check_line_width_setting(settings["line_width_mm"], rules)
     return ResolvedColorConfig(settings=settings, sources=sources, config_sha256=sha)
 
 
@@ -336,18 +356,55 @@ def check_outline_width_setting(width_mm, rules: dict) -> float:
     mm, from rules: a registry or {rule id: value}): it must be wider, since cleanup
     removes strips at or below that width and would remove the band. Returns it as a
     float; raises ColorConfigError."""
+    try:
+        return check_outline_width(width_mm, _opening_mm("outline_width_mm", rules),
+                                   OPENING_RULE)
+    except ColorError as e:
+        raise ColorConfigError(str(e)) from None
+
+
+def check_line_width_setting(width_mm, rules: dict) -> float:
+    """line_width_mm checked against the opening rule (flat.sliver.opening_width, in mm,
+    from rules: a registry or {rule id: value}): it must be wider. The lines are drawn
+    after cleanup, so cleanup does not remove them; a width at or below the one cleanup
+    treats as too thin to print is refused (docs/plans/2026-11-19-widen-lines-design.md,
+    The design, 1). Returns it as a float; raises ColorConfigError."""
+    opening = _opening_mm("line_width_mm", rules)
+    if (isinstance(width_mm, bool) or not isinstance(width_mm, numbers.Real)
+            or not math.isfinite(float(width_mm))):
+        raise ColorConfigError(f"line_width_mm must be a finite number of mm, got "
+                               f"{width_mm!r}")
+    if not float(width_mm) > opening:
+        raise ColorConfigError(f"line_width_mm ({float(width_mm)} mm) must be wider than "
+                               f"{OPENING_RULE} ({opening} mm): cleanup treats strips at "
+                               "or below that width as too thin to print")
+    return float(width_mm)
+
+
+def _opening_mm(key: str, rules: dict) -> float:
+    """flat.sliver.opening_width in mm, from rules (a registry or {rule id: value}), for
+    the check of the setting `key`."""
     if OPENING_RULE not in rules:
-        raise ColorConfigError(f"outline_width_mm needs rule {OPENING_RULE}, which is not in "
-                               "the rules")
+        raise ColorConfigError(f"{key} needs rule {OPENING_RULE}, which is not in the rules")
     opening = rules[OPENING_RULE]
     if isinstance(opening, Rule):
         if opening.unit != "mm":
             raise ColorConfigError(f"{OPENING_RULE} must be in 'mm', got {opening.unit!r}")
         opening = opening.default
-    try:
-        return check_outline_width(width_mm, float(opening), OPENING_RULE)
-    except ColorError as e:
-        raise ColorConfigError(str(e)) from None
+    return float(opening)
+
+
+def recorded_settings(settings: Mapping, sources: Mapping) -> tuple[dict, dict]:
+    """The settings and sources as colors.json and the plan's identity store them: without
+    thin_lines and line_width_mm (LINE_KEYS) unless thin_lines is widen. Under remove, or
+    when thin_lines is absent (which means remove), a record is then the one made before
+    the keys existed, with the same colors_id and bytes (docs/plans/2026-11-19-widen-
+    lines.md, "byte-identical when off"). Returns new dicts in the given key order; the
+    inputs are not changed."""
+    if settings.get("thin_lines") == "widen":
+        return dict(settings), dict(sources)
+    return ({k: v for k, v in settings.items() if k not in LINE_KEYS},
+            {k: v for k, v in sources.items() if k not in LINE_KEYS})
 
 
 def _rule_default(key: str, rules: dict[str, Rule], cap: int):

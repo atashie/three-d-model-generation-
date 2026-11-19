@@ -773,10 +773,13 @@ def colors(
         "--outlines", help="drop (default) or keep the cartoon outline.")] = None,
     config: Annotated[Path | None, typer.Option(
         "--config", help="YAML file with colors, extract, edges, base, outlines, "
-                         "outline_color, merge and outline_width_mm; flags override it. "
-                         "outline_color, merge (by extraction index) and "
-                         "outline_width_mm (the kept outline's width; default the rule "
-                         "color.outline.keep_width) are set in this file only.")
+                         "outline_color, merge, outline_width_mm, thin_lines and "
+                         "line_width_mm; flags override it. outline_color, merge (by "
+                         "extraction index), outline_width_mm (the kept outline's width; "
+                         "default the rule color.outline.keep_width), thin_lines (remove, "
+                         "the default, or widen: draw thin lines inside one color at "
+                         "line_width_mm) and line_width_mm (default the rule "
+                         "color.lines.width) are set in this file only.")
     ] = None,
 ) -> None:
     """Suggest a palette for a selection: write labels.png, regions.png and colors.json.

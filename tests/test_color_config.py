@@ -15,9 +15,11 @@ from tdmg.color_config import (
     ResolvedColorConfig,
     check_base,
     check_extraction_indices,
+    check_line_width_setting,
     edge_sigma_px,
     merge_problem,
     palette_cap,
+    recorded_settings,
     resolve_color_config,
 )
 from tdmg.paths import PROFILES_DIR
@@ -27,13 +29,14 @@ from tdmg.rules import load_rules
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
 NO_FLAGS = {"colors": None, "edges": None, "base": None}
-# The Task 7b and 7e-b keys at their defaults (settings as resolved, as recorded, and their
-# sources).
+# The Task 7b, 7e-b and widen-lines keys at their defaults (settings as resolved, as
+# recorded, and their sources).
 NEW = {"extract": 6, "outlines": "drop", "outline_color": "auto", "merge": (),
-       "outline_width_mm": 0.5}
+       "outline_width_mm": 0.5, "thin_lines": "remove", "line_width_mm": 0.41}
 NEW_PLAIN = {**NEW, "merge": []}
 NEW_SOURCES = {"extract": "rule", "outlines": "default", "outline_color": "default",
-               "merge": "default", "outline_width_mm": "rule"}
+               "merge": "default", "outline_width_mm": "rule", "thin_lines": "default",
+               "line_width_mm": "rule"}
 
 
 def _resolve(flags=None, path=None, printer=A1):
@@ -333,7 +336,7 @@ def test_resolved_config_copies_its_inputs():
 def test_keys_come_from_the_model():
     assert KEYS == tuple(ColorConfig.model_fields) == (
         "colors", "extract", "edges", "base", "outlines", "outline_color", "merge",
-        "outline_width_mm")
+        "outline_width_mm", "thin_lines", "line_width_mm")
 
 
 def test_a_missing_rule_is_a_clear_error():
@@ -375,11 +378,13 @@ def test_a_bad_extract_rule_value_is_refused():
 
 def test_new_keys_precedence_flag_over_file_over_default(tmp_path):
     path = _config(tmp_path, "extract: 7\noutlines: keep\noutline_color: none\n"
-                             "merge: [[5, 1], [6, 1]]\noutline_width_mm: 0.5\n")
+                             "merge: [[5, 1], [6, 1]]\noutline_width_mm: 0.5\n"
+                             "thin_lines: widen\nline_width_mm: 0.45\n")
     r = _resolve(path=path)
     assert (r.settings["extract"], r.settings["outlines"], r.settings["outline_color"],
-            r.settings["merge"], r.settings["outline_width_mm"]) == (
-        7, "keep", "none", ((5, 1), (6, 1)), 0.5)
+            r.settings["merge"], r.settings["outline_width_mm"], r.settings["thin_lines"],
+            r.settings["line_width_mm"]) == (
+        7, "keep", "none", ((5, 1), (6, 1)), 0.5, "widen", 0.45)
     assert {k: r.sources[k] for k in NEW} == {k: "config" for k in NEW}
     r = _resolve({"extract": 8, "outlines": "drop"}, path)
     assert (r.settings["extract"], r.settings["outlines"]) == (8, "drop")
@@ -587,3 +592,97 @@ def test_a_file_that_is_an_explicit_null_is_refused(tmp_path, text):
 
 def test_a_comment_only_file_still_means_no_settings(tmp_path):
     assert _resolve(path=_config(tmp_path, "# nothing set\n")).sources["edges"] == "default"
+
+
+# ---- widen lines (docs/plans/2026-11-19-widen-lines.md, Task 2) ---------------------------
+
+def test_widen_resolves_the_line_width_from_its_rule(tmp_path):
+    r = _resolve(path=_config(tmp_path, "thin_lines: widen\n"))
+    assert r.settings["thin_lines"] == "widen" and r.sources["thin_lines"] == "config"
+    assert r.settings["line_width_mm"] == RULES["color.lines.width"].default == 0.41
+    assert r.sources["line_width_mm"] == "rule"
+    rules = copy.deepcopy(RULES)
+    rid = "color.lines.width"
+    rules[rid] = rules[rid].model_copy(update={"default": 0.45})
+    assert resolve_color_config(NO_FLAGS, None, rules, A1).settings["line_width_mm"] == 0.45
+
+
+def test_thin_lines_defaults_to_remove():
+    r = _resolve()
+    assert r.settings["thin_lines"] == "remove" and r.sources["thin_lines"] == "default"
+
+
+@pytest.mark.parametrize("text, value", [("0.41", 0.41), ("1", 1.0)])
+def test_a_line_width_above_the_opening_is_accepted(tmp_path, text, value):
+    r = _resolve(path=_config(tmp_path, f"thin_lines: widen\nline_width_mm: {text}\n"))
+    assert r.settings["line_width_mm"] == value
+    assert type(r.settings["line_width_mm"]) is float
+    assert r.sources["line_width_mm"] == "config"
+
+
+@pytest.mark.parametrize("text, message", [
+    ("0.4", (r"line_width_mm \(0.4 mm\) must be wider than flat.sliver.opening_width "
+             r"\(0.4 mm\): cleanup")),
+    ("0.3", r"line_width_mm \(0.3 mm\) must be wider than flat.sliver.opening_width"),
+    ("0", "line_width_mm must be a finite number of mm above 0"),
+    ("-1", "line_width_mm must be a finite number of mm above 0"),
+    (".nan", "line_width_mm must be a finite number of mm above 0"),
+    ("true", "line_width_mm must be a finite number of mm above 0"),
+    ("'0.5'", "line_width_mm must be a finite number of mm above 0"),
+])
+def test_a_line_width_at_or_below_the_opening_is_refused(tmp_path, text, message):
+    with pytest.raises(ColorConfigError, match=message):
+        _resolve(path=_config(tmp_path, f"thin_lines: widen\nline_width_mm: {text}\n"))
+    with pytest.raises(ColorConfigError, match=message):     # under remove too
+        _resolve(path=_config(tmp_path, f"line_width_mm: {text}\n"))
+
+
+def test_check_line_width_setting_directly():
+    assert check_line_width_setting(0.41, RULES) == 0.41
+    assert check_line_width_setting(0.41, {"flat.sliver.opening_width": 0.4}) == 0.41
+    for bad in (0.4, 0.3):
+        with pytest.raises(ColorConfigError, match="line_width_mm.*flat.sliver.opening_width"):
+            check_line_width_setting(bad, RULES)
+    with pytest.raises(ColorConfigError, match="line_width_mm needs rule"):
+        check_line_width_setting(0.41, {})
+
+
+def test_a_line_width_rule_at_the_opening_or_in_another_unit_is_refused():
+    rid = "color.lines.width"
+    rules = copy.deepcopy(RULES)
+    rules[rid] = rules[rid].model_copy(update={"default": 0.4})
+    with pytest.raises(ColorConfigError, match="line_width_mm"):
+        resolve_color_config(NO_FLAGS, None, rules, A1)
+    rules[rid] = rules[rid].model_copy(update={"default": 0.45, "unit": "px"})
+    with pytest.raises(ColorConfigError, match="must be in 'mm'"):
+        resolve_color_config(NO_FLAGS, None, rules, A1)
+
+
+@pytest.mark.parametrize("text", ["thin", "keep", "Widen", "true", "[widen]"])
+def test_an_unknown_thin_lines_value_is_refused(tmp_path, text):
+    with pytest.raises(ColorConfigError, match="thin_lines"):
+        _resolve(path=_config(tmp_path, f"thin_lines: {text}\n"))
+
+
+def test_recorded_settings_drop_the_line_keys_under_remove():
+    rec = _resolve().as_record()
+    settings, sources = recorded_settings(rec["settings"], rec["sources"])
+    assert settings == {k: v for k, v in rec["settings"].items()
+                        if k not in ("thin_lines", "line_width_mm")}
+    assert sources == {k: v for k, v in rec["sources"].items()
+                       if k not in ("thin_lines", "line_width_mm")}
+    # The record keys are those from before the setting existed, in the same order.
+    assert list(settings) == list(sources) == [
+        "colors", "extract", "edges", "base", "outlines", "outline_color", "merge",
+        "outline_width_mm"]
+    # The inputs are not changed.
+    assert "thin_lines" in rec["settings"] and "line_width_mm" in rec["sources"]
+    # Absent means remove: settings without the keys pass through unchanged.
+    assert recorded_settings(settings, sources) == (settings, sources)
+
+
+def test_recorded_settings_keep_the_line_keys_under_widen(tmp_path):
+    rec = _resolve(path=_config(tmp_path, "thin_lines: widen\n")).as_record()
+    settings, sources = recorded_settings(rec["settings"], rec["sources"])
+    assert settings == rec["settings"] and sources == rec["sources"]
+    assert settings["thin_lines"] == "widen" and settings["line_width_mm"] == 0.41

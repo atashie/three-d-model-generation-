@@ -13,14 +13,15 @@ null parameter passed as "not given", never as a resolved default:
   image is the job's source file, so the record's source name is its file name;
 - flat: make_flat(select/, width_mm, thickness_mm, smooth_px=..., printer only if set);
 - colors: make_colors with the rules and tdmg.colors.COLORS_PRINTER, as tdmg colors. The
-  five keys tdmg colors takes as flags (COLOR_FLAG_KEYS) are passed as flags; the three it
-  takes only from its config file (outline_color, merge, outline_width_mm) are written to a
-  config file (colors_config: canonical YAML of the set ones only, in a temporary folder)
-  passed as config_path, and no file when none is set. So colors.json equals that of
+  five keys tdmg colors takes as flags (COLOR_FLAG_KEYS) are passed as flags; the five it
+  takes only from its config file (COLOR_CONFIG_KEYS: outline_color, merge,
+  outline_width_mm, thin_lines, line_width_mm) are written to a config file
+  (colors_config: canonical YAML of the set ones only, in a temporary folder) passed as
+  config_path, and no file when none is set. So colors.json equals that of
   `tdmg colors SEL --width-mm W [flags] [--config FILE]` with FILE holding colors_config's
-  bytes: its `settings.sources` says "flag" for the first five and "config" for the other
-  three, and `settings.config_sha256` is the SHA-256 of colors_config's bytes (null
-  without one);
+  bytes: its `settings.sources` says "flag" for the first five and "config" for the
+  others that are set, and `settings.config_sha256` is the SHA-256 of colors_config's
+  bytes (null without one);
 - colored_flat: make_colored_flat(select/, colors/, thickness_mm, width_mm, printer);
 - slice: make_slice on flat/ (R1), or make_color_slice on colored_flat/ (R2, face auto
   when null), with timeout_s, check_tree = not skip_tree_check, and the slicer folders.

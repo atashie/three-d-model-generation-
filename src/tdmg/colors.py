@@ -61,6 +61,7 @@ from tdmg.color_config import (
     check_base,
     edge_sigma_px,
     palette_cap,
+    recorded_settings,
     resolve_color_config,
 )
 from tdmg.color_outline import SHADE_METHOD
@@ -219,12 +220,15 @@ def colors_identity(*, methods: dict, selection_id: str, cutout_pixels_sha256: s
 
     methods: the algorithm versions (colors, quantize, outline, cleanup, labels). settings:
     the resolved values of every key (colors, extract, edges, base, outlines,
-    outline_color, merge, outline_width_mm), not their sources: the same values from a
-    flag, a file or a default give the same plan. outline_width_mm is in it under drop
-    too, where it is unused: a documented choice, so the identity is always every
-    resolved setting. The rules that only give a setting's default
-    (color.extract.default_count, color.outline.keep_width) are therefore not hashed
-    separately; their values are settings.extract and settings.outline_width_mm.
+    outline_color, merge, outline_width_mm, and thin_lines and line_width_mm under
+    thin_lines widen only: tdmg.color_config.recorded_settings leaves both out under
+    remove, so a remove plan keeps the colors_id from before they existed), not their
+    sources: the same values from a flag, a file or a default give the same plan.
+    outline_width_mm is in it under drop too, where it is unused: a documented choice, so
+    the identity is every resolved setting (but the two line keys under remove). The
+    rules that only give a setting's default (color.extract.default_count, color.outline.keep_width,
+    color.lines.width) are therefore not hashed separately; their values are
+    settings.extract, settings.outline_width_mm and settings.line_width_mm.
     printer: the profile id (as flat_identity's params hold it). rules: {rule id: registry
     value} for every rule used: the two cleanup rules (the island rule's own
     min_square_side, not the derived area), the edges preset's rule, if any, the outline
@@ -522,7 +526,13 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     edge_sigma_px(resolved.settings["edges"], rules)    # refuse a bad preset before reading
     sel = read_selection(selection_dir, cutout=True)
     create_folder = check_output_dir(out_dir)
-    record, files, _ = build_colors(sel, width_mm, resolved.settings, resolved.as_record(),
+    # The record's settings and sources, and so the identity's settings, leave out
+    # thin_lines and line_width_mm under remove: such a plan is byte-identical to one made
+    # before the keys existed (recorded_settings).
+    record_settings = resolved.as_record()
+    record_settings["settings"], record_settings["sources"] = recorded_settings(
+        record_settings["settings"], record_settings["sources"])
+    record, files, _ = build_colors(sel, width_mm, resolved.settings, record_settings,
                                     rules, printer, supersample, render=True)
     try:
         data = record_text(record)

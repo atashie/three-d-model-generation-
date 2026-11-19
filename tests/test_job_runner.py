@@ -707,6 +707,7 @@ FULL = {
                    "colors.extract=5", "colors.edges=furry", "colors.base=0",
                    "colors.outlines=drop", "colors.outline_color=none",
                    "colors.merge=[[3, 2]]", "colors.outline_width_mm=0.6",
+                   "colors.thin_lines=widen", "colors.line_width_mm=0.45",
                    "colored_flat.thickness_mm=3", "colored_flat.width_mm=60",
                    "colored_flat.printer=bambu-a1", "slice.timeout_s=90",
                    "slice.skip_tree_check=true", "slice.face=up"],
@@ -985,3 +986,50 @@ def test_set_text_through_the_real_command_line(tmp_path):
                           capture_output=True, text=True, encoding="utf-8")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert load_job(folder)["stages"]["select"]["instructions"] == words
+
+
+# --- widen lines, Task 2: thin_lines and line_width_mm are config-file keys ---------------
+
+def test_set_thin_lines_and_line_width(tmp_path):
+    folder = _new(tmp_path, "turkey", colors=True)
+    _set(folder, "colors.thin_lines=widen", "colors.line_width_mm=0.41")
+    params = load_job(folder)["stages"]["colors"]
+    assert params["thin_lines"] == "widen" and params["line_width_mm"] == 0.41
+    _set(folder, "colors.line_width_mm=1")
+    assert type(load_job(folder)["stages"]["colors"]["line_width_mm"]) is float
+    # Both go to the config file, not to flags.
+    assert {"thin_lines", "line_width_mm"} <= set(job_runner.COLOR_CONFIG_KEYS)
+    assert colors_config(load_job(folder)["stages"]["colors"]) == (
+        b"line_width_mm: 1.0\nthin_lines: widen\n")
+
+
+@pytest.mark.parametrize(("assignment", "reason"), [
+    ("colors.thin_lines=thin", "thin_lines"),
+    ("colors.line_width_mm=wide", "line_width_mm"),
+    ("colors.line_width_mm=0", "line_width_mm"),
+])
+def test_set_refuses_bad_line_settings(tmp_path, assignment, reason):
+    folder = _new(tmp_path, "turkey", colors=True)
+    before = (folder / "job.yaml").read_bytes()
+    result = _invoke("job", "set", "turkey", assignment, "--jobs-dir", folder.parent)
+    assert result.exit_code == 2
+    assert reason in _plain(result.output)
+    assert (folder / "job.yaml").read_bytes() == before
+
+
+def test_the_colors_stage_writes_the_line_settings_into_its_config(tmp_path):
+    folder = _new(tmp_path, "turkey", colors=True)
+    _set(folder, "colors.width_mm=60", "colors.thin_lines=widen",
+         "colors.line_width_mm=0.45")
+    job = load_job(folder)
+    config = colors_config(job["stages"]["colors"])
+    assert config == b"line_width_mm: 0.45\nthin_lines: widen\n"
+    select = tmp_path / "select"
+    assert _invoke("select", folder / "source" / "roadie.png", "--out", select).exit_code == 0
+    rec = job_runner._run_colors(folder, job, job["stages"]["colors"], {"select": select},
+                                 tmp_path / "colors", Machine())
+    assert rec["settings"]["settings"]["thin_lines"] == "widen"
+    assert rec["settings"]["settings"]["line_width_mm"] == 0.45
+    assert rec["settings"]["sources"]["thin_lines"] == "config"
+    assert rec["settings"]["sources"]["line_width_mm"] == "config"
+    assert rec["settings"]["config_sha256"] == job_runner._sha(config)

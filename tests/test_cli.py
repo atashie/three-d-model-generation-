@@ -504,9 +504,11 @@ def test_colors_help(tmp_path):
                    "--outlines", "--config"):
         assert option in text
     assert "--outline-color" not in text and "--merge" not in text   # config file only
-    assert ("outline_color, merge (by extraction index) and outline_width_mm (the kept "
-            "outline's width; default the rule color.outline.keep_width) are set in this "
-            "file only") in text
+    assert ("outline_color, merge (by extraction index), outline_width_mm (the kept "
+            "outline's width; default the rule color.outline.keep_width), thin_lines "
+            "(remove, the default, or widen: draw thin lines inside one color at "
+            "line_width_mm) and line_width_mm (default the rule color.lines.width) are set "
+            "in this file only") in text
     assert "Usage: tdmg colors [OPTIONS] {SELECTION_DIR}" in text
     assert "1 files written, but the plan is not ready" in text
 

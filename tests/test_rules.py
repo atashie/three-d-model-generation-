@@ -97,3 +97,12 @@ def test_kept_outline_is_wider_than_the_cleanup_opening():
     assert keep.unit == opening.unit == "mm"
     assert keep.default > opening.default
     assert keep.scales_with_model is False
+
+
+def test_drawn_line_width_is_wider_than_the_cleanup_opening():
+    # tdmg.color_config refuses a line_width_mm at or below the opening width
+    # (docs/plans/2026-11-19-widen-lines.md, Task 2), so the rule default must be wider.
+    width, opening = RULES["color.lines.width"], RULES["flat.sliver.opening_width"]
+    assert width.unit == opening.unit == "mm"
+    assert width.default > opening.default
+    assert width.scales_with_model is False
