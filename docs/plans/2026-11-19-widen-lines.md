@@ -224,8 +224,12 @@ Tests:
      "color_final", "host_final", "area_px", "width_px", "length_px", "drawn",
      "reason", "ridge": [[r, c], ...]}]}`;
    - `methods["lines"] = LINES_METHOD`;
-   - `used_rules` gains `color.lines.width`, `color.lines.host_share` and
-     `color.lines.min_elongation`;
+   - `used_rules` (the identity's rules) gains `color.lines.host_share` and
+     `color.lines.min_elongation`. `color.lines.width` stays out of it, as
+     `color.outline.keep_width` does: the `line_width_mm` setting value is hashed instead
+     (decided after the Task 2 quality review). The `lines` block's `rules` field still
+     lists all three, as information;
+   - use `color_config.widens(settings)` for every "is this a widen plan" test;
    - `RECORD_SCHEMA` becomes `tdmg.colors/5`.
    - The settings go through `recorded_settings` (Task 2).
    - **Under remove, nothing above appears**, and the schema stays `tdmg.colors/4`.
@@ -237,8 +241,10 @@ Tests:
    flat.sliver.opening_width floor does not apply to them; printing them at this width is
    untested".
 5. **`colors_verify`:**
-   - accept schema 4 without `lines` and schema 5 with `lines`;
-   - require `methods.lines`, the three rules in `identity.rules` and the settings keys
+   - accept schema 4 without `lines` and schema 5 with `lines`; refuse widen in a
+     schema-4 record and remove in a schema-5 one;
+   - require `methods.lines`, `color.lines.host_share` and `color.lines.min_elongation`
+     in `identity.rules`, and the settings keys
      exactly when `thin_lines` is widen (extend the `want` set at line ~273);
    - validate the block's types (ints for the indices and ridge points, finite numbers);
    - the rebuild (`render=False`) must give the same `lines` block, ridge included.
