@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import itertools
 import json
 import math
 import numbers
@@ -33,6 +34,7 @@ from tdmg.color import (
 from tdmg.color_config import (
     FURRY_RULE,
     KEYS,
+    LINE_WIDTH_RULE,
     SMOOTH_RULE,
     ColorConfig,
     ColorConfigError,
@@ -43,7 +45,9 @@ from tdmg.color_config import (
     check_outline_width_setting,
     palette_cap,
     record_setting_keys,
+    widens,
 )
+from tdmg.color_lines import LINES_METHOD
 from tdmg.color_outline import (
     KEEP_RATIO_RULE,
     OUTLINE_METHOD,
@@ -60,10 +64,16 @@ from tdmg.colors import (
     COLORS_ALGORITHM_VERSION,
     ENVIRONMENT_KEYS,
     LABELS_OUTSIDE,
+    LINES_DRAWN_AFTER,
+    LINES_ELONGATION_RULE,
+    LINES_HOST_RULE,
+    LINES_NOTE,
     OUTPUT_FILES,
     RECORD_NAME,
     RECORD_SCHEMA,
+    RECORD_SCHEMAS,
     UNRENDERED_FIELDS,
+    WIDEN_RECORD_SCHEMA,
     ColorsError,
     build_colors,
     check_width_mm,
@@ -87,6 +97,24 @@ SOURCES = get_args(Source)
 SUPPORTED_METHODS = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
                      "outline": OUTLINE_METHOD, "shade": SHADE_METHOD,
                      "cleanup": CLEANUP_METHOD, "labels": LABELS_METHOD}
+# Under thin_lines widen, the line step's method too (docs/plans/2026-11-19-widen-lines.md,
+# Task 5); a remove plan has no methods.lines.
+WIDEN_METHODS = {**SUPPORTED_METHODS, "lines": LINES_METHOD}
+LINE_RULES = (LINES_HOST_RULE, LINES_ELONGATION_RULE)
+LINES_KEYS = {"method", "width_mm", "width_px", "rules", "drawn_after", "notes", "items"}
+LINE_ITEM_KEYS = {"color", "color_hex", "host", "host_hex", "color_final", "host_final",
+                  "area_px", "width_px", "length_px", "drawn", "reason", "ridge"}
+
+
+def supported_methods(settings) -> dict:
+    """The methods a record must name: SUPPORTED_METHODS, plus methods.lines under
+    thin_lines widen (WIDEN_METHODS)."""
+    return WIDEN_METHODS if widens(settings) else SUPPORTED_METHODS
+
+
+def record_schema(settings) -> str:
+    """The schema a record must have: tdmg.colors/5 under thin_lines widen, else /4."""
+    return WIDEN_RECORD_SCHEMA if widens(settings) else RECORD_SCHEMA
 
 
 @dataclass(frozen=True, eq=False)
@@ -124,9 +152,10 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
     R1 outline, so a caller cannot skip it by leaving an argument out.
 
     Checks, in order:
-    1. colors.json is UTF-8 JSON with schema RECORD_SCHEMA and an identity block;
-       colors_id is colors_id(identity). The plan is ready: ready is true (a plan written
-       with ready false is refused with its reason).
+    1. colors.json is UTF-8 JSON with schema tdmg.colors/4 or /5 (RECORD_SCHEMAS) and an
+       identity block; colors_id is colors_id(identity). The plan is ready: ready is true
+       (a plan written with ready false is refused with its reason). The schema is /5
+       exactly when the identity's settings have thin_lines widen (record_schema).
     2. The identity's values have valid types: settings as ColorConfig takes them (colors
        an int, extract an int 2..MAX_EXTRACT, edges a preset, base auto or a non-bool int,
        outlines drop or keep, outline_color auto, none or a list, merge a list of valid
@@ -138,7 +167,8 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
        settings.line_width_mm when present, are wider than the identity's opening width
        (flat.sliver.opening_width). The settings hold thin_lines and line_width_mm exactly
        when thin_lines is widen (record_setting_keys), and the record's sources the same
-       keys.
+       keys. Under widen the methods include methods.lines and the rules
+       color.lines.host_share and color.lines.min_elongation; under remove neither.
        As when resolving: extract >= colors, and check_extraction_indices against
        extraction.n_extracted (an int 1..extract), outline.family (sorted, distinct indices
        below it) and outline.core.
@@ -203,7 +233,16 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
        palette entries).
     The printer (checked first, with 2) is the profile the identity names, a known profile
     id; its nozzle must be the identity's, and settings.colors at most its palette cap.
-    Settings must not be null, and the identity's methods must be SUPPORTED_METHODS.
+    Settings must not be null, and the identity's methods must be SUPPORTED_METHODS (with
+    methods.lines under widen: supported_methods).
+    The lines block (thin_lines widen; _check_lines) is present exactly under widen. Its
+    form is checked (keys, the method, width_mm = settings.line_width_mm, width_px =
+    width_mm / mm_per_px exactly, the three rules with host_share and min_elongation the
+    identity's, each item's types: extraction indices, their hexes, final indices that
+    follow the extraction's fates and merges, drawn exactly when both are set and differ,
+    a reason exactly when not drawn, and a ridge of sorted distinct integer [row, col]
+    half pixels inside the image, 0 to 2 x height - 1 and 0 to 2 x width - 1). Then the
+    rebuild (9) must give the same block, compared as JSON exactly (ridge included).
 
     What it cannot check: the UNRENDERED_FIELDS are as the record says, and regions.png is
     only hashed, not redrawn. The rebuild proves that the plan follows from the recorded
@@ -219,10 +258,15 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
         record = json.loads(path.read_bytes().decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as e:
         raise ColorsError(f"{path} is not valid JSON: {e}") from None
-    if not isinstance(record, dict) or record.get("schema") != RECORD_SCHEMA:
-        raise ColorsError(f"{path} is not a {RECORD_SCHEMA} record")
+    if not isinstance(record, dict) or record.get("schema") not in RECORD_SCHEMAS:
+        raise ColorsError(f"{path} is not a {' or '.join(RECORD_SCHEMAS)} record")
     if not isinstance(record.get("identity"), dict):
         raise ColorsError(f"{path} has no identity block")
+    want_schema = record_schema(record["identity"].get("settings"))
+    if record["schema"] != want_schema:
+        raise ColorsError(f"{path} is a {record['schema']} record, but its settings make it "
+                          f"a {want_schema} one (tdmg.colors/5 exactly under thin_lines "
+                          "widen)")
     try:
         return _verify(colors_dir, record, selection_dir, check_preview,
                        load_rules() if rules is None else rules)
@@ -265,9 +309,10 @@ def _identity_values(ident: dict, family, printer: PrinterProfile
     if nulls:
         raise ColorsError(f"identity.settings.{nulls[0]} is null; a resolved setting always "
                           "has a value")
-    if ident["methods"] != SUPPORTED_METHODS:
+    if ident["methods"] != supported_methods(settings):
         raise ColorsError("identity.methods are not the methods this version implements "
-                          f"({SUPPORTED_METHODS}); remake the plan with this version")
+                          f"({supported_methods(settings)}); remake the plan with this "
+                          "version")
     try:
         ColorConfig.model_validate(settings, context={"cap": palette_cap(printer)})
     except ValidationError as e:
@@ -284,7 +329,8 @@ def _identity_values(ident: dict, family, printer: PrinterProfile
     want = ({OPENING_RULE, ISLAND_RULE, SHADE_HUE_RULE, SHADE_CHROMA_RULE}
             | ({edge_rule} if edge_rule else set())
             | ({THIN_SHARE_RULE} if settings["outline_color"] == "auto" else set())
-            | ({KEEP_RATIO_RULE} if family else set()))
+            | ({KEEP_RATIO_RULE} if family else set())
+            | (set(LINE_RULES) if widens(settings) else set()))
     if not isinstance(rules, dict) or set(rules) != want:
         raise ColorsError(f"identity.rules must hold exactly {', '.join(sorted(want))}")
     for rule_id, value in rules.items():
@@ -408,6 +454,7 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
             for v in vanished):
         raise ColorsError("colors.json is inconsistent: smoothing.vanished must list final "
                           "palette entries (index and hex)")
+    _check_lines(record, settings, rules, mm_per_px)
     sel = _check_selection(selection_dir, ident, inside)
     _check_rebuild(record, labels8, sel, settings, width_mm, supersample, printer,
                    registry)
@@ -416,6 +463,97 @@ def _verify(colors_dir: Path, record: dict, selection_dir, check_preview: bool,
     return VerifiedColors(record=record, labels=labels, palette=palette,
                           settings=dict(settings), base_index=base_index, sigma_px=sigma,
                           supersample=supersample, width_mm=width_mm, mm_per_px=mm_per_px)
+
+
+def _finite(v) -> bool:
+    return not isinstance(v, bool) and isinstance(v, numbers.Real) and math.isfinite(v)
+
+
+def _index(v, n: int) -> bool:
+    """v is an int (not bool) from 0 to n - 1."""
+    return type(v) is int and 0 <= v < n
+
+
+def _lines_inconsistent(what: str) -> ColorsError:
+    return ColorsError(f"colors.json is inconsistent: lines {what}")
+
+
+def _check_lines(record: dict, settings: dict, rules: dict, mm_per_px: float) -> None:
+    """The lines block (verify_colors' docstring): present exactly under widen, with its
+    form, its values against the settings, rules and extraction, and its items' types. The
+    rebuild then compares it whole."""
+    widen = widens(settings)
+    if ("lines" in record) != widen:
+        raise ColorsError("colors.json is inconsistent: a lines block must be there exactly "
+                          "under thin_lines widen")
+    if not widen:
+        return
+    block = record["lines"]
+    if not isinstance(block, dict) or set(block) != LINES_KEYS:
+        raise _lines_inconsistent(f"must hold exactly {', '.join(sorted(LINES_KEYS))}")
+    if block["method"] != LINES_METHOD or record["methods"].get("lines") != LINES_METHOD:
+        raise _lines_inconsistent(f"method must be {LINES_METHOD}, as methods.lines")
+    width_mm = block["width_mm"]
+    if (not _finite(width_mm) or type(width_mm) is not type(settings["line_width_mm"])
+            or width_mm != settings["line_width_mm"]):
+        raise _lines_inconsistent("width_mm must be settings.line_width_mm")
+    if type(block["width_px"]) is not float or block["width_px"] != width_mm / mm_per_px:
+        raise _lines_inconsistent("width_px must be width_mm / mm_per_px")
+    lr = block["rules"]
+    if (not isinstance(lr, dict) or set(lr) != {LINE_WIDTH_RULE, *LINE_RULES}
+            or not all(_finite(v) for v in lr.values())
+            or any(lr[r] != rules[r] for r in LINE_RULES)):
+        raise _lines_inconsistent(f"rules must give {LINE_WIDTH_RULE} and the identity's "
+                                  f"{' and '.join(LINE_RULES)}")
+    if block["drawn_after"] != LINES_DRAWN_AFTER or block["notes"] != [LINES_NOTE]:
+        raise _lines_inconsistent("drawn_after and notes are not this version's")
+    items = block["items"]
+    if not isinstance(items, list):
+        raise _lines_inconsistent("items must be a list")
+    ext = record["extraction"]["palette"]
+    n_ext, k = len(ext), len(record["palette"])
+    into = {a: b for a, b in settings["merge"]}
+    rows, cols = 2 * record["input"]["height_px"], 2 * record["input"]["width_px"]
+    for n, it in enumerate(items):
+        where = f"items[{n}]"
+        if not isinstance(it, dict) or set(it) != LINE_ITEM_KEYS:
+            raise _lines_inconsistent(f"{where} must hold exactly "
+                                      f"{', '.join(sorted(LINE_ITEM_KEYS))}")
+        c, h = it["color"], it["host"]
+        if not (_index(c, n_ext) and _index(h, n_ext)) or c == h:
+            raise _lines_inconsistent(f"{where}: color and host must be two extraction "
+                                      "indices")
+        if it["color_hex"] != ext[c]["hex"] or it["host_hex"] != ext[h]["hex"]:
+            raise _lines_inconsistent(f"{where}: color_hex and host_hex must be the "
+                                      "extraction's colors")
+        for end, i in (("color_final", c), ("host_final", h)):
+            f = it[end]
+            if f is not None and not _index(f, k):
+                raise _lines_inconsistent(f"{where}: {end} must be null or a final index")
+            if f != ext[into.get(i, i)]["final_index"]:
+                raise _lines_inconsistent(f"{where}: {end} is not the final index the "
+                                          "extraction's fates and merges give")
+        cf, hf = it["color_final"], it["host_final"]
+        drawn = cf is not None and hf is not None and cf != hf
+        if it["drawn"] is not drawn:
+            raise _lines_inconsistent(f"{where}: drawn must be true exactly when color_final "
+                                      "and host_final are set and differ")
+        if (it["reason"] is None) != drawn or not (
+                it["reason"] is None or (isinstance(it["reason"], str) and it["reason"])):
+            raise _lines_inconsistent(f"{where}: a line not drawn needs a reason, a drawn "
+                                      "one none")
+        if (type(it["area_px"]) is not int or it["area_px"] < 1
+                or not all(_finite(it[x]) and it[x] > 0 for x in ("width_px", "length_px"))):
+            raise _lines_inconsistent(f"{where}: area_px must be an int of at least 1, and "
+                                      "width_px and length_px finite numbers above 0")
+        ridge = it["ridge"]
+        if (not isinstance(ridge, list) or not ridge
+                or not all(isinstance(pt, list) and len(pt) == 2
+                           and _index(pt[0], rows) and _index(pt[1], cols) for pt in ridge)
+                or any(a >= b for a, b in itertools.pairwise(ridge))):
+            raise _lines_inconsistent(
+                f"{where}: ridge must be sorted distinct [row, col] integer half pixels, "
+                f"rows 0 to {rows - 1} and columns 0 to {cols - 1}")
 
 
 def _check_palette(palette: list, base_index, base) -> int:
@@ -777,11 +915,17 @@ def _check_rebuild(record: dict, labels8: np.ndarray, sel, settings: dict, width
                           "pixels (changed by hand, or made by a version or machine whose "
                           "results differ)")
     skip = (*UNRENDERED_FIELDS, "settings")
-    where = _first_difference(_without(record, skip),
-                              _without(json.loads(json.dumps(rebuilt)), skip), "")
+    rebuilt = json.loads(json.dumps(rebuilt))
+    where = _first_difference(_without(record, skip), _without(rebuilt, skip), "")
     if where is not None:
         raise ColorsError("colors.json differs from the plan rebuilt from its identity at "
                           f"{where or 'the top level'}")
+    # The lines are drawn from the record (tdmg flat --colors), so the block must be the
+    # rebuilt one exactly, floats included, not only to LAB_ABS_TOL.
+    if "lines" in record and (json.dumps(record["lines"], sort_keys=True)
+                              != json.dumps(rebuilt.get("lines"), sort_keys=True)):
+        raise ColorsError("colors.json's lines differ from the lines rebuilt from its "
+                          "identity")
 
 
 def _first_difference(got, want, path: str) -> str | None:

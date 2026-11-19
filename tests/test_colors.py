@@ -12,7 +12,7 @@ import time
 import numpy as np
 import pytest
 from PIL import Image
-from selection_fixtures import roadie_like
+from selection_fixtures import lined_disc, roadie_like
 
 import tdmg.color_plan
 import tdmg.colors
@@ -24,6 +24,7 @@ from tdmg.color import (
     printable_limits_px,
     quantize,
 )
+from tdmg.color_lines import LINES_METHOD
 from tdmg.color_outline import (
     KEEP_NO_EFFECT_NOTE,
     KEEP_RATIO_RULE,
@@ -48,6 +49,7 @@ from tdmg.colors import (
     colors_id,
     colors_identity,
     extracted_swatch_box,
+    lines_legend,
     make_colors,
     mask_mm_per_px,
     not_ready_reason,
@@ -477,7 +479,7 @@ def _swap_counts(r):
     (lambda r: r["identity"]["rules"].update({"flat.sliver.opening_width": 0.5}),
      "colors_id does not match"),
     (lambda r: r.pop("identity"), "identity"),
-    (lambda r: r.update(schema="tdmg.colors/1"), "not a tdmg.colors/4 record"),
+    (lambda r: r.update(schema="tdmg.colors/1"), "not a tdmg.colors/4 or tdmg.colors/5 record"),
     (lambda r: r["palette"].pop(), "final_index is not the final palette entry"),
     (lambda r: r["palette"][1].update(index=5), "palette indices are not 0..k-1"),
     (lambda r: r["palette"][0].update(hex="#000000"), "is not its rgb"),
@@ -1990,3 +1992,219 @@ def test_verify_colors_checks_the_line_keys_under_widen(widened, sel, tmp_path, 
     with pytest.raises(ColorsError, match=message):
         verify_colors(d, sel)
 
+
+
+# --- widen lines, Task 5: the lines block, the preview and verify -------------------------
+
+LINE_WIDTH_MM = 18.1      # lined_disc's disc is 181 px across: 0.1 mm/px
+LINE_RULE_IDS = ("color.lines.width", "color.lines.host_share", "color.lines.min_elongation")
+
+
+def _widen_plan(folder, rgba, text=b"thin_lines: widen\n"):
+    sel = write_sel(folder / "sel", rgba)
+    cfg = folder / "c.yaml"
+    cfg.write_bytes(text)
+    rec = run(sel, folder / "out", width_mm=LINE_WIDTH_MM, config_path=cfg)
+    return sel, folder / "out", rec
+
+
+@pytest.fixture(scope="module")
+def lined(tmp_path_factory):
+    return _widen_plan(tmp_path_factory.mktemp("lined"), lined_disc())
+
+
+def _ext_index(rec, hex_code):
+    return next(e["index"] for e in rec["extraction"]["palette"] if e["hex"] == hex_code)
+
+
+RED_HEX, BROWN_HEX = "#c81e1e", "#82552d"
+
+
+def test_widen_records_the_lines_block(lined):
+    sel, out, rec = lined
+    assert rec["schema"] == "tdmg.colors/5"
+    assert rec["methods"]["lines"] == LINES_METHOD == rec["identity"]["methods"]["lines"]
+    rules = rec["identity"]["rules"]
+    assert rules["color.lines.host_share"] == RULES["color.lines.host_share"].default
+    assert rules["color.lines.min_elongation"] == RULES["color.lines.min_elongation"].default
+    assert "color.lines.width" not in rules          # hashed as settings.line_width_mm
+    block = rec["lines"]
+    assert set(block) == {"method", "width_mm", "width_px", "rules", "drawn_after", "notes",
+                          "items"}
+    assert block["method"] == LINES_METHOD
+    assert block["width_mm"] == 0.41 == rec["identity"]["settings"]["line_width_mm"]
+    assert block["width_px"] == 0.41 / rec["mm_per_px"]
+    assert block["rules"] == {rid: float(RULES[rid].default) for rid in LINE_RULE_IDS}
+    assert "untested" in block["notes"][0] and "opening_width" in block["notes"][0]
+    (item,) = block["items"]
+    red, brown = _ext_index(rec, RED_HEX), _ext_index(rec, BROWN_HEX)
+    ext = rec["extraction"]["palette"]
+    assert (item["color"], item["host"]) == (red, brown)
+    assert (item["color_final"], item["host_final"]) == (ext[red]["final_index"],
+                                                          ext[brown]["final_index"])
+    assert item["drawn"] is True and item["reason"] is None
+    assert item["area_px"] == 3 * 110
+    ridge = np.array(item["ridge"])
+    # Half pixels: the 3 px line is image rows 120-122, so half-pixel rows 240-245.
+    assert ridge[:, 0].min() >= 240 and ridge[:, 0].max() <= 245
+    assert ridge[:, 1].min() >= 80 and ridge[:, 1].max() < 300
+    assert item["ridge"] == sorted(item["ridge"])
+    verify_colors(out, sel)
+
+
+def _right_panel_px(png, row, col, width_px):
+    """regions.png's right-panel colour at image pixel (row, col)."""
+    im = np.asarray(Image.open(png).convert("RGB"))
+    p = PREVIEW_SCALE
+    return tuple(int(v) for v in im[row * p + 1, width_px * p + col * p + 1])
+
+
+def test_widen_draws_the_line_in_the_preview_and_remove_does_not(lined, tmp_path):
+    sel, out, rec = lined
+    removed = run(sel, tmp_path / "rm", width_mm=LINE_WIDTH_MM)
+    assert removed["schema"] == RECORD_SCHEMA and "lines" not in removed
+    assert "lines" not in removed["methods"]
+    w = rec["input"]["width_px"]
+    item = rec["lines"]["items"][0]
+    red = tuple(rec["palette"][item["color_final"]]["rgb"])
+    brown = tuple(rec["palette"][item["host_final"]]["rgb"])
+    for col in (60, 95, 130):
+        assert _right_panel_px(out / "regions.png", 121, col, w) == red
+        assert _right_panel_px(tmp_path / "rm" / "regions.png", 121, col, w) == brown
+    # The legend line adds strip rows (wrapped); the left panel is the remove plan's.
+    a = np.asarray(Image.open(out / "regions.png"))
+    b = np.asarray(Image.open(tmp_path / "rm" / "regions.png"))
+    assert a.shape[0] > b.shape[0] and (a.shape[0] - b.shape[0]) % (ROW_PX * PREVIEW_SCALE) == 0
+    h = rec["input"]["height_px"] * PREVIEW_SCALE
+    assert (a[:h, :w * PREVIEW_SCALE] == b[:h, :w * PREVIEW_SCALE]).all()
+    assert lines_legend(rec["lines"]) == (
+        "lines: 1 drawn at 0.41 mm after cleanup (thin_lines: widen); untested in print")
+    # labels.png is the cleaned map, without the line, as under remove.
+    assert (np.asarray(Image.open(out / "labels.png"))
+            == np.asarray(Image.open(tmp_path / "rm" / "labels.png"))).all()
+
+
+def test_a_line_whose_color_cleanup_removed_is_recorded_not_drawn(tmp_path):
+    # outline_color none: red, thin everywhere without the garnish, would otherwise be the
+    # outline family, and lines are found only outside it.
+    sel, out, rec = _widen_plan(tmp_path, lined_disc(garnish=False),
+                                text=b"thin_lines: widen\noutline_color: none\n")
+    (item,) = rec["lines"]["items"]
+    assert item["color_final"] is None and item["drawn"] is False
+    assert "has no final color (fate cleanup)" in item["reason"]
+    assert lines_legend(rec["lines"]) == (
+        "lines: 0 drawn at 0.41 mm after cleanup (thin_lines: widen), 1 found but not "
+        "drawn; untested in print")
+    verify_colors(out, sel)
+
+
+def test_a_line_merged_into_its_host_is_recorded_not_drawn(lined, tmp_path):
+    red, brown = _ext_index(lined[2], RED_HEX), _ext_index(lined[2], BROWN_HEX)
+    sel, out, rec = _widen_plan(tmp_path, lined_disc(), text=(
+        f"thin_lines: widen\nmerge: [[{red}, {brown}]]\n".encode()))
+    (item,) = rec["lines"]["items"]
+    assert item["color_final"] == item["host_final"] is not None
+    assert item["drawn"] is False and "same final color" in item["reason"]
+    verify_colors(out, sel)
+
+
+def _set_schema(schema):
+    return lambda r: r.update(schema=schema)
+
+
+def _drop_line_rule(r):
+    r["identity"]["rules"].pop("color.lines.host_share")
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def _drop_lines_method(r):
+    for m in (r["identity"]["methods"], r["methods"]):
+        m.pop("lines")
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def _item(change):
+    return lambda r: change(r["lines"]["items"][0])
+
+
+def _move_ridge_point(it):
+    r, c = it["ridge"][-1]
+    it["ridge"][-1] = [r, c + 1]          # still sorted and inside the image
+
+
+@pytest.mark.parametrize("change, message", [
+    (_set_schema("tdmg.colors/4"),
+     "is a tdmg.colors/4 record, but its settings make it a tdmg.colors/5"),
+    (_drop_line_rule, "identity.rules must hold exactly"),
+    (_drop_lines_method, "identity.methods are not the methods"),
+    (lambda r: r.pop("lines"), "a lines block must be there exactly under thin_lines widen"),
+    (lambda r: r["lines"].update(extra=1), "lines must hold exactly"),
+    (lambda r: r["lines"].update(method="x/1"), "lines method must be"),
+    (lambda r: r["lines"].update(width_mm=0.5), "lines width_mm must be"),
+    (lambda r: r["lines"].update(width_px=4), "lines width_px must be"),
+    (lambda r: r["lines"]["rules"].update({"color.lines.host_share": 0.8}), "lines rules"),
+    (lambda r: r["lines"].update(notes=[]), "drawn_after and notes"),
+    (_item(lambda it: it.update(color=True)), "two extraction indices"),
+    (_item(lambda it: it.update(host=it["color"])), "two extraction indices"),
+    (_item(lambda it: it.update(color_hex="#000000")), "color_hex and host_hex"),
+    (_item(lambda it: it.update(color_final=it["host_final"])), "color_final is not the"),
+    (_item(lambda it: it.update(drawn=False)), "drawn must be true exactly"),
+    (_item(lambda it: it.update(reason="why")), "needs a reason"),
+    (_item(lambda it: it.update(area_px=330.0)), "area_px must be an int"),
+    (_item(lambda it: it.update(width_px=float("inf"))), "area_px must be an int"),
+    (_item(lambda it: it["ridge"].__setitem__(0, [240.0, 80])), "ridge must be sorted"),
+    (_item(lambda it: it["ridge"].append([400, 399])), "rows 0 to 399"),
+    (_item(lambda it: it["ridge"].append([399, 400])), "columns 0 to 399"),
+    (_item(lambda it: it["ridge"].insert(0, [-1, 0])), "ridge must be sorted"),
+    (_item(lambda it: it["ridge"].reverse()), "ridge must be sorted"),
+    (_item(lambda it: it.update(ridge=[])), "ridge must be sorted"),
+    (_item(_move_ridge_point), "rebuilt from its identity at lines"),
+    (_item(lambda it: it.update(width_px=it["width_px"] + 1e-12)),
+     "lines differ from the lines rebuilt"),
+], ids=["schema 4", "rule", "method", "no block", "extra key", "block method", "width_mm",
+        "width_px int", "block rules", "notes", "bool color", "host is color", "hex",
+        "final", "drawn", "reason", "area float", "width inf", "ridge float", "ridge row",
+        "ridge col", "ridge negative", "ridge order", "ridge empty", "ridge moved",
+        "width last digit"])
+def test_verify_colors_checks_the_lines(lined, tmp_path, change, message):
+    sel, out, _ = lined
+    d = _copy(out, tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, sel)
+
+
+def test_verify_colors_refuses_a_remove_plan_as_schema_5(done, sel, tmp_path):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, _set_schema("tdmg.colors/5"))
+    with pytest.raises(ColorsError, match="is a tdmg.colors/5 record, but its settings make "
+                                          "it a tdmg.colors/4"):
+        verify_colors(d, sel)
+
+
+def _rehash(r):
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def _add_lines_method(r):
+    r["identity"]["methods"]["lines"] = LINES_METHOD
+    r["methods"]["lines"] = LINES_METHOD
+    _rehash(r)
+
+
+def _add_line_rule(r):
+    r["identity"]["rules"]["color.lines.host_share"] = 0.9
+    _rehash(r)
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda r: r.update(lines={"items": []}), "a lines block must be there exactly"),
+    (_add_lines_method, "identity.methods are not the methods"),
+    (_add_line_rule, "identity.rules must hold exactly"),
+], ids=["block", "method", "rule"])
+def test_verify_colors_refuses_line_fields_in_a_remove_plan(done, sel, tmp_path, change,
+                                                            message):
+    d = _copy(done[1], tmp_path, "colors")
+    _edit_record(d, change)
+    with pytest.raises(ColorsError, match=message):
+        verify_colors(d, sel)

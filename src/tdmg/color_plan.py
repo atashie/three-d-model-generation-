@@ -93,6 +93,17 @@ class ColorPlan:
     final_index: tuple[int | None, ...]
 
 
+def final_color(plan: ColorPlan, i: int) -> int | None:
+    """The final palette index that extracted color i's pixels end in, or None: its own
+    final_index, or, for a merged color, the final_index of the color it was merged into
+    (merges have no chains: tdmg.color.merge_problem). None when that color has no final
+    index (removed by the outline step or cleanup, or covered by the kept band). Used by
+    the line step (docs/plans/2026-11-19-widen-lines.md, Task 5) to give a found line's
+    color and host, which are extraction indices, their final indices."""
+    into = dict(plan.merges)
+    return plan.final_index[into.get(i, i)]
+
+
 def shade_candidates(n: int, outline_remap, core, merges) -> list[int]:
     """The extraction indices compared for shade pairs: kept by the outline step, not the
     core, and not merged away."""

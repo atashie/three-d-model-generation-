@@ -57,3 +57,24 @@ def two_subjects() -> np.ndarray:
 
 def empty() -> np.ndarray:
     return np.zeros((10, 10, 4), np.uint8)
+
+
+LINE_BROWN = (130, 85, 45)
+LINE_RED = (200, 30, 30)
+# lined_disc's thin line: image rows and columns (a 3 x 110 px strip), and its garnish.
+LINE_ROWS, LINE_COLS = (120, 123), (40, 150)
+GARNISH_CENTRE, GARNISH_RADIUS = (140, 60), 18      # x, y; px
+
+
+def lined_disc(garnish: bool = True) -> np.ndarray:
+    """A brown disc (radius 90 px, 181 px across) with a thin straight red line 3 px wide
+    inside it and, unless garnish is False, a wide red disc (radius 18 px) apart from the
+    line, so red stays a final color after cleanup. At width 18.1 mm (0.1 mm/px) the
+    line is 0.3 mm wide: below flat.sliver.opening_width, so cleanup removes it, and
+    thin_lines widen draws it again (docs/plans/2026-11-19-widen-lines.md, Task 5)."""
+    img = np.zeros((200, 200, 4), np.uint8)
+    cv2.circle(img, (100, 100), 90, (*LINE_BROWN, 255), -1)
+    if garnish:
+        cv2.circle(img, GARNISH_CENTRE, GARNISH_RADIUS, (*LINE_RED, 255), -1)
+    img[LINE_ROWS[0]:LINE_ROWS[1], LINE_COLS[0]:LINE_COLS[1]] = (*LINE_RED, 255)
+    return img

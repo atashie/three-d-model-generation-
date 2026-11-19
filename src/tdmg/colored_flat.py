@@ -16,6 +16,11 @@ make_colored_flat chains the pure steps and writes their outputs in make_flat's 
    unrealistic to glue on, and a plan does not mark which outline-color pixels are the
    redrawn band), where the glue route is not built. A keep plan with no family
    (outline_color none, or auto finding none) drew no band and builds glue as usual.
+   Under thin_lines widen (docs/plans/2026-11-19-widen-lines.md, Task 5) the plan's drawn
+   lines are drawn on the fine map right after smooth_labels, as the plan's preview drew
+   them (tdmg.colors.draw_recorded_lines: the record's drawn items, in record order, at
+   its width_px), and with at least one drawn line the glue route is not built either
+   (LINES_GLUE_NOT_BUILT).
 4. Checks (Decision 9): every per-body, per-plate and assembly check of ams_checks and
    glue_checks, F3.thin_regions per body of both routes (information, UNKNOWN, as in tdmg
    flat) and F6.slicer UNKNOWN per route, so the verdict here is always NOT CERTIFIED.
@@ -46,6 +51,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from tdmg import __version__
 from tdmg.checks import F1_CHECK_IDS, CheckResult, verdict
+from tdmg.color import ColorError
 from tdmg.color_checks import ColorCheckError, ams_checks, export_3mf_check, glue_checks
 from tdmg.color_config import ColorConfigError, palette_cap
 from tdmg.color_geometry import ColorGeometryError, ams_bodies, color_cells, color_regions
@@ -60,6 +66,7 @@ from tdmg.colors import (
     TEXT_X_PX,
     ColorsError,
     background,
+    draw_recorded_lines,
     enlarge,
     swatch_strip,
     wrap_text,
@@ -152,8 +159,19 @@ REVIEW_END = ("The verdict stays NOT CERTIFIED: F3.thin_regions and F6.slicer ar
               "until the bodies are sliced; tdmg slice slices this folder (face up, face "
               "down and each glue plate) and judges each one.")
 REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_3MF + REVIEW_END
-REVIEW_NO_GLUE = REVIEW_TOP + "The glue version was not built: " + GLUE_NOT_BUILT + ". " \
-    + REVIEW_3MF + REVIEW_END
+LINES_GLUE_NOT_BUILT = ("the plan draws thin lines (thin_lines: widen; {n} drawn at "
+                        "{width:g} mm), much narrower than the smallest glue piece (rule "
+                        "color.glue.min_piece_side_mm), so they cannot be glued on; for a "
+                        "glue print, use a plan made with thin_lines: remove")
+
+
+def review_no_glue(reason: str) -> str:
+    """The review line when the glue route was not built, for the given reason."""
+    return REVIEW_TOP + "The glue version was not built: " + reason + ". " + REVIEW_3MF \
+        + REVIEW_END
+
+
+REVIEW_NO_GLUE = review_no_glue(GLUE_NOT_BUILT)
 
 
 class ColoredFlatError(FlatError):
@@ -415,8 +433,10 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     not built (no glue-*.stl, no parts.png). The test is the verified plan's
     outline.keep_width: verify_colors pins it to be set exactly under outlines: keep
     with a non-empty outline family, and null
-    otherwise (so a keep plan with no family builds glue as usual). Then the
-    record's glue section is {"built": false, "reason", "report": null} ({"built": true,
+    otherwise (so a keep plan with no family builds glue as usual). Nor is it built for a
+    thin_lines widen plan with at least one drawn line (LINES_GLUE_NOT_BUILT; both
+    reasons are joined when both hold). Then the record's glue section is {"built": false,
+    "reason", "report": null} ({"built": true,
     "reason": null, "report": glue_geometry's report} otherwise), a warning says why, and
     the verdict's required set leaves out GLUE_ONLY_CHECKS (record: required_checks).
 
@@ -485,12 +505,21 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     opening, island = opening_param["value"], island_param["value"]
     sigma = float(rules[SMOOTH_RULE].default)
     # A band was drawn exactly when keep_width is set (verify_colors: keep with a family).
-    build_glue = plan.record["outline"]["keep_width"] is None
+    no_glue = [] if plan.record["outline"]["keep_width"] is None else [GLUE_NOT_BUILT]
+    # Under thin_lines widen only (verify_colors: the block is there exactly then).
+    lines = plan.record.get("lines")
+    n_lines = 0 if lines is None else sum(it["drawn"] for it in lines["items"])
+    if n_lines:
+        no_glue.append(LINES_GLUE_NOT_BUILT.format(n=n_lines, width=lines["width_mm"]))
+    build_glue = not no_glue
+    no_glue_reason = "; and ".join(no_glue) or None
     try:
         _, transform, parts, cleaning = silhouette(mask, plan.width_mm, sigma, opening,
                                                    island, image_box=True)
         region = shapely.union_all(parts)
         fine = smooth_labels(plan.labels, plan.sigma_px, plan.supersample).fine
+        if lines is not None:
+            fine = draw_recorded_lines(fine, plan.supersample, lines)
         regions = color_regions(fine, plan.supersample, transform, region,
                                 n_colors=len(plan.palette), base_index=plan.base_index,
                                 thin_width_mm=opening)
@@ -504,7 +533,7 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                                  clearance_mm=clearance, min_piece_side_mm=side,
                                  opening_mm=opening, min_island_mm2=island)
             glue_result = glue_checks(glue, printer=profile, rules=rules)
-    except (ColorGeometryError, ColorCheckError, SmoothingError) as e:
+    except (ColorGeometryError, ColorCheckError, SmoothingError, ColorError) as e:
         raise ColoredFlatError(f"the colored geometry was refused: {e}") from None
 
     hex_of = {p["index"]: p["hex"] for p in plan.palette}
@@ -572,8 +601,8 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                             "folded, so the glue model does not use it")
         glue_section = {"built": True, "reason": None, "report": glue.report}
     else:
-        warnings.append(f"glue version not built: {GLUE_NOT_BUILT}")
-        glue_section = {"built": False, "reason": GLUE_NOT_BUILT, "report": None}
+        warnings.append(f"glue version not built: {no_glue_reason}")
+        glue_section = {"built": False, "reason": no_glue_reason, "report": None}
 
     params = {
         "width_mm": plan.width_mm, "thickness_mm": thickness, "printer": profile.id,
@@ -603,6 +632,10 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                      "base": p["index"] == base} for p in plan.palette],
         "base_index": base, "transform": transform, "cleaning": cleaning,
         "regions": regions.report, "cells": cells.report, "glue": glue_section,
+        # Under thin_lines widen only: the plan's lines drawn on the fine map.
+        **({} if lines is None else {"lines": {
+            "drawn": n_lines, "width_mm": lines["width_mm"],
+            "width_px": lines["width_px"], "method": lines["method"]}}),
         "bodies": body_rows,
         "model_3mf": {"file": MODEL_3MF, "palette": PALETTE_NAME,
                       "encoding": THREEMF_ENCODING, "object_name": THREEMF_OBJECT,
@@ -613,7 +646,7 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
         "verdict": verdict(all_checks, required),
         "outputs": {name: hashlib.sha256(data).hexdigest() for name, data in files.items()},
         "environment": colored_environment(),
-        "review": REVIEW if build_glue else REVIEW_NO_GLUE,
+        "review": REVIEW if build_glue else review_no_glue(no_glue_reason),
     }
     try:
         data = record_text(record)

@@ -5,6 +5,7 @@ import hashlib
 import inspect
 import io
 import json
+import math
 import re
 import shutil
 import zipfile
@@ -15,12 +16,13 @@ import shapely
 import trimesh
 from lxml import etree
 from PIL import Image
-from selection_fixtures import roadie_like
+from selection_fixtures import LINE_COLS, LINE_ROWS, lined_disc, roadie_like
 from typer.testing import CliRunner
 
 import tdmg.colored_flat as cf
 from tdmg.checks import CheckResult, merge_exact
 from tdmg.cli import app
+from tdmg.color_geometry import color_cells as cf_color_cells
 from tdmg.colored_flat import (
     BORDER_PX,
     COLORED_REQUIRED_CHECKS,
@@ -768,3 +770,105 @@ def test_environment_records_the_zlib_that_deflates_model_3mf(made):
     env = made[0]["environment"]
     assert env["zlib_python"] == zlib.ZLIB_RUNTIME_VERSION
     assert {"zlib", "python", "lxml", "lib3mf"} <= set(env)
+
+
+# --- widen lines, Task 5: the drawn lines in the 3D build --------------------------------
+
+LINED_WIDTH_MM = 18.1     # lined_disc at 0.1 mm/px (tests/test_colors.py)
+
+
+def _config_plan(sel, out, text, width_mm=60.0):
+    cfg = out.parent / f"{out.name}.yaml"
+    cfg.write_bytes(text)
+    return make_colors(sel, out, width_mm=width_mm, flags=dict(NO_FLAGS), config_path=cfg,
+                       rules=RULES, printer=A1)
+
+
+def test_thin_lines_remove_written_out_builds_the_same_files(plan, made, tmp_path):
+    """Byte-identical when off: a plan with thin_lines: remove written out has the left-out
+    plan's colors_id, so tdmg flat --colors writes the same bytes, record included."""
+    sel, _, rec = plan
+    colors = tmp_path / "colors"
+    assert _config_plan(sel, colors, b"thin_lines: remove\n")["colors_id"] == rec["colors_id"]
+    out = tmp_path / "out"
+    flat = make_colored_flat(sel, colors, out, thickness_mm=3.0)
+    assert "lines" not in flat
+    assert sorted(p.name for p in out.iterdir()) == sorted(p.name for p in made[1].iterdir())
+    for p in made[1].iterdir():
+        assert (out / p.name).read_bytes() == p.read_bytes(), p.name
+
+
+@pytest.fixture(scope="module")
+def lined(tmp_path_factory):
+    root = tmp_path_factory.mktemp("lined")
+    sel = write_sel(root / "sel", lined_disc())
+    rec = _config_plan(sel, root / "colors", b"thin_lines: widen\n", width_mm=LINED_WIDTH_MM)
+    captured = {}
+
+    def capture(*a, **kw):
+        captured["cells"] = cells = cf_color_cells(*a, **kw)
+        return cells
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(cf, "color_cells", capture)
+        flat = make_colored_flat(sel, root / "colors", root / "out", thickness_mm=3.0)
+    return sel, root / "colors", rec, flat, captured["cells"]
+
+
+def test_a_widen_plan_draws_its_line_in_the_ams_inlay(lined):
+    _, _, rec, flat, cells = lined
+    (item,) = rec["lines"]["items"]
+    red = item["color_final"]
+    t = flat["transform"]
+    s, x0, y1 = t["scale_mm_per_px"], t["x0_px"], t["y1_px"]
+    # The inlay of the line's color holds a long thin polygon along the line (image rows
+    # 120-122, columns 40-149), apart from the garnish disc.
+    parts = shapely.union_all(list(cells.of(red)))
+    parts = list(getattr(parts, "geoms", [parts]))
+    centre_y = (y1 - (LINE_ROWS[0] + LINE_ROWS[1]) / 2) * s
+    line = [g for g in parts if g.bounds[1] < centre_y < g.bounds[3]
+            and g.bounds[2] - g.bounds[0] > 5.0]
+    assert len(line) == 1
+    (g,) = line
+    assert g.bounds[0] < (LINE_COLS[0] + 3 - x0) * s
+    assert g.bounds[2] > (LINE_COLS[1] - 3 - x0) * s
+    # Its width, area / length (length from the perimeter, as for a long strip), is about
+    # line_width_mm: the line is drawn at 0.41 mm on the plan's scale (0.1 mm/px), and the
+    # model's scale is the smoothed outline's (about 1% larger here).
+    length = (g.length + math.sqrt(g.length ** 2 - 16 * g.area)) / 4
+    width = g.area / length
+    assert width == pytest.approx(rec["lines"]["width_mm"], abs=0.03)
+    # The glue route is not built, and the record says why and how many lines it drew.
+    assert flat["glue"]["built"] is False
+    assert "thin_lines: widen; 1 drawn at 0.41 mm" in flat["glue"]["reason"]
+    assert any("glue version not built: the plan draws thin lines" in w
+               for w in flat["warnings"])
+    assert flat["lines"] == {"drawn": 1, "width_mm": 0.41,
+                             "width_px": rec["lines"]["width_px"],
+                             "method": rec["lines"]["method"]}
+    assert flat["required_checks"] == sorted(COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS)
+    assert not any(b["route"] == "glue" for b in flat["bodies"])
+
+
+def test_a_widen_plan_with_no_drawn_line_still_builds_glue(tmp_path):
+    sel = write_sel(tmp_path / "sel", lined_disc(garnish=False))
+    # outline_color none: red, thin everywhere without the garnish, would otherwise be
+    # the outline family, and lines are found only outside it.
+    rec = _config_plan(sel, tmp_path / "colors", b"thin_lines: widen\noutline_color: none\n",
+                       width_mm=LINED_WIDTH_MM)
+    assert [it["drawn"] for it in rec["lines"]["items"]] == [False]
+    flat = make_colored_flat(sel, tmp_path / "colors", tmp_path / "out", thickness_mm=3.0)
+    assert flat["glue"]["built"] is True
+    assert flat["lines"]["drawn"] == 0
+
+
+def test_a_widen_plan_with_an_edited_ridge_is_refused(lined, tmp_path):
+    sel, colors, *_ = lined
+    d = tmp_path / "colors"
+    shutil.copytree(colors, d)
+    record = json.loads((d / "colors.json").read_bytes())
+    r, c = record["lines"]["items"][0]["ridge"][-1]
+    record["lines"]["items"][0]["ridge"][-1] = [r, c + 1]
+    (d / "colors.json").write_bytes(json.dumps(record).encode())
+    with pytest.raises(ColoredFlatError, match="lines"):
+        make_colored_flat(sel, d, tmp_path / "out", thickness_mm=3.0)
+    assert not (tmp_path / "out").exists()
