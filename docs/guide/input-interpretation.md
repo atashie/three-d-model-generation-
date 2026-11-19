@@ -130,6 +130,13 @@ thin, disconnected or unsupported geometry. Both need inspection.
 
 ## Known limits
 
+- **Checkered backgrounds:** a checker (for example, a generated image that copies a
+  transparency checker) has two shades. On `roadie-thanksgiving` they were about 107 and
+  144–149 grey. At the default tolerance (30) each square is its own island, and
+  `--remove-at` removes almost nothing. `--tolerance 80` with one point removed the whole
+  checker, because no subject color was that close to either grey. Measure the colors
+  first; see `research/verification/2026-11-19-widen-lines/README.md` (last section).
+
 - **Memory:** on a synthetic 4000 × 4000 image, selection peaked at 565 MiB and
   writing the outputs at 429 MiB. These are numpy allocations traced by tracemalloc;
   OpenCV and zlib buffers are not counted. See `measure_memory.py` and `memory.txt` in

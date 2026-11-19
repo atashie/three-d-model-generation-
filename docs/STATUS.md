@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-17 (restructure Task 12: the make-print skill).
+**Last updated:** 2026-11-19 (`roadie-mural` paused; `roadie-thanksgiving` waits for the widen-lines feature, designed and approved, not built).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -193,6 +193,62 @@ has been measured with calipers, and strength is not judged.
 8. **R4 backend (open):** help the owner choose under their decision rule: a cheap
    standard service, around $1 per model, beats a homemade pipeline if it does
    everything we need.
+
+9. **`roadie-mural`, paused 2026-11-19 (owner: "Let's pause this work - we will return to
+   it later").** A job from a phone photo of a painted school mural (R2, 60 mm wide; the
+   thickness of 3 mm is not set yet). State in `jobs/roadie-mural/` (git-ignored):
+   - Selection: a mask made by code (not recorded as commands), `roadie-mural-mask-3.png`
+     on the owner's OneDrive Desktop. The owner's selection confirmation is **stale**: it
+     was given for an earlier mask.
+   - Colors: "4 colors, ready" (extract 6; merges [[4, 0], [5, 1]]; outline dropped).
+     The owner has not confirmed the colors.
+   - Open question: does the owner's "the black is the outline" mean keep the outline?
+   - The owner's complaints: white specks on the beak, and scrabbly shoes.
+   - **Cause, found in software on this one photo:** the grey fringe on each side of a
+     black line quantizes as shaded white. When the outline is dropped, the line goes to
+     the nearest color, so white takes most of it. The borders then run along the ragged
+     red edge, and leave two beak specks of 0.7 and 0.8 mm² (just above the 0.64 mm²
+     island minimum).
+   - **Test** (scratchpad simulation on the final labels, judged by eye): the fringe was
+     taken as line by growing the dark pixels (max channel < 90) by 4 px (0.13 mm) before
+     splitting the line, and the borders were smoothed at 0.21 mm (6.5 px).
+     - Result: both beak specks are gone, and the borders run along the middle of the
+       lines.
+     - With 7 px (0.23 mm), the line starts to cut the thin ring around the lace hole.
+     - With no growth and the stronger smoothing alone, the specks stay.
+   - Also: `flat.smooth.sigma_px` works in pixels, so on this photo (0.032 mm/px) it
+     smooths about 2.7 times less on the print than on Roadie.
+   - **Design waiting for the owner's choice:**
+     - (A, recommended) new color settings `colors.smooth_mm` and
+       `colors.outline_fringe_mm`, off by default, so `roadie-drop` still verifies
+       identical;
+     - (B) make both the new default;
+     - (C) one `colors.source=photo` switch.
+   - Also proposed:
+     - a list of small pieces, with zoomed crops, in the color review;
+     - mask steps recorded as selection commands (cut at a frame edge, drop light pixels
+       that touch the outside, fill holes, smooth the outline in mm), since the bumpy
+       sole bottoms come from the hand-made mask;
+     - a photo acceptance case in `docs/guide/input-interpretation.md`;
+     - a photo section in the make-print skill.
+   - Small bug: `job set select.remove_at=null` is refused for list keys. Use `[]` to
+     clear them before setting `select.mask`.
+
+10. **Build `colors.thin_lines: widen`, then finish `roadie-thanksgiving` (next, owner:
+    "build the widen-lines feature first").** The design is approved
+    (`docs/plans/2026-11-19-widen-lines-design.md`); its evidence is in
+    `research/verification/2026-11-19-widen-lines/`. Next: the implementation plan, then
+    subagent implementation with spec and quality reviews, then a Codex review.
+    - The job `roadie-thanksgiving` (in `jobs/`, git-ignored) is a Gemini-generated,
+      4-color Thanksgiving Roadie, R2, 60 mm wide. The origin is recorded as `generated`
+      only, and the owner declined the other details. The selection
+      (`remove_at [[5, 5]]`, `keep_at [[560, 540]]`, tolerance 80) is confirmed
+      ("perfect!").
+    - The colors are "4 colors, ready" (extract 6; outline dropped, auto) and not
+      confirmed. The thickness is not set (the original Roadie used 3 mm).
+    - After the build: set `colors.thin_lines=widen` (0.41 mm), rerun, show the owner
+      the turkey lines, and ask for the color confirmation and the thickness. The pupils
+      still join at 60 mm; that is out of the feature's scope.
 
 **Ideas, not started:** owner-generated "print-friendly" input art (flat colors, plain
 background), recorded with its prompt and model, run through the unchanged pipeline.

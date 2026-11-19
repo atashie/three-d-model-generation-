@@ -106,6 +106,18 @@ If one fails, stop and tell the owner: the slice stage cannot run without them.
 5. Ask what should become the model, in their words (for example "only the bird, not the
    grey circle"). This is a record; code does not read it.
 
+Also:
+- **If the owner does not want to give the origin details**, record only `--origin`. The
+  other fields stay `unknown`. Do not ask again. (2026-11-19, `roadie-thanksgiving`:
+  "these are unnecessary to cataolog".)
+- **If the image looks like a tdmg output** (a grey checker meaning "not part of the
+  model", a legend such as "0 #f60606 447.2 mm^2 ams-base.stl"), say so. A generator
+  given a `top.png` can copy its look. Explain what has to be removed. Offer a clean
+  version (plain background, PNG) as the safer route, but the owner may use the file as
+  it is: the checker and legend can be removed in step 4.
+- **If the owner asks you to make or change the image**, say no: image generation is
+  outside the pipeline (CLAUDE.md rule 1). The owner makes it with their own generator.
+
 **Waits for the owner:** the path, the origin, and what should become the model.
 
 ## Step 2: choose the kind of print and a job name
@@ -159,6 +171,20 @@ Check the read-back: it prints the stored words ASCII-escaped, as JSON.
 
    See `docs/guide/input-interpretation.md`. Tell the owner which points you would use
    and why, and ask: "Shall I try these points?"
+
+   **Measure the background before choosing.** Sample the pixel colors at the background
+   and at the subject's edge (a short Pillow script). The flood fill removes connected
+   pixels within the tolerance of the clicked color.
+   - A **checker background** has two greys, for example 107 and 144–149 on
+     `roadie-thanksgiving`. They are farther apart than the default tolerance of 30, so
+     each square is its own island and nothing is removed. Set a tolerance that covers
+     both greys but no subject color (80 worked there), and use a single `remove_at`
+     point. A second point then fails with "not in the current selection" because it is
+     already removed.
+   - A **legend or frame** that does not touch the subject drops away under `keep_at`.
+     It needs no point of its own.
+   - After the run, check the edge up close: count the kept pixels that are greyish
+     (low saturation), and look at a zoomed crop against a bright color.
 2. When they agree, set them and run:
 
    ```bash
@@ -235,6 +261,25 @@ uv run tdmg job set NAME colors.width_mm=60
      AMS lite). `colors.extract` is how many colors are found before merges.
    - **Edges** (`colors.edges`): `smooth` (default), `furry` or `exact`.
    - **Base** (`colors.base`): `auto` (the largest color) or a color number.
+   **Check the small details before the owner confirms.** Compare zoomed crops of the
+   source and of the final colors (`colors/labels.png`; 255 is outside) for:
+   - thin lines drawn inside a color (the red lines on `roadie-thanksgiving`'s turkey);
+   - gaps between nearby shapes (two pupils);
+   - dots, such as the holes on a shoe.
+
+   Then say what is lost, and why. Cleanup removes anything narrower than 0.4 mm
+   (`flat.sliver.opening_width`) or smaller than 0.64 mm². Measure the detail's width in
+   pixels and multiply it by `mm_per_px` from `colors/colors.json`. The choices:
+   - accept the loss;
+   - make the print wider;
+   - `colors.thin_lines: widen`, **planned, not built yet**
+     (`docs/plans/2026-11-19-widen-lines-design.md`). It draws lines inside one color at
+     0.41 mm, after cleanup and smoothing.
+
+   Do not offer `outlines: keep` to save such lines in a JPEG or a generated image. The
+   blur leaves the line's color along every color border, so the band covers the whole
+   picture. This was measured: 27% of `roadie-thanksgiving`, plus a 5th filament.
+   Pupils that join through a narrow gap are not lines; no setting keeps them apart yet.
 4. If the plan is not ready (more colors than allowed), the status says so. Ask the
    owner which colors to merge. Set what they choose and run again:
 
@@ -418,6 +463,20 @@ OK to commit.
 - **The rebuild differs at finish (exit 1):** stop. Nothing was published or deleted.
   Tell the owner what differs. Do not retry with changes, and do not purge. The owner's
   print confirmation covers the file they printed only.
+- **The owner wants a result that no setting gives** (a detail kept, a border cleaner):
+  1. Try the existing settings first. Put the job back after a failed try (`job set`)
+     and say so.
+  2. Measure the cause on the job's own files with a short script in the scratchpad.
+     Show the owner side-by-side crops (source | today | prototype) and numbers, not
+     descriptions.
+  3. Give two or three options with the trade-off of each, and ask the owner to choose.
+     Keep the owner's own numbers when the evidence allows them (0.41 mm, not a "safer"
+     0.5 mm). If a number does not work, show why with a measurement, and offer a way
+     that keeps it.
+  4. When the owner approves, write the design (`docs/plans/DATE-TOPIC-design.md`, with
+     the dead ends and the owner's words). Copy the prototype scripts and their numbers
+     to `research/verification/DATE-TOPIC/`. Pause the job until the feature is built.
+     Example: `docs/plans/2026-11-19-widen-lines-design.md`.
 
 ## Not jobs yet
 
