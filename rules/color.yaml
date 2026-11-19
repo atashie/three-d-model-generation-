@@ -156,7 +156,7 @@
       locator: "Finds exactly the turkey's lines (264 and 504 px)"
       provenance: primary
       validation: untested
-      claim: "Our own software measurement (no print) on roadie-thanksgiving at 60 mm: with a host share of at least 0.9 (together with elongation at least 3 and the island area), the prototype widen_try5.py finds exactly the turkey's two lines and nothing else. One image."
+      claim: "Our own software measurement (no print) on roadie-thanksgiving at 60 mm: with a host share of at least 0.9 (together with elongation at least 3 and the island area), the prototype widen_try5.py finds exactly the turkey's lines (two pieces, 264 and 504 px). One image."
   notes: "The share of the 2 px ring around a candidate, counting no pixel of its own color, that is one other color. A share, so it does not depend on the print width. One image; the value is not tuned against near misses."
 
 - id: color.lines.min_elongation
