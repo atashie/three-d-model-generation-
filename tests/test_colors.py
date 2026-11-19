@@ -42,7 +42,7 @@ from tdmg.colors import (
     OUTER_OUTLINE,
     OUTPUT_FILES,
     PREVIEW_SCALE,
-    RECORD_SCHEMA,
+    REMOVE_RECORD_SCHEMA,
     ROW_PX,
     UNRENDERED_FIELDS,
     ColorsError,
@@ -206,7 +206,7 @@ def test_outputs_and_record_schema(done, sel):
     assert sorted(p.name for p in out.iterdir()) == sorted([*OUTPUT_FILES, "colors.json"])
     assert json.loads((out / "colors.json").read_bytes()) == rec
     assert set(rec) == TOP_KEYS
-    assert rec["schema"] == RECORD_SCHEMA == "tdmg.colors/4"
+    assert rec["schema"] == REMOVE_RECORD_SCHEMA == "tdmg.colors/4"
     assert rec["algorithm"] == COLORS_ALGORITHM_VERSION == "colors-2"
     for name in OUTPUT_FILES:
         assert rec["outputs"][name] == hashlib.sha256((out / name).read_bytes()).hexdigest()
@@ -2062,7 +2062,7 @@ def _right_panel_px(png, row, col, width_px):
 def test_widen_draws_the_line_in_the_preview_and_remove_does_not(lined, tmp_path):
     sel, out, rec = lined
     removed = run(sel, tmp_path / "rm", width_mm=LINE_WIDTH_MM)
-    assert removed["schema"] == RECORD_SCHEMA and "lines" not in removed
+    assert removed["schema"] == REMOVE_RECORD_SCHEMA and "lines" not in removed
     assert "lines" not in removed["methods"]
     w = rec["input"]["width_px"]
     item = rec["lines"]["items"][0]
@@ -2108,6 +2108,44 @@ def test_a_line_merged_into_its_host_is_recorded_not_drawn(lined, tmp_path):
     verify_colors(out, sel)
 
 
+def test_a_line_merged_into_a_color_cleanup_removed_names_the_target(tmp_path):
+    # Red is only the thin line (outline_color none, so it is not the outline family) and
+    # is merged into a green speck below the island area; cleanup then removes green.
+    rgba = lined_disc(garnish=False)
+    rgba[60:65, 60:65] = (30, 160, 60, 255)
+    folder = tmp_path / "probe"
+    folder.mkdir()
+    probe = _widen_plan(folder, rgba, text=b"thin_lines: widen\noutline_color: none\n")[2]
+    red, green = _ext_index(probe, RED_HEX), _ext_index(probe, "#1ea03c")
+    sel, out, rec = _widen_plan(tmp_path, rgba, text=(
+        f"thin_lines: widen\noutline_color: none\nmerge: [[{red}, {green}]]\n".encode()))
+    (item,) = rec["lines"]["items"]
+    assert item["color"] == red and item["color_final"] is None and not item["drawn"]
+    assert f"merged into {green}, fate cleanup" in item["reason"]
+    verify_colors(out, sel)
+
+
+def test_a_line_whose_host_has_no_final_color_is_not_drawn(lined, tmp_path, monkeypatch):
+    # A host with no final index does not arise on a small fixture (the host surrounds
+    # the line, so cleanup keeps it), so the plan is patched to say cleanup removed it.
+    sel, _, rec0 = lined
+    host = rec0["lines"]["items"][0]["host"]
+    real = tdmg.colors.plan_colors
+
+    def patched(*a, **kw):
+        plan = real(*a, **kw)
+        return dataclasses.replace(
+            plan, fate=tuple("cleanup" if i == host else f for i, f in enumerate(plan.fate)),
+            final_index=tuple(None if i == host else f
+                              for i, f in enumerate(plan.final_index)))
+    monkeypatch.setattr(tdmg.colors, "plan_colors", patched)
+    rec = run(sel, tmp_path / "out", width_mm=LINE_WIDTH_MM, flags={"thin_lines": "widen"})
+    (item,) = rec["lines"]["items"]
+    assert item["host_final"] is None and item["drawn"] is False
+    assert item["reason"] == (f"its host {host} ({item['host_hex']}) has no final color "
+                              "(fate cleanup)")
+
+
 def _set_schema(schema):
     return lambda r: r.update(schema=schema)
 
@@ -2149,7 +2187,7 @@ def _move_ridge_point(it):
     (_item(lambda it: it.update(color_hex="#000000")), "color_hex and host_hex"),
     (_item(lambda it: it.update(color_final=it["host_final"])), "color_final is not the"),
     (_item(lambda it: it.update(drawn=False)), "drawn must be true exactly"),
-    (_item(lambda it: it.update(reason="why")), "needs a reason"),
+    (_item(lambda it: it.update(reason="why")), "a drawn line has no reason"),
     (_item(lambda it: it.update(area_px=330.0)), "area_px must be an int"),
     (_item(lambda it: it.update(width_px=float("inf"))), "area_px must be an int"),
     (_item(lambda it: it["ridge"].__setitem__(0, [240.0, 80])), "ridge must be sorted"),
@@ -2158,14 +2196,22 @@ def _move_ridge_point(it):
     (_item(lambda it: it["ridge"].insert(0, [-1, 0])), "ridge must be sorted"),
     (_item(lambda it: it["ridge"].reverse()), "ridge must be sorted"),
     (_item(lambda it: it.update(ridge=[])), "ridge must be sorted"),
-    (_item(_move_ridge_point), "rebuilt from its identity at lines"),
+    (_item(_move_ridge_point), r"rebuilt from its identity at lines\.items\[0\]\.ridge"),
     (_item(lambda it: it.update(width_px=it["width_px"] + 1e-12)),
-     "lines differ from the lines rebuilt"),
+     r"lines differ from the lines rebuilt from its identity at lines\.items\[0\]\.width_px"),
+    (_item(lambda it: it.update(host_final=it["color_final"])), "host_final is not the"),
+    (_item(lambda it: it.update(drawn=False, reason="")), "reason must be null or a non-empty"),
+    (lambda r: r["lines"]["items"].__setitem__(0, [1, 2]), r"items\[0\] must hold exactly"),
+    (lambda r: r["lines"]["rules"].update({"color.lines.width": float("nan")}),
+     "lines rules"),
+    (_item(lambda it: it.update(width_px=0.0)), "area_px must be an int"),
+    (_item(lambda it: it.update(length_px=-1.0)), "area_px must be an int"),
 ], ids=["schema 4", "rule", "method", "no block", "extra key", "block method", "width_mm",
         "width_px int", "block rules", "notes", "bool color", "host is color", "hex",
         "final", "drawn", "reason", "area float", "width inf", "ridge float", "ridge row",
         "ridge col", "ridge negative", "ridge order", "ridge empty", "ridge moved",
-        "width last digit"])
+        "width last digit", "host final", "empty reason", "item not dict", "rule nan",
+        "width zero", "length negative"])
 def test_verify_colors_checks_the_lines(lined, tmp_path, change, message):
     sel, out, _ = lined
     d = _copy(out, tmp_path, "colors")
@@ -2207,4 +2253,18 @@ def test_verify_colors_refuses_line_fields_in_a_remove_plan(done, sel, tmp_path,
     d = _copy(done[1], tmp_path, "colors")
     _edit_record(d, change)
     with pytest.raises(ColorsError, match=message):
+        verify_colors(d, sel)
+
+
+def _settings_not_a_mapping(r):
+    r["identity"]["settings"] = ["thin_lines", "widen"]
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def test_verify_colors_reports_settings_that_are_not_a_mapping(lined, tmp_path):
+    # The schema check needs the settings; with no mapping, the identity check says why.
+    sel, out, _ = lined
+    d = _copy(out, tmp_path, "colors")
+    _edit_record(d, _settings_not_a_mapping)
+    with pytest.raises(ColorsError, match="identity.settings must be a mapping"):
         verify_colors(d, sel)

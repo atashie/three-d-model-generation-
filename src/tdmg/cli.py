@@ -47,7 +47,13 @@ from tdmg.color_slicing import (
 )
 from tdmg.colored_flat import RECORD_NAME as COLORED_RECORD
 from tdmg.colored_flat import make_colored_flat
-from tdmg.colors import COLORS_PRINTER, ColorsError, extracted_text, make_colors
+from tdmg.colors import (
+    COLORS_PRINTER,
+    ColorsError,
+    extracted_text,
+    lines_legend,
+    make_colors,
+)
 from tdmg.flat import FlatError, make_flat
 from tdmg.job_runner import (
     Machine,
@@ -859,6 +865,8 @@ def _colors_lines(rec: dict) -> list[str]:
                      "remove it entirely; it is still in labels.png")
     lines.append(f"cleanup changed {rec['cleanup']['pixels_changed']} px in "
                  f"{rec['cleanup']['passes']} passes")
+    if "lines" in rec:                 # thin_lines widen only
+        lines.append(lines_legend(rec["lines"]))
     lines.append(f"colors_id {rec['colors_id']}")
     return lines
 

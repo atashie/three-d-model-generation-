@@ -160,9 +160,8 @@ REVIEW_END = ("The verdict stays NOT CERTIFIED: F3.thin_regions and F6.slicer ar
               "down and each glue plate) and judges each one.")
 REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_3MF + REVIEW_END
 LINES_GLUE_NOT_BUILT = ("the plan draws thin lines (thin_lines: widen; {n} drawn at "
-                        "{width:g} mm), much narrower than the smallest glue piece (rule "
-                        "color.glue.min_piece_side_mm), so they cannot be glued on; for a "
-                        "glue print, use a plan made with thin_lines: remove")
+                        "{width:g} mm), and the glue route does not take drawn lines; for "
+                        "a glue print, use a plan made with thin_lines: remove")
 
 
 def review_no_glue(reason: str) -> str:

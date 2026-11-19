@@ -420,6 +420,20 @@ def test_colors_flags_and_config(tmp_path):
     assert "edges furry" in _plain(r.stdout)
 
 
+def test_colors_prints_the_lines_row_under_widen_only(tmp_path):
+    sel = _selection(tmp_path)
+    cfg = tmp_path / "c.yaml"
+    cfg.write_bytes(b"thin_lines: widen\n")
+    r = _colors(sel, tmp_path / "widen", "--config", str(cfg))
+    assert r.exit_code == 0, r.output
+    rec = json.loads((tmp_path / "widen" / "colors.json").read_bytes())
+    drawn = sum(it["drawn"] for it in rec["lines"]["items"])
+    assert f"lines: {drawn} drawn at 0.41 mm after cleanup (thin_lines: widen)" in r.stdout
+    r = _colors(sel, tmp_path / "remove")
+    assert r.exit_code == 0, r.output
+    assert "lines:" not in r.stdout
+
+
 def test_colors_numeric_base(tmp_path):
     out = tmp_path / "colors"
     r = _colors(_selection(tmp_path), out, "--colors", "2", "--extract", "2", "--base", "1")

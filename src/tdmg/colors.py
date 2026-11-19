@@ -107,9 +107,9 @@ from tdmg.smoothing import (
 # the two line rules in identity.rules; only a thin_lines widen plan is written as /5, so
 # a remove plan stays the /4 record it was before the line step existed.
 COLORS_ALGORITHM_VERSION = "colors-2"
-RECORD_SCHEMA = "tdmg.colors/4"
-WIDEN_RECORD_SCHEMA = "tdmg.colors/5"
-RECORD_SCHEMAS = (RECORD_SCHEMA, WIDEN_RECORD_SCHEMA)
+REMOVE_RECORD_SCHEMA = "tdmg.colors/4"     # thin_lines remove (or absent)
+WIDEN_RECORD_SCHEMA = "tdmg.colors/5"      # thin_lines widen
+RECORD_SCHEMAS = (REMOVE_RECORD_SCHEMA, WIDEN_RECORD_SCHEMA)
 RECORD_NAME = "colors.json"
 # The printer profile tdmg colors plans for (its palette cap and nozzle); tdmg job run uses
 # the same one.
@@ -703,7 +703,7 @@ def build_colors(sel, width_mm: float, settings, record_settings: dict, rules: d
         nozzle_diameter_mm=limits.nozzle_diameter_mm, rules=used_rules,
         supersample=supersample)
     record = {
-        "schema": WIDEN_RECORD_SCHEMA if lines_record is not None else RECORD_SCHEMA,
+        "schema": WIDEN_RECORD_SCHEMA if lines_record is not None else REMOVE_RECORD_SCHEMA,
         "tdmg_version": __version__ if render else None,
         "algorithm": COLORS_ALGORITHM_VERSION,
         "colors_id": colors_id(identity), "identity": identity,
@@ -817,11 +817,9 @@ def lines_block(plan, settings, rules: dict, mm_per_px: float, limits) -> dict:
         cf, hf = final_color(plan, ln.color), final_color(plan, ln.host)
         reason = None
         if cf is None:
-            reason = (f"its color {ln.color} ({hexes[ln.color]}) has no final color "
-                      f"(fate {plan.fate[ln.color]})")
+            reason = _no_final_color("color", ln.color, plan)
         elif hf is None:
-            reason = (f"its host {ln.host} ({hexes[ln.host]}) has no final color "
-                      f"(fate {plan.fate[ln.host]})")
+            reason = _no_final_color("host", ln.host, plan)
         elif cf == hf:
             reason = f"its color and its host end in the same final color {cf} (a merge)"
         items.append({"color": ln.color, "color_hex": hexes[ln.color], "host": ln.host,
@@ -833,6 +831,18 @@ def lines_block(plan, settings, rules: dict, mm_per_px: float, limits) -> dict:
             "rules": {LINE_WIDTH_RULE: float(rules[LINE_WIDTH_RULE].default),
                       LINES_HOST_RULE: host_share, LINES_ELONGATION_RULE: min_elongation},
             "drawn_after": LINES_DRAWN_AFTER, "notes": [LINES_NOTE], "items": items}
+
+
+def _no_final_color(what: str, i: int, plan) -> str:
+    """Why a line's color or host (extraction index i) has no final color: its own fate,
+    or, when it was merged, the color it was merged into and that color's fate."""
+    hexes, into = plan.extracted.hex, dict(plan.merges)
+    if i in into:
+        j = into[i]
+        why = f"merged into {j}, fate {plan.fate[j]}"
+    else:
+        why = f"fate {plan.fate[i]}"
+    return f"its {what} {i} ({hexes[i]}) has no final color ({why})"
 
 
 def drawn_lines(block: dict) -> list[tuple[int, int, list]]:

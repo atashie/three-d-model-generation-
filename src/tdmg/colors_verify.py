@@ -70,8 +70,8 @@ from tdmg.colors import (
     LINES_NOTE,
     OUTPUT_FILES,
     RECORD_NAME,
-    RECORD_SCHEMA,
     RECORD_SCHEMAS,
+    REMOVE_RECORD_SCHEMA,
     UNRENDERED_FIELDS,
     WIDEN_RECORD_SCHEMA,
     ColorsError,
@@ -114,7 +114,7 @@ def supported_methods(settings) -> dict:
 
 def record_schema(settings) -> str:
     """The schema a record must have: tdmg.colors/5 under thin_lines widen, else /4."""
-    return WIDEN_RECORD_SCHEMA if widens(settings) else RECORD_SCHEMA
+    return WIDEN_RECORD_SCHEMA if widens(settings) else REMOVE_RECORD_SCHEMA
 
 
 @dataclass(frozen=True, eq=False)
@@ -262,8 +262,9 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
         raise ColorsError(f"{path} is not a {' or '.join(RECORD_SCHEMAS)} record")
     if not isinstance(record.get("identity"), dict):
         raise ColorsError(f"{path} has no identity block")
+    # With settings that are not a mapping, _identity_values reports the real problem.
     want_schema = record_schema(record["identity"].get("settings"))
-    if record["schema"] != want_schema:
+    if isinstance(record["identity"].get("settings"), dict) and record["schema"] != want_schema:
         raise ColorsError(f"{path} is a {record['schema']} record, but its settings make it "
                           f"a {want_schema} one (tdmg.colors/5 exactly under thin_lines "
                           "widen)")
@@ -491,8 +492,8 @@ def _check_lines(record: dict, settings: dict, rules: dict, mm_per_px: float) ->
     block = record["lines"]
     if not isinstance(block, dict) or set(block) != LINES_KEYS:
         raise _lines_inconsistent(f"must hold exactly {', '.join(sorted(LINES_KEYS))}")
-    if block["method"] != LINES_METHOD or record["methods"].get("lines") != LINES_METHOD:
-        raise _lines_inconsistent(f"method must be {LINES_METHOD}, as methods.lines")
+    if block["method"] != LINES_METHOD:     # methods.lines is checked with the identity
+        raise _lines_inconsistent(f"method must be {LINES_METHOD}")
     width_mm = block["width_mm"]
     if (not _finite(width_mm) or type(width_mm) is not type(settings["line_width_mm"])
             or width_mm != settings["line_width_mm"]):
@@ -526,6 +527,9 @@ def _check_lines(record: dict, settings: dict, rules: dict, mm_per_px: float) ->
         if it["color_hex"] != ext[c]["hex"] or it["host_hex"] != ext[h]["hex"]:
             raise _lines_inconsistent(f"{where}: color_hex and host_hex must be the "
                                       "extraction's colors")
+        # Each final index is derived again here from the extraction's recorded fates and
+        # merges (as tdmg.color_plan.final_color does from the plan), a cross-check that
+        # does not depend on the rebuild.
         for end, i in (("color_final", c), ("host_final", h)):
             f = it[end]
             if f is not None and not _index(f, k):
@@ -533,15 +537,18 @@ def _check_lines(record: dict, settings: dict, rules: dict, mm_per_px: float) ->
             if f != ext[into.get(i, i)]["final_index"]:
                 raise _lines_inconsistent(f"{where}: {end} is not the final index the "
                                           "extraction's fates and merges give")
+        reason = it["reason"]
+        if reason is not None and not (isinstance(reason, str) and reason):
+            raise _lines_inconsistent(f"{where}: reason must be null or a non-empty string")
         cf, hf = it["color_final"], it["host_final"]
         drawn = cf is not None and hf is not None and cf != hf
         if it["drawn"] is not drawn:
             raise _lines_inconsistent(f"{where}: drawn must be true exactly when color_final "
                                       "and host_final are set and differ")
-        if (it["reason"] is None) != drawn or not (
-                it["reason"] is None or (isinstance(it["reason"], str) and it["reason"])):
-            raise _lines_inconsistent(f"{where}: a line not drawn needs a reason, a drawn "
-                                      "one none")
+        if drawn and it["reason"] is not None:
+            raise _lines_inconsistent(f"{where}: a drawn line has no reason")
+        if not drawn and it["reason"] is None:
+            raise _lines_inconsistent(f"{where}: a line not drawn needs a reason")
         if (type(it["area_px"]) is not int or it["area_px"] < 1
                 or not all(_finite(it[x]) and it[x] > 0 for x in ("width_px", "length_px"))):
             raise _lines_inconsistent(f"{where}: area_px must be an int of at least 1, and "
@@ -922,13 +929,14 @@ def _check_rebuild(record: dict, labels8: np.ndarray, sel, settings: dict, width
                           f"{where or 'the top level'}")
     # The lines are drawn from the record (tdmg flat --colors), so the block must be the
     # rebuilt one exactly, floats included, not only to LAB_ABS_TOL.
-    if "lines" in record and (json.dumps(record["lines"], sort_keys=True)
-                              != json.dumps(rebuilt.get("lines"), sort_keys=True)):
-        raise ColorsError("colors.json's lines differ from the lines rebuilt from its "
-                          "identity")
+    if "lines" in record:
+        where = _first_difference(record["lines"], rebuilt.get("lines"), "lines", exact=True)
+        if where is not None:
+            raise ColorsError("colors.json's lines differ from the lines rebuilt from its "
+                              f"identity at {where}")
 
 
-def _first_difference(got, want, path: str) -> str | None:
+def _first_difference(got, want, path: str, exact: bool = False) -> str | None:
     """The path of the first difference between two JSON values, or None. Two floats may
     differ by LAB_ABS_TOL (last-digit differences of float functions between C libraries,
     as for the Lab check); everything else must have the same type and value, so an int
@@ -937,7 +945,8 @@ def _first_difference(got, want, path: str) -> str | None:
         if set(got) != set(want):
             return f"{path} (keys)"
         for key in sorted(got):
-            where = _first_difference(got[key], want[key], f"{path}.{key}" if path else key)
+            where = _first_difference(got[key], want[key], f"{path}.{key}" if path else key,
+                                      exact)
             if where is not None:
                 return where
         return None
@@ -945,10 +954,10 @@ def _first_difference(got, want, path: str) -> str | None:
         if len(got) != len(want):
             return f"{path} (length)"
         for i, (a, b) in enumerate(zip(got, want, strict=True)):
-            where = _first_difference(a, b, f"{path}[{i}]")
+            where = _first_difference(a, b, f"{path}[{i}]", exact)
             if where is not None:
                 return where
         return None
-    if type(got) is float and type(want) is float:
+    if type(got) is float and type(want) is float and not exact:
         return None if math.isclose(got, want, rel_tol=0.0, abs_tol=LAB_ABS_TOL) else path
     return None if type(got) is type(want) and got == want else path
