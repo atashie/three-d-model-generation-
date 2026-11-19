@@ -186,7 +186,8 @@ VALUES = {
 }
 WORD_FLAGS = ("--owner-said", "--purge-owner-said", "--prompt", "--generator",
               "--generator-version", "--settings", "--references", "--chosen", "--edits")
-STAGE_KEY = re.compile(r"\b(" + "|".join(jobs.STAGE_FIELDS) + r")\.([a-z_]+)\b")
+# A rule id such as flat.sliver.opening_width has a third part; a stage key has two.
+STAGE_KEY = re.compile(r"\b(" + "|".join(jobs.STAGE_FIELDS) + r")\.([a-z_]+)\b(?!\.\w)")
 FILE_SUFFIXES = {"json", "png", "yaml", "md", "stl", "3mf", "gcode"}
 
 
