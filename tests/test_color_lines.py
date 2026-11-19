@@ -1,15 +1,26 @@
-"""tdmg.color_lines.find_lines: thin lines inside one other color
-(docs/plans/2026-11-19-widen-lines.md, Task 3). Synthetic images built here."""
+"""tdmg.color_lines.find_lines and draw_lines: thin lines inside one other color
+(docs/plans/2026-11-19-widen-lines.md, Tasks 3-4). Synthetic images built here."""
 
 import math
 
 import numpy as np
 import pytest
+from scipy import ndimage
+from scipy.spatial import cKDTree
 
 from tdmg.color import OUTSIDE, ColorError, Limits, from_labels, printable_limits_px
-from tdmg.color_lines import Line, find_lines
+from tdmg.color_lines import (
+    RIDGE_SMOOTH_PX,
+    Line,
+    _bridged,
+    _segment,
+    draw_lines,
+    find_lines,
+)
+from tdmg.color_outline import stroke_ridge
 from tdmg.profiles import load_printer
 from tdmg.rules import load_rules
+from tdmg.smoothing import smooth_labels
 
 RULES = load_rules()
 # 0.1 mm/px: opening 4 px, island area 64 px.
@@ -455,3 +466,261 @@ def test_comb_timing():
 def test_every_color_in_the_family_finds_nothing():
     q = quantized(arc_image())
     assert find_lines(q, tuple(range(len(q.hex))), LIMITS, 4.0, 0.9, 3.0) == ()
+
+
+# --- draw_lines ----------------------------------------------------------------------------
+
+S = 4                    # the fine map's supersample (tdmg.smoothing.SUPERSAMPLE)
+DRAW_W = 4.9             # 0.41 mm at 0.0836 mm/px (roadie-thanksgiving)
+HOST, INK, THIRD = 1, 2, 3
+
+
+def straight_ridge(row0=100, col0=40, col1=360, rows=2):
+    """A horizontal ridge `rows` half pixels thick, half-pixel columns col0..col1 - 1."""
+    return tuple((r, c) for r in range(row0, row0 + rows) for c in range(col0, col1))
+
+
+def ring_ridge(centre, radius, a0, a1, n_px, width=4.0):
+    """find_lines' kind of ridge (stroke_ridge at half-pixel resolution) of an arc `width`
+    px wide, angles a0..a1 (radians, atan2 of (y, x), y down), centre in cell coordinates."""
+    r, c = np.mgrid[0:2 * n_px, 0:2 * n_px]
+    y, x = (r + 0.5) / 2, (c + 0.5) / 2
+    d = np.hypot(y - centre[0], x - centre[1]) - radius
+    ang = np.mod(np.arctan2(y - centre[0], x - centre[1]), 2 * math.pi)
+    mask = (np.abs(d) <= width / 2) & (ang >= a0) & (ang <= a1)
+    ry, rx = np.nonzero(stroke_ridge(mask))
+    return tuple(zip(ry.tolist(), rx.tolist()))
+
+
+def width_along(fine, label, point, normal, s=S, reach=6.0, step=0.002):
+    """The length (image px) of the run of `label` through `point` (cell coordinates) along
+    `normal`, sampled every `step` px; each sample takes the fine pixel it falls in."""
+    t = np.arange(-reach, reach + step / 2, step)
+    y, x = point[0] + t * normal[0], point[1] + t * normal[1]
+    on = fine[np.floor(y * s).astype(int), np.floor(x * s).astype(int)] == label
+    mid = len(t) // 2
+    assert on[mid], f"no {label} at {point}"
+    lo, hi = mid, mid
+    while lo > 0 and on[lo - 1]:
+        lo -= 1
+    while hi < len(t) - 1 and on[hi + 1]:
+        hi += 1
+    assert 0 < lo and hi < len(t) - 1, "the run reaches the sampling window's end"
+    return (hi - lo + 1) * step
+
+
+def test_draw_straight_band_width():
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, straight_ridge())], DRAW_W)
+    across = (out == INK).sum(axis=0)
+    # Away from the ends (raw ridge: cell x 20.25..179.75), 3 px in from each.
+    cols = np.arange(int(23.25 * S), int(176.75 * S))
+    assert np.all(np.abs(across[cols] - DRAW_W * S) <= 1)
+    # Centred on the ridge's middle, cell row 50.5: centres in 48.05..52.95, rows 192..211.
+    rows = np.nonzero((out == INK).any(axis=1))[0]
+    assert (rows.min(), rows.max()) == (192, 211)
+
+
+def test_draw_ends_pulled_in_by_smoothing():
+    """The end shortening the docstring states. The raw ridge (two half pixels thick) ends
+    at cell x 20.25; the smoothed end point lies 9/14 px further in (the mean of the 7
+    ridge points within 1.5 px: half-pixel columns 40-43 in its row, 40-42 in the other),
+    so the first painted fine column is the first centre at or beyond
+    20.25 + 9/14 - 4.9 / 2."""
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, straight_ridge())], DRAW_W)
+    cols = np.nonzero((out == INK).any(axis=0))[0]
+    first = 20.25 + 9 / 14 - DRAW_W / 2
+    assert cols.min() == math.ceil(first * S - 0.5)
+    assert cols.max() == 200 * S - 1 - cols.min()                  # symmetric
+    # One half pixel thick: the end moves 0.75 px (the mean of half-pixel columns 40-43).
+    out1 = draw_lines(fine, S, [(INK, HOST, straight_ridge(rows=1))], DRAW_W)
+    cols1 = np.nonzero((out1 == INK).any(axis=0))[0]
+    assert cols1.min() == math.ceil((20.25 + 0.75 - DRAW_W / 2) * S - 0.5)
+    assert RIDGE_SMOOTH_PX == 1.5
+
+
+def test_draw_quarter_circle_width_along_normals():
+    centre, radius = (10.0, 10.0), 30.0
+    ridge = ring_ridge(centre, radius, 0.0, math.pi / 2, 50)
+    fine = np.full((50 * S, 50 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
+    widths = []
+    for a in np.linspace(math.radians(10), math.radians(80), 20):
+        u = (math.sin(a), math.cos(a))
+        p = (centre[0] + radius * u[0], centre[1] + radius * u[1])
+        widths.append(width_along(out, INK, p, u))
+    assert np.all(np.abs(np.array(widths) - DRAW_W) <= 0.35), widths
+
+
+def test_draw_never_paints_a_third_color():
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    fine[:, 400:440] = THIRD                       # a stripe across the band
+    out = draw_lines(fine, S, [(INK, HOST, straight_ridge())], DRAW_W)
+    assert np.array_equal(out[:, 400:440], fine[:, 400:440])
+    assert (out[:, 399] == INK).sum() == (out[:, 440] == INK).sum() > 0
+    # A pixel of the line's own color in its band stays (painting it is a no-op).
+    fine[200, 300] = INK
+    assert draw_lines(fine, S, [(INK, HOST, straight_ridge())], DRAW_W)[200, 300] == INK
+
+
+def test_draw_later_line_does_not_paint_an_earlier_one():
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    a = (INK, HOST, straight_ridge())
+    b = (THIRD, HOST, tuple((r, 200) for r in range(60, 140)))   # vertical, crossing a
+    ab, ba = draw_lines(fine, S, [a, b], DRAW_W), draw_lines(fine, S, [b, a], DRAW_W)
+    cross = (slice(195, 210), slice(400 - 4, 400 + 4))
+    assert np.all(ab[cross] == INK) and np.all(ba[cross] == THIRD)
+
+
+@pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.int32, np.int64])
+def test_draw_input_unchanged_dtype_kept(dtype):
+    fine = np.full((60 * S, 200 * S), HOST, dtype)
+    fine.setflags(write=False)                     # as smooth_labels returns it
+    before = fine.copy()
+    out = draw_lines(fine, S, [(INK, HOST, straight_ridge())], DRAW_W)
+    assert np.array_equal(fine, before)
+    assert out.dtype == fine.dtype and out.shape == fine.shape
+    assert not np.shares_memory(out, fine)
+    assert (out == INK).any()
+
+
+def test_draw_color_equal_host_skipped_and_no_lines():
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    assert np.array_equal(draw_lines(fine, S, [(HOST, HOST, straight_ridge())], DRAW_W),
+                          fine)
+    assert np.array_equal(draw_lines(fine, S, [], DRAW_W), fine)
+
+
+def test_draw_ridge_beyond_the_map_is_clipped():
+    fine = np.full((10 * S, 10 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, ((0, 0), (0, 1), (100, 100)))], DRAW_W)
+    assert out[0, 0] == INK and 0 < (out == INK).sum() < fine.size
+
+
+def test_draw_deterministic_and_ridge_order_irrelevant():
+    ridge = ring_ridge((10.0, 10.0), 30.0, 0.0, math.pi / 2, 50)
+    fine = np.full((50 * S, 50 * S), HOST, np.uint8)
+    a = draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
+    b = draw_lines(fine, S, [(INK, HOST, tuple(reversed(ridge)))], DRAW_W)
+    c = draw_lines(fine, S, [(INK, HOST, np.array(ridge))], DRAW_W)
+    assert np.array_equal(a, b) and np.array_equal(a, c)
+
+
+def test_draw_matches_a_plain_float_reference():
+    """The exact-fraction implementation against a plain float form (cKDTree ball means,
+    nearest smoothed point of every fine pixel centre): they may differ only on pixels
+    whose distance is within 1e-9 px of the radius. Both start from the bridged ridge
+    (the bridges are tested on their own below)."""
+    ridge = np.array(ring_ridge((10.0, 10.0), 30.0, 0.0, math.pi / 2, 50))
+    fine = np.full((50 * S, 50 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
+    cell = (_bridged(ridge, DRAW_W) + 0.5) / 2
+    near = cKDTree(cell).query_ball_point(cell, RIDGE_SMOOTH_PX)
+    smooth = np.array([cell[sorted(n)].mean(axis=0) for n in near])
+    ii, jj = np.mgrid[0:fine.shape[0], 0:fine.shape[1]]
+    cen = np.stack([((ii + 0.5) / S).ravel(), ((jj + 0.5) / S).ravel()], 1)
+    d = cKDTree(smooth).query(cen)[0].reshape(fine.shape)
+    differ = (d <= DRAW_W / 2) != (out == INK)
+    assert np.all(np.abs(d[differ] - DRAW_W / 2) < 1e-9)
+
+
+def test_draw_bridges_ridge_gaps_up_to_the_width():
+    """find_lines' ridge can break into pieces along a curve (the arc fixture's ridge is 50
+    8-connected pieces, with gaps up to 4.5 px). A gap of at most the drawn width is
+    bridged, so the band is whole and its width holds across the gap; a longer gap stays."""
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    ridge = straight_ridge()
+    gap = tuple(p for p in ridge if not 190 <= p[1] < 198)        # 189 to 198: 4.5 px gap
+    out = draw_lines(fine, S, [(INK, HOST, gap)], DRAW_W)
+    _, n = ndimage.label(out == INK, structure=np.ones((3, 3), bool))
+    assert n == 1
+    across = (out == INK).sum(axis=0)
+    assert np.all(np.abs(across[95 * S:100 * S] - DRAW_W * S) <= 1)
+    # A gap of 5 px (189 to 199 half px; more than 4.9) is not bridged: two pieces.
+    far = tuple(p for p in ridge if not 190 <= p[1] < 199)
+    _, n = ndimage.label(draw_lines(fine, S, [(INK, HOST, far)], DRAW_W) == INK,
+                         structure=np.ones((3, 3), bool))
+    assert n == 2
+    # The arc fixture's ridge (find_lines) is in pieces; bridged, it is one.
+    (line,) = run(quantized(arc_image()), family_rows=(DARK,))
+    pieces = np.zeros((400, 400), bool)
+    pieces[tuple(np.array(line.ridge).T)] = True
+    assert ndimage.label(pieces, structure=np.ones((3, 3), bool))[1] > 1
+    bridged = np.zeros((400, 400), bool)
+    bridged[tuple(_bridged(np.array(line.ridge), DRAW_W).T)] = True
+    assert ndimage.label(bridged, structure=np.ones((3, 3), bool))[1] == 1
+
+
+def test_bridge_segment_exact():
+    seg = _segment(np.array([0, 0]), np.array([3, 7]))
+    assert seg.tolist() == [[0, 0], [0, 1], [1, 2], [1, 3], [2, 4], [2, 5], [3, 6], [3, 7]]
+
+
+_GOOD = np.ones((8, 8), np.uint8)
+
+
+@pytest.mark.parametrize("args, match", [
+    ((np.zeros((4, 4), bool), 4, [], 4.9), "integer"),
+    ((np.zeros((4, 4), float), 4, [], 4.9), "integer"),
+    ((np.zeros((4,), np.uint8), 4, [], 4.9), "2-D"),
+    ((np.zeros((0, 4), np.uint8), 4, [], 4.9), "2-D"),
+    (([[1, 1], [1, 1]], 4, [], 4.9), "2-D"),
+    ((_GOOD, 0, [], 4.9), "supersample"),
+    ((_GOOD, True, [], 4.9), "supersample"),
+    ((_GOOD, 2.0, [], 4.9), "supersample"),
+    ((_GOOD, 4, [], 0.0), "width_px"),
+    ((_GOOD, 4, [], float("nan")), "width_px"),
+    ((_GOOD, 4, [(2, 1)], 4.9), "each line"),
+    ((_GOOD, 4, [(256, 1, ((0, 0),))], 4.9), "color_final"),
+    ((_GOOD, 4, [(-1, 1, ((0, 0),))], 4.9), "color_final"),
+    ((_GOOD, 4, [(2, True, ((0, 0),))], 4.9), "host_final"),
+    ((_GOOD, 4, [(2, 1, ())], 4.9), "ridge"),
+    ((_GOOD, 4, [(2, 1, ((0.5, 0),))], 4.9), "ridge"),
+    ((_GOOD, 4, [(2, 1, ((-1, 0),))], 4.9), "ridge"),
+    ((_GOOD, 4, [(2, 1, ((0, 0, 0),))], 4.9), "ridge"),
+    ((_GOOD, 4, [(2, 1, ((0, 0), (1,)))], 4.9), "ridge"),
+])
+def test_draw_bad_arguments_refused(args, match):
+    with pytest.raises(ColorError, match=match):
+        draw_lines(*args)
+
+
+def test_draw_checks_every_line_before_drawing():
+    fine = np.full((8, 8), HOST, np.uint8)
+    with pytest.raises(ColorError, match="ridge"):
+        draw_lines(fine, 4, [(INK, HOST, ((0, 0),)), (INK, HOST, ())], 4.9)
+
+
+def test_find_then_draw_after_cleanup_end_to_end():
+    """find_lines on the arc image, the line removed from the labels as cleanup would,
+    smooth_labels, then draw_lines with the found ridge: the drawn line is one 8-connected
+    piece of the drawn width along its normals, reaching both ends, and nothing else
+    changes."""
+    rows = arc_image()
+    rows[20:60, 150:190] = GREEN                   # another region, away from the arc
+    q = quantized(rows)
+    (line,) = run(q, family_rows=(DARK,))
+    labels = np.asarray(q.labels).copy()
+    red, brown, green = ix(q, RED), ix(q, BROWN), ix(q, GREEN)
+    labels[(labels == red) | (labels == ix(q, DARK))] = brown     # as cleanup would
+    fine = smooth_labels(labels, 2.5, S).fine
+    assert not (fine == red).any()
+    out = draw_lines(fine, S, [(line.color, line.host, line.ridge)], DRAW_W)
+    drawn = out == red
+    _, n = ndimage.label(drawn, structure=np.ones((3, 3), bool))
+    assert n == 1
+    assert np.array_equal(out[~drawn], fine[~drawn])
+    assert np.array_equal(out == green, fine == green)
+    centre = (ARC_C[0] + 0.5, ARC_C[1] + 0.5)      # pixel-index centre -> cell coordinates
+    widths = []
+    for a in np.linspace(ARC_FROM + 0.1, ARC_TO - 0.1, 20):    # 6 px of arc in from the ends
+        u = (math.sin(a), math.cos(a))
+        p = (centre[0] + ARC_R * u[0], centre[1] + ARC_R * u[1])
+        widths.append(width_along(out, red, p, u))
+    assert np.all(np.abs(np.array(widths) - DRAW_W) <= 0.35), widths
+    # It reaches each end of the drawn arc to within 1 px of arc.
+    ii, jj = np.nonzero(drawn)
+    ang = np.mod(np.arctan2((ii + 0.5) / S - centre[0], (jj + 0.5) / S - centre[1]),
+                 2 * math.pi)
+    assert ang.min() <= ARC_FROM + 1.0 / ARC_R and ang.max() >= ARC_TO - 1.0 / ARC_R

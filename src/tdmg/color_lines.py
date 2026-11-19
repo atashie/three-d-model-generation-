@@ -60,14 +60,23 @@ run once per piece on its bounding box padded by 2 px; the ring, the width and t
 run once per candidate on its own bounding box padded by 2 px. Each crop gives the same
 result as the whole image (the pad holds the whole ring; beyond a box no pixel is in the
 piece or candidate); tests/test_color_lines.py compares it with a plain whole-image form.
+
+draw_lines (Task 4; design item 4) draws found lines on a smoothed fine label map, after
+cleanup and smoothing: each line's ridge has its gaps of at most the drawn width bridged
+and is smoothed (RIDGE_SMOOTH_PX), then every fine pixel of the host within half the
+drawn width of the smoothed ridge takes the line's color.
+RIDGE_SMOOTH_PX (1.5 image px) is a method constant, not a print threshold: it is the size
+of the beading it removes, the half-pixel staircase of a ridge that runs at an angle.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 from scipy import ndimage
+from scipy.spatial import cKDTree
 
 from tdmg.color import (
     FOUR_CONNECTED,
@@ -80,6 +89,7 @@ from tdmg.color import (
     open_mask,
 )
 from tdmg.color_outline import stroke_ridge
+from tdmg.smoothing import SmoothingError, check_supersample
 
 # The method's version, recorded in colors.json's methods.lines (Task 5).
 LINES_METHOD = "inside-one-color-lines/1"
@@ -89,6 +99,12 @@ BODY_WIDTHS = 2
 RING_SQUARE_PX = 5
 # The percentile of the distances taken as the candidate's half width.
 WIDTH_PERCENTILE = 90
+
+# draw_lines moves each ridge point to the mean of the line's ridge points within this many
+# image px (3 half pixels). A method constant, not a print threshold (module docstring).
+RIDGE_SMOOTH_PX = 1.5
+# draw_lines tests the discs of this many ridge points at a time (memory only).
+_CHUNK = 1024
 
 _EIGHT = ndimage.generate_binary_structure(2, 2)
 _RING = np.ones((RING_SQUARE_PX, RING_SQUARE_PX), bool)
@@ -230,3 +246,208 @@ def find_lines(q: Quantized, family: tuple[int, ...], limits: Limits,
                                   length_px=length, ridge=ridge))
     found.sort(key=lambda ln: (ln.color, ln.ridge[0]))
     return tuple(found)
+
+
+def _check_ridge(ridge) -> np.ndarray:
+    """ridge as an (n, 2) int64 array of half-pixel (row, col), n >= 1, all >= 0."""
+    try:
+        a = np.asarray(ridge)
+    except (TypeError, ValueError) as exc:   # ragged sequences
+        raise ColorError(f"ridge must be (row, col) pairs, got {ridge!r}") from exc
+    if a.ndim != 2 or a.shape[1] != 2 or not a.shape[0]:
+        raise ColorError(f"ridge must be a non-empty sequence of (row, col) pairs, "
+                         f"got shape {a.shape}")
+    if a.dtype == np.bool_ or not np.issubdtype(a.dtype, np.integer):
+        raise ColorError(f"ridge must hold integers, got {a.dtype}")
+    if int(a.min()) < 0:
+        raise ColorError(f"ridge points must be at least 0, got {int(a.min())}")
+    return a.astype(np.int64)
+
+
+def _check_label(name: str, value, dtype: np.dtype) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise ColorError(f"{name} must be an integer label, got {value!r}")
+    top = int(np.iinfo(dtype).max)
+    if not 0 <= int(value) <= top:
+        raise ColorError(f"{name} must be a label from 0 to {top} (the fine map's dtype "
+                         f"{dtype}), got {int(value)}")
+    return int(value)
+
+
+def _segment(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """The half pixels of the straight segment from a to b (int64 (row, col)), both ends
+    included: max(|dr|, |dc|) + 1 points, a + round(t (b - a) / m) in exact integers
+    (round half up)."""
+    d = b - a
+    m = int(np.abs(d).max())
+    t = np.arange(m + 1, dtype=np.int64)[:, None]
+    return a + (2 * t * d + m) // (2 * m)
+
+
+def _bridged(pts: np.ndarray, width_px: float) -> np.ndarray:
+    """The ridge with its short gaps filled: sorted distinct int64 (row, col) half pixels.
+
+    find_lines' ridge (local maxima of a discrete distance) is not always connected: along a
+    curve it breaks into pieces, with gaps of a few px. For each two 8-connected pieces of
+    the ridge (on the half-pixel grid) whose nearest points are at most width_px apart, the
+    straight segment between those points is added (_segment). The nearest pair is the one
+    with the least exact squared distance, ties to the lowest (index, index) in the sorted
+    ridge. A gap no longer than the drawn width is closed; a bridge's drawn capsule lies
+    between the two discs at its ends, which already overlap or touch. Longer gaps stay.
+    """
+    pts = np.unique(pts, axis=0)                              # sorted rows, distinct
+    local = pts - pts.min(axis=0)                             # the ridge's own box
+    mark = np.zeros(tuple(local.max(axis=0) + 1), bool)
+    mark[local[:, 0], local[:, 1]] = True
+    comp_map, n = ndimage.label(mark, structure=_EIGHT)
+    if n < 2:
+        return pts
+    comp = comp_map[local[:, 0], local[:, 1]]
+    reach2 = (2.0 * width_px) ** 2                            # in half pixels, squared
+    xy = pts.astype(np.float64)
+    pairs = cKDTree(xy).query_pairs(2.0 * width_px + 0.5, output_type="ndarray")
+    if not len(pairs):
+        return pts
+    i, j = pairs[:, 0], pairs[:, 1]
+    i, j = np.minimum(i, j), np.maximum(i, j)
+    keep = comp[i] != comp[j]
+    i, j = i[keep], j[keep]
+    d2 = ((pts[i] - pts[j]) ** 2).sum(axis=1)                 # exact integers
+    keep = d2.astype(np.float64) <= reach2
+    i, j, d2 = i[keep], j[keep], d2[keep]
+    ca, cb = np.minimum(comp[i], comp[j]), np.maximum(comp[i], comp[j])
+    order = np.lexsort((j, i, d2, cb, ca))                    # per piece pair: least first
+    i, j, ca, cb = i[order], j[order], ca[order], cb[order]
+    first = np.ones(len(i), bool)
+    first[1:] = (ca[1:] != ca[:-1]) | (cb[1:] != cb[:-1])
+    added = [_segment(pts[a], pts[b]) for a, b in zip(i[first], j[first])]
+    return np.unique(np.concatenate([pts, *added]), axis=0)
+
+
+def _smoothed(pts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The smoothed ridge as exact fractions: (num_y, num_x, den), int64, one per point.
+
+    Point k's smoothed position in cell coordinates is (num_y / den, num_x / den): the mean
+    of the cell-coordinate centres ((r + 0.5) / 2, (c + 0.5) / 2) of the ridge points
+    within RIDGE_SMOOTH_PX of it (itself included). With n such points and sums S_r, S_c of
+    their half-pixel indices, the mean is ((2 S_r + n) / (4 n), (2 S_c + n) / (4 n)).
+    Membership is decided on exact integer squared distances in half pixels: cKDTree finds
+    the points of a slightly larger ball (indices sorted), so its float test never decides.
+    """
+    reach = 2 * RIDGE_SMOOTH_PX                               # 3.0 half pixels
+    xy = pts.astype(np.float64)
+    near_all = cKDTree(xy).query_ball_point(xy, reach + 0.5)
+    num_y = np.empty(len(pts), np.int64)
+    num_x = np.empty(len(pts), np.int64)
+    den = np.empty(len(pts), np.int64)
+    for k, near in enumerate(near_all):
+        idx = np.array(sorted(near), np.int64)
+        d2 = ((pts[idx] - pts[k]) ** 2).sum(axis=1)           # exact integers
+        idx = idx[d2 <= reach * reach]
+        n = len(idx)
+        num_y[k] = 2 * int(pts[idx, 0].sum()) + n
+        num_x[k] = 2 * int(pts[idx, 1].sum()) + n
+        den[k] = 4 * n
+    return num_y, num_x, den
+
+
+def _disc_pixels(num_y: np.ndarray, num_x: np.ndarray, den: np.ndarray, s: int,
+                 radius: float, shape: tuple[int, int]) -> np.ndarray:
+    """The flat indices, sorted and distinct, of the fine pixels whose centre is within
+    radius (image px) of at least one point (num_y / den, num_x / den).
+
+    Only a window around each point is tested: the fine pixels at most ceil(radius x s) + 1
+    rows and columns from the fine pixel that holds the point. Fine pixel (i, j) has its
+    centre at ((2i + 1) / (2s), (2j + 1) / (2s)), so with q = 2 s den its offset from the
+    point is (a / q, b / q), a = (2i + 1) den - 2 s num_y and b = (2j + 1) den - 2 s num_x,
+    exact integers. It is inside when a^2 + b^2 <= radius^2 x q^2: the left side is an
+    exact integer (far below 2^53, so exact in float64), the right side one float64
+    product.
+    """
+    h, w = shape
+    reach = math.ceil(radius * s) + 1
+    off = np.arange(-reach, reach + 1, dtype=np.int64)
+    dy, dx = (a.ravel() for a in np.meshgrid(off, off, indexing="ij"))
+    r2 = radius * radius
+    found = []
+    for start in range(0, len(den), _CHUNK):
+        ny, nx, dn = (v[start:start + _CHUNK, None] for v in (num_y, num_x, den))
+        i = (ny * s) // dn + dy
+        j = (nx * s) // dn + dx
+        a = (2 * i + 1) * dn - 2 * s * ny
+        b = (2 * j + 1) * dn - 2 * s * nx
+        q = (2 * s * dn).astype(np.float64)
+        inside = (a * a + b * b).astype(np.float64) <= r2 * (q * q)
+        inside &= (i >= 0) & (i < h) & (j >= 0) & (j < w)
+        found.append(i[inside] * w + j[inside])
+    return np.unique(np.concatenate(found))
+
+
+def draw_lines(fine: np.ndarray, supersample: int, lines, width_px: float) -> np.ndarray:
+    """The fine map with the lines drawn at width_px (design item 4).
+
+    fine: a fine label map such as tdmg.smoothing.smooth_labels' fine (2-D, integer; image
+    pixel (r, c) is split into supersample x supersample fine pixels, fine pixel (i, j)
+    centred at ((i + 0.5) / s, (j + 0.5) / s) in cell coordinates). supersample: an int
+    >= 1 (bool refused). lines: an iterable of (color_final, host_final, ridge): two labels
+    in the fine map's numbering (after the merges' remap), each from 0 to the dtype's
+    maximum, and a Line.ridge (half-pixel (row, col), half pixel (r, c) centred at
+    ((r + 0.5) / 2, (c + 0.5) / 2); non-empty, integers >= 0). width_px: the drawn width in
+    image px, a finite number above 0. Every argument is checked before anything is drawn;
+    ColorError otherwise.
+
+    For each line, in the given order:
+    0. Its ridge's short gaps are bridged (_bridged): find_lines' ridge can break into
+       pieces along a curve (gaps of up to 4.5 px measured on a 6 px arc), which would
+       pinch or cut the drawn line. Two pieces whose nearest points are at most width_px
+       apart get the straight run of half pixels between those points. Longer gaps stay.
+       This is a step beyond the plan's two, found by testing (the arc in
+       tests/test_color_lines.py drew in two pieces without it).
+    1. Its ridge is smoothed: each point moves to the mean of the line's ridge points
+       within RIDGE_SMOOTH_PX of it, itself included (each line on its own). This removes
+       the half-pixel staircase of a ridge at an angle, which would bead the drawn edges.
+       Near an end the mean lies inward, so the drawn line is a little shorter than with
+       the raw ridge: on a straight ridge two half pixels thick (find_lines' ridge of a
+       line an even number of px wide) the end point moves 9/14 px (0.64 px) along it,
+       on one half pixel thick 0.75 px (tests/test_color_lines.py). The raw ridge starts
+       about 1.5 px inside the found line's end and the drawn end cap reaches width_px / 2
+       beyond the smoothed end, so the drawn line still reaches near the found line's end.
+    2. Each fine pixel whose centre is within width_px / 2 of a smoothed point (the edge
+       counts as within) and whose label is host_final at that moment becomes
+       color_final. So a line never paints over a third color, nor over an earlier line of
+       another color. Only the fine pixels near each point are tested.
+    A line with color_final == host_final is skipped (nothing to draw; the caller records
+    why).
+
+    The smoothed points are exact fractions and the inclusion test compares an exact
+    integer with one float64 product (_disc_pixels), so the result does not depend on the
+    platform's float summation order. Returns a new array of fine's dtype and shape (not
+    read-only, even if fine is); fine is never changed.
+    """
+    if not isinstance(fine, np.ndarray) or fine.ndim != 2 or not fine.size:
+        raise ColorError(f"fine must be a non-empty 2-D array, got "
+                         f"{getattr(fine, 'shape', type(fine).__name__)}")
+    if fine.dtype == np.bool_ or not np.issubdtype(fine.dtype, np.integer):
+        raise ColorError(f"fine must be an integer label map, got {fine.dtype}")
+    try:
+        s = check_supersample(supersample)
+    except SmoothingError as exc:
+        raise ColorError(str(exc)) from exc
+    radius = finite_positive("width_px", width_px) / 2
+    todo = []
+    for item in lines:
+        if not isinstance(item, (tuple, list)) or len(item) != 3:
+            raise ColorError(f"each line must be (color_final, host_final, ridge), "
+                             f"got {item!r}")
+        color = _check_label("color_final", item[0], fine.dtype)
+        host = _check_label("host_final", item[1], fine.dtype)
+        todo.append((color, host, _check_ridge(item[2])))
+    out = np.array(fine, copy=True, order="C")
+    flat = out.reshape(-1)                   # a view: out is C-contiguous
+    for color, host, pts in todo:
+        if color == host:
+            continue
+        idx = _disc_pixels(*_smoothed(_bridged(pts, 2 * radius)), s, radius, out.shape)
+        idx = idx[flat[idx] == host]
+        flat[idx] = color
+    return out
