@@ -7,7 +7,6 @@ import hashlib
 import json
 import math
 import shutil
-import sys
 import time
 
 import numpy as np
@@ -57,7 +56,6 @@ from tdmg.colors import (
 from tdmg.colors_verify import VerifiedColors, verify_colors
 from tdmg.flat import mask_outline, to_model
 from tdmg.profiles import load_printer
-from tdmg.records import canonical_json
 from tdmg.rules import load_rules
 from tdmg.selection import (
     Intake,
@@ -1862,19 +1860,14 @@ def test_verify_colors_refuses_a_png_pillow_will_not_decode(done, sel, tmp_path)
 # the change (docs/plans/2026-11-19-widen-lines.md, "byte-identical when off").
 # colors_id hashes the identity: the selection's hashes (pinned on every CI platform by
 # tests/test_selection.py's golden test), the settings, the rule values and the methods.
-# "stable" is the SHA-256 of the canonical JSON of colors.json without the
-# UNRENDERED_FIELDS, and BEFORE_THIN_LINES_LABELS is pixels_sha256 of labels.png. Those two
-# hold quantize's and cleanup's float results, and no test in this repo pins them across
-# platforms (the golden hashes of tests/test_make_flat.py cover flat, not quantize), so
-# they are checked on Windows only, where they were computed; elsewhere
-# test_thin_lines_remove_written_out_is_the_plan_left_out compares two builds instead.
+# The record and labels hold quantize's and cleanup's float results. Pinned by hash, they
+# differed between the PC and the Windows CI runner (CI run for 844165b), so they are not
+# pinned; test_thin_lines_remove_written_out_is_the_plan_left_out compares two builds
+# instead.
 BEFORE_THIN_LINES = {
-    "default": {"colors_id": "10a973984603cb6cf8e1fc5a2cd0fee64cb98efbe9a60aa9afce1b98ae1ecb69",
-                "stable": "3219bc289581f4197cec66fb6df35c0b1511d5218b3c2015ed2ed9a411576041"},
-    "config": {"colors_id": "9375b9cdb476a68c4a1c22ca9acbaf8e50e83e2047e2496f49744965124a2a35",
-               "stable": "6fca98549302908f4380d56db63ab365f6c2b66ee750c7cbbf633f5a025c4fd4"},
+    "default": {"colors_id": "10a973984603cb6cf8e1fc5a2cd0fee64cb98efbe9a60aa9afce1b98ae1ecb69"},
+    "config": {"colors_id": "9375b9cdb476a68c4a1c22ca9acbaf8e50e83e2047e2496f49744965124a2a35"},
 }
-BEFORE_THIN_LINES_LABELS = "5dc906ba5124d9cc0cec3cba6493b078dc6c8e7dc7092739e2138adaa64d1d16"
 LINE_KEYS = ("thin_lines", "line_width_mm")
 
 
@@ -1908,11 +1901,6 @@ def test_thin_lines_remove_gives_the_plan_from_before_the_setting(sel, tmp_path,
         assert key not in rec["identity"]["settings"]
         assert key not in rec["settings"]["settings"]
         assert key not in rec["settings"]["sources"]
-    if sys.platform == "win32":        # float results; see BEFORE_THIN_LINES
-        labels = np.asarray(Image.open(out / "labels.png"))
-        assert pixels_sha256(labels) == BEFORE_THIN_LINES_LABELS
-        stable = hashlib.sha256(canonical_json(_stable(out))).hexdigest()
-        assert stable == BEFORE_THIN_LINES[case]["stable"]
     verify_colors(out, sel)
 
 
