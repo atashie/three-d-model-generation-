@@ -267,6 +267,33 @@ Tests:
      is about `line_width_mm` wide (measure the shapely polygon's area / length).
    - `colors_verify` passes a widen plan, and fails it when the ridge is edited.
 
+### Task 5b: a required line-coverage check (added 2026-11-19)
+
+**Why:** sliced with the pinned OrcaSlicer, the turkey's 0.41 mm lines are partly
+unprinted (gaps up to 3.9 mm face up, 4.5 mm face down; see the research README's
+slicing addendum), but only the per-tool warning `F3.edge_coverage.T0` shows it, so the
+verdict stays PRINTABLE. The design promised the verdict would show it. The owner, asked
+whether gaps in widened lines should make the verdict NOT CERTIFIED: "to your question:
+yes".
+
+**What to build** (no new number: reuse `acceptance.dimension.tolerance` and the
+first-layer allowance, as `F3.edge_coverage` does):
+- `colored_flat` records, under `lines` in colored.json, each drawn line's smoothed
+  centre line in model mm (the points draw_lines paints around, through the same
+  transform as the regions), only when the plan has drawn lines.
+- `tdmg.color_gcode` (or `tdmg.printed`) adds a check `F3.line_coverage`, present only
+  when colored.json has drawn lines: for each face, on every layer where the model's
+  section of the line's tool body contains a centre-line sample, the distance from that
+  sample to that tool's printed footprint on that layer (the existing bead model) must be
+  within the allowance. PASS when every sample is covered, FAIL naming the worst gap
+  (distance, model mm position, z, line index), UNKNOWN when not measurable (as F3).
+- It is **required** for PRINTABLE (add it to `required_check_ids` only for such plans);
+  remove plans get no new check, so their slice records stay byte-identical (check
+  `tdmg library verify roadie-drop`).
+- Tests: a synthetic G-code/footprint that covers a line passes; one with a gap fails
+  with the right position; a remove plan's check set is unchanged; the real turkey at
+  0.41 mm FAILs and at 0.6 mm PASSes (scratch check, not committed).
+
 ### Task 6: docs, skill, and the real job
 
 **Files:** `docs/guide/pipeline-and-gate.md` (the colors section: step 6 after

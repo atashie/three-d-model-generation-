@@ -1,0 +1,16 @@
+You are doing an independent, critical and adversarial review of BUILT code in this repository: the `thin_lines: widen` feature carried out by docs/plans/2026-11-19-widen-lines.md (Tasks 1 to 5) against its design docs/plans/2026-11-19-widen-lines-design.md. The change is `git diff b23af64..4415fdb`. Read CLAUDE.md first (the project's rules: no unexplained numbers, rules with evidence, keep kind/provenance/validation separate, never call something verified unless it was run, docs agree with code, records are evidence). Then read the design, the plan and research/verification/2026-11-19-widen-lines/README.md. Do not modify files. You may run read-only commands and tests (`uv run pytest tests/test_color_lines.py` etc.); say which you ran.
+
+Main code: src/tdmg/color_lines.py (find_lines, draw_lines), src/tdmg/color_config.py (thin_lines, line_width_mm, widens, recorded_settings), src/tdmg/colors.py (lines block, schema tdmg.colors/5, preview), src/tdmg/colors_verify.py, src/tdmg/colored_flat.py, src/tdmg/color_plan.py (final_color), src/tdmg/jobs.py (ADDED_FIELDS), rules/color.yaml (color.lines.*); tests/test_color_lines.py, test_colors.py, test_colored_flat.py, test_color_config.py, test_jobs.py, test_job_runner.py.
+
+Owner decisions are not defects: lines are drawn at 0.41 mm by default (the owner's number), after cleanup and smoothing, so cleanup's 0.4 mm floor does not apply to them; plans with thin_lines: remove must stay byte-identical to before (the library entry prints/roadie-drop must still verify identical); the glue route is not built when lines are drawn; only the whole-model edge checks are required for PRINTABLE (owner decision 2026-11-13). A known open point, not to re-report: on the real turkey OrcaSlicer leaves parts of 0.41 mm lines unprinted and only per-color warnings show it.
+
+Look hardest for:
+1. **Byte-identity when off.** Any path where thin_lines: remove (explicit, absent, or via an old job.yaml) changes colors.json, labels.png, regions.png, colored.json, model.3mf, the identity/colors_id, or a job's behaviour.
+2. **Correctness of find_lines.** Can it call a border, an outline fringe, a speck or a wide region a "line"? Can it miss a real line inside one color? Is the color view (family pixels to their CIELAB-nearest non-family color) right when merges or outline keep are in play?
+3. **Correctness of draw_lines.** Off-by-half-pixel coordinate errors between ridge half pixels and the fine map; painting over the wrong colors; the MST bridging joining parts it should not; width accuracy; determinism across platforms (any float decision that could flip).
+4. **Record and verify.** Can a colors.json with wrong or edited lines pass verify_colors, or a correct one fail? Do colored_flat and the preview draw exactly the same lines? Can a stale or edited ridge reach the 3D model?
+5. **Evidence and rules.** Do rules/color.yaml's color.lines.* entries honestly reflect their evidence (locators exist; claims supported; kind/provenance/validation not overstated)?
+6. **Docs agree with code** (design, plan, rule notes, docstrings).
+7. **Tests.** Important behaviours untested, or tests that cannot fail.
+
+Report each finding with: severity (High/Medium/Low); file:line; a concrete failure scenario; a suggested change. End with the 3 most important changes. Be specific; skip praise.

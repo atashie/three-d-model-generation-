@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-19 (`roadie-mural` paused; `roadie-thanksgiving` waits for the widen-lines feature, designed and approved, not built).
+**Last updated:** 2026-11-19 (widen-lines Tasks 1–5 built and pushed; Codex review, Task 5b and Task 6 next; `roadie-mural` paused).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -234,21 +234,42 @@ has been measured with calipers, and strength is not judged.
    - Small bug: `job set select.remove_at=null` is refused for list keys. Use `[]` to
      clear them before setting `select.mask`.
 
-10. **Build `colors.thin_lines: widen`, then finish `roadie-thanksgiving` (next, owner:
-    "build the widen-lines feature first").** The design is approved
-    (`docs/plans/2026-11-19-widen-lines-design.md`); its evidence is in
-    `research/verification/2026-11-19-widen-lines/`. Next: the implementation plan, then
-    subagent implementation with spec and quality reviews, then a Codex review.
-    - The job `roadie-thanksgiving` (in `jobs/`, git-ignored) is a Gemini-generated,
-      4-color Thanksgiving Roadie, R2, 60 mm wide. The origin is recorded as `generated`
-      only, and the owner declined the other details. The selection
-      (`remove_at [[5, 5]]`, `keep_at [[560, 540]]`, tolerance 80) is confirmed
-      ("perfect!").
-    - The colors are "4 colors, ready" (extract 6; outline dropped, auto) and not
-      confirmed. The thickness is not set (the original Roadie used 3 mm).
-    - After the build: set `colors.thin_lines=widen` (0.41 mm), rerun, show the owner
-      the turkey lines, and ask for the color confirmation and the thickness. The pupils
-      still join at 60 mm; that is out of the feature's scope.
+10. **`colors.thin_lines: widen`: Tasks 1–5 built, reviewed (spec + quality per task)
+    and pushed (to 4415fdb); next Task 7's Codex review, then Task 5b, then Task 6.**
+    Plan `docs/plans/2026-11-19-widen-lines.md`; design
+    `docs/plans/2026-11-19-widen-lines-design.md`; evidence
+    `research/verification/2026-11-19-widen-lines/` (with two addenda: find_lines on the
+    turkey, and slicing at line widths 0.41–0.6 mm).
+    - What exists: rules `color.lines.width` (0.41), `.host_share` (0.9),
+      `.min_elongation` (3, length / width); settings `thin_lines` (remove | widen) and
+      `line_width_mm`, kept out of colors.json under remove (`recorded_settings`), old
+      job.yaml files load (`jobs.ADDED_FIELDS`); `tdmg.color_lines.find_lines` and
+      `draw_lines` (MST bridging, closed loops, bounds); colors.json schema
+      `tdmg.colors/5` with a `lines` block under widen; verify strict both ways;
+      colored_flat draws the recorded lines, no glue then. Under remove everything is
+      byte-identical; `tdmg library verify roadie-drop` identical (exit 0).
+    - **Codex review running/ran:** `research/reviews/2026-11-19-widen-lines/`
+      (`prompt.md`, `codex-review.txt` when done). Verify each finding against the code,
+      reproduce with a failing test, fix, record in that folder's README (Task 7).
+    - **Task 5b (owner: "to your question: yes"):** a required `F3.line_coverage` so that
+      unprinted stretches of widened lines make the verdict NOT CERTIFIED; spec in the
+      plan.
+    - **Slicing finding:** with the pinned OrcaSlicer, 0.41 mm turkey lines leave gaps up
+      to 3.9 mm (face up) / 4.5 mm (face down); full from about 0.6 mm. The owner keeps
+      0.41 mm and will test-print it ("1) 0.41 mm and test-print it").
+    - **Task 6:** docs (pipeline-and-gate colors section, color-multi attribute page,
+      skill step 6 no longer "planned", design marked built), then run
+      `roadie-thanksgiving`: `tdmg job set roadie-thanksgiving colors.thin_lines=widen`,
+      `job run`, show regions.png and crops, ask for the color confirmation and the
+      thickness (original 3 mm), build, slice, explain the verdict (expect NOT CERTIFIED
+      from Task 5b at 0.41 mm), and the owner test-prints with `--accept-not-certified`
+      only in their own words.
+    - The job `roadie-thanksgiving` (git-ignored): R2, 60 mm; origin `generated` only;
+      selection `remove_at [[5, 5]]`, `keep_at [[560, 540]]`, tolerance 80, confirmed
+      ("perfect!"); colors "4 colors, ready", not confirmed; thickness not set; the pupils
+      still join (out of scope).
+    - CI: green at fa9215c on all three platforms; at 60929f7 macOS was cancelled by
+      GitHub (no runner), Windows and Ubuntu green; 4415fdb not yet checked.
 
 **Ideas, not started:** owner-generated "print-friendly" input art (flat colors, plain
 background), recorded with its prompt and model, run through the unchanged pipeline.

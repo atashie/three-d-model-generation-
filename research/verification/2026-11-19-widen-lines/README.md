@@ -75,3 +75,29 @@ These are the prototype's two pieces (264 and 504 px). The prototypes wrote "elo
 for area / width (a length in pixels, 60.1 and 114.7 for these pieces), not for length /
 width. On this image the same two lines are found at length / width >= 3 and with no
 elongation limit at all, so the image does not test that limit.
+
+## Addendum, 2026-11-19: slicing the turkey at several line widths (after Task 5, commit f481987)
+
+`make_colors` (`thin_lines: widen`, `line_width_mm` as listed), `make_colored_flat`
+(thickness 3 mm) and `make_color_slice` (pinned OrcaSlicer 2.5.0 and PrusaSlicer 2.9.7,
+`check_tree=False`) on a copy of `roadie-thanksgiving`'s selection, 60 mm wide. Red
+`#f50506` is the base (tool T0); the lines are red inside the brown inlay. The table gives
+the per-tool check `F3.edge_coverage.T0` (a warning, not required): the largest distance
+from a red model edge to red plastic, and where it is. The lines span model x 47.2–51.3 /
+y 28.7–31.6 and x 52.2–55.7 / y 29.9–32.3 (face down mirrors x).
+
+| Line width | Face up: gap, at (x, y) mm, z | Face down: gap, at (x, y) mm, z |
+|---|---|---|
+| no lines (`remove`) | 0.421, (39.6, 25.0), 2.8 | 1.125, (21.3, 24.0), 0.2 |
+| 0.41 mm | 3.884, (50.4, 31.7), 2.6 | 4.477, (7.6, 31.0), 0.2 |
+| 0.45 mm | 1.846, (50.3, 31.8), 2.8 | 4.495, (7.6, 31.0), 0.2 |
+| 0.50 mm | 1.587, (51.1, 28.6), 2.6 | 3.881, (9.6, 31.8), 0.2 |
+| 0.55 mm | 1.375, (48.2, 31.0), 2.6 | 1.574, (8.8, 28.5), 0.2 |
+| 0.60 mm | 0.421, (39.6, 25.0), 2.8 | 1.125, (21.3, 24.0), 0.2 |
+
+From 0.45 to 0.55 mm the worst gap is on the lines; at 0.6 mm it is back at the no-lines
+location, so OrcaSlicer prints these lines in full from about 0.6 mm. The whole-model
+`F3.edge_coverage` (required) passed in every case, so the verdict did not show the
+unprinted line stretches. The owner chose to keep 0.41 mm and test-print it ("1) 0.41 mm
+and test-print it"), and that a widened line's coverage should count in the verdict
+("to your question: yes"). Bambu Studio, which the owner prints from, was not measured.
