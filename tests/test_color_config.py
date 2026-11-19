@@ -3,24 +3,30 @@ and the edge presets (Decision 5)."""
 
 import copy
 import hashlib
+from fractions import Fraction
 
+import numpy as np
 import pytest
 import yaml
 
 from tdmg.color_config import (
     KEYS,
     MIN_COLORS,
+    REMOVE_SETTING_KEYS,
     ColorConfig,
     ColorConfigError,
     ResolvedColorConfig,
     check_base,
     check_extraction_indices,
     check_line_width_setting,
+    check_outline_width_setting,
     edge_sigma_px,
     merge_problem,
     palette_cap,
+    record_setting_keys,
     recorded_settings,
     resolve_color_config,
+    widens,
 )
 from tdmg.paths import PROFILES_DIR
 from tdmg.profiles import PrinterProfile, load_printer
@@ -686,3 +692,30 @@ def test_recorded_settings_keep_the_line_keys_under_widen(tmp_path):
     settings, sources = recorded_settings(rec["settings"], rec["sources"])
     assert settings == rec["settings"] and sources == rec["sources"]
     assert settings["thin_lines"] == "widen" and settings["line_width_mm"] == 0.41
+
+
+@pytest.mark.parametrize("settings, want", [
+    ({"thin_lines": "widen"}, True), ({"thin_lines": "remove"}, False), ({}, False),
+    ({"thin_lines": "Widen"}, False), (None, False), ([("thin_lines", "widen")], False),
+])
+def test_widens_is_the_one_predicate(settings, want):
+    assert widens(settings) is want
+
+
+def test_record_setting_keys_follow_widens():
+    assert record_setting_keys({"thin_lines": "widen"}) == KEYS
+    assert record_setting_keys({}) == REMOVE_SETTING_KEYS
+    assert record_setting_keys({"thin_lines": "remove"}) == REMOVE_SETTING_KEYS
+    assert REMOVE_SETTING_KEYS == tuple(k for k in KEYS
+                                        if k not in ("thin_lines", "line_width_mm"))
+
+
+@pytest.mark.parametrize("value", [0.5, 1, np.float64(0.5), np.float32(0.5), True, "0.5",
+                                   np.int64(1), Fraction(1, 2), float("inf"), None])
+def test_the_two_width_checks_take_the_same_numbers(value):
+    def outcome(check):
+        try:
+            return check(value, RULES)
+        except ColorConfigError as e:
+            return "refused: " + str(e).split(" must be")[1]
+    assert outcome(check_outline_width_setting) == outcome(check_line_width_setting)

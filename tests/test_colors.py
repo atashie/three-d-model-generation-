@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import shutil
+import sys
 import time
 
 import numpy as np
@@ -1856,13 +1857,17 @@ def test_verify_colors_refuses_a_png_pillow_will_not_decode(done, sel, tmp_path)
 # thin_lines and line_width_mm settings existed: `git worktree add <tmp> 6d22cd5`, then,
 # with PYTHONPATH=<tmp>/src, make_colors on this file's `sel` fixture (roadie_like, the
 # default SelectionSpec) at 60 mm with no flags, without a config file ("default") and
-# with a config file holding b"outline_width_mm: 0.6\n" ("config"). "stable" is the
-# SHA-256 of the canonical JSON of colors.json without the UNRENDERED_FIELDS (the
-# software versions, the output file hashes and the fine-map fields), so it does not
-# depend on the environment; BEFORE_THIN_LINES_LABELS is pixels_sha256 of labels.png. On
-# that machine the whole colors.json, labels.png and regions.png were also byte-identical
-# before and after the change (docs/plans/2026-11-19-widen-lines.md, "byte-identical when
-# off").
+# with a config file holding b"outline_width_mm: 0.6\n" ("config"). On that machine the
+# whole colors.json, labels.png and regions.png were also byte-identical before and after
+# the change (docs/plans/2026-11-19-widen-lines.md, "byte-identical when off").
+# colors_id hashes the identity: the selection's hashes (pinned on every CI platform by
+# tests/test_selection.py's golden test), the settings, the rule values and the methods.
+# "stable" is the SHA-256 of the canonical JSON of colors.json without the
+# UNRENDERED_FIELDS, and BEFORE_THIN_LINES_LABELS is pixels_sha256 of labels.png. Those two
+# hold quantize's and cleanup's float results, and no test in this repo pins them across
+# platforms (the golden hashes of tests/test_make_flat.py cover flat, not quantize), so
+# they are checked on Windows only, where they were computed; elsewhere
+# test_thin_lines_remove_written_out_is_the_plan_left_out compares two builds instead.
 BEFORE_THIN_LINES = {
     "default": {"colors_id": "10a973984603cb6cf8e1fc5a2cd0fee64cb98efbe9a60aa9afce1b98ae1ecb69",
                 "stable": "3219bc289581f4197cec66fb6df35c0b1511d5218b3c2015ed2ed9a411576041"},
@@ -1873,41 +1878,60 @@ BEFORE_THIN_LINES_LABELS = "5dc906ba5124d9cc0cec3cba6493b078dc6c8e7dc7092739e213
 LINE_KEYS = ("thin_lines", "line_width_mm")
 
 
-def _stable_sha(out):
+def _stable(out, drop=()):
+    """colors.json without the UNRENDERED_FIELDS and the dotted fields in drop."""
     rec = json.loads((out / "colors.json").read_bytes())
-    for field in UNRENDERED_FIELDS:
+    for field in (*UNRENDERED_FIELDS, *drop):
         *parents, last = field.split(".")
         d = rec
         for p in parents:
             d = d[p]
         del d[last]
-    return hashlib.sha256(canonical_json(rec)).hexdigest()
+    return rec
 
 
-@pytest.mark.parametrize("case, text", [
-    ("default", None), ("config", "outline_width_mm: 0.6\n"),
-    # thin_lines: remove written out, or with a line width, is the same plan as leaving
-    # it out (absent means remove). The config file's hash differs, so only the identity
-    # and labels.png are compared for these.
-    ("default", "thin_lines: remove\n"),
-    ("default", "thin_lines: remove\nline_width_mm: 0.5\n"),
-])
-def test_thin_lines_remove_gives_the_plan_from_before_the_setting(sel, tmp_path, case, text):
+def _build(sel, out, text):
     cfg = None
     if text is not None:
-        cfg = tmp_path / "c.yaml"
+        cfg = out.parent / f"{out.name}.yaml"
         cfg.write_bytes(text.encode())
+    return run(sel, out, config_path=cfg)
+
+
+@pytest.mark.parametrize("case, text", [("default", None),
+                                        ("config", "outline_width_mm: 0.6\n")])
+def test_thin_lines_remove_gives_the_plan_from_before_the_setting(sel, tmp_path, case, text):
     out = tmp_path / "out"
-    rec = run(sel, out, config_path=cfg)
+    rec = _build(sel, out, text)
     assert rec["colors_id"] == BEFORE_THIN_LINES[case]["colors_id"]
-    labels = np.asarray(Image.open(out / "labels.png"))
-    assert pixels_sha256(labels) == BEFORE_THIN_LINES_LABELS
     for key in LINE_KEYS:
         assert key not in rec["identity"]["settings"]
         assert key not in rec["settings"]["settings"]
         assert key not in rec["settings"]["sources"]
-    if text is None or "thin_lines" not in text:
-        assert _stable_sha(out) == BEFORE_THIN_LINES[case]["stable"]
+    if sys.platform == "win32":        # float results; see BEFORE_THIN_LINES
+        labels = np.asarray(Image.open(out / "labels.png"))
+        assert pixels_sha256(labels) == BEFORE_THIN_LINES_LABELS
+        stable = hashlib.sha256(canonical_json(_stable(out))).hexdigest()
+        assert stable == BEFORE_THIN_LINES[case]["stable"]
+    verify_colors(out, sel)
+
+
+@pytest.mark.parametrize("text", ["thin_lines: remove\n",
+                                  "thin_lines: remove\nline_width_mm: 0.5\n"])
+def test_thin_lines_remove_written_out_is_the_plan_left_out(sel, tmp_path, done, text):
+    # On every platform: the plan with thin_lines: remove written out (with or without a
+    # line width) is the plan with no config file, but for the config file's hash.
+    out = tmp_path / "out"
+    rec = _build(sel, out, text)
+    left_out_rec, left_out = done
+    assert rec["colors_id"] == left_out_rec["colors_id"] == (
+        BEFORE_THIN_LINES["default"]["colors_id"])
+    assert rec["settings"]["config_sha256"] is not None
+    for name in ("labels.png", "regions.png"):
+        assert (np.asarray(Image.open(out / name)) ==
+                np.asarray(Image.open(left_out / name))).all(), name
+    drop = ("settings.config_sha256",)
+    assert _stable(out, drop) == _stable(left_out, drop)
     verify_colors(out, sel)
 
 

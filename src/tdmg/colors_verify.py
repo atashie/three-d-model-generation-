@@ -33,7 +33,6 @@ from tdmg.color import (
 from tdmg.color_config import (
     FURRY_RULE,
     KEYS,
-    LINE_KEYS,
     SMOOTH_RULE,
     ColorConfig,
     ColorConfigError,
@@ -43,6 +42,7 @@ from tdmg.color_config import (
     check_line_width_setting,
     check_outline_width_setting,
     palette_cap,
+    record_setting_keys,
 )
 from tdmg.color_outline import (
     KEEP_RATIO_RULE,
@@ -81,9 +81,6 @@ from tdmg.smoothing import LABELS_METHOD, SmoothingError, check_supersample, sig
 
 EDGE_RULES = {"smooth": SMOOTH_RULE, "furry": FURRY_RULE, "exact": None}
 SETTING_KEYS = KEYS
-# A remove record (thin_lines absent, which means remove) holds every setting but LINE_KEYS
-# (tdmg.color_config.recorded_settings); a widen record holds every setting.
-REMOVE_SETTING_KEYS = tuple(k for k in KEYS if k not in LINE_KEYS)
 SOURCES = get_args(Source)
 # The only methods this code implements. A record naming another version (older or newer)
 # is refused: the rebuild below, and design step 2's fine map, would silently use these.
@@ -257,8 +254,10 @@ def _identity_values(ident: dict, family, printer: PrinterProfile
     edges rule id. family: the record's outline family (whether the keep width is used).
     printer: the identity's profile (settings.colors must be within its palette cap)."""
     settings = ident["settings"]
+    if not isinstance(settings, dict):
+        raise ColorsError("identity.settings must be a mapping of the resolved settings")
     keys = record_setting_keys(settings)
-    if not isinstance(settings, dict) or set(settings) != set(keys):
+    if set(settings) != set(keys):
         raise ColorsError(f"identity.settings must hold exactly {', '.join(keys)}"
                           + ("" if keys == SETTING_KEYS else
                              " (thin_lines and line_width_mm only under thin_lines widen)"))
@@ -443,15 +442,6 @@ def _check_palette(palette: list, base_index, base) -> int:
         raise ColorsError("colors.json is inconsistent: base_index and the palette's base "
                           "flags do not match settings.base")
     return want
-
-
-def record_setting_keys(settings) -> tuple[str, ...]:
-    """The setting keys a record holds: every key (SETTING_KEYS) when thin_lines is widen,
-    else every key but thin_lines and line_width_mm (REMOVE_SETTING_KEYS; a record of a
-    remove plan, and every record made before the keys existed, lacks both)."""
-    if isinstance(settings, dict) and settings.get("thin_lines") == "widen":
-        return SETTING_KEYS
-    return REMOVE_SETTING_KEYS
 
 
 def _check_settings_block(block) -> None:

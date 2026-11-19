@@ -1004,9 +1004,9 @@ def test_set_thin_lines_and_line_width(tmp_path):
 
 
 @pytest.mark.parametrize(("assignment", "reason"), [
-    ("colors.thin_lines=thin", "thin_lines"),
-    ("colors.line_width_mm=wide", "line_width_mm"),
-    ("colors.line_width_mm=0", "line_width_mm"),
+    ("colors.thin_lines=thin", "stages.colors.thin_lines Input should be 'remove' or 'widen'"),
+    ("colors.line_width_mm=wide", "stages.colors.line_width_mm Input should be a valid number"),
+    ("colors.line_width_mm=0", "stages.colors.line_width_mm Input should be greater than 0"),
 ])
 def test_set_refuses_bad_line_settings(tmp_path, assignment, reason):
     folder = _new(tmp_path, "turkey", colors=True)

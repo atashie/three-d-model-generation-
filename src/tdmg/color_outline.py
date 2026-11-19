@@ -383,13 +383,23 @@ def check_outline_width(width_mm, opening_width_mm: float, opening_rule: str) ->
     """width_mm (the band width, outline_width_mm) as a float: a finite number (not a bool)
     wider than the cleanup's opening (opening_width_mm, from opening_rule), since cleanup
     removes strips at or below that width and would remove the band. Raises ColorError."""
+    return check_wider_than_opening(
+        "outline_width_mm", width_mm, opening_width_mm, opening_rule,
+        "cleanup removes strips at or below that width, so it would remove the band")
+
+
+def check_wider_than_opening(key: str, width_mm, opening_width_mm: float, opening_rule: str,
+                             reason: str) -> float:
+    """width_mm (the setting `key`, in mm) as a float: a finite int or float (a numpy
+    float too; not a bool) wider than the cleanup's opening (opening_width_mm, from
+    opening_rule). reason ends the message when it is not wider. Raises ColorError. The
+    one check behind outline_width_mm and line_width_mm, so both take the same numbers."""
     if (isinstance(width_mm, bool) or not isinstance(width_mm, (int, float, np.floating))
             or not math.isfinite(float(width_mm))):
-        raise ColorError(f"outline_width_mm must be a finite number of mm, got {width_mm!r}")
+        raise ColorError(f"{key} must be a finite number of mm, got {width_mm!r}")
     if not float(width_mm) > opening_width_mm:
-        raise ColorError(f"outline_width_mm ({float(width_mm)} mm) must be wider than "
-                         f"{opening_rule} ({opening_width_mm} mm): cleanup removes strips "
-                         "at or below that width, so it would remove the band")
+        raise ColorError(f"{key} ({float(width_mm)} mm) must be wider than {opening_rule} "
+                         f"({opening_width_mm} mm): {reason}")
     return float(width_mm)
 
 

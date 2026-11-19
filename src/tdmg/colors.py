@@ -226,17 +226,20 @@ def colors_identity(*, methods: dict, selection_id: str, cutout_pixels_sha256: s
     sources: the same values from a flag, a file or a default give the same plan.
     outline_width_mm is in it under drop too, where it is unused: a documented choice, so
     the identity is every resolved setting (but the two line keys under remove). The
-    rules that only give a setting's default (color.extract.default_count, color.outline.keep_width,
-    color.lines.width) are therefore not hashed separately; their values are
-    settings.extract, settings.outline_width_mm and settings.line_width_mm.
+    rules that only give a setting's default (color.extract.default_count,
+    color.outline.keep_width, color.lines.width) are therefore never in rules; their
+    values are hashed as settings.extract, settings.outline_width_mm and (under widen)
+    settings.line_width_mm.
     printer: the profile id (as flat_identity's params hold it). rules: {rule id: registry
     value} for every rule used: the two cleanup rules (the island rule's own
     min_square_side, not the derived area), the edges preset's rule, if any, the outline
     rules that decided the plan (the thin share under auto, the
-    wide-area ratio with a family) and the two shade rules. The preview's outer outline
-    (flat.smooth.sigma_px) is display only and not part of it. The edges sigma is hashed
-    only there; `exact` has no rule and sigma 0 by definition. supersample: the fine map's
-    factor. The environment is never part of it.
+    wide-area ratio with a family), the two shade rules, and under thin_lines widen only
+    the two line-finding rules (color.lines.host_share and color.lines.min_elongation;
+    added with the line step, docs/plans/2026-11-19-widen-lines.md Task 5). The preview's
+    outer outline (flat.smooth.sigma_px) is display only and not part of it. The edges
+    sigma is hashed only there; `exact` has no rule and sigma 0 by definition.
+    supersample: the fine map's factor. The environment is never part of it.
     """
     return {"methods": dict(methods), "selection_id": selection_id,
             "cutout_pixels_sha256": cutout_pixels_sha256,
@@ -529,10 +532,10 @@ def _make_colors(selection_dir, out_dir, width_mm, flags, config_path, rules, pr
     # The record's settings and sources, and so the identity's settings, leave out
     # thin_lines and line_width_mm under remove: such a plan is byte-identical to one made
     # before the keys existed (recorded_settings).
-    record_settings = resolved.as_record()
-    record_settings["settings"], record_settings["sources"] = recorded_settings(
-        record_settings["settings"], record_settings["sources"])
-    record, files, _ = build_colors(sel, width_mm, resolved.settings, record_settings,
+    settings_block = resolved.as_record()
+    settings_block["settings"], settings_block["sources"] = recorded_settings(
+        settings_block["settings"], settings_block["sources"])
+    record, files, _ = build_colors(sel, width_mm, resolved.settings, settings_block,
                                     rules, printer, supersample, render=True)
     try:
         data = record_text(record)

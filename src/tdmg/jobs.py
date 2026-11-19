@@ -700,6 +700,8 @@ def _validate_stages(rid: str, stages, source: dict) -> None:
     for stage in order:
         fields = stage_fields(rid, stage)
         if isinstance(stages[stage], dict):
+            # Key order does not matter: dump_job sorts keys, and the stage code reads its
+            # fields in STAGE_FIELDS order.
             for key in ADDED_FIELDS.get(stage, ()):
                 stages[stage].setdefault(key, fields[key].default)
         _keys(f"stages.{stage}", stages[stage], tuple(fields))

@@ -49,8 +49,6 @@ against `extract` when resolving, after quantize, and after the outline step.
 from __future__ import annotations
 
 import hashlib
-import math
-import numbers
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,7 +59,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, ValidationError, field_validator
 
 from tdmg.color import OPENING_RULE, ColorError, merge_problem
-from tdmg.color_outline import KEEP_WIDTH_RULE, check_outline_width
+from tdmg.color_outline import KEEP_WIDTH_RULE, check_outline_width, check_wider_than_opening
 from tdmg.profiles import PrinterProfile
 from tdmg.rules import Rule
 
@@ -96,6 +94,7 @@ MergePair = Annotated[list[Index], Field(min_length=2, max_length=2)]
 # than the opening in check_outline_width_setting and check_line_width_setting (which
 # need the rules). The type of outline_width_mm and line_width_mm.
 OutlineWidth = Annotated[float, Field(strict=True, allow_inf_nan=False, gt=0)]
+LineWidth = OutlineWidth
 Source = Literal["flag", "config", "profile", "rule", "default"]
 
 
@@ -115,7 +114,7 @@ class ColorConfig(BaseModel):
     merge: list[MergePair] | None = None
     outline_width_mm: OutlineWidth | None = None
     thin_lines: ThinLines | None = None
-    line_width_mm: OutlineWidth | None = None
+    line_width_mm: LineWidth | None = None
 
     @field_validator("colors")
     @classmethod
@@ -150,6 +149,9 @@ class ColorConfig(BaseModel):
 
 
 KEYS = tuple(ColorConfig.model_fields)
+# A record of a remove plan (thin_lines absent, which means remove) holds every setting but
+# LINE_KEYS (recorded_settings, record_setting_keys); a widen record holds every setting.
+REMOVE_SETTING_KEYS = tuple(k for k in KEYS if k not in LINE_KEYS)
 # Every key needs exactly one default, so a key added to ColorConfig without one fails at
 # import.
 _DEFAULTED = [*DEFAULTS, PROFILE_DEFAULT, *RULE_DEFAULTS]
@@ -369,16 +371,12 @@ def check_line_width_setting(width_mm, rules: dict) -> float:
     after cleanup, so cleanup does not remove them; a width at or below the one cleanup
     treats as too thin to print is refused (docs/plans/2026-11-19-widen-lines-design.md,
     The design, 1). Returns it as a float; raises ColorConfigError."""
-    opening = _opening_mm("line_width_mm", rules)
-    if (isinstance(width_mm, bool) or not isinstance(width_mm, numbers.Real)
-            or not math.isfinite(float(width_mm))):
-        raise ColorConfigError(f"line_width_mm must be a finite number of mm, got "
-                               f"{width_mm!r}")
-    if not float(width_mm) > opening:
-        raise ColorConfigError(f"line_width_mm ({float(width_mm)} mm) must be wider than "
-                               f"{OPENING_RULE} ({opening} mm): cleanup treats strips at "
-                               "or below that width as too thin to print")
-    return float(width_mm)
+    try:
+        return check_wider_than_opening(
+            "line_width_mm", width_mm, _opening_mm("line_width_mm", rules), OPENING_RULE,
+            "cleanup treats strips at or below that width as too thin to print")
+    except ColorError as e:
+        raise ColorConfigError(str(e)) from None
 
 
 def _opening_mm(key: str, rules: dict) -> float:
@@ -394,6 +392,19 @@ def _opening_mm(key: str, rules: dict) -> float:
     return float(opening)
 
 
+def widens(settings) -> bool:
+    """True when settings (a mapping: resolved settings, or a record's) has thin_lines
+    widen. Absent, or anything else, means remove. The one test of the setting."""
+    return isinstance(settings, Mapping) and settings.get("thin_lines") == "widen"
+
+
+def record_setting_keys(settings) -> tuple[str, ...]:
+    """The setting keys a record holds: every key (KEYS) when the settings widen (widens),
+    else every key but thin_lines and line_width_mm (REMOVE_SETTING_KEYS; a record of a
+    remove plan, and every record made before the keys existed, lacks both)."""
+    return KEYS if widens(settings) else REMOVE_SETTING_KEYS
+
+
 def recorded_settings(settings: Mapping, sources: Mapping) -> tuple[dict, dict]:
     """The settings and sources as colors.json and the plan's identity store them: without
     thin_lines and line_width_mm (LINE_KEYS) unless thin_lines is widen. Under remove, or
@@ -401,7 +412,7 @@ def recorded_settings(settings: Mapping, sources: Mapping) -> tuple[dict, dict]:
     the keys existed, with the same colors_id and bytes (docs/plans/2026-11-19-widen-
     lines.md, "byte-identical when off"). Returns new dicts in the given key order; the
     inputs are not changed."""
-    if settings.get("thin_lines") == "widen":
+    if widens(settings):
         return dict(settings), dict(sources)
     return ({k: v for k, v in settings.items() if k not in LINE_KEYS},
             {k: v for k, v in sources.items() if k not in LINE_KEYS})
