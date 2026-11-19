@@ -105,6 +105,9 @@ WIDTH_PERCENTILE = 90
 RIDGE_SMOOTH_PX = 1.5
 # draw_lines tests the discs of this many ridge points at a time (memory only).
 _CHUNK = 1024
+# The most ridge points within 3 half pixels of one (integer points with x^2 + y^2 <= 9),
+# times 4: the largest denominator of a smoothed point (_smoothed, _disc_pixels).
+_MAX_DEN = 4 * 29
 
 _EIGHT = ndimage.generate_binary_structure(2, 2)
 _RING = np.ones((RING_SQUARE_PX, RING_SQUARE_PX), bool)
@@ -248,8 +251,10 @@ def find_lines(q: Quantized, family: tuple[int, ...], limits: Limits,
     return tuple(found)
 
 
-def _check_ridge(ridge) -> np.ndarray:
-    """ridge as an (n, 2) int64 array of half-pixel (row, col), n >= 1, all >= 0."""
+def _check_ridge(ridge, rows: int, cols: int) -> np.ndarray:
+    """ridge as an (n, 2) int64 array of half-pixel (row, col), n >= 1, each row in
+    0..rows - 1 and col in 0..cols - 1 (checked on the given integers, before the cast, so
+    a large unsigned value cannot wrap)."""
     try:
         a = np.asarray(ridge)
     except (TypeError, ValueError) as exc:   # ragged sequences
@@ -261,6 +266,10 @@ def _check_ridge(ridge) -> np.ndarray:
         raise ColorError(f"ridge must hold integers, got {a.dtype}")
     if int(a.min()) < 0:
         raise ColorError(f"ridge points must be at least 0, got {int(a.min())}")
+    top_r, top_c = (int(v) for v in a.max(axis=0))
+    if top_r >= rows or top_c >= cols:
+        raise ColorError(f"ridge points must lie in the map's {rows} x {cols} half pixels, "
+                         f"got row {top_r}, col {top_c}")
     return a.astype(np.int64)
 
 
@@ -284,20 +293,34 @@ def _segment(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return a + (2 * t * d + m) // (2 * m)
 
 
-def _kruskal(pts: np.ndarray, comp: np.ndarray, n: int, reach: int
-             ) -> list[tuple[int, int]] | None:
-    """The bridges (point index pairs) of the minimum spanning tree over the n pieces, from
-    the point pairs at most reach half pixels apart (exact integer test), or None when
-    those pairs do not join every piece."""
+def _piece_bridges(pts: np.ndarray, comp: np.ndarray, reach: int
+                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """For each two pieces with points at most reach half pixels apart (exact integer
+    test), their single shortest bridge: (d2, i, j) arrays (point indices i < j), the least
+    (d2, i, j) of the pair, sorted by (d2, i, j)."""
     pairs = cKDTree(pts.astype(np.float64)).query_pairs(reach + 0.5, output_type="ndarray")
     if not len(pairs):
-        return None
+        pairs = np.zeros((0, 2), np.int64)
     i, j = np.minimum(pairs[:, 0], pairs[:, 1]), np.maximum(pairs[:, 0], pairs[:, 1])
     keep = comp[i] != comp[j]
     i, j = i[keep], j[keep]
     d2 = ((pts[i] - pts[j]) ** 2).sum(axis=1)                 # exact integers
     keep = d2 <= reach * reach
     i, j, d2 = i[keep], j[keep], d2[keep]
+    ca, cb = np.minimum(comp[i], comp[j]), np.maximum(comp[i], comp[j])
+    order = np.lexsort((j, i, d2, cb, ca))                    # per piece pair: least first
+    ca, cb, d2, i, j = ca[order], cb[order], d2[order], i[order], j[order]
+    first = np.ones(len(i), bool)
+    first[1:] = (ca[1:] != ca[:-1]) | (cb[1:] != cb[:-1])
+    d2, i, j = d2[first], i[first], j[first]
+    order = np.lexsort((j, i, d2))
+    return d2[order], i[order], j[order]
+
+
+def _kruskal(comp: np.ndarray, n: int, d2: np.ndarray, i: np.ndarray, j: np.ndarray
+             ) -> np.ndarray | None:
+    """Which of the candidate bridges (sorted by (d2, i, j)) form the minimum spanning tree
+    over the n pieces (a bool mask), or None when they do not join every piece."""
     parent = list(range(n + 1))                               # pieces are 1..n
 
     def root(a: int) -> int:
@@ -306,14 +329,16 @@ def _kruskal(pts: np.ndarray, comp: np.ndarray, n: int, reach: int
             a = parent[a]
         return a
 
-    bridges = []
-    for k in np.lexsort((j, i, d2)):                          # weight, then lowest indices
+    tree = np.zeros(len(d2), bool)
+    joined = 0
+    for k in range(len(d2)):
         ra, rb = root(int(comp[i[k]])), root(int(comp[j[k]]))
         if ra != rb:
             parent[max(ra, rb)] = min(ra, rb)
-            bridges.append((int(i[k]), int(j[k])))
-            if len(bridges) == n - 1:
-                return bridges
+            tree[k] = True
+            joined += 1
+            if joined == n - 1:
+                return tree
     return None
 
 
@@ -324,13 +349,21 @@ def _bridged(pts: np.ndarray) -> np.ndarray:
     curve it breaks into 8-connected pieces (on the half-pixel grid), with gaps of a few px
     that depend on the found line's shape, not on the drawn width. All the pieces come
     from one 8-connected found line, so every gap is an artifact of the discrete ridge and
-    all of them are joined, with no distance limit: by the minimum spanning tree over the
-    pieces, the weight of two pieces being the exact integer squared distance between
-    their nearest points. Kruskal takes the point pairs sorted by (squared distance, lower
-    index, higher index) in the sorted ridge, so ties are deterministic; each bridge adds
-    the straight run of half pixels between its two points (_segment). The candidate pairs
-    are those within a reach of 4 half pixels, doubled until they join every piece; the
-    tree found is the one over all pairs (every edge it needs is within the final reach).
+    all of them are joined, with no distance limit.
+
+    1. Each two pieces have one candidate bridge, their nearest points: the least exact
+       integer squared distance, ties to the lowest (index, index) in the sorted ridge.
+    2. The minimum spanning tree over the pieces (Kruskal over the candidates sorted by
+       (squared distance, lower index, higher index), so ties are deterministic) joins
+       them all. The candidates are those within a reach of 4 half pixels, doubled until
+       they join every piece; the tree found is the one over all candidates (every edge
+       it needs is within the final reach).
+    3. A tree leaves one gap open in every closed loop (a ring drawn as a line would be
+       cut or pinched there). So every other candidate no longer than the tree's longest
+       bridge (squared distance at most its squared distance) is added too: only gaps no
+       larger than one the tree already had to bridge. A loop whose closing gap is longer
+       than every bridge of the tree stays open there.
+    Each bridge adds the straight run of half pixels between its two points (_segment).
     Known small effect: on a tight hairpin a bridge may cross the waist between the two
     arms, where their discs already overlap.
     """
@@ -343,9 +376,14 @@ def _bridged(pts: np.ndarray) -> np.ndarray:
         return pts
     comp = comp_map[local[:, 0], local[:, 1]]
     reach = 4
-    while (bridges := _kruskal(pts, comp, n, reach)) is None:
+    while True:
+        d2, i, j = _piece_bridges(pts, comp, reach)
+        tree = _kruskal(comp, n, d2, i, j)
+        if tree is not None:
+            break
         reach *= 2
-    added = [_segment(pts[a], pts[b]) for a, b in bridges]
+    use = d2 <= d2[tree].max()                                # the tree and loop closers
+    added = [_segment(pts[a], pts[b]) for a, b in zip(i[use], j[use])]
     return np.unique(np.concatenate([pts, *added]), axis=0)
 
 
@@ -366,7 +404,8 @@ def _smoothed(pts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     num_x = np.empty(len(pts), np.int64)
     den = np.empty(len(pts), np.int64)
     for k, near in enumerate(near_all):
-        idx = np.array(sorted(near), np.int64)
+        idx = np.array(sorted(near), np.int64)                # sorted for clarity only:
+        # the sums below are exact integers, so their order does not matter
         d2 = ((pts[idx] - pts[k]) ** 2).sum(axis=1)           # exact integers
         idx = idx[d2 <= reach * reach]
         n = len(idx)
@@ -386,7 +425,11 @@ def _disc_pixels(num_y: np.ndarray, num_x: np.ndarray, den: np.ndarray, s: int,
     centre at ((2i + 1) / (2s), (2j + 1) / (2s)), so with q = 2 s den its offset from the
     point is (a / q, b / q), a = (2i + 1) den - 2 s num_y and b = (2j + 1) den - 2 s num_x,
     exact integers. It is inside when a^2 + b^2 <= radius^2 x q^2: the left side is an
-    exact integer (far below 2^53, so exact in float64); the right side is float64,
+    exact integer, exact in float64 while it is below 2^53. A tested pixel's centre is at
+    most radius + 3 px from the point in each axis and q <= 2 s _MAX_DEN, so
+    a^2 + b^2 <= 2 (2 s _MAX_DEN (radius + 3))^2; draw_lines refuses a supersample and
+    width for which that reaches 2^53 (s = 4 allows widths up to about 144000 px; s = 64,
+    about 9000 px). The right side is float64,
     radius * radius then times q * q, IEEE-rounded the same way on every platform, so the
     test is deterministic.
     """
@@ -418,9 +461,10 @@ def draw_lines(fine: np.ndarray, supersample: int, lines, width_px: float) -> np
     >= 1 (bool refused). lines: an iterable of (color_final, host_final, ridge): two labels
     in the fine map's numbering (after the merges' remap), each from 0 to the dtype's
     maximum, and a Line.ridge (half-pixel (row, col), half pixel (r, c) centred at
-    ((r + 0.5) / 2, (c + 0.5) / 2); non-empty, integers >= 0). width_px: the drawn width in
-    image px, a finite number above 0. Every argument is checked before anything is drawn;
-    ColorError otherwise.
+    ((r + 0.5) / 2, (c + 0.5) / 2); non-empty integers inside the map: rows 0 to
+    2 x (fine rows / s) - 1, cols likewise). fine's shape must be a multiple of s (as
+    smooth_labels' map is). width_px: the drawn width in image px, a finite number above
+    0. Every argument is checked before anything is drawn; ColorError otherwise.
 
     For each line, in the given order:
     0. Its ridge's pieces are joined (_bridged): find_lines' ridge can break into pieces
@@ -441,8 +485,10 @@ def draw_lines(fine: np.ndarray, supersample: int, lines, width_px: float) -> np
        beyond the smoothed end, so the drawn line still reaches near the found line's end.
     2. Each fine pixel whose centre is within width_px / 2 of a smoothed point (the edge
        counts as within) and whose label is host_final at that moment becomes
-       color_final. So a line never paints over a third color, nor over an earlier line of
-       another color. Only the fine pixels near each point are tested.
+       color_final. Only pixels holding host_final at that moment change, so a line never
+       paints over a third color; lines are painted in the given order, and a later line
+       may paint over an earlier line whose color is its host. Only the fine pixels near
+       each point are tested.
     A line with color_final == host_final is skipped (nothing to draw; the caller records
     why).
 
@@ -460,7 +506,14 @@ def draw_lines(fine: np.ndarray, supersample: int, lines, width_px: float) -> np
         s = check_supersample(supersample)
     except SmoothingError as exc:
         raise ColorError(str(exc)) from exc
+    if fine.shape[0] % s or fine.shape[1] % s:
+        raise ColorError(f"fine's shape {fine.shape} must be a multiple of the supersample "
+                         f"{s}")
     radius = finite_positive("width_px", width_px) / 2
+    if 2 * (2 * s * _MAX_DEN * (radius + 3)) ** 2 >= 2.0 ** 53:
+        raise ColorError(f"width_px {width_px} is too large for exact tests at supersample "
+                         f"{s}")
+    rows, cols = 2 * (fine.shape[0] // s), 2 * (fine.shape[1] // s)
     todo = []
     for item in lines:
         if not isinstance(item, (tuple, list)) or len(item) != 3:
@@ -468,7 +521,7 @@ def draw_lines(fine: np.ndarray, supersample: int, lines, width_px: float) -> np
                              f"got {item!r}")
         color = _check_label("color_final", item[0], fine.dtype)
         host = _check_label("host_final", item[1], fine.dtype)
-        todo.append((color, host, _check_ridge(item[2])))
+        todo.append((color, host, _check_ridge(item[2], rows, cols)))
     out = np.array(fine, copy=True, order="C")
     flat = out.reshape(-1)                   # a view: out is C-contiguous
     for color, host, pts in todo:

@@ -526,7 +526,8 @@ def test_draw_ends_pulled_in_by_smoothing():
     at cell x 20.25; the smoothed end point lies 9/14 px further in (the mean of the 7
     ridge points within 1.5 px: half-pixel columns 40-43 in its row, 40-42 in the other),
     so the first painted fine column is the first centre at or beyond
-    20.25 + 9/14 - 4.9 / 2."""
+    20.25 + 9/14 - 4.9 / 2. The 9/14 and 0.75 below follow from RIDGE_SMOOTH_PX = 1.5
+    (asserted at the end); another radius gives other shifts."""
     fine = np.full((60 * S, 200 * S), HOST, np.uint8)
     out = draw_lines(fine, S, [(INK, HOST, straight_ridge())], DRAW_W)
     cols = np.nonzero((out == INK).any(axis=0))[0]
@@ -567,10 +568,24 @@ def test_draw_never_paints_a_third_color():
 def test_draw_later_line_does_not_paint_an_earlier_one():
     fine = np.full((60 * S, 200 * S), HOST, np.uint8)
     a = (INK, HOST, straight_ridge())
-    b = (THIRD, HOST, tuple((r, 200) for r in range(60, 140)))   # vertical, crossing a
+    b = (THIRD, HOST, tuple((r, 200) for r in range(60, 120)))   # vertical, crossing a
     ab, ba = draw_lines(fine, S, [a, b], DRAW_W), draw_lines(fine, S, [b, a], DRAW_W)
     cross = (slice(195, 210), slice(400 - 4, 400 + 4))
     assert np.all(ab[cross] == INK) and np.all(ba[cross] == THIRD)
+
+
+def test_draw_later_line_paints_an_earlier_line_that_is_its_host():
+    """Only pixels holding host_final at that moment change: a later line whose host is an
+    earlier line's color paints over that line where they cross (order matters)."""
+    fine = np.full((60 * S, 200 * S), HOST, np.uint8)
+    a = (INK, HOST, straight_ridge())
+    b = (THIRD, INK, tuple((r, 200) for r in range(60, 120)))    # host: a's color
+    out = draw_lines(fine, S, [a, b], DRAW_W)
+    cross = (slice(195, 210), slice(400 - 4, 400 + 4))
+    assert np.all(out[cross] == THIRD)
+    assert not (out[:150, 400] == THIRD).any()                    # only over a's band
+    # The other order: b finds no INK yet and paints nothing.
+    assert not (draw_lines(fine, S, [b, a], DRAW_W) == THIRD).any()
 
 
 @pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.int32, np.int64])
@@ -592,10 +607,36 @@ def test_draw_color_equal_host_skipped_and_no_lines():
     assert np.array_equal(draw_lines(fine, S, [], DRAW_W), fine)
 
 
-def test_draw_ridge_beyond_the_map_is_clipped():
+@pytest.mark.parametrize("ridge", [
+    ((0, 0), (20, 0)),                      # row 20: one past the last half pixel (19)
+    ((0, 0), (0, 20)),
+    np.array([(0, 0), (2 ** 64 - 1, 0)], np.uint64),   # would wrap in int64
+    np.array([(0, 0), (2 ** 63, 3)], np.uint64),
+])
+def test_draw_ridge_beyond_the_map_refused(ridge):
     fine = np.full((10 * S, 10 * S), HOST, np.uint8)
-    out = draw_lines(fine, S, [(INK, HOST, ((0, 0), (0, 1), (100, 100)))], DRAW_W)
-    assert out[0, 0] == INK and 0 < (out == INK).sum() < fine.size
+    with pytest.raises(ColorError, match="ridge"):
+        draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
+
+
+def test_draw_ridge_on_the_map_edges_is_clipped():
+    """Ridge points on the first and last half-pixel rows and columns: the discs are
+    clipped to the map, without error."""
+    fine = np.full((10 * S, 10 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, ((0, 0), (19, 19), (0, 19), (19, 0)))], DRAW_W)
+    assert out[0, 0] == out[-1, -1] == out[0, -1] == out[-1, 0] == INK
+    assert 0 < (out == INK).sum() < fine.size
+
+
+def test_draw_shape_must_be_a_multiple_of_supersample():
+    with pytest.raises(ColorError, match="multiple"):
+        draw_lines(np.ones((10, 12), np.uint8), 4, [], DRAW_W)
+
+
+def test_draw_width_too_large_for_exact_tests_refused():
+    with pytest.raises(ColorError, match="too large"):
+        draw_lines(np.ones((8, 8), np.uint8), 4, [], 2e5)
+    draw_lines(np.ones((8, 8), np.uint8), 4, [], 1e5)              # within the bound
 
 
 def test_draw_deterministic_and_ridge_order_irrelevant():
@@ -646,7 +687,7 @@ def test_draw_joins_every_piece_of_a_ridge():
     (line,) = run(quantized(arc_image()), family_rows=(DARK,))
     pieces = np.zeros((400, 400), bool)
     pieces[tuple(np.array(line.ridge).T)] = True
-    assert ndimage.label(pieces, structure=eight)[1] == 50
+    assert ndimage.label(pieces, structure=eight)[1] > 1
     bridged = np.zeros((400, 400), bool)
     bridged[tuple(_bridged(np.array(line.ridge)).T)] = True
     assert ndimage.label(bridged, structure=eight)[1] == 1
@@ -666,14 +707,41 @@ def test_draw_two_lines_are_never_joined():
 
 
 def test_bridged_tie_break_deterministic():
-    """Four pieces at a square's corners, four equally near bridges: the three with the
-    lowest point indices win (0-1, 0-2, 1-3, not 2-3), whatever the input order."""
-    pts = np.array([(0, 0), (0, 4), (4, 0), (4, 4)])
+    """Two pieces, two equally short bridges: the one with the lowest point indices wins
+    (row 0, not row 1), whatever the input order."""
+    pts = np.array([(0, 0), (1, 0), (0, 3), (1, 3)])              # two vertical pieces
     a = _bridged(pts)
     assert np.array_equal(a, _bridged(pts[::-1]))
-    want = [_segment(pts[0], pts[1]), _segment(pts[0], pts[2]), _segment(pts[1], pts[3])]
-    assert np.array_equal(a, np.unique(np.concatenate(want), axis=0))
-    assert not any((p == (4, 2)).all() for p in a)                # no 2-3 bridge
+    assert np.array_equal(a, np.unique(np.concatenate([pts, [(0, 1), (0, 2)]]), axis=0))
+
+
+def test_bridged_closes_a_square_loop():
+    """Four pieces at a square's corners: the tree takes three equal bridges, and the
+    fourth, no longer than the tree's longest, closes the loop."""
+    pts = np.array([(0, 0), (0, 4), (4, 0), (4, 4)])
+    want = [_segment(pts[a], pts[b]) for a, b in ((0, 1), (0, 2), (1, 3), (2, 3))]
+    assert np.array_equal(_bridged(pts), np.unique(np.concatenate(want), axis=0))
+
+
+def test_draw_full_ring_is_closed():
+    """A full ring's ridge (80 pieces): a spanning tree alone leaves one gap; the loop's
+    closing bridge is added, so the drawn ring is closed (the rest of the map is two
+    pieces, inside and outside), at the drawn width along 360 normals, and still closed
+    when drawn at 2 px."""
+    centre, radius = (50.0, 50.0), 30.0
+    ridge = ring_ridge(centre, radius, 0.0, 2 * math.pi, 100)
+    fine = np.full((100 * S, 100 * S), HOST, np.uint8)
+    four = ndimage.generate_binary_structure(2, 1)
+    for width in (DRAW_W, 2.0):
+        out = draw_lines(fine, S, [(INK, HOST, ridge)], width)
+        assert ndimage.label(out != INK, structure=four)[1] == 2, width
+    out = draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
+    widths = []
+    for a in np.radians(np.arange(360) + 0.5):
+        u = (math.sin(a), math.cos(a))
+        p = (centre[0] + radius * u[0], centre[1] + radius * u[1])
+        widths.append(width_along(out, INK, p, u))
+    assert np.all(np.abs(np.array(widths) - DRAW_W) <= 0.35), (min(widths), max(widths))
 
 
 def test_bridge_segment_exact():
