@@ -173,6 +173,62 @@
       claim: "Our own software measurement (no print) on roadie-thanksgiving at 60 mm: with no size and length limits, the prototype widen_try4.py also changed 12 specks of 13-27 px (feathers, eye, hat brim). Those specks are also below the island area. With the island area and the host share, tdmg.color_lines.find_lines keeps only the turkey's two line pieces, whose length / width is 13.2 and 25.2 (README addendum); they are found with or without this limit."
   notes: "Elongation is length / width, where length = area / width and width = 2 x the 90th percentile of the distance to the edge: a ratio, so it does not depend on the print width. (The prototypes wrote elongation for area / width, a length in pixels; that is not this ratio.) Its job is to reject round blobs above the island area, which a synthetic test shows (a 97 px dot of width 8 has 1.5). The turkey's line pieces have 13.2 and 25.2; the image's specks are also below the island area, so this one image does not test the limit. One image."
 
+- id: color.lines.loop_path_factor
+  kind: hypothesis
+  summary: "Under `thin_lines: widen`, when a found line's ridge (its center line) is joined, a bridge that closes a loop is taken only where the path along the ridge between its two ends is more than this many times the bridge's own length (both in half-pixel steps)."
+  unit: ratio
+  default: 3
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-19-widen-lines/README.md
+      locator: "Loop path factor 3 (`color.lines.loop_path_factor`)"
+      provenance: primary
+      validation: untested
+      claim: "Our own reasoning, checked by software tests on synthetic fixtures (no print, no owner image): along a straight or gently bent ridge the ratio is about 1 and around a half turn at most about 2.2, so 3 takes no bend for a loop; rings in one, two and 45 pieces close and a straight line, a U and a chord past a middle piece are refused."
+  notes: "A ratio of two path lengths, so it does not depend on the print width. It does not by itself refuse a long U (whose path is unbounded against its chord): the in-line run test (color.lines.run_tolerance) and the topology test (a bridge may only restore a hole the line has) do. A loop closes once its perimeter is more than about 5.3 times its gap. Not tuned against near misses."
+
+- id: color.lines.run_tolerance
+  kind: hypothesis
+  summary: "Under `thin_lines: widen`, a loop-closing bridge's straight run must lie inside the found line grown by this distance (in whole half pixels), so it follows the line and never crosses the host."
+  unit: px
+  default: 0.5
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-19-widen-lines/README.md
+      locator: "Run tolerance 0.5 px (`color.lines.run_tolerance`)"
+      provenance: primary
+      validation: untested
+      claim: "Our own reasoning, checked by a software test (no print): the ridge and the run are both rounded to half pixels, so a run between two ridge points inside the line can cut a corner of its staircase edge by one half pixel; a one-half-pixel-thin diamond loop closes only with this tolerance."
+  notes: "In image pixels because it comes from the half-pixel grid of the ridge, not from the print. Must be a whole number of half pixels. The topology test takes the parts of the line's complement (outside and holes) from the line itself, not the grown line; only their pixels beyond this tolerance from the line count, since a run may pass that close."
+
+- id: color.lines.close_reach
+  kind: hypothesis
+  summary: "Under `thin_lines: widen`, loop-closing bridges of a found line's ridge are looked for within twice the spanning tree's reach and at least this distance; a loop whose gap is longer stays open."
+  unit: px
+  default: 8
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-19-widen-lines/README.md
+      locator: "Close reach 8 px (`color.lines.close_reach`)"
+      provenance: primary
+      validation: untested
+      claim: "Our own software test (no print): on the varying-width ring (radius 25 px, half width 1 to 2 px) the closing gap was 7.1 half pixels while the tree needed a reach of 8 half pixels; 8 px is twice that, so a ring whose ridge is one piece with such a gap is still searched."
+  notes: "A limit of the search, in image pixels because the ridge's gaps come from the pixel grid. Must be a whole number of half pixels. One synthetic fixture sets it; a longer artifact gap would leave a loop open."
+
+- id: color.lines.ridge_smooth
+  kind: hypothesis
+  summary: "Under `thin_lines: widen`, each point of a found line's ridge is moved to the mean of the ridge points within this distance before the line is drawn, so the drawn edges are not beaded by the ridge's half-pixel staircase."
+  unit: px
+  default: 1.5
+  applies_to: {color: [C2]}
+  evidence:
+    - ref: research/verification/2026-11-19-widen-lines/README.md
+      locator: "Ridge smoothing 1.5 px (`color.lines.ridge_smooth`)"
+      provenance: primary
+      validation: untested
+      claim: "Our own reasoning and software tests (no print): 1.5 px is the size of the half-pixel staircase of a ridge at an angle, which beaded the drawn edges without smoothing (widen_try6.py); with it a straight band's width is within one fine pixel of the drawn width, and a drawn end is 0.64 to 0.75 px shorter than the raw ridge."
+  notes: "In image pixels because the staircase comes from the pixel grid. Larger values shorten the drawn ends and round tight bends more. Not compared against other values."
+
 - id: color.outline.keep_area_width_ratio
   kind: hypothesis
   summary: "When the outline family is dropped, a wide area of the core color (a 4-connected component of the core's pixels that its own opening keeps) stays in the core color only if its inscribed width (2 x the largest distance from its pixels to the nearest pixel outside it) is at least this many times the family's stroke width (the 90th percentile of 2 x that distance on the ridge of the family's thin strokes). Other wide areas take the nearest non-family color."

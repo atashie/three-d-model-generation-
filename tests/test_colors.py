@@ -9,10 +9,12 @@ import math
 import shutil
 import time
 
+import cv2
 import numpy as np
 import pytest
 from PIL import Image
-from selection_fixtures import lined_disc, roadie_like
+from scipy import ndimage
+from selection_fixtures import LINE_COLS, LINE_ROWS, lined_disc, roadie_like
 
 import tdmg.color_plan
 import tdmg.colors
@@ -48,6 +50,7 @@ from tdmg.colors import (
     ColorsError,
     colors_id,
     colors_identity,
+    draw_recorded_lines,
     extracted_swatch_box,
     lines_legend,
     make_colors,
@@ -68,7 +71,7 @@ from tdmg.selection import (
     select_subject,
     write_selection,
 )
-from tdmg.smoothing import LABELS_METHOD, SUPERSAMPLE
+from tdmg.smoothing import LABELS_METHOD, SUPERSAMPLE, smooth_labels
 
 RULES = load_rules()
 A1 = load_printer("bambu-a1")
@@ -1925,6 +1928,24 @@ def test_thin_lines_remove_written_out_is_the_plan_left_out(sel, tmp_path, done,
     verify_colors(out, sel)
 
 
+def test_no_thin_lines_key_runs_no_line_code_and_gives_the_same_bytes(sel, tmp_path, done,
+                                                                      monkeypatch):
+    """Codex review of the fixes, 2026-11-19, finding 6: with no thin_lines key (no config
+    file) the line step does not run at all: with every line function made to fail, the
+    plan's files are byte for byte those of the plan made without that (whole colors.json
+    included, config_sha256 and all). Its identity is the one from before the setting
+    existed (test_thin_lines_remove_gives_the_plan_from_before_the_setting); across
+    versions and machines, tdmg library verify roadie-drop compares the whole files."""
+    def fail(*args, **kwargs):
+        raise AssertionError("line code ran without thin_lines")
+    for name in ("find_lines", "paint_lines", "draw_lines", "closing_params", "lines_block"):
+        monkeypatch.setattr(tdmg.colors, name, fail)
+    out = tmp_path / "out"
+    run(sel, out)
+    for name in ("colors.json", "labels.png", "regions.png"):
+        assert (out / name).read_bytes() == (done[1] / name).read_bytes(), name
+
+
 def test_thin_lines_widen_is_recorded_in_the_settings_and_the_identity(sel, tmp_path, done):
     cfg = tmp_path / "c.yaml"
     cfg.write_bytes(b"thin_lines: widen\n")
@@ -1997,7 +2018,12 @@ def test_verify_colors_checks_the_line_keys_under_widen(widened, sel, tmp_path, 
 # --- widen lines, Task 5: the lines block, the preview and verify -------------------------
 
 LINE_WIDTH_MM = 18.1      # lined_disc's disc is 181 px across: 0.1 mm/px
-LINE_RULE_IDS = ("color.lines.width", "color.lines.host_share", "color.lines.min_elongation")
+# The line rules a lines block records: not color.lines.width, which only gives
+# line_width_mm's default (recorded as settings.line_width_mm; Codex review 2026-11-19,
+# finding 5).
+LINE_RULE_IDS = ("color.lines.host_share", "color.lines.min_elongation",
+                 "color.lines.loop_path_factor", "color.lines.run_tolerance",
+                 "color.lines.close_reach", "color.lines.ridge_smooth")
 
 
 def _widen_plan(folder, rgba, text=b"thin_lines: widen\n"):
@@ -2146,6 +2172,81 @@ def test_a_line_whose_host_has_no_final_color_is_not_drawn(lined, tmp_path, monk
                               "(fate cleanup)")
 
 
+def _ring_image(phase=0.17):
+    """Codex review 2026-11-19, finding 1: a closed red ring in brown, radius 25 px, half
+    width 1.5 + 0.5 cos(angle + phase) px, with a red garnish so that red stays a final
+    color."""
+    img = np.zeros((200, 200, 4), np.uint8)
+    cv2.circle(img, (100, 100), 90, (130, 85, 45, 255), -1)
+    cv2.circle(img, (150, 50), 15, (200, 30, 30, 255), -1)
+    yy, xx = np.mgrid[0:200, 0:200].astype(float)
+    d = np.hypot(yy - 100, xx - 100) - 25
+    half = 1.5 + 0.5 * np.cos(np.arctan2(yy - 100, xx - 100) + phase)
+    img[np.abs(d) < half] = (200, 30, 30, 255)
+    return img
+
+
+def test_a_varying_width_ring_stays_closed(tmp_path):
+    """The ring's ridge breaks into pieces; its closing gap is longer than every bridge
+    the spanning tree needs. Drawn after cleanup and smoothing, the ring must still part
+    the brown inside it from the brown outside it."""
+    sel, out, rec = _widen_plan(tmp_path, _ring_image(),
+                                text=b"thin_lines: widen\noutline_color: none\n")
+    (item,) = [it for it in rec["lines"]["items"] if it["drawn"]]
+    v = verify_colors(out, sel)
+    s = v.supersample
+    drawn = draw_recorded_lines(smooth_labels(v.labels, v.sigma_px, s).fine, s, rec["lines"])
+    four = ndimage.generate_binary_structure(2, 1)
+    parts, _ = ndimage.label(drawn != item["color_final"], structure=four)
+    assert parts[100 * s, 100 * s] != parts[100 * s, 140 * s]
+
+
+def _fringed_line():
+    """Codex review 2026-11-19, finding 3: lined_disc with a 1 px black fringe above and
+    below the red line, so outlines: keep redraws a band over it."""
+    img = lined_disc()
+    (r0, r1), (c0, c1) = LINE_ROWS, LINE_COLS
+    img[r0 - 1, c0:c1] = (15, 10, 10, 255)
+    img[r1, c0:c1] = (15, 10, 10, 255)
+    return img
+
+
+def test_a_line_the_kept_band_covers_is_recorded_not_drawn(tmp_path):
+    sel, out, rec = _widen_plan(tmp_path / "keep", _fringed_line(),
+                                text=b"thin_lines: widen\noutlines: keep\n")
+    (item,) = [it for it in rec["lines"]["items"] if it["color_hex"] == RED_HEX]
+    assert item["color_final"] is not None and item["host_final"] is not None
+    assert item["color_final"] != item["host_final"]
+    assert item["drawn"] is False and "paints no pixel" in item["reason"]
+    assert lines_legend(rec["lines"]).startswith("lines: 0 drawn")
+    v = verify_colors(out, sel)            # the rebuild gives the same block
+    fine = smooth_labels(v.labels, v.sigma_px, v.supersample).fine
+    assert np.array_equal(draw_recorded_lines(fine, v.supersample, rec["lines"]), fine)
+    # With outlines: drop the same line is there to draw, and is drawn.
+    _, _, dropped = _widen_plan(tmp_path / "drop", _fringed_line(),
+                                text=b"thin_lines: widen\noutlines: drop\n")
+    (item,) = [it for it in dropped["lines"]["items"] if it["color_hex"] == RED_HEX]
+    assert item["drawn"] is True and item["reason"] is None
+
+
+def _with_default(rule_id, value):
+    rules = dict(RULES)
+    rules[rule_id] = RULES[rule_id].model_copy(update={"default": value})
+    return rules
+
+
+def test_an_explicit_line_width_survives_a_change_to_the_unused_default(tmp_path):
+    """Codex review 2026-11-19, finding 5: the width rule only gives line_width_mm's
+    default, so with line_width_mm set, changing only that default leaves the record
+    valid (as for outline_width_mm and color.outline.keep_width)."""
+    sel, out, _ = _widen_plan(tmp_path / "lines", lined_disc(),
+                              text=b"thin_lines: widen\nline_width_mm: 0.41\n")
+    verify_colors(out, sel, rules=_with_default("color.lines.width", 0.45))
+    sel, out, _ = _widen_plan(tmp_path / "band", lined_disc(),
+                              text=b"outlines: keep\noutline_width_mm: 0.5\n")
+    verify_colors(out, sel, rules=_with_default(KEEP_WIDTH_RULE, 0.6))
+
+
 def _set_schema(schema):
     return lambda r: r.update(schema=schema)
 
@@ -2158,6 +2259,12 @@ def _drop_line_rule(r):
 def _drop_lines_method(r):
     for m in (r["identity"]["methods"], r["methods"]):
         m.pop("lines")
+    r["colors_id"] = colors_id(r["identity"])
+
+
+def _old_lines_method(r):
+    for m in (r["identity"]["methods"], r["methods"]):
+        m["lines"] = "inside-one-color-lines/1"
     r["colors_id"] = colors_id(r["identity"])
 
 
@@ -2175,6 +2282,8 @@ def _move_ridge_point(it):
      "is a tdmg.colors/4 record, but its settings make it a tdmg.colors/5"),
     (_drop_line_rule, "identity.rules must hold exactly"),
     (_drop_lines_method, "identity.methods are not the methods"),
+    (_old_lines_method, ("identity.methods.lines is inside-one-color-lines/1, but this "
+                         "version finds and draws lines with inside-one-color-lines/2")),
     (lambda r: r.pop("lines"), "a lines block must be there exactly under thin_lines widen"),
     (lambda r: r["lines"].update(extra=1), "lines must hold exactly"),
     (lambda r: r["lines"].update(method="x/1"), "lines method must be"),
@@ -2186,7 +2295,8 @@ def _move_ridge_point(it):
     (_item(lambda it: it.update(host=it["color"])), "two extraction indices"),
     (_item(lambda it: it.update(color_hex="#000000")), "color_hex and host_hex"),
     (_item(lambda it: it.update(color_final=it["host_final"])), "color_final is not the"),
-    (_item(lambda it: it.update(drawn=False)), "drawn must be true exactly"),
+    (_item(lambda it: it.update(drawn=False)), "a line not drawn needs a reason"),
+    (_item(lambda it: it.update(drawn=1)), "drawn must be true or false"),
     (_item(lambda it: it.update(reason="why")), "a drawn line has no reason"),
     (_item(lambda it: it.update(area_px=330.0)), "area_px must be an int"),
     (_item(lambda it: it.update(width_px=float("inf"))), "area_px must be an int"),
@@ -2206,10 +2316,10 @@ def _move_ridge_point(it):
      "lines rules"),
     (_item(lambda it: it.update(width_px=0.0)), "area_px must be an int"),
     (_item(lambda it: it.update(length_px=-1.0)), "area_px must be an int"),
-], ids=["schema 4", "rule", "method", "no block", "extra key", "block method", "width_mm",
-        "width_px int", "block rules", "notes", "bool color", "host is color", "hex",
-        "final", "drawn", "reason", "area float", "width inf", "ridge float", "ridge row",
-        "ridge col", "ridge negative", "ridge order", "ridge empty", "ridge moved",
+], ids=["schema 4", "rule", "method", "method 1", "no block", "extra key", "block method",
+        "width_mm", "width_px int", "block rules", "notes", "bool color", "host is color", "hex",
+        "final", "drawn", "drawn int", "reason", "area float", "width inf", "ridge float",
+        "ridge row", "ridge col", "ridge negative", "ridge order", "ridge empty", "ridge moved",
         "width last digit", "host final", "empty reason", "item not dict", "rule nan",
         "width zero", "length negative"])
 def test_verify_colors_checks_the_lines(lined, tmp_path, change, message):

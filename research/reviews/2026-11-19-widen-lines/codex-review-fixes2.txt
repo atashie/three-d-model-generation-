@@ -1,0 +1,41 @@
+**Found one High defect. No additional High or Medium defects were reproduced.**
+
+1. **High — Nested loops still permit spurious closure.**  
+   [src/tdmg/color_lines.py:516](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_lines.py:516)
+
+   `_Topology` protects only the original complement component connected to the frame. It permits splitting an existing hole into additional holes.
+
+   **Reproduction:** a fully opaque 110×110 brown image, with one-pixel red rectangle outlines:
+   - Outer rectangle: rows 10–90, columns 10–90, closed.
+   - Inner rectangle: rows 30–70, columns 30–70; remove `(30,50)`.
+   - Connect them along row 50, columns 10–30.
+   - Add a separate red square at `[96:106,96:106]`.
+   - Use width **45.1 mm**, `thin_lines: widen`, `outline_color: none`, default line width **0.41 mm**.
+
+   Through actual detection, cleanup, smoothing, and redraw, one line is recorded as drawn, and the inner opening closes: the brown complement has **three components**. Disabling only `_closing` preserves the opening and leaves **two components**. The requested drawing width is one image pixel, so this is not an unavoidable widening effect.
+
+   Both sides of the inner opening belong to an original hole, making `self.exterior` false there. Once the outer ridge closes, `self.enclosed` also cannot distinguish subdivisions inside it.
+
+   **Suggested change:** preserve connectivity within **every original complement component**, including holes, rather than checking only newly enclosed frame-exterior pixels. Add this connected, nested open-and-closed fixture.
+
+2. **Low — Evidence validation remains inconsistent, as explicitly deferred.**  
+   [rules/color.yaml:186](C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml:186)
+
+   The new entries describe executed software checks but label them `untested`; CLAUDE.md defines that evidence as `measured`. The deferral is transparent, but the inconsistency remains and now covers the new rules too.
+
+   **Suggested change:** retain `kind: hypothesis`, classify executed software evidence as `measured`, and distinguish untested print performance.
+
+The other handling checked out: the projection’s missing line is detected after clipping; `/1` is rejected; all six effective rule values affect widen identity and leave remove identity unchanged; units convert correctly. The README supports the stated defaults as hypotheses. The same-process byte test establishes inertness, not historical compatibility; my independent HEAD comparison matched complete record serialization and both PNGs.
+
+**Checks run; no files modified:**
+
+- `python -B -m pytest tests/test_color_lines.py tests/test_rules.py --noconftest -s -p no:cacheprovider -q`: **230 passed**.
+- Selected read-only config tests: **20 passed**.
+- In-memory clipping, identity, HEAD-byte, and nested-loop reproductions.
+- Frame-touching, colored-hole, nested-closed, and spoke fixtures; 93 connected wavy-ring cases: no lost source holes found.
+- Ordered bridge-list comparisons on three grids, including the dense fixture, and reversed-input repeatability: matched.
+- `git diff --check 79dcd14`: passed.
+
+No slicers, 3MF export, library verification, or cross-platform execution were run.
+
+**Most important remaining change: protect connectivity inside existing holes when accepting closing bridges.**

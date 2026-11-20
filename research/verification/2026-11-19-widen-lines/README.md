@@ -101,3 +101,15 @@ location, so OrcaSlicer prints these lines in full from about 0.6 mm. The whole-
 unprinted line stretches. The owner chose to keep 0.41 mm and test-print it ("1) 0.41 mm
 and test-print it"), and that a widened line's coverage should count in the verdict
 ("to your question: yes"). Bambu Studio, which the owner prints from, was not measured.
+
+## Addendum, 2026-11-19: the ridge joining and smoothing values (after the Codex reviews)
+
+Software tests only (no print): `tests/test_color_lines.py` and `tests/test_colors.py` on
+synthetic fixtures, Windows PC. The values below were chosen by reasoning and then checked
+on those fixtures; none is tuned against a measured near miss, and none is tested on an
+owner image other than the roadie-thanksgiving runs above.
+
+- Loop path factor 3 (`color.lines.loop_path_factor`): a closing bridge is taken only where the path along the ridge is more than 3 times the bridge (in half-pixel steps). Along a straight or gently bent ridge the ratio is about 1, around a half turn at most about 2.2 (pi / 2 in length, times up to sqrt 2 for counting steps). A loop closes once its perimeter is more than about 5.3 times its gap. The factor alone does not refuse a long U (its path is unbounded against its chord); the in-line run test and the topology test do. Fixtures: the rings in one, two and 45 pieces close; the straight line, the U and the chord past a middle piece are refused.
+- Run tolerance 0.5 px (`color.lines.run_tolerance`): a bridge's straight run may leave the found line by one half pixel, since the ridge and the run are rounded to half pixels and a run between two ridge points inside the line can cut a corner of its staircase edge. Fixture: a one-half-pixel-thin diamond loop closes only with it.
+- Close reach 8 px (`color.lines.close_reach`): closing bridges are looked for within twice the spanning tree's reach and at least 8 px. On the varying-width ring (radius 25 px, half width 1 to 2 px, 0.1 mm/px) the closing gap was 7.1 half pixels while the tree needed a reach of 8 half pixels; 8 px is twice that, so a ring whose ridge is one piece with such a gap is still searched. A longer gap stays open.
+- Ridge smoothing 1.5 px (`color.lines.ridge_smooth`): each ridge point moves to the mean of the ridge points within 1.5 px, the size of the half-pixel staircase of a ridge at an angle, which beaded the drawn edges without it (`widen_try6.py` above, "slightly beaded edges"). With it the straight band's width is within one fine pixel of the drawn width, and a drawn end is 0.64 to 0.75 px shorter than the raw ridge.

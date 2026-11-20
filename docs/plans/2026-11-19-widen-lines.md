@@ -204,6 +204,12 @@ Tests:
 
 ### Task 5: wiring into the plan, the record, verify and the 3D build
 
+(Changed after the Codex reviews of 2026-11-19: the `lines.rules` block lists the six
+line rules but not `color.lines.width`, `drawn` also needs the line to paint a pixel,
+`colored_flat` draws at the model's scale and counts a line only where it is in the final
+cells, and the method is `inside-one-color-lines/2`. See the design doc, "Changes after
+the Codex reviews".)
+
 **Files:** `src/tdmg/colors.py`, `src/tdmg/colors_verify.py`, `src/tdmg/colored_flat.py`,
 `src/tdmg/color_plan.py` (only if a final-index helper is needed). Tests:
 `tests/test_colors.py`, `tests/test_colors_verify.py`, `tests/test_colored_flat.py`
@@ -218,10 +224,13 @@ Tests:
      merged color, the final index of the color it was merged into. Use the plan's
      existing logic if it has one (`color_plan.final_of`).
    - A line whose color or host has no final index, or whose two final indices are equal,
-     is recorded with `"drawn": false` and a reason. It is not drawn.
+     is recorded with `"drawn": false` and a reason. It is not drawn. So is a line that
+     would paint no pixel (tested on the cleaned labels at the fine map's resolution,
+     without the smoothing blur; added after the Codex review).
 2. **In the record**, under widen only:
-   - `"lines"`: `{"method": LINES_METHOD, "width_mm", "width_px", "rules": {the three
-     rule ids: values}, "drawn_after": "cleanup and smoothing, on the fine map",
+   - `"lines"`: `{"method": LINES_METHOD, "width_mm", "width_px", "rules":
+     {the six line rules (color.lines.host_share, min_elongation, loop_path_factor,
+     run_tolerance, close_reach, ridge_smooth): values}, "drawn_after": "cleanup and smoothing, on the fine map",
      "notes": [...], "items": [{"color", "color_hex", "host", "host_hex",
      "color_final", "host_final", "area_px", "width_px", "length_px", "drawn",
      "reason", "ridge": [[r, c], ...]}]}`;
@@ -229,8 +238,9 @@ Tests:
    - `used_rules` (the identity's rules) gains `color.lines.host_share` and
      `color.lines.min_elongation`. `color.lines.width` stays out of it, as
      `color.outline.keep_width` does: the `line_width_mm` setting value is hashed instead
-     (decided after the Task 2 quality review). The `lines` block's `rules` field still
-     lists all three, as information;
+     (decided after the Task 2 quality review). The `lines` block's `rules` field lists
+     the six line rules but not the width rule (after the Codex reviews: it listed the
+     three Task 1 rules before);
    - use `color_config.widens(settings)` for every "is this a widen plan" test;
    - `RECORD_SCHEMA` becomes `tdmg.colors/5`.
    - The settings go through `recorded_settings` (Task 2).
@@ -251,7 +261,10 @@ Tests:
    - validate the block's types (ints for the indices and ridge points, finite numbers);
    - the rebuild (`render=False`) must give the same `lines` block, ridge included.
 6. **`colored_flat`:** after `fine = smooth_labels(...)`, when the plan's record has a
-   `lines` block, apply `draw_lines` with its drawn items and its `width_px`. Under
+   `lines` block, apply `draw_lines` with its drawn items at `width_mm` on the model's
+   scale (`width_mm / transform.scale_mm_per_px`; after the Codex review: it used the
+   block's `width_px`, the plan's scale, before), and warn when it paints fewer lines
+   than the record says were drawn. Under
    widen with at least one drawn line, build no glue version: set `build_glue = False`
    and give a reason in the record, as for a kept outline band. Record the number of
    lines drawn in the colored_flat record only when the plan has `lines` (byte-identical

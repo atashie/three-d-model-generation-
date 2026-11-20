@@ -1,0 +1,72 @@
+1. **High — Closed lines can become open during redraw.**  
+   [src/tdmg/color_lines.py:385](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_lines.py:385)
+
+   The MST joins ridge components, but the additional edges close only gaps no longer than the longest tree edge. This does not preserve closed loops.
+
+   **Reproduced:** a closed red ring on brown, radius 25 px, with half-width `1.5 + 0.5*cos(angle + 0.17)` px, at 0.1 mm/px. With `outline_color: none` and default widening, detection finds one line and records it as drawn. After actual cleanup, smoothing and drawing, the interior and exterior brown regions connect through a break; centerline samples at 101°–102° are missing.
+
+   **Change:** preserve connectivity and cycles from the candidate mask when constructing its centerline. Constrain bridges to that mask instead of inferring topology from Euclidean distances alone. Add varying-width closed-loop tests; the existing uniform-circle test misses this.
+
+2. **Medium — The recorded physical width is not the width used in model coordinates.**  
+   [src/tdmg/colored_flat.py:521](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colored_flat.py:521), [src/tdmg/colors.py:811](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py:811)
+
+   `width_px` uses the original mask’s bounding-box scale. The model subsequently uses the smoothed silhouette’s scale, which can differ substantially.
+
+   **Reproduced:** a 120 px-wide body with a connected 100 px-long, one-pixel-wide projection, built at 22 mm. Silhouette smoothing removes the projection. The plan scale is 0.1 mm/px; the model scale becomes approximately 0.182417 mm/px. A line recorded as **0.41 mm** measures **0.729668 mm across the resulting AMS cells**.
+
+   **Change:** derive drawing width from the final silhouette transform, sharing that calculation between preview and geometry. Add a physical-width test where smoothing materially changes the silhouette extent.
+
+3. **Medium — `drawn: true` can describe a completely absent line.**  
+   [src/tdmg/colors.py:817](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py:817)
+
+   Drawing status depends only on whether the final color indices exist and differ. It never checks whether the host pixels needed to draw the line remain.
+
+   **Reproduced:** add one-pixel black fringes above and below `lined_disc()`’s red line, then use `outlines: keep`. Detection records the red line as drawn, but the kept black band covers it. `draw_recorded_lines` changes **zero pixels**, and the line crop contains **zero red pixels**. With `outlines: drop`, the same fixture draws the red line.
+
+   **Change:** distinguish eligible, actually represented, and obstructed lines. Record an obstruction reason when the kept outline prevents drawing; derive the legend and drawn count from the actual result. Preserve the third-color protection.
+
+4. **Medium — Explicit `remove` breaks the promised `colors.json` byte identity.**  
+   [src/tdmg/colors.py:569](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py:569), [src/tdmg/job_runner.py:202](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/job_runner.py:202)
+
+   Filtering removes the new settings and sources, but retains the hash of the config containing them.
+
+   **Reproduced:** the archived Roadie job generates no colors config. Setting only `thin_lines: remove` generates `b"thin_lines: remove\n"`. Its recorded `config_sha256` changes from `null` to a digest, despite identical effective settings and `colors_id`.
+
+   The test at [tests/test_colors.py:1923](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_colors.py:1923) explicitly removes this field before comparison, so it cannot enforce the stated guarantee.
+
+   **Change:** omit inactive line settings from job-generated configs and resolve their provenance handling without changing the legacy record. Compare complete record bytes in the regression test.
+
+5. **Medium — Changing an unused default invalidates a correctly configured widen record.**  
+   [src/tdmg/colors.py:831](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors.py:831), [src/tdmg/colors_verify.py:926](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colors_verify.py:926)
+
+   `color.lines.width` is deliberately excluded from identity rules because the resolved setting determines the width. Nevertheless, the lines block stores the registry’s current default, and rebuilding compares that informational value.
+
+   **Reproduced:** build with explicit `line_width_mm: 0.41`; change only the registry default to 0.45. The unchanged record fails rebuilding at `lines.rules.color.lines.width`, although its settings, identity and drawing inputs remain unchanged.
+
+   **Change:** separate historical default provenance from rebuild-derived drawing data. Do not require an unused default to equal today’s registry value.
+
+6. **Medium — Remove mode now depends on validation of an unused line width.**  
+   [src/tdmg/color_config.py:352](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_config.py:352)
+
+   Resolution always checks `line_width_mm`, including absent or explicit `thin_lines: remove`.
+
+   **Reproduced:** supply rules with `flat.sliver.opening_width: 0.45`. The existing default outline width, 0.5 mm, remains valid, but an otherwise ordinary remove-mode configuration now fails because the unused line default is 0.41 mm.
+
+   **Change:** avoid resolving or enforcing active-feature width constraints when widening is disabled. Test remove mode with independently changed cleanup rules.
+
+7. **Low — Software measurements are classified as untested, conflating kind and validation.**  
+   [rules/color.yaml:144](C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml:144), [rules/color.yaml:158](C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml:158)
+
+   These entries cite executed software measurements but label their validation `untested`. The research README calls them measured, and `CLAUDE.md` explicitly defines software measurements without printing as `measured`.
+
+   **Change:** retain `kind: hypothesis`, but classify the measured evidence separately from untested print performance. Correct [tests/test_rules.py:23](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py:23), whose blanket hypothesis → untested assertion prevents that distinction.
+
+**Checks run:** 194 line/rule tests and 21 selected config tests passed using the existing Python environment with `--noconftest -s -p no:cacheprovider`. I also ran the in-memory reproductions above and compared an absent/remove-mode build against the `b23af64` implementation: that fixture’s `colors.json`, `labels.png` and `regions.png` matched byte-for-byte.
+
+The broader pytest invocation was blocked by sandbox restrictions on caches and temporary directories. I did **not** run slicers, export a new 3MF, or run `library verify roadie-drop`. No files were modified.
+
+The three most important changes are:
+
+1. Preserve source-line topology through ridge reconstruction.
+2. Make remove mode inert, including config hashes and unused-default validation.
+3. Use final model scale for drawing and record whether each line actually appears.

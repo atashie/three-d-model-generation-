@@ -37,9 +37,11 @@ The keys (Task 7b added extract, outlines, outline_color and merge):
   remove is the behaviour from before the key existed: cleanup removes thin drawn lines.
   widen draws the thin lines that lie inside one other color at line_width_mm.
 - line_width_mm: the width at which widen draws those lines, in mm, a finite number wider
-  than flat.sliver.opening_width (default: the rule color.lines.width, source "rule").
-  Under remove both keys are left out of the record and the identity (recorded_settings),
-  so a remove plan is byte-identical to one made before they existed.
+  than flat.sliver.opening_width (default: the rule color.lines.width, source "rule"). The
+  comparison with the opening is made under widen only: under remove the width is unused
+  (Codex review 2026-11-19, finding 6). Under remove both keys are left out of the record
+  and the identity (recorded_settings), so a remove plan is byte-identical to one made
+  before they existed.
 Extraction indices are the order quantize gives (largest area first), which the preview
 shows. The checks that need the extracted palette (an index below the number of colors the
 image gave, no merge from the outline family) are in check_extraction_indices; it runs
@@ -349,7 +351,8 @@ def resolve_color_config(flags: dict, config_path: str | Path | None, rules: dic
                              settings["extract"])
     edge_sigma_px(settings["edges"], rules)
     check_outline_width_setting(settings["outline_width_mm"], rules)
-    check_line_width_setting(settings["line_width_mm"], rules)
+    if widens(settings):             # unused under remove, so not compared there
+        check_line_width_setting(settings["line_width_mm"], rules)
     return ResolvedColorConfig(settings=settings, sources=sources, config_sha256=sha)
 
 

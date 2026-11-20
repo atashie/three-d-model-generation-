@@ -18,9 +18,14 @@ make_colored_flat chains the pure steps and writes their outputs in make_flat's 
    (outline_color none, or auto finding none) drew no band and builds glue as usual.
    Under thin_lines widen (docs/plans/2026-11-19-widen-lines.md, Task 5) the plan's drawn
    lines are drawn on the fine map right after smooth_labels, as the plan's preview drew
-   them (tdmg.colors.draw_recorded_lines: the record's drawn items, in record order, at
-   its width_px), and with at least one drawn line the glue route is not built either
-   (LINES_GLUE_NOT_BUILT).
+   them (tdmg.color_lines.paint_lines on the record's drawn items, in record order), but
+   at line_width_mm on the model's own scale, width_mm / transform.scale_mm_per_px: the
+   model's scale is the smoothed outline's, which can differ from the plan's mask scale
+   that the preview and the record's width_px use (Codex review 2026-11-19, finding 2).
+   A line is in the model when a fine pixel it painted has its centre in the final cells
+   of its color (after the clipping to the smoothed outline); with at least one, the glue
+   route is not built either (LINES_GLUE_NOT_BUILT), and a recorded drawn line that is not
+   in the model is named in a warning (LINES_NOT_PAINTED).
 4. Checks (Decision 9): every per-body, per-plate and assembly check of ams_checks and
    glue_checks, F3.thin_regions per body of both routes (information, UNKNOWN, as in tdmg
    flat) and F6.slicer UNKNOWN per route, so the verdict here is always NOT CERTIFIED.
@@ -56,7 +61,9 @@ from tdmg.color_checks import ColorCheckError, ams_checks, export_3mf_check, glu
 from tdmg.color_config import ColorConfigError, palette_cap
 from tdmg.color_geometry import ColorGeometryError, ams_bodies, color_cells, color_regions
 from tdmg.color_glue import glue_geometry
+from tdmg.color_lines import paint_lines
 from tdmg.colors import (
+    LINES_SMOOTH_RULE,
     MARGIN_PX,
     PREVIEW_SCALE,
     ROW_PX,
@@ -66,7 +73,7 @@ from tdmg.colors import (
     TEXT_X_PX,
     ColorsError,
     background,
-    draw_recorded_lines,
+    drawn_lines,
     enlarge,
     swatch_strip,
     wrap_text,
@@ -162,6 +169,13 @@ REVIEW = REVIEW_TOP + REVIEW_PARTS + REVIEW_3MF + REVIEW_END
 LINES_GLUE_NOT_BUILT = ("the plan draws thin lines (thin_lines: widen; {n} drawn at "
                         "{width:g} mm), and the glue route does not take drawn lines; for "
                         "a glue print, use a plan made with thin_lines: remove")
+# When fewer lines reach the model than the plan records as drawn: the plan's test is on
+# the cleaned labels at the plan's scale; the model's is what is left of each line's
+# painted pixels in the final cells of its color, after smoothing and the clipping to the
+# smoothed outline (Codex review of the fixes, 2026-11-19, finding 2).
+LINES_NOT_PAINTED = ("{n} of the plan's {m} drawn line(s) are not in the model (at "
+                     "{width:g} mm on the model's scale, after smoothing and the clipping "
+                     "to the outline): {which}")
 
 
 def review_no_glue(reason: str) -> str:
@@ -214,6 +228,24 @@ def body_file(route: str, index: int, hex_code: str, base_index: int) -> str:
 
 
 # --- previews --------------------------------------------------------------------------
+
+
+def _line_in_cells(owner: np.ndarray, n: int, color: int, cells, transform: dict,
+                   supersample: int) -> bool:
+    """Whether line n (its index in owner, paint_lines' owner map) is in the model: the
+    centre of some fine pixel it painted lies in a final cell of its color (exact
+    shapely.intersects_xy, in model mm by the transform, as paint_cells)."""
+    rows, cols = np.nonzero(owner == n)
+    if not len(rows):
+        return False
+    region = shapely.union_all(cells.of(color))
+    if region.is_empty:
+        return False
+    s, x0, y1 = transform["scale_mm_per_px"], transform["x0_px"], transform["y1_px"]
+    x_mm = ((cols + 0.5) / supersample - x0) * s
+    y_mm = (y1 - (rows + 0.5) / supersample) * s
+    shapely.prepare(region)
+    return bool(shapely.intersects_xy(region, x_mm, y_mm).any())
 
 
 def paint_cells(cells, labels, colors: dict, transform: dict, shape) -> np.ndarray:
@@ -433,7 +465,8 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     outline.keep_width: verify_colors pins it to be set exactly under outlines: keep
     with a non-empty outline family, and null
     otherwise (so a keep plan with no family builds glue as usual). Nor is it built for a
-    thin_lines widen plan with at least one drawn line (LINES_GLUE_NOT_BUILT; both
+    thin_lines widen plan with at least one drawn line that is in the model (a pixel it
+    painted lies in the final cells of its color) (LINES_GLUE_NOT_BUILT; both
     reasons are joined when both hold). Then the record's glue section is {"built": false,
     "reason", "report": null} ({"built": true,
     "reason": null, "report": glue_geometry's report} otherwise), a warning says why, and
@@ -507,22 +540,39 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     no_glue = [] if plan.record["outline"]["keep_width"] is None else [GLUE_NOT_BUILT]
     # Under thin_lines widen only (verify_colors: the block is there exactly then).
     lines = plan.record.get("lines")
-    n_lines = 0 if lines is None else sum(it["drawn"] for it in lines["items"])
-    if n_lines:
-        no_glue.append(LINES_GLUE_NOT_BUILT.format(n=n_lines, width=lines["width_mm"]))
-    build_glue = not no_glue
-    no_glue_reason = "; and ".join(no_glue) or None
+    n_lines, line_width_px, unpainted = 0, None, []
     try:
         _, transform, parts, cleaning = silhouette(mask, plan.width_mm, sigma, opening,
                                                    island, image_box=True)
         region = shapely.union_all(parts)
         fine = smooth_labels(plan.labels, plan.sigma_px, plan.supersample).fine
+        owner = None
         if lines is not None:
-            fine = draw_recorded_lines(fine, plan.supersample, lines)
+            # line_width_mm on the model's scale (image px), not the plan's (width_px).
+            line_width_px = lines["width_mm"] / transform["scale_mm_per_px"]
+            fine, _, owner = paint_lines(fine, plan.supersample, drawn_lines(lines),
+                                         line_width_px, owners=True,
+                                         smooth_px=lines["rules"][LINES_SMOOTH_RULE])
         regions = color_regions(fine, plan.supersample, transform, region,
                                 n_colors=len(plan.palette), base_index=plan.base_index,
                                 thin_width_mm=opening)
         cells = color_cells(regions, region, plan.base_index)
+        if lines is not None:
+            # Which recorded drawn lines (index in lines.items, color, host) reach the
+            # model: some pixel they painted has its centre in the final cells of their
+            # color.
+            drawn_items = [(k, it) for k, it in enumerate(lines["items"]) if it["drawn"]]
+            kept = [_line_in_cells(owner, n, it["color_final"], cells, transform,
+                                   plan.supersample)
+                    for n, (_, it) in enumerate(drawn_items)]
+            n_lines = sum(kept)
+            unpainted = [f"items[{k}] ({it['color_hex']} in {it['host_hex']})"
+                         for (k, it), ok in zip(drawn_items, kept, strict=True) if not ok]
+            if n_lines:
+                no_glue.append(LINES_GLUE_NOT_BUILT.format(n=n_lines,
+                                                           width=lines["width_mm"]))
+        build_glue = not no_glue
+        no_glue_reason = "; and ".join(no_glue) or None
         ams = ams_bodies(cells, thickness_mm=thickness, skin_mm=skin)
         ams_result = ams_checks(ams, cells, thickness,
                                 colors=plan.record["identity"]["settings"]["colors"],
@@ -589,6 +639,10 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                                            ams_rows, skin))
     inlays = sorted(set(cells.labels) - {base})
     warnings = list(regions.warnings)
+    if unpainted:
+        warnings.append(LINES_NOT_PAINTED.format(
+            n=len(unpainted), m=len(unpainted) + n_lines, width=lines["width_mm"],
+            which=", ".join(unpainted)))
     if build_glue:
         files["parts.png"] = png_bytes(parts_image(glue, plan.palette, transform, shape,
                                                    skin_mm=skin, clearance_mm=clearance,
@@ -631,10 +685,11 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                      "base": p["index"] == base} for p in plan.palette],
         "base_index": base, "transform": transform, "cleaning": cleaning,
         "regions": regions.report, "cells": cells.report, "glue": glue_section,
-        # Under thin_lines widen only: the plan's lines drawn on the fine map.
+        # Under thin_lines widen only: the plan's lines drawn on the fine map. drawn: the
+        # lines that changed a fine pixel; width_px: line_width_mm on the model's scale.
         **({} if lines is None else {"lines": {
             "drawn": n_lines, "width_mm": lines["width_mm"],
-            "width_px": lines["width_px"], "method": lines["method"]}}),
+            "width_px": line_width_px, "method": lines["method"]}}),
         "bodies": body_rows,
         "model_3mf": {"file": MODEL_3MF, "palette": PALETTE_NAME,
                       "encoding": THREEMF_ENCODING, "object_name": THREEMF_OBJECT,

@@ -639,8 +639,32 @@ def test_a_line_width_above_the_opening_is_accepted(tmp_path, text, value):
 def test_a_line_width_at_or_below_the_opening_is_refused(tmp_path, text, message):
     with pytest.raises(ColorConfigError, match=message):
         _resolve(path=_config(tmp_path, f"thin_lines: widen\nline_width_mm: {text}\n"))
-    with pytest.raises(ColorConfigError, match=message):     # under remove too
+    if "opening_width" in message:     # under remove the width is unused: not compared
         _resolve(path=_config(tmp_path, f"line_width_mm: {text}\n"))
+    else:                              # but its own form is still checked
+        with pytest.raises(ColorConfigError, match=message):
+            _resolve(path=_config(tmp_path, f"line_width_mm: {text}\n"))
+
+
+def _rules_with_opening(value):
+    rules = copy.deepcopy(RULES)
+    rid = "flat.sliver.opening_width"
+    rules[rid] = rules[rid].model_copy(update={"default": value})
+    return rules
+
+
+@pytest.mark.parametrize("text", [None, "thin_lines: remove\n"])
+def test_remove_does_not_compare_the_unused_line_width_with_the_opening(tmp_path, text):
+    """Codex review 2026-11-19, finding 6: with an opening of 0.45 mm the outline default
+    (0.5 mm) is still wider, but the unused line default (0.41 mm) is not. Remove mode
+    (absent or explicit) must resolve; widen must refuse."""
+    rules = _rules_with_opening(0.45)
+    path = None if text is None else _config(tmp_path, text)
+    r = resolve_color_config(NO_FLAGS, path, rules, A1)
+    assert r.settings["thin_lines"] == "remove"
+    with pytest.raises(ColorConfigError, match=r"line_width_mm \(0.41 mm\) must be wider"):
+        resolve_color_config(NO_FLAGS, _config(tmp_path, "thin_lines: widen\n", "w.yaml"),
+                             rules, A1)
 
 
 def test_check_line_width_setting_directly():
@@ -657,8 +681,10 @@ def test_a_line_width_rule_at_the_opening_or_in_another_unit_is_refused():
     rid = "color.lines.width"
     rules = copy.deepcopy(RULES)
     rules[rid] = rules[rid].model_copy(update={"default": 0.4})
+    widen = {**NO_FLAGS, "thin_lines": "widen"}
     with pytest.raises(ColorConfigError, match="line_width_mm"):
-        resolve_color_config(NO_FLAGS, None, rules, A1)
+        resolve_color_config(widen, None, rules, A1)
+    resolve_color_config(NO_FLAGS, None, rules, A1)       # unused under remove
     rules[rid] = rules[rid].model_copy(update={"default": 0.45, "unit": "px"})
     with pytest.raises(ColorConfigError, match="must be in 'mm'"):
         resolve_color_config(NO_FLAGS, None, rules, A1)

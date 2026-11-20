@@ -832,8 +832,8 @@ def test_a_widen_plan_draws_its_line_in_the_ams_inlay(lined):
     assert g.bounds[0] < (LINE_COLS[0] + 3 - x0) * s
     assert g.bounds[2] > (LINE_COLS[1] - 3 - x0) * s
     # Its width, area / length (length from the perimeter, as for a long strip), is about
-    # line_width_mm: the line is drawn at 0.41 mm on the plan's scale (0.1 mm/px), and the
-    # model's scale is the smoothed outline's (about 1% larger here).
+    # line_width_mm: the line is drawn at 0.41 mm on the model's scale (the smoothed
+    # outline's, about 1% larger here than the plan's 0.1 mm/px).
     length = (g.length + math.sqrt(g.length ** 2 - 16 * g.area)) / 4
     width = g.area / length
     assert width == pytest.approx(rec["lines"]["width_mm"], abs=0.03)
@@ -842,11 +842,77 @@ def test_a_widen_plan_draws_its_line_in_the_ams_inlay(lined):
     assert "thin_lines: widen; 1 drawn at 0.41 mm" in flat["glue"]["reason"]
     assert any("glue version not built: the plan draws thin lines" in w
                for w in flat["warnings"])
-    assert flat["lines"] == {"drawn": 1, "width_mm": 0.41,
-                             "width_px": rec["lines"]["width_px"],
+    assert flat["lines"] == {"drawn": 1, "width_mm": 0.41, "width_px": 0.41 / s,
                              "method": rec["lines"]["method"]}
     assert flat["required_checks"] == sorted(COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS)
     assert not any(b["route"] == "glue" for b in flat["bodies"])
+
+
+def _body_with_spur() -> np.ndarray:
+    """Codex review 2026-11-19, finding 2: a 120 px brown body with a 1 x 100 px spur that
+    silhouette smoothing removes, so the model's scale (the smoothed outline's extent) is
+    far from the plan's (the mask's), with a red garnish and a 3 px red line."""
+    img = np.zeros((200, 260, 4), np.uint8)
+    img[40:160, 20:140] = (130, 85, 45, 255)
+    img[100:101, 140:240] = (130, 85, 45, 255)
+    yy, xx = np.mgrid[0:200, 0:260]
+    img[(yy - 70) ** 2 + (xx - 110) ** 2 <= 15 ** 2] = (200, 30, 30, 255)
+    img[120:123, 30:100] = (200, 30, 30, 255)
+    return img
+
+
+def test_a_line_is_drawn_at_line_width_mm_on_the_models_scale(tmp_path):
+    sel = write_sel(tmp_path / "sel", _body_with_spur())
+    rec = _config_plan(sel, tmp_path / "colors", b"thin_lines: widen\n", width_mm=22.0)
+    captured = {}
+
+    def capture(*a, **kw):
+        captured["cells"] = cells = cf_color_cells(*a, **kw)
+        return cells
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(cf, "color_cells", capture)
+        flat = make_colored_flat(sel, tmp_path / "colors", tmp_path / "out", thickness_mm=3.0)
+    scale = flat["transform"]["scale_mm_per_px"]
+    assert scale > 1.5 * rec["mm_per_px"]          # the scales differ a lot here
+    (item,) = [it for it in rec["lines"]["items"] if it["drawn"]]
+    parts = shapely.union_all(list(captured["cells"].of(item["color_final"])))
+    parts = list(getattr(parts, "geoms", [parts]))
+    g = max(parts, key=lambda p: (p.bounds[2] - p.bounds[0]) / (p.bounds[3] - p.bounds[1]))
+    length = (g.length + math.sqrt(g.length ** 2 - 16 * g.area)) / 4
+    # Within one fine pixel of the model (scale / supersample).
+    assert g.area / length == pytest.approx(0.41, abs=scale / rec["smoothing"]["supersample"])
+    assert flat["lines"]["width_px"] == 0.41 / scale
+
+
+def _body_with_lined_projection() -> np.ndarray:
+    """Codex review of the fixes, 2026-11-19, finding 2: a 200 px brown body with an
+    attached 7 x 340 px projection that holds a 1 x 300 px red line, and a red square on
+    the body (so red stays a final color). Built 27 mm wide, the outline's cleanup removes
+    the projection, so the line, recorded as drawn, is not in the model."""
+    img = np.zeros((220, 560, 4), np.uint8)
+    img[10:210, 10:210] = (130, 85, 45, 255)
+    img[106:113, 210:550] = (130, 85, 45, 255)
+    img[109:110, 230:530] = (200, 30, 30, 255)
+    img[40:70, 40:70] = (200, 30, 30, 255)
+    return img
+
+
+def test_a_recorded_line_that_is_not_in_the_model_is_warned_about(tmp_path):
+    """The plan's paint test (cleaned labels, plan scale) and the model can disagree:
+    here the line is painted on the fine map but lies outside the smoothed outline, so
+    no part of it is in the final cells. The record and the CLI warn, naming the line,
+    the line is not counted as drawn, and the glue route is built."""
+    sel = write_sel(tmp_path / "sel", _body_with_lined_projection())
+    rec = _config_plan(sel, tmp_path / "colors", b"thin_lines: widen\n", width_mm=27.0)
+    [(k, item)] = [(k, it) for k, it in enumerate(rec["lines"]["items"]) if it["drawn"]]
+    flat = make_colored_flat(sel, tmp_path / "colors", tmp_path / "out", thickness_mm=3.0)
+    want = (f"1 of the plan's 1 drawn line(s) are not in the model (at 0.41 mm on the "
+            f"model's scale, after smoothing and the clipping to the outline): items[{k}] "
+            f"({item['color_hex']} in {item['host_hex']})")
+    assert want in flat["warnings"]
+    assert flat["lines"]["drawn"] == 0 and flat["glue"]["built"] is True
+    r = _cli(sel, tmp_path / "colors", tmp_path / "cli")
+    assert f"warning: {want}" in _plain(r.stderr)
 
 
 def test_a_widen_plan_with_no_drawn_line_still_builds_glue(tmp_path):

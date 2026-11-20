@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-19 (widen-lines Tasks 1–5 built and pushed; Codex review, Task 5b and Task 6 next; `roadie-mural` paused).
+**Last updated:** 2026-11-19 (widen-lines Codex review handled in three rounds; trial print of `roadie-thanksgiving` next, then Task 5b and Task 6; `roadie-mural` paused).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -234,8 +234,11 @@ has been measured with calipers, and strength is not judged.
    - Small bug: `job set select.remove_at=null` is refused for list keys. Use `[]` to
      clear them before setting `select.mask`.
 
-10. **`colors.thin_lines: widen`: Tasks 1–5 built, reviewed (spec + quality per task)
-    and pushed (to 4415fdb); next Task 7's Codex review, then Task 5b, then Task 6.**
+10. **`colors.thin_lines: widen`: Tasks 1–5 built and Task 7 (Codex review, three
+    rounds) handled; next the owner's trial print of `roadie-thanksgiving`, then Task 5b,
+    then Task 6.** Owner, 2026-11-19: "sure, let's move to the simplest option to get a
+    printable version ready asap" (run the job before Task 5b and the docs) and "proceed
+    with your recommendations through the build, check and slice face up / down".
     Plan `docs/plans/2026-11-19-widen-lines.md`; design
     `docs/plans/2026-11-19-widen-lines-design.md`; evidence
     `research/verification/2026-11-19-widen-lines/` (with two addenda: find_lines on the
@@ -248,9 +251,16 @@ has been measured with calipers, and strength is not judged.
       `tdmg.colors/5` with a `lines` block under widen; verify strict both ways;
       colored_flat draws the recorded lines, no glue then. Under remove everything is
       byte-identical; `tdmg library verify roadie-drop` identical (exit 0).
-    - **Codex review running/ran:** `research/reviews/2026-11-19-widen-lines/`
-      (`prompt.md`, `codex-review.txt` when done). Verify each finding against the code,
-      reproduce with a failing test, fix, record in that folder's README (Task 7).
+    - **Codex review done (Task 7):** `research/reviews/2026-11-19-widen-lines/README.md`
+      records every finding of the three rounds and its handling. Changes: ridge pieces
+      joined in `find_lines` with loop-closing bridges (in-mask run, never splitting the
+      mask's outside or a hole); lines drawn on the model's scale; a line is drawn only
+      if it paints a pixel, and colored_flat warns (`LINES_NOT_PAINTED`) and builds glue
+      when a line is not in the final cells; method `inside-one-color-lines/2`; new
+      hypothesis rules `color.lines.loop_path_factor`, `.run_tolerance`, `.close_reach`,
+      `.ridge_smooth`; `color.lines.width` no longer in the lines block's rules. The
+      round 3 fix (nested holes) has tests but no Codex pass yet; review it with Task 5b.
+      The slicing sweep above was made before these changes.
     - **Task 5b (owner: "to your question: yes"):** a required `F3.line_coverage` so that
       unprinted stretches of widened lines make the verdict NOT CERTIFIED; spec in the
       plan.
@@ -290,6 +300,8 @@ R1's `F2.export_matches_geometry` checks only bounds and volume (see
 | MakerLab engine/version, credits, settings, uploaded input provenance | Unknown; the owner supplied STLs, not generation metadata |
 | Intended output form | Not settled (a pending decision in earlier handoffs) |
 | Oddie shape acceptance and desired Roadie depth/form | Not settled. The extracted Roadie is a flat-backed relief; do not silently convert it to a full figurine |
+| May a `kind: hypothesis` rule's evidence be `validation: measured` when it is a software measurement (Codex widen-lines review, findings 1.7/2.5/3.2)? Today `tests/test_rules.py` requires `untested` | Not answered; repo-wide, not changed |
+| The kept outline band (`outline_width_mm`) and cleanup's opening use the plan's scale, not the model's after silhouette smoothing (Codex widen-lines 1.2; lines are fixed) | Not answered; pre-existing, left as is |
 
 ## Owner decisions, in short
 

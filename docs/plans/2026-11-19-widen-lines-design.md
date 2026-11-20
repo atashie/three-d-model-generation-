@@ -45,9 +45,11 @@ These dead ends are measured. Do not try them again for this kind of line.
 ## The design
 
 1. **Settings** (owner style choices, explicit, with defaults):
-   - `colors.thin_lines`: `remove` (the default, today's behaviour) or `widen`. With
-     `remove`, every result is byte-identical to today, so `tdmg library verify
-     roadie-drop` still reports identical.
+   - `colors.thin_lines`: `remove` (the default, today's behaviour) or `widen`. Unchanged
+     inputs (no `thin_lines` key) give byte-identical records, so `tdmg library verify
+     roadie-drop` still reports identical. An explicit `thin_lines: remove` gives the same
+     `colors_id` and settings, but its `config_sha256` records the config file given, as
+     explicit defaults always have.
    - `colors.line_width_mm`: the drawn width under `widen`. The default comes from a new
      rule color.lines.width (planned), 0.41 mm, kind `hypothesis`, evidence the owner's words
      above, validation `untested`. Refused at or below `flat.sliver.opening_width`.
@@ -85,6 +87,45 @@ These dead ends are measured. Do not try them again for this kind of line.
      untested in print.
 6. **The gate is unchanged.** The model is built and sliced as before. If a slicer drops
    a line, the slice checks show it in the verdict.
+
+**Changes after the Codex reviews** (`research/reviews/2026-11-19-widen-lines/`: the
+first review's findings 1, 2, 3, 5 and 6, and the review of those fixes,
+`codex-review-fixes.txt`, findings 1 to 4 and 6, and its third round,
+`codex-review-fixes2.txt`):
+
+- The center line's pieces are joined in `find_lines`, with the line's own pixels as a
+  mask: a spanning tree joins every piece. When the line has a hole, bridges that close a
+  loop are added too: between any two center-line points (of one piece or two), where
+  the path along the center line is more than `color.lines.loop_path_factor` (3) times
+  the bridge, the bridge's run stays inside the line grown by `color.lines.run_tolerance`
+  (0.5 px), no third piece lies in the disc on the bridge, and the bridge splits no
+  part of the line's complement, neither its outside nor a hole (it may only restore a
+  hole the line has: an opening of one loop stays open when another loop of the same
+  line is closed, and an opening into a hole stays open). Pixels within the run
+  tolerance of the line do not count, since a run may pass there. The path factor alone
+  does not tell a loop from a long U; the run and topology tests do. So a closed
+  line (a ring, also one whose center line is one or two pieces, or only 2 px wide)
+  stays closed. The search is limited to twice the tree's reach and at least
+  `color.lines.close_reach` (8 px); a longer gap stays open. The recorded ridge is the
+  joined one. On a net of lines the joined ridge can keep small extra holes at crossings
+  (5 to 19 half pixels on the test grid); the drawn width covers them.
+- The ridge smoothing before drawing is the rule `color.lines.ridge_smooth` (1.5 px).
+  The four ridge rules are hypotheses with software evidence only; all six line rules
+  are in a widen plan's identity, none in a remove plan's.
+- The line method is `inside-one-color-lines/2`; a widen plan made with `/1` is refused
+  by verify and must be made again.
+- `tdmg flat --colors` draws the lines at `line_width_mm` on the model's own scale (the
+  smoothed outline's), not the plan's mask scale; the preview keeps the plan's scale.
+- A line that could be drawn but paints no pixel (for example, the kept outline band
+  covers it) is recorded `drawn: false` with a reason. The test is made on the cleaned
+  labels at the fine map's resolution, without the smoothing blur, so the rebuild gives
+  the same record. In `tdmg flat --colors` a line counts as in the model when a pixel it
+  painted lies in the final cells of its color (after the clipping to the smoothed
+  outline); the glue decision counts those lines, and a recorded drawn line that is not
+  in the model is named in a warning (in `colored.json` and on the command line).
+- The lines block's `rules` lists the six line rules but not `color.lines.width`; the
+  width is `settings.line_width_mm`.
+- `line_width_mm` is compared with `flat.sliver.opening_width` under `widen` only.
 
 **Out of scope:** narrow necks of a larger region (the white gap between the two pupils on
 `roadie-thanksgiving` still closes at 60 mm). Widening a neck pushes a neighbouring color

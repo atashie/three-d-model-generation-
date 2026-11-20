@@ -25,7 +25,7 @@ defaults), and then:
 6. Under thin_lines widen only (docs/plans/2026-11-19-widen-lines.md, Task 5): the thin
    lines inside one other color are found on the extracted colors (lines_block,
    tdmg.color_lines.find_lines) and recorded, ridges included, in the record's lines
-   block (schema tdmg.colors/5, methods.lines and the two line rules in the identity).
+   block (schema tdmg.colors/5, methods.lines and the six line rules in the identity).
    The preview draws them on the fine map (draw_recorded_lines) and lists them in a
    legend row; labels.png stays the cleaned map without them, and tdmg flat --colors
    draws them from the record. Under remove none of this happens and the record is the
@@ -64,7 +64,6 @@ from tdmg.color import (
     printable_limits_px,
 )
 from tdmg.color_config import (
-    LINE_WIDTH_RULE,
     SMOOTH_RULE,
     ColorConfigError,
     check_base,
@@ -74,7 +73,13 @@ from tdmg.color_config import (
     resolve_color_config,
     widens,
 )
-from tdmg.color_lines import LINES_METHOD, draw_lines, find_lines
+from tdmg.color_lines import (
+    LINES_METHOD,
+    closing_params,
+    draw_lines,
+    find_lines,
+    paint_lines,
+)
 from tdmg.color_outline import SHADE_METHOD
 from tdmg.color_plan import final_color, plan_colors
 from tdmg.profiles import PrinterProfile
@@ -104,7 +109,7 @@ from tdmg.smoothing import (
 # wide_components and specks_not_drawn (the changed outline step is methods.outline);
 # tdmg.colors/4 (Task 8 review) adds the extraction fate "band". tdmg.colors/5
 # (docs/plans/2026-11-19-widen-lines.md, Task 5) adds the lines block, methods.lines and
-# the two line rules in identity.rules; only a thin_lines widen plan is written as /5, so
+# the line rules (LINES_RULES) in identity.rules; only a thin_lines widen plan is written as /5, so
 # a remove plan stays the /4 record it was before the line step existed.
 COLORS_ALGORITHM_VERSION = "colors-2"
 REMOVE_RECORD_SCHEMA = "tdmg.colors/4"     # thin_lines remove (or absent)
@@ -156,17 +161,32 @@ MERGE_HINT = ("to merge two colors, add merge: [[from, into]] to the config file
               "indices); shade pairs are only flagged, never merged for you")
 
 # --- thin_lines widen (docs/plans/2026-11-19-widen-lines.md, Task 5) ----------------------
-# The two rules find_lines takes (unit ratio). The width rule (LINE_WIDTH_RULE) only gives
-# line_width_mm's default, so it is hashed as that setting, not in identity.rules; the
-# lines block lists all three, as information.
+# The rules the line step takes, with their units: the two find_lines tests, the three
+# that close a found line's loops (tdmg.color_lines.closing_params) and the ridge
+# smoothing that draw_lines takes. The width rule (color.lines.width) only gives
+# line_width_mm's default, so it is hashed as that setting, not in identity.rules, and the
+# lines block does not list it (the width is settings.line_width_mm and the block's
+# width_mm; Codex review 2026-11-19, finding 5, as for color.outline.keep_width).
 LINES_HOST_RULE = "color.lines.host_share"
 LINES_ELONGATION_RULE = "color.lines.min_elongation"
-LINES_RULE_UNIT = "ratio"
+LINES_LOOP_RULE = "color.lines.loop_path_factor"
+LINES_TOLERANCE_RULE = "color.lines.run_tolerance"
+LINES_REACH_RULE = "color.lines.close_reach"
+LINES_SMOOTH_RULE = "color.lines.ridge_smooth"
+LINES_RULE_UNITS = {LINES_HOST_RULE: "ratio", LINES_ELONGATION_RULE: "ratio",
+                    LINES_LOOP_RULE: "ratio", LINES_TOLERANCE_RULE: "px",
+                    LINES_REACH_RULE: "px", LINES_SMOOTH_RULE: "px"}
+LINES_RULES = tuple(LINES_RULE_UNITS)
 LINES_DRAWN_AFTER = "cleanup and smoothing, on the fine map"
 LINES_NOTE = ("drawn after cleanup and smoothing, so cleanup's flat.sliver.opening_width "
               "floor does not apply to them; printing them at this width is untested")
 LINES_LEGEND = ("lines: {drawn} drawn at {width:g} mm after cleanup (thin_lines: widen)"
                 "{skipped}; untested in print")
+# Why a line that could be drawn is not: it would paint no pixel (Codex review 2026-11-19,
+# finding 3).
+LINES_PAINTS_NOTHING = ("it paints no pixel: no pixel of its host {host} is left within its "
+                        "drawn width after cleanup (covered, for example by the kept "
+                        "outline band)")
 
 
 def legend_rows(edges: str) -> list[str]:
@@ -264,8 +284,10 @@ def colors_identity(*, methods: dict, selection_id: str, cutout_pixels_sha256: s
     min_square_side, not the derived area), the edges preset's rule, if any, the outline
     rules that decided the plan (the thin share under auto, the
     wide-area ratio with a family), the two shade rules, and under thin_lines widen only
-    the two line-finding rules (color.lines.host_share and color.lines.min_elongation;
-    added with the line step, docs/plans/2026-11-19-widen-lines.md Task 5). The preview's
+    the six line rules (LINES_RULES: color.lines.host_share and min_elongation, added
+    with the line step, docs/plans/2026-11-19-widen-lines.md Task 5, and the four ridge
+    rules, loop_path_factor, run_tolerance, close_reach and ridge_smooth, added after the
+    Codex review of the fixes). The preview's
     outer outline (flat.smooth.sigma_px) is display only and not part of it. The edges
     sigma is hashed only there; `exact` has no rule and sigma 0 by definition.
     supersample: the fine map's factor. The environment is never part of it.
@@ -614,7 +636,7 @@ def build_colors(sel, width_mm: float, settings, record_settings: dict, rules: d
     limits = printable_limits_px(mm_per_px, rules, printer)
     plan = plan_colors(sel.cutout_rgb, sel.mask, settings, limits, rules)
     extracted, outline, merges = plan.extracted, plan.outline, plan.merges
-    lines_record = (lines_block(plan, settings, rules, mm_per_px, limits)
+    lines_record = (lines_block(plan, settings, rules, mm_per_px, limits, supersample)
                     if widens(settings) else None)
     cleaned, log = plan.cleaned, plan.log
     n_ext = len(extracted.hex)
@@ -692,8 +714,7 @@ def build_colors(sel, width_mm: float, settings, record_settings: dict, rules: d
     used_rules.update(dict(plan.shade_rules))
     if lines_record is not None:
         methods["lines"] = LINES_METHOD
-        used_rules.update({rid: lines_record["rules"][rid]
-                           for rid in (LINES_HOST_RULE, LINES_ELONGATION_RULE)})
+        used_rules.update({rid: lines_record["rules"][rid] for rid in LINES_RULES})
     limits_record = json_plain(dataclasses.asdict(limits))
     identity = colors_identity(
         methods=methods, selection_id=sel.record["selection_id"],
@@ -776,41 +797,52 @@ def build_colors(sel, width_mm: float, settings, record_settings: dict, rules: d
 
 
 def line_rule(rules: dict, rule_id: str) -> float:
-    """A line-finding rule's default as a float, after checking that it is in the
-    registry, in LINES_RULE_UNIT and finite. Raises ColorsError otherwise."""
+    """A line rule's default as a float, after checking that it is in the registry, in
+    its unit (LINES_RULE_UNITS) and finite. Raises ColorsError otherwise."""
     if rule_id not in rules:
         raise ColorsError(f"rule {rule_id} is not in the rules registry")
     rule = rules[rule_id]
-    if rule.unit != LINES_RULE_UNIT:
-        raise ColorsError(f"{rule_id} must be in {LINES_RULE_UNIT!r}, got {rule.unit!r}")
+    unit = LINES_RULE_UNITS[rule_id]
+    if rule.unit != unit:
+        raise ColorsError(f"{rule_id} must be in {unit!r}, got {rule.unit!r}")
     value = float(rule.default)
     if not math.isfinite(value):
         raise ColorsError(f"{rule_id} must be finite, got {value}")
     return value
 
 
-def lines_block(plan, settings, rules: dict, mm_per_px: float, limits) -> dict:
+def lines_block(plan, settings, rules: dict, mm_per_px: float, limits,
+                supersample: int) -> dict:
     """The record's lines block under thin_lines widen (docs/plans/2026-11-19-widen-
     lines.md, Task 5; design item 5).
 
     width_px = line_width_mm / mm_per_px. find_lines runs on the extracted colors with the
     outline family, the limits (island area), width_px and the two rules. Each line's color
     and host (extraction indices) get their final indices (tdmg.color_plan.final_color:
-    a merged color's is that of the color it went into). A line is drawn exactly when both
-    are set and differ; otherwise drawn is false and reason says why. items keep
-    find_lines' order (by color, then first ridge point), which is the drawing order.
-    ridge: [[row, col], ...] half pixels (tdmg.color_lines.Line). rules: the three line
-    rules' values, as information (only host_share and min_elongation are in
-    identity.rules; the width is hashed as the setting line_width_mm).
+    a merged color's is that of the color it went into). A line can be drawn when both
+    are set and differ; otherwise drawn is false and reason says why. A line that can be
+    drawn is drawn only if it paints at least one pixel (Codex review 2026-11-19, finding
+    3): tdmg.color_lines.paint_lines draws those lines, in order, at width_px on the
+    cleaned labels split into supersample x supersample fine pixels with no smoothing (so
+    the record does not depend on the smoothing blur, which UNRENDERED_FIELDS leave out
+    for not being shown bit-identical across machines); a line that changes no pixel there
+    (every host pixel under it is gone, for example covered by the kept outline band) has
+    drawn false and reason LINES_PAINTS_NOTHING. items keep find_lines' order (by color,
+    then first ridge point), which is the drawing order. ridge: [[row, col], ...] half
+    pixels (tdmg.color_lines.Line). rules: the LINES_RULES' values (all in
+    identity.rules); the width is the setting line_width_mm (width_mm here), not the
+    width rule's default. Drawing reads its smoothing from rules (draw_recorded_lines).
     """
-    host_share = line_rule(rules, LINES_HOST_RULE)
-    min_elongation = line_rule(rules, LINES_ELONGATION_RULE)
-    if LINE_WIDTH_RULE not in rules:
-        raise ColorsError(f"rule {LINE_WIDTH_RULE} is not in the rules registry")
+    values = {rid: line_rule(rules, rid) for rid in LINES_RULES}
+    try:
+        closing = closing_params(values[LINES_LOOP_RULE], values[LINES_TOLERANCE_RULE],
+                                 values[LINES_REACH_RULE])
+    except ColorError as e:
+        raise ColorsError(f"the line rules: {e}") from None
     width_mm = settings["line_width_mm"]
     width_px = width_mm / mm_per_px
-    found = find_lines(plan.extracted, plan.outline.family, limits, width_px, host_share,
-                       min_elongation)
+    found = find_lines(plan.extracted, plan.outline.family, limits, width_px,
+                       values[LINES_HOST_RULE], values[LINES_ELONGATION_RULE], closing)
     hexes = plan.extracted.hex
     items = []
     for ln in found:
@@ -827,9 +859,25 @@ def lines_block(plan, settings, rules: dict, mm_per_px: float, limits) -> dict:
                       "area_px": ln.area_px, "width_px": ln.width_px,
                       "length_px": ln.length_px, "drawn": reason is None, "reason": reason,
                       "ridge": [[r, c] for r, c in ln.ridge]})
+    eligible = [it for it in items if it["drawn"]]
+    if eligible:
+        s = check_supersample(supersample)
+        # int16 holds every final index and OUTSIDE (-1): the palette is below
+        # LABELS_OUTSIDE (255), which build_colors checks before writing labels.png.
+        labels = np.asarray(plan.cleaned.labels)
+        if len(plan.cleaned.hex) >= 2 ** 15:
+            raise ColorsError(f"{len(plan.cleaned.hex)} colors do not fit the line test")
+        cleaned = labels.astype(np.int16)
+        unsmoothed = np.repeat(np.repeat(cleaned, s, axis=0), s, axis=1)
+        _, painted = paint_lines(unsmoothed, s, [(it["color_final"], it["host_final"],
+                                                  it["ridge"]) for it in eligible], width_px,
+                                 smooth_px=values[LINES_SMOOTH_RULE])
+        for it, n in zip(eligible, painted, strict=True):
+            if not n:
+                it["drawn"] = False
+                it["reason"] = LINES_PAINTS_NOTHING.format(host=it["host_hex"])
     return {"method": LINES_METHOD, "width_mm": width_mm, "width_px": width_px,
-            "rules": {LINE_WIDTH_RULE: float(rules[LINE_WIDTH_RULE].default),
-                      LINES_HOST_RULE: host_share, LINES_ELONGATION_RULE: min_elongation},
+            "rules": values,
             "drawn_after": LINES_DRAWN_AFTER, "notes": [LINES_NOTE], "items": items}
 
 
@@ -854,8 +902,12 @@ def drawn_lines(block: dict) -> list[tuple[int, int, list]]:
 
 def draw_recorded_lines(fine: np.ndarray, supersample: int, block: dict) -> np.ndarray:
     """fine with a lines block's drawn items drawn at its width_px (draw_lines), in
-    record order. The preview and tdmg flat --colors both draw them so."""
-    return draw_lines(fine, supersample, drawn_lines(block), block["width_px"])
+    record order: line_width_mm on the plan's scale (mm_per_px), as the preview draws
+    them. tdmg flat --colors draws the same items at line_width_mm on the model's own
+    scale instead (tdmg.colored_flat), since the model's scale is the smoothed outline's,
+    which can differ from the plan's (Codex review 2026-11-19, finding 2)."""
+    return draw_lines(fine, supersample, drawn_lines(block), block["width_px"],
+                      smooth_px=block["rules"][LINES_SMOOTH_RULE])
 
 
 def lines_legend(block: dict) -> str:

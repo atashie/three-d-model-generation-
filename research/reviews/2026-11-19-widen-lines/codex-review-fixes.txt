@@ -1,0 +1,77 @@
+1. **High — A genuine opening is closed when another loop exists in the same component.**  
+   [src/tdmg/color_lines.py:489](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_lines.py:489), [line 550](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_lines.py:550)
+
+   `_has_hole` authorizes closing across the entire candidate. Dilation can then erase an unrelated opening, allowing a bridge that creates a new hole.
+
+   **Reproduced through detection, cleanup, smoothing and redraw:** a 100×100 brown image containing one-pixel red rectangle outlines:
+   - Upper rectangle: rows 15–45, columns 20–60, with pixel `(15,40)` removed.
+   - Lower rectangle: rows 65–85, columns 20–60, closed.
+   - Connect them along column 20; add a separate red square to retain red in the final palette.
+
+   At 41 mm width, `line_width_mm: 0.41`, `outline_color: none`, the record contains one drawn line. The new closing step closes **both** rectangles. Disabling only `_closing` leaves the upper rectangle open and the lower one closed. This is not an inevitable consequence of widening: the requested width is one image pixel.
+
+   **Change:** require each closing bridge to restore a hole present in the original mask, while preserving the original exterior’s connectivity. A global “some hole exists” condition is insufficient. Add this connected open-and-closed fixture.
+
+2. **Medium — A line can disappear from the final geometry without the new warning.**  
+   [src/tdmg/colored_flat.py:529](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/colored_flat.py:529)
+
+   `painted`, `n_lines`, and the glue decision are calculated **before** `color_regions` clips the drawing to the cleaned silhouette.
+
+   **Reproduced in memory:** a 200×200 px brown body with an attached 7×340 px projection, containing a 1×300 px red line; a separate red square remains on the body. At 27 mm overall width:
+   - `colors.json` records the line as drawn.
+   - Model drawing changes **41,400 fine pixels**.
+   - Their area before clipping is **6.483114 mm²**; after clipping it is **0 mm²**.
+   - `color_regions.warnings` is empty because the separate red square survives.
+
+   The current code consequently counts an absent line and suppresses glue without emitting `LINES_NOT_PAINTED`.
+
+   **Change:** track each line’s surviving footprint through clipping and final cells. Derive line warnings and the glue decision from that result. The mocked zero-paint test does not exercise this failure.
+
+3. **Medium — Different line algorithms still produce the same plan identity.**  
+   [src/tdmg/color_lines.py:99](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_lines.py:99)
+
+   `LINES_METHOD` remains `inside-one-color-lines/1`, although ridge construction, drawing eligibility and the recorded rules block have changed.
+
+   **Reproduced:** building the varying-width ring with HEAD and the working tree gives identical `colors_id` values, but the recorded ridge changes from **282 to 375 points**, and `regions.png` bytes differ. Thus the same identity names materially different reviewed plans. Exact rebuilding rejects differences; it does not resolve the identity collision.
+
+   **Change:** bump the widen-specific method version and explicitly reject or support earlier widen records. Keep remove-mode identities unchanged.
+
+4. **Medium — The new topology thresholds bypass CLAUDE.md rule 2.**  
+   [src/tdmg/color_lines.py:113](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_lines.py:113)
+
+   `LOOP_PATH_FACTOR`, `RUN_TOLERANCE_HALF_PX`, and `CLOSE_MIN_REACH` determine which connections exist. They are acceptance thresholds and a search limit, regardless of being called “geometry constants.” Rule 2 does not exempt thresholds that are unrelated to printing.
+
+   The comments provide reasoning, but not registry evidence with validation status. The semicircle argument also does not establish the claimed bound for arbitrary bends: a long U-shaped path can have an arbitrarily large path-to-chord ratio.
+
+   **Change:** register these values with evidence and their actual limitations, include effective values in the widen identity, and classify the assumptions honestly. Memory-only chunk sizes can remain implementation constants.
+
+5. **Low — Previous finding 7 remains an evidence-classification inconsistency.**  
+   [rules/color.yaml:144](C:/Users/arikt/documents/github/three-d-model-generation-/rules/color.yaml:144), [tests/test_rules.py:23](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_rules.py:23)
+
+   The cited README explicitly calls these software results **measured**. The registry calls the same evidence **untested**, and the test prohibits the distinction required by CLAUDE.md rule 3.
+
+   I accept that this convention predates the patch; I do **not** accept it as evidence that the classification is correct. It can be deferred as a repository-wide correction, but remains unresolved.
+
+   **Change:** retain `kind: hypothesis`; classify executed software evidence as `measured`, while keeping print-performance claims untested. Update the blanket test accordingly.
+
+6. **Low — The documentation still promises broader byte identity than the implementation provides.**  
+   [docs/plans/2026-11-19-widen-lines-design.md:49](C:/Users/arikt/documents/github/three-d-model-generation-/docs/plans/2026-11-19-widen-lines-design.md:49), [tests/test_colors.py:1926](C:/Users/arikt/documents/github/three-d-model-generation-/tests/test_colors.py:1926)
+
+   I accept the implementation rationale for previous finding 4: retaining the raw config hash preserves provenance, and explicit defaults already affected records. But “every result is byte-identical” still overstates that contract. Adding an explicit remove config changes `config_sha256`; the test removes that field before comparison and therefore cannot establish complete byte identity.
+
+   **Change:** document unchanged-input compatibility separately from explicit-config semantic equivalence. Keep a complete-byte regression for unchanged inputs.
+
+**Checks run:** no files modified.
+
+- `python -B -m pytest tests/test_color_lines.py tests/test_rules.py --noconftest -s -p no:cacheprovider -q`: **212 passed**.
+- Selected config tests: **4 passed**; one additional test was blocked during temporary-directory setup by the read-only sandbox.
+- In-memory comparisons against HEAD: absent and explicit-remove flags produced identical record serialization and identical PNG bytes on the ring fixture.
+- Rebuild checks rejected both a moved ridge coordinate and a one-ULP line-width alteration.
+- Sixty randomized **ordered bridge-list** comparisons matched the whole-graph reference. Additional ring, polygon-loop, C-shape and grid sweeps found no lost-loop counterexample; the connected open-and-closed fixture above exposed a spurious closure.
+- No cross-platform execution, slicers, 3MF export, or `library verify roadie-drop` run. I found no new platform-dependent decision in the incremental path logic, but did not establish cross-platform parity.
+
+The three most important changes are:
+
+1. Preserve source topology per closing bridge, including openings connected to other loops.
+2. Determine line survival after final geometry clipping.
+3. Version the changed line method so different plans receive different identities.

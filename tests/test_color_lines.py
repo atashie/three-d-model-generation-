@@ -1,6 +1,7 @@
 """tdmg.color_lines.find_lines and draw_lines: thin lines inside one other color
 (docs/plans/2026-11-19-widen-lines.md, Tasks 3-4). Synthetic images built here."""
 
+import dataclasses
 import math
 
 import numpy as np
@@ -8,14 +9,13 @@ import pytest
 from scipy import ndimage
 from scipy.spatial import cKDTree
 
+from tdmg import color_lines
 from tdmg.color import OUTSIDE, ColorError, Limits, from_labels, printable_limits_px
 from tdmg.color_lines import (
-    RIDGE_SMOOTH_PX,
+    Closing,
     Line,
-    _bridged,
     _segment,
-    draw_lines,
-    find_lines,
+    closing_params,
 )
 from tdmg.color_outline import stroke_ridge
 from tdmg.profiles import load_printer
@@ -27,6 +27,27 @@ RULES = load_rules()
 LIMITS = printable_limits_px(0.1, RULES, load_printer("bambu-a1"))
 HOST_SHARE = RULES["color.lines.host_share"].default
 MIN_ELONGATION = RULES["color.lines.min_elongation"].default
+# The ridge rules (rules/color.yaml): smoothing for draw_lines, and the loop closing.
+RIDGE_SMOOTH_PX = RULES["color.lines.ridge_smooth"].default
+CLOSING = closing_params(RULES["color.lines.loop_path_factor"].default,
+                         RULES["color.lines.run_tolerance"].default,
+                         RULES["color.lines.close_reach"].default)
+
+
+def find_lines(q, family, limits, width_px, host_share, min_elongation, closing=CLOSING):
+    """tdmg.color_lines.find_lines with the registry's closing rules."""
+    return color_lines.find_lines(q, family, limits, width_px, host_share, min_elongation,
+                                  closing)
+
+
+def draw_lines(fine, supersample, lines, width_px, smooth_px=RIDGE_SMOOTH_PX):
+    """tdmg.color_lines.draw_lines with the registry's ridge smoothing."""
+    return color_lines.draw_lines(fine, supersample, lines, width_px, smooth_px=smooth_px)
+
+
+def _bridged(pts, inside=None, closing=CLOSING):
+    """tdmg.color_lines._bridged with the registry's closing rules (when given a mask)."""
+    return color_lines._bridged(pts, inside, None if inside is None else closing)
 
 # Palette rows (the order given to from_labels; q.remap maps them to q's indices).
 # In CIELAB, DARK is nearest RED and BLACK nearest BROWN (checked in test_palette_nearest).
@@ -103,7 +124,8 @@ def test_curved_line_with_family_fringe():
     ang = np.mod(np.arctan2(c[:, 0] - ARC_C[0], c[:, 1] - ARC_C[1]), 2 * math.pi)
     cap = 4.0 / ARC_R                                    # 4 px of arc at each end
     mid = (ang >= ARC_FROM + cap) & (ang <= ARC_TO - cap)
-    assert mid.sum() > 0.9 * len(c)
+    # 0.85: the ridge holds its bridges too (_bridged), 38 of 318 points in the caps.
+    assert mid.sum() > 0.85 * len(c)
     assert np.abs(d[mid]).max() <= 1.0
     # At the caps the ridge runs to the corners, still inside the 6 px line's pixels.
     assert np.abs(d).max() <= 3.5
@@ -394,9 +416,11 @@ def reference_find_lines(q, family, limits, width_px, host_share, min_elongation
                 length = area / max(w, 1.0)
                 if length / max(w, 1.0) < min_elongation:
                     continue
-                ry, rx = np.nonzero(stroke_ridge(np.repeat(np.repeat(part, 2, 0), 2, 1)))
+                halves = np.repeat(np.repeat(part, 2, 0), 2, 1)
+                ry, rx = np.nonzero(stroke_ridge(halves))
+                joined = _bridged(np.stack([ry, rx], axis=1), halves)
                 out.append(Line(c, host, area, w, length,
-                                tuple(sorted(zip(ry.tolist(), rx.tolist())))))
+                                tuple(sorted(map(tuple, joined.tolist())))))
     out.sort(key=lambda ln: (ln.color, ln.ridge[0]))
     return tuple(out)
 
@@ -480,15 +504,19 @@ def straight_ridge(row0=100, col0=40, col1=360, rows=2):
     return tuple((r, c) for r in range(row0, row0 + rows) for c in range(col0, col1))
 
 
-def ring_ridge(centre, radius, a0, a1, n_px, width=4.0):
-    """find_lines' kind of ridge (stroke_ridge at half-pixel resolution) of an arc `width`
-    px wide, angles a0..a1 (radians, atan2 of (y, x), y down), centre in cell coordinates."""
+def ring_ridge(centre, radius, a0, a1, n_px, width=4.0, joined=False):
+    """find_lines' kind of stroke ridge (stroke_ridge at half-pixel resolution) of an arc
+    `width` px wide, angles a0..a1 (radians, atan2 of (y, x), y down), centre in cell
+    coordinates; joined: with its pieces joined as find_lines joins them (_bridged with
+    the arc's half pixels as the mask)."""
     r, c = np.mgrid[0:2 * n_px, 0:2 * n_px]
     y, x = (r + 0.5) / 2, (c + 0.5) / 2
     d = np.hypot(y - centre[0], x - centre[1]) - radius
     ang = np.mod(np.arctan2(y - centre[0], x - centre[1]), 2 * math.pi)
     mask = (np.abs(d) <= width / 2) & (ang >= a0) & (ang <= a1)
     ry, rx = np.nonzero(stroke_ridge(mask))
+    if joined:
+        return tuple(map(tuple, _bridged(np.stack([ry, rx], axis=1), mask).tolist()))
     return tuple(zip(ry.tolist(), rx.tolist()))
 
 
@@ -683,14 +711,16 @@ def test_draw_joins_every_piece_of_a_ridge():
     far = tuple(p for p in ridge if not 190 <= p[1] < 211)
     assert ndimage.label(draw_lines(fine, S, [(INK, HOST, far)], DRAW_W) == INK,
                          structure=eight)[1] == 1
-    # The arc fixture's ridge (find_lines) is in pieces; bridged, it is one.
-    (line,) = run(quantized(arc_image()), family_rows=(DARK,))
-    pieces = np.zeros((400, 400), bool)
-    pieces[tuple(np.array(line.ridge).T)] = True
-    assert ndimage.label(pieces, structure=eight)[1] > 1
-    bridged = np.zeros((400, 400), bool)
-    bridged[tuple(_bridged(np.array(line.ridge)).T)] = True
-    assert ndimage.label(bridged, structure=eight)[1] == 1
+    # The arc fixture's stroke ridge is in pieces; find_lines' ridge (joined) is one.
+    rows = arc_image()
+    part = (rows == RED) | (rows == DARK)                # the candidate: the view's red
+    raw = stroke_ridge(np.repeat(np.repeat(part, 2, 0), 2, 1))
+    assert ndimage.label(raw, structure=eight)[1] > 1
+    (line,) = run(quantized(rows), family_rows=(DARK,))
+    joined = np.zeros((400, 400), bool)
+    joined[tuple(np.array(line.ridge).T)] = True
+    assert ndimage.label(joined, structure=eight)[1] == 1
+    assert (raw & ~joined).sum() == 0                    # the stroke ridge is all kept
     # Drawn much narrower than its gaps (2 px), the arc is still one piece.
     arc_fine = np.full((200 * S, 200 * S), HOST, np.uint8)
     thin = draw_lines(arc_fine, S, [(INK, HOST, line.ridge)], 2.0)
@@ -715,21 +745,326 @@ def test_bridged_tie_break_deterministic():
     assert np.array_equal(a, np.unique(np.concatenate([pts, [(0, 1), (0, 2)]]), axis=0))
 
 
-def test_bridged_closes_a_square_loop():
-    """Four pieces at a square's corners: the tree takes three equal bridges, and the
-    fourth, no longer than the tree's longest, closes the loop."""
-    pts = np.array([(0, 0), (0, 4), (4, 0), (4, 4)])
-    want = [_segment(pts[a], pts[b]) for a, b in ((0, 1), (0, 2), (1, 3), (2, 3))]
-    assert np.array_equal(_bridged(pts), np.unique(np.concatenate(want), axis=0))
+FOUR = ndimage.generate_binary_structure(2, 1)
+EIGHT = ndimage.generate_binary_structure(2, 2)
+
+
+def closed_map(pts, shape):
+    """The ridge as a bool map."""
+    m = np.zeros(shape, bool)
+    m[tuple(np.asarray(pts).T)] = True
+    return m
+
+
+def circle_ridge(r=40, n=100, gaps=()):
+    """A one half pixel thick ridge on a circle of radius r half pixels about (n/2, n/2),
+    without the points in the gaps (angle ranges in degrees), and its mask: the band
+    within 3 half pixels of the circle (a ring with a hole)."""
+    c = n / 2
+    t = np.radians(np.arange(0, 360, 0.25))
+    ang = np.degrees(t)
+    keep = np.ones(len(t), bool)
+    for a0, a1 in gaps:
+        keep &= ~((ang >= a0) & (ang <= a1))
+    pts = np.unique(np.rint(np.stack([c + r * np.sin(t[keep]), c + r * np.cos(t[keep])],
+                                     axis=1)).astype(np.int64), axis=0)
+    yy, xx = np.mgrid[0:n, 0:n]
+    mask = np.abs(np.hypot(yy - c, xx - c) - r) <= 3
+    return pts, mask
+
+
+def closed(ridge, shape) -> bool:
+    """Whether the ridge parts the map: the centre from the corner (4-connected)."""
+    m = np.zeros(shape, bool)
+    m[tuple(np.asarray(ridge).T)] = True
+    parts = ndimage.label(~m, structure=FOUR)[0]
+    return parts[shape[0] // 2, shape[1] // 2] != parts[0, 0]
+
+
+@pytest.mark.parametrize("gaps", [((80, 90),), ((-1, 5), (175, 185))],
+                         ids=["one gap, one piece", "two gaps, two pieces"])
+def test_bridged_closes_a_ring_in_one_or_two_pieces(gaps):
+    """Spec review of the Codex fixes: a ring whose ridge is one piece (a C) or two pieces
+    has a gap the spanning tree never bridges; the closing bridges close it."""
+    pts, mask = circle_ridge(gaps=gaps)
+    n_pieces = ndimage.label(closed_map(pts, mask.shape), structure=EIGHT)[1]
+    assert n_pieces == len(gaps)
+    assert not closed(_bridged(pts), mask.shape)           # the tree alone
+    assert closed(_bridged(pts, mask), mask.shape)
+
+
+def test_bridged_does_not_close_a_u_whose_ends_the_line_does_not_join():
+    """A U whose two tips are 16 half pixels apart across the host, in a line that also
+    has a closed loop (so the mask has a hole and the closing step runs): the tips are
+    far apart along the ridge, but the run between them leaves the line, so no bridge."""
+    n = 200
+    mask = np.zeros((n, n), bool)
+    mask[40:151, 60:65] = mask[40:151, 76:81] = True          # the arms
+    mask[146:151, 60:91] = True                               # the bottom, on to the loop
+    mask[150:171, 90:111] = True
+    mask[155:166, 95:106] = False                             # the loop's hole
+    ridge = set()
+    ridge |= {(r, 62) for r in range(42, 149)} | {(r, 78) for r in range(42, 149)}
+    ridge |= {(148, c) for c in range(62, 93)}
+    ridge |= ({(r, 92) for r in range(148, 169)} | {(r, 108) for r in range(152, 169)}
+              | {(152, c) for c in range(92, 109)} | {(168, c) for c in range(92, 109)})
+    pts = np.array(sorted(ridge), np.int64)
+    assert np.array_equal(_bridged(pts, mask), pts)          # one piece, nothing added
+
+
+def test_bridged_does_not_close_a_straight_line():
+    """A straight ridge in two pieces, in a line whose mask also has a hole away from it
+    (so the closing step runs): the tree joins the pieces, and nothing else is added."""
+    pts = np.array(straight_ridge(row0=10, col0=10, col1=100))
+    pts = pts[(pts[:, 1] < 50) | (pts[:, 1] > 53)]
+    mask = np.zeros((30, 130), bool)
+    mask[7:15, 8:102] = True
+    mask[18:28, 110:120] = True
+    mask[21:25, 113:117] = False                              # the hole
+    assert np.array_equal(_bridged(pts, mask), _bridged(pts))
+    assert ndimage.label(closed_map(_bridged(pts), mask.shape), structure=EIGHT)[1] == 1
+
+
+def test_a_closing_bridge_past_a_third_piece_is_refused(monkeypatch):
+    """_clear: a ring in one piece with a gap, and a third piece (one point) inside the
+    gap, off the line toward the hole, which the tree joins to the ring. Every bridge
+    across the gap has that point in the disc on it as diameter, and the runs to the point
+    leave the (narrow) line, so the gap stays open; with _clear patched to pass, the long
+    path makes the bridge a loop closer and it is added."""
+    pts, _ = circle_ridge(gaps=((80, 90),))
+    yy, xx = np.mgrid[0:100, 0:100]
+    mask = np.abs(np.hypot(yy - 50, xx - 50) - 40) <= 1
+    pts = np.unique(np.concatenate([pts, [(87, 53)]]), axis=0)
+    assert not closed(_bridged(pts, mask), mask.shape)
+    monkeypatch.setattr(color_lines, "_clear", lambda *args: True)
+    assert closed(_bridged(pts, mask), mask.shape)
+
+
+@pytest.mark.parametrize("radius", [20, 8])
+@pytest.mark.parametrize("width_px", [1.5, 2.05])
+def test_a_thin_ring_found_and_drawn_stays_closed(radius, width_px):
+    """Spec review of the Codex fixes: a 2 px ring (half width 1 px) at width_px 1.5 and
+    2.05 (0.41 mm at 0.2 mm/px). Two of its closing runs cut a corner of the line's
+    staircase edge by a half pixel; with color.lines.run_tolerance they are taken."""
+    n = 80
+    yy, xx = np.mgrid[0:n, 0:n].astype(float)
+    rows = np.full((n, n), BROWN, np.int64)
+    rows[np.abs(np.hypot(yy - 40, xx - 40) - radius) < 1.0] = RED
+    q = quantized(rows)
+    (line,) = run(q, width_px=width_px, limits=dataclasses.replace(LIMITS, min_area_px=8))
+    assert closed(line.ridge, (2 * n, 2 * n))
+    fine = np.full((n * S, n * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, line.ridge)], width_px)
+    parts = ndimage.label(out != INK, structure=FOUR)[0]
+    assert parts[40 * S, 40 * S] != parts[0, 0]
+
+
+def wavy_grid(n: int, spacing: int = 20) -> np.ndarray:
+    """A net of wavy red lines 1.5 to 2.5 px wide, spacing px apart, on brown: one found
+    line with many holes (the spec review's timing fixture)."""
+    yy, xx = np.mgrid[0:n, 0:n].astype(float)
+    w = 1.0 + 0.5 * np.cos(xx / 7 + yy / 5)
+    on = ((np.abs(((yy + 3 * np.sin(xx / 15)) % spacing) - spacing / 2) < w)
+          | (np.abs(((xx + 3 * np.sin(yy / 15)) % spacing) - spacing / 2) < w))
+    rows = np.full((n, n), BROWN, np.int64)
+    rows[on] = RED
+    return rows
+
+
+def _closing_whole_graph(pts, comp, inside, tree_bridges, reach, closing):
+    """_closing written plainly: every candidate's path measured on the whole graph, with
+    every bridge found so far, and the same run, disc and topology tests."""
+    from scipy.sparse.csgraph import dijkstra
+
+    if not color_lines._has_hole(inside):
+        return []
+    loose = inside
+    for _ in range(closing.run_tolerance):
+        loose = ndimage.binary_dilation(loose, structure=EIGHT)
+    pairs = cKDTree(pts.astype(float)).query_pairs(reach + 0.5, output_type="ndarray")
+    if not len(pairs):
+        return []
+    i, j = pairs.min(axis=1), pairs.max(axis=1)
+    d2 = ((pts[i] - pts[j]) ** 2).sum(axis=1)
+    steps = np.abs(pts[i] - pts[j]).max(axis=1)
+    keep = (d2 <= reach * reach) & (steps > 1)
+    order = np.lexsort((j[keep], i[keep], d2[keep]))
+    i, j, steps = i[keep][order], j[keep][order], steps[keep][order]
+    kd = cKDTree(pts.astype(float))
+    found = []
+    graph = color_lines._ridge_graph(pts, list(tree_bridges))
+    topology = color_lines._Topology(inside, loose, pts,
+                                     [_segment(pts[a], pts[b]) for a, b in tree_bridges])
+    for a, b, m in zip(i.tolist(), j.tolist(), steps.tolist()):
+        bound = closing.loop_path_factor * m
+        if not dijkstra(graph, directed=False, indices=a, limit=bound)[b] > bound:
+            continue
+        seg = _segment(pts[a], pts[b])
+        if (not loose[seg[:, 0], seg[:, 1]].all()
+                or not color_lines._clear(pts, comp, a, b, kd) or not topology.try_add(seg)):
+            continue
+        found.append((a, b))
+        graph = color_lines._ridge_graph(pts, list(tree_bridges) + found)
+    return found
+
+
+def _stroke(rows):
+    """The view's red candidate of a fixture as find_lines takes it: its half pixels and
+    their stroke ridge."""
+    halves = np.repeat(np.repeat(rows == RED, 2, 0), 2, 1)
+    ry, rx = np.nonzero(stroke_ridge(halves))
+    return np.stack([ry, rx], axis=1).astype(np.int64), halves
+
+
+def _ring_rows(n=80, radius=20.0, half=1.0, amp=0.0):
+    yy, xx = np.mgrid[0:n, 0:n].astype(float)
+    d = np.hypot(yy - n / 2, xx - n / 2) - radius
+    rows = np.full((n, n), BROWN, np.int64)
+    rows[np.abs(d) < half + amp * np.cos(np.arctan2(yy - n / 2, xx - n / 2) + 0.17)] = RED
+    return rows
+
+
+@pytest.mark.parametrize("fixture", [
+    lambda: _stroke(wavy_grid(60)),
+    lambda: _stroke(wavy_grid(100)),
+    lambda: _stroke(_ring_rows()),
+    lambda: _stroke(_ring_rows(radius=8.0)),
+    lambda: _stroke(_ring_rows(n=120, radius=25.0, half=1.5, amp=0.5)),
+    lambda: circle_ridge(gaps=((80, 90),)),
+    lambda: circle_ridge(gaps=((-1, 5), (175, 185))),
+    lambda: _stroke(wavy_grid(70, 10)),
+], ids=["grid 60", "grid 100", "ring 20", "ring 8", "varying ring", "one gap", "two gaps",
+        "dense grid"])
+def test_closing_equals_the_whole_graph_form(fixture, monkeypatch):
+    """_closing measures a path again only near a bridge found since, on a cropped graph;
+    the result (the same bridges, in the same order) is the plain whole-graph form's."""
+    pts, mask = fixture()
+    fast = _bridged(pts, mask)
+    monkeypatch.setattr(color_lines, "_closing", _closing_whole_graph)
+    assert np.array_equal(fast, _bridged(pts, mask))
+
+
+def test_grid_timing():
+    """A coarse guard: a 200 x 200 px wavy grid of lines (one found line, many holes) took
+    over 6 minutes when every candidate rebuilt the whole graph, and takes about 1 s now
+    on the Windows PC (2026-11-19). Wall clock as test_comb_timing: the limit, 10 times
+    that, is generous for slower runners and still fails on the old behaviour."""
+    import time
+
+    q = quantized(wavy_grid(200))
+    t0 = time.perf_counter()
+    lines = run(q, width_px=2.05)
+    elapsed = time.perf_counter() - t0
+    assert len(lines) == 1
+    assert elapsed < 10.0
+
+
+def test_an_open_loop_beside_a_closed_one_stays_open():
+    """Codex review of the fixes, 2026-11-19, finding 1: two 1 px red rectangle outlines
+    joined along a side, the upper one open (one pixel missing), the lower one closed, in
+    one found line (41 mm wide: 0.41 mm/px, drawn at 1 px). The lower one has a hole, so
+    loops are closed; the upper one's opening must stay open (its inside is the line's
+    exterior), the lower one closed."""
+    rows = np.full((100, 100), BROWN, np.int64)
+    for r0, r1 in ((15, 45), (65, 85)):
+        rows[[r0, r1], 20:61] = RED
+        rows[r0:r1 + 1, [20, 60]] = RED
+    rows[15, 40] = BROWN                                     # the opening
+    rows[45:66, 20] = RED                                    # the join
+    (line,) = run(quantized(rows), width_px=1.0,
+                  limits=dataclasses.replace(LIMITS, min_area_px=8))
+    out = draw_lines(np.full((100 * S, 100 * S), HOST, np.uint8), S,
+                     [(INK, HOST, line.ridge)], 1.0)
+    parts = ndimage.label(out != INK, structure=FOUR)[0]
+    assert parts[30 * S, 40 * S] == parts[0, 0]              # upper: open to the outside
+    assert parts[75 * S, 40 * S] != parts[0, 0]              # lower: closed
+
+
+def _nested_rectangles(inner_open: bool) -> np.ndarray:
+    """Codex review of the fixes (round 3), 2026-11-19: 1 px red rectangle outlines, the
+    outer rows 10-90 x cols 10-90, the inner rows 30-70 x cols 30-70 (with (30, 50)
+    missing when inner_open), joined along row 50, cols 10-30, on brown (45.1 mm wide:
+    0.41 mm/px, drawn at 1 px)."""
+    rows = np.full((110, 110), BROWN, np.int64)
+    for a, b in ((10, 90), (30, 70)):
+        rows[[a, b], a:b + 1] = RED
+        rows[a:b + 1, [a, b]] = RED
+    if inner_open:
+        rows[30, 50] = BROWN
+    rows[50, 10:31] = RED
+    return rows
+
+
+@pytest.mark.parametrize("inner_open", [True, False], ids=["inner open", "both closed"])
+def test_a_bridge_never_splits_a_hole(inner_open):
+    """The inner rectangle's opening leads into the outer one's hole: closing it would
+    split that hole in two, so it stays open; the outer rectangle stays closed. With both
+    closed, both stay closed."""
+    (line,) = run(quantized(_nested_rectangles(inner_open)), width_px=1.0,
+                  limits=dataclasses.replace(LIMITS, min_area_px=8))
+    out = draw_lines(np.full((110 * S, 110 * S), HOST, np.uint8), S,
+                     [(INK, HOST, line.ridge)], 1.0)
+    parts = ndimage.label(out != INK, structure=FOUR)[0]
+    inner, ring, outside = parts[50 * S, 50 * S], parts[20 * S, 50 * S], parts[0, 0]
+    assert ring != outside                                   # the outer one is closed
+    assert bool(inner == ring) is inner_open                 # the inner one as drawn
+
+
+@pytest.mark.parametrize("args, match", [
+    ((0, 0.5, 8), "loop_path_factor"),
+    ((float("nan"), 0.5, 8), "loop_path_factor"),
+    ((3, 0.3, 8), "run_tolerance"),
+    ((3, -0.5, 8), "run_tolerance"),
+    ((3, True, 8), "run_tolerance"),
+    ((3, 0.5, 0), "close_reach"),
+    ((3, 0.5, 8.25), "close_reach"),
+])
+def test_closing_params_refuses_bad_values(args, match):
+    with pytest.raises(ColorError, match=match):
+        closing_params(*args)
+
+
+def test_closing_params_from_the_rules():
+    assert CLOSING == Closing(loop_path_factor=3.0, run_tolerance=1, min_reach=16)
+    with pytest.raises(ColorError, match="closing"):
+        color_lines.find_lines(quantized(arc_image()), (), LIMITS, 4.0, 0.9, 3.0, None)
+
+
+def test_a_closing_run_may_cut_a_corner_by_one_half_pixel(monkeypatch):
+    """A one half pixel thin diamond loop (8-connected), its ridge the loop less the cells
+    at one corner: every straight run across the gap passes inside the corner, one half
+    pixel off the line. color.lines.run_tolerance (0.5 px, one half pixel) takes it; with
+    0 the loop stays open."""
+    n, c0, r = 80, 40, 30
+    yy, xx = np.mgrid[0:n, 0:n]
+    mask = np.abs(yy - c0) + np.abs(xx - c0) == r
+    pts = np.argwhere(mask & (xx - c0 <= r - 2)).astype(np.int64)
+    assert ndimage.label(closed_map(pts, mask.shape), structure=EIGHT)[1] == 1
+    assert closed(_bridged(pts, mask), mask.shape)
+    assert CLOSING.run_tolerance == 1
+    strict = dataclasses.replace(CLOSING, run_tolerance=0)
+    assert not closed(_bridged(pts, mask, strict), mask.shape)
+
+
+def test_bridged_adds_no_chord_past_a_piece_between():
+    """Three pieces along a bend, inside a mask with a hole (so the closing step runs):
+    the bridge from the first to the third is not added: the path along the ridge is no
+    longer than color.lines.loop_path_factor times it, and the middle piece lies in the
+    disc on it."""
+    pts = np.array([(0, 0), (2, 4), (0, 8)])
+    want = [_segment(pts[0], pts[1]), _segment(pts[1], pts[2])]
+    inside = np.ones((5, 11), bool)
+    inside[3, 8] = False                                      # a hole
+    assert np.array_equal(_bridged(pts, inside), np.unique(np.concatenate(want), axis=0))
 
 
 def test_draw_full_ring_is_closed():
-    """A full ring's ridge (80 pieces): a spanning tree alone leaves one gap; the loop's
-    closing bridge is added, so the drawn ring is closed (the rest of the map is two
-    pieces, inside and outside), at the drawn width along 360 normals, and still closed
-    when drawn at 2 px."""
+    """A full ring's ridge (80 pieces): a spanning tree alone leaves one gap; joined as
+    find_lines joins it, the loop's closing bridge is added, so the drawn ring is closed
+    (the rest of the map is two pieces, inside and outside), at the drawn width along 360
+    normals, and still closed when drawn at 2 px."""
     centre, radius = (50.0, 50.0), 30.0
-    ridge = ring_ridge(centre, radius, 0.0, 2 * math.pi, 100)
+    ridge = ring_ridge(centre, radius, 0.0, 2 * math.pi, 100, joined=True)
     fine = np.full((100 * S, 100 * S), HOST, np.uint8)
     four = ndimage.generate_binary_structure(2, 1)
     for width in (DRAW_W, 2.0):

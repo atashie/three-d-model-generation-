@@ -34,7 +34,6 @@ from tdmg.color import (
 from tdmg.color_config import (
     FURRY_RULE,
     KEYS,
-    LINE_WIDTH_RULE,
     SMOOTH_RULE,
     ColorConfig,
     ColorConfigError,
@@ -65,9 +64,8 @@ from tdmg.colors import (
     ENVIRONMENT_KEYS,
     LABELS_OUTSIDE,
     LINES_DRAWN_AFTER,
-    LINES_ELONGATION_RULE,
-    LINES_HOST_RULE,
     LINES_NOTE,
+    LINES_RULES,
     OUTPUT_FILES,
     RECORD_NAME,
     RECORD_SCHEMAS,
@@ -100,7 +98,7 @@ SUPPORTED_METHODS = {"colors": COLORS_ALGORITHM_VERSION, "quantize": METHOD,
 # Under thin_lines widen, the line step's method too (docs/plans/2026-11-19-widen-lines.md,
 # Task 5); a remove plan has no methods.lines.
 WIDEN_METHODS = {**SUPPORTED_METHODS, "lines": LINES_METHOD}
-LINE_RULES = (LINES_HOST_RULE, LINES_ELONGATION_RULE)
+LINE_RULES = LINES_RULES
 LINES_KEYS = {"method", "width_mm", "width_px", "rules", "drawn_after", "notes", "items"}
 LINE_ITEM_KEYS = {"color", "color_hex", "host", "host_hex", "color_final", "host_final",
                   "area_px", "width_px", "length_px", "drawn", "reason", "ridge"}
@@ -237,12 +235,14 @@ def verify_colors(colors_dir, selection_dir, *, check_preview: bool = True,
     methods.lines under widen: supported_methods).
     The lines block (thin_lines widen; _check_lines) is present exactly under widen. Its
     form is checked (keys, the method, width_mm = settings.line_width_mm, width_px =
-    width_mm / mm_per_px exactly, the three rules with host_share and min_elongation the
+    width_mm / mm_per_px exactly, the rules exactly host_share and min_elongation, the
     identity's, each item's types: extraction indices, their hexes, final indices that
-    follow the extraction's fates and merges, drawn exactly when both are set and differ,
-    a reason exactly when not drawn, and a ridge of sorted distinct integer [row, col]
-    half pixels inside the image, 0 to 2 x height - 1 and 0 to 2 x width - 1). Then the
-    rebuild (9) must give the same block, compared as JSON exactly (ridge included).
+    follow the extraction's fates and merges, drawn only when both are set and differ (a
+    line that has them but paints no pixel is not drawn: tdmg.colors.lines_block, which
+    the rebuild repeats), a reason exactly when not drawn, and a ridge of sorted
+    distinct integer [row, col] half pixels inside the image, 0 to 2 x height - 1 and 0
+    to 2 x width - 1). Then the rebuild (9) must give the same block, compared as JSON
+    exactly (ridge included).
 
     What it cannot check: the UNRENDERED_FIELDS are as the record says, and regions.png is
     only hashed, not redrawn. The rebuild proves that the plan follows from the recorded
@@ -310,6 +310,13 @@ def _identity_values(ident: dict, family, printer: PrinterProfile
     if nulls:
         raise ColorsError(f"identity.settings.{nulls[0]} is null; a resolved setting always "
                           "has a value")
+    lines_method = ident["methods"].get("lines") if isinstance(ident["methods"], dict) else None
+    if widens(settings) and isinstance(lines_method, str) and lines_method != LINES_METHOD:
+        # An earlier widen plan (inside-one-color-lines/1 joined and recorded its lines
+        # differently) is not rebuilt as another one: it must be made again.
+        raise ColorsError(f"identity.methods.lines is {lines_method}, but this version "
+                          f"finds and draws lines with {LINES_METHOD}; remake the plan with "
+                          "this version")
     if ident["methods"] != supported_methods(settings):
         raise ColorsError("identity.methods are not the methods this version implements "
                           f"({supported_methods(settings)}); remake the plan with this "
@@ -501,11 +508,11 @@ def _check_lines(record: dict, settings: dict, rules: dict, mm_per_px: float) ->
     if type(block["width_px"]) is not float or block["width_px"] != width_mm / mm_per_px:
         raise _lines_inconsistent("width_px must be width_mm / mm_per_px")
     lr = block["rules"]
-    if (not isinstance(lr, dict) or set(lr) != {LINE_WIDTH_RULE, *LINE_RULES}
+    if (not isinstance(lr, dict) or set(lr) != set(LINE_RULES)
             or not all(_finite(v) for v in lr.values())
             or any(lr[r] != rules[r] for r in LINE_RULES)):
-        raise _lines_inconsistent(f"rules must give {LINE_WIDTH_RULE} and the identity's "
-                                  f"{' and '.join(LINE_RULES)}")
+        raise _lines_inconsistent(f"rules must give exactly the identity's "
+                                  f"{', '.join(LINE_RULES)}")
     if block["drawn_after"] != LINES_DRAWN_AFTER or block["notes"] != [LINES_NOTE]:
         raise _lines_inconsistent("drawn_after and notes are not this version's")
     items = block["items"]
@@ -541,9 +548,14 @@ def _check_lines(record: dict, settings: dict, rules: dict, mm_per_px: float) ->
         if reason is not None and not (isinstance(reason, str) and reason):
             raise _lines_inconsistent(f"{where}: reason must be null or a non-empty string")
         cf, hf = it["color_final"], it["host_final"]
-        drawn = cf is not None and hf is not None and cf != hf
-        if it["drawn"] is not drawn:
-            raise _lines_inconsistent(f"{where}: drawn must be true exactly when color_final "
+        drawn = it["drawn"]
+        if type(drawn) is not bool:
+            raise _lines_inconsistent(f"{where}: drawn must be true or false")
+        # Drawn needs both final colors, and different ones; a line that has them may
+        # still not be drawn when it paints no pixel (tdmg.colors.lines_block), which the
+        # rebuild compares.
+        if drawn and not (cf is not None and hf is not None and cf != hf):
+            raise _lines_inconsistent(f"{where}: drawn can be true only when color_final "
                                       "and host_final are set and differ")
         if drawn and it["reason"] is not None:
             raise _lines_inconsistent(f"{where}: a drawn line has no reason")
