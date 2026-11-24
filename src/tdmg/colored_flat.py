@@ -25,7 +25,9 @@ make_colored_flat chains the pure steps and writes their outputs in make_flat's 
    A line is in the model when a fine pixel it painted has its centre in the final cells
    of its color (after the clipping to the smoothed outline); with at least one, the glue
    route is not built either (LINES_GLUE_NOT_BUILT), and a recorded drawn line that is not
-   in the model is named in a warning (LINES_NOT_PAINTED).
+   in the model is named in a warning (LINES_NOT_PAINTED). The record's lines block gives
+   each line in the model's centre line in model mm (lines.centre_lines,
+   CENTRE_LINES_METHOD; Task 5b), which tdmg slice's F3.line_coverage measures.
 4. Checks (Decision 9): every per-body, per-plate and assembly check of ams_checks and
    glue_checks, F3.thin_regions per body of both routes (information, UNKNOWN, as in tdmg
    flat) and F6.slicer UNKNOWN per route, so the verdict here is always NOT CERTIFIED.
@@ -61,7 +63,7 @@ from tdmg.color_checks import ColorCheckError, ams_checks, export_3mf_check, glu
 from tdmg.color_config import ColorConfigError, palette_cap
 from tdmg.color_geometry import ColorGeometryError, ams_bodies, color_cells, color_regions
 from tdmg.color_glue import glue_geometry
-from tdmg.color_lines import paint_lines
+from tdmg.color_lines import centre_line, paint_lines
 from tdmg.colors import (
     LINES_SMOOTH_RULE,
     MARGIN_PX,
@@ -115,6 +117,10 @@ RECORD_NAME = "colored.json"
 # colorflat-3 (2026-11-12, R2 step 3): the AMS output adds model.3mf and palette.json, the
 # record a model_3mf section, and the AMS assembly F2.export_3mf_matches_bodies (a new
 # required check). The STL, PNG and glue bytes are those of colorflat-2.
+# Not bumped for lines.centre_lines (widen lines, Task 5b): the block exists only under
+# thin_lines widen, so a remove plan's record and outputs stay byte-identical; an older
+# widen record is told apart by its missing centre_method (CENTRE_LINES_METHOD) and
+# refused by tdmg slice.
 ALGORITHM = "colorflat-3"
 MODEL_3MF = "model.3mf"
 PALETTE_NAME = "palette.json"
@@ -173,6 +179,12 @@ LINES_GLUE_NOT_BUILT = ("the plan draws thin lines (thin_lines: widen; {n} drawn
 # the cleaned labels at the plan's scale; the model's is what is left of each line's
 # painted pixels in the final cells of its color, after smoothing and the clipping to the
 # smoothed outline (Codex review of the fixes, 2026-11-19, finding 2).
+# The lines block's centre lines (widen lines, Task 5b): lines.centre_lines gives, for each
+# drawn line in the model, the points draw_lines paints around in model mm and their edges
+# (tdmg.color_lines.centre_line), which tdmg slice's F3.line_coverage measures. A colored
+# record under thin_lines widen without this method (made before Task 5b) is refused by
+# tdmg slice (tdmg.color_slicing.centre_lines_of). Remove plans have no lines block.
+CENTRE_LINES_METHOD = "smoothed-ridge-graph/1"
 LINES_NOT_PAINTED = ("{n} of the plan's {m} drawn line(s) are not in the model (at "
                      "{width:g} mm on the model's scale, after smoothing and the clipping "
                      "to the outline): {which}")
@@ -246,6 +258,20 @@ def _line_in_cells(owner: np.ndarray, n: int, color: int, cells, transform: dict
     y_mm = (y1 - (rows + 0.5) / supersample) * s
     shapely.prepare(region)
     return bool(shapely.intersects_xy(region, x_mm, y_mm).any())
+
+
+def _centre_row(k: int, item: dict, hex_code: str, smooth_px: float,
+                transform: dict) -> dict:
+    """lines.centre_lines' row for the plan's lines.items[k], a drawn line in the model:
+    its body's palette index and hex, its host's palette index, and its centre line
+    (tdmg.color_lines.centre_line, cell (row, col)) in model mm by the regions' transform
+    (x = (col - x0_px) s, y = (y1_px - row) s, as _line_in_cells)."""
+    points, edges = centre_line(item["ridge"], smooth_px)
+    s, x0, y1 = transform["scale_mm_per_px"], transform["x0_px"], transform["y1_px"]
+    mm = np.column_stack([(points[:, 1] - x0) * s, (y1 - points[:, 0]) * s])
+    return {"item": k, "index": item["color_final"], "hex": hex_code,
+            "host": item["host_final"],
+            "points_mm": mm.tolist(), "edges": edges.tolist()}
 
 
 def paint_cells(cells, labels, colors: dict, transform: dict, shape) -> np.ndarray:
@@ -540,7 +566,7 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
     no_glue = [] if plan.record["outline"]["keep_width"] is None else [GLUE_NOT_BUILT]
     # Under thin_lines widen only (verify_colors: the block is there exactly then).
     lines = plan.record.get("lines")
-    n_lines, line_width_px, unpainted = 0, None, []
+    n_lines, line_width_px, unpainted, centres = 0, None, [], []
     try:
         _, transform, parts, cleaning = silhouette(mask, plan.width_mm, sigma, opening,
                                                    island, image_box=True)
@@ -566,6 +592,10 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
                                    plan.supersample)
                     for n, (_, it) in enumerate(drawn_items)]
             n_lines = sum(kept)
+            smooth = lines["rules"][LINES_SMOOTH_RULE]
+            palette_hex = {p["index"]: p["hex"] for p in plan.palette}
+            centres = [_centre_row(k, it, palette_hex[it["color_final"]], smooth, transform)
+                       for (k, it), ok in zip(drawn_items, kept, strict=True) if ok]
             unpainted = [f"items[{k}] ({it['color_hex']} in {it['host_hex']})"
                          for (k, it), ok in zip(drawn_items, kept, strict=True) if not ok]
             if n_lines:
@@ -686,10 +716,12 @@ def make_colored_flat(selection_dir, colors_dir, out_dir, *, thickness_mm, width
         "base_index": base, "transform": transform, "cleaning": cleaning,
         "regions": regions.report, "cells": cells.report, "glue": glue_section,
         # Under thin_lines widen only: the plan's lines drawn on the fine map. drawn: the
-        # lines that changed a fine pixel; width_px: line_width_mm on the model's scale.
+        # lines in the model; width_px: line_width_mm on the model's scale; centre_lines:
+        # each one's centre line in model mm (CENTRE_LINES_METHOD).
         **({} if lines is None else {"lines": {
             "drawn": n_lines, "width_mm": lines["width_mm"],
-            "width_px": line_width_px, "method": lines["method"]}}),
+            "width_px": line_width_px, "method": lines["method"],
+            "centre_method": CENTRE_LINES_METHOD, "centre_lines": centres}}),
         "bodies": body_rows,
         "model_3mf": {"file": MODEL_3MF, "palette": PALETTE_NAME,
                       "encoding": THREEMF_ENCODING, "object_name": THREEMF_OBJECT,

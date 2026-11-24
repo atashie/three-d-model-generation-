@@ -23,6 +23,7 @@ import tdmg.colored_flat as cf
 from tdmg.checks import CheckResult, merge_exact
 from tdmg.cli import app
 from tdmg.color_geometry import color_cells as cf_color_cells
+from tdmg.color_lines import centre_line
 from tdmg.colored_flat import (
     BORDER_PX,
     COLORED_REQUIRED_CHECKS,
@@ -38,6 +39,7 @@ from tdmg.colored_flat import (
     paint_cells,
 )
 from tdmg.colors import (
+    LINES_SMOOTH_RULE,
     MARGIN_PX,
     PREVIEW_SCALE,
     ROW_PX,
@@ -842,8 +844,9 @@ def test_a_widen_plan_draws_its_line_in_the_ams_inlay(lined):
     assert "thin_lines: widen; 1 drawn at 0.41 mm" in flat["glue"]["reason"]
     assert any("glue version not built: the plan draws thin lines" in w
                for w in flat["warnings"])
-    assert flat["lines"] == {"drawn": 1, "width_mm": 0.41, "width_px": 0.41 / s,
-                             "method": rec["lines"]["method"]}
+    assert {k: v for k, v in flat["lines"].items() if k != "centre_lines"} == {
+        "drawn": 1, "width_mm": 0.41, "width_px": 0.41 / s,
+        "method": rec["lines"]["method"], "centre_method": cf.CENTRE_LINES_METHOD}
     assert flat["required_checks"] == sorted(COLORED_REQUIRED_CHECKS - GLUE_ONLY_CHECKS)
     assert not any(b["route"] == "glue" for b in flat["bodies"])
 
@@ -911,6 +914,7 @@ def test_a_recorded_line_that_is_not_in_the_model_is_warned_about(tmp_path):
             f"({item['color_hex']} in {item['host_hex']})")
     assert want in flat["warnings"]
     assert flat["lines"]["drawn"] == 0 and flat["glue"]["built"] is True
+    assert flat["lines"]["centre_lines"] == []
     r = _cli(sel, tmp_path / "colors", tmp_path / "cli")
     assert f"warning: {want}" in _plain(r.stderr)
 
@@ -925,6 +929,7 @@ def test_a_widen_plan_with_no_drawn_line_still_builds_glue(tmp_path):
     flat = make_colored_flat(sel, tmp_path / "colors", tmp_path / "out", thickness_mm=3.0)
     assert flat["glue"]["built"] is True
     assert flat["lines"]["drawn"] == 0
+    assert flat["lines"]["centre_lines"] == []
 
 
 def test_a_widen_plan_with_an_edited_ridge_is_refused(lined, tmp_path):
@@ -938,3 +943,31 @@ def test_a_widen_plan_with_an_edited_ridge_is_refused(lined, tmp_path):
     with pytest.raises(ColoredFlatError, match="lines"):
         make_colored_flat(sel, d, tmp_path / "out", thickness_mm=3.0)
     assert not (tmp_path / "out").exists()
+
+
+# --- widen lines, Task 5b: the centre lines F3.line_coverage measures ---------------------
+
+
+def test_a_widen_record_gives_each_drawn_lines_centre_line_in_model_mm(lined):
+    """colored.json's lines.centre_lines: for each drawn line in the model, the points
+    draw_lines paints around (tdmg.color_lines.centre_line), mapped to model mm by the
+    regions' transform, with its edges, its plan item and its color."""
+    _, _, rec, flat, cells = lined
+    (item,) = rec["lines"]["items"]
+    (row,) = flat["lines"]["centre_lines"]
+    assert sorted(row) == ["edges", "hex", "host", "index", "item", "points_mm"]
+    assert row["host"] == item["host_final"] != row["index"]
+    hex_code = next(p["hex"] for p in flat["palette"] if p["index"] == item["color_final"])
+    assert (row["item"], row["index"], row["hex"]) == (0, item["color_final"], hex_code)
+    points, edges = centre_line(item["ridge"], rec["lines"]["rules"][LINES_SMOOTH_RULE])
+    t = flat["transform"]
+    s, x0, y1 = t["scale_mm_per_px"], t["x0_px"], t["y1_px"]
+    want = np.column_stack([(points[:, 1] - x0) * s, (y1 - points[:, 0]) * s])
+    assert np.array_equal(np.array(row["points_mm"]), want)
+    assert row["edges"] == edges.tolist()
+    # The centre line lies in the line's inlay (the model's cells of its color).
+    red = shapely.union_all(list(cells.of(item["color_final"])))
+    inside = shapely.intersects_xy(red, want[:, 0], want[:, 1])
+    assert inside.mean() > 0.95
+    assert flat["lines"]["drawn"] == len(flat["lines"]["centre_lines"])
+

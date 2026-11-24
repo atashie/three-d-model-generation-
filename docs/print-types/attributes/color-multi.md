@@ -287,6 +287,7 @@ source.
 | Pieces tried in the wrong pockets | The pieces look alike; a row turned half a turn still runs left to right | None (how Bambu Studio places `pieces.stl` is not checked) | The form: do not move, turn or arrange the pieces; mark piece 1 with a pen before taking them off the plate (owner decision, 2026-11-14: "Pen mark is enough") |
 | A depth patch is not the depth in the form | Bambu Studio printed at another layer height | None; the form records the settings used | The form gives the checked settings (`print_settings` in `strip.json`); print with them |
 | Thin outline lines missing in the print | A kept outline line is narrower than the slicer prints; the slicer skips it | That color's `F3.edge_coverage` in `tdmg slice` (a warning, not blocking) | Accept it (the outer band prints), make the plan with a wider `outline_width_mm`, or use `outlines: drop` |
+| Drawn lines (`thin_lines: widen`) missing in the print | The line is too narrow for the slicer, which leaves it out (`roadie-thanksgiving`, 0.41 mm red lines, printed 2026-11-22) | `F3.line_coverage` in `tdmg slice` (required): it FAILs naming the worst unprinted point | None needed: the face is NOT CERTIFIED; make the plan with a wider `line_width_mm` and slice again |
 | A color on the wrong body, or the print turned | The slicer input or the tool order is wrong | `F6.tool_placement` and `F6.filaments_used` (required) | None needed: the face is NOT CERTIFIED |
 | More color changes than needed | OrcaSlicer orders each layer without looking ahead (face down) | `F6.color_changes` records the true minimum beside the count | Accept it (one change more; face down is preferred by default since 2026-11-16), or print face up (`--face up`) |
 | A connectivity warning on every plan | Two colors' beads meet edge to edge; the bead model leaves a hairline between them | `F3.printed_connectivity` (a warning) | None needed; the outer edge is still checked |
@@ -332,6 +333,9 @@ source.
   - R1's `F6.slicer_exit`, `F6.gcode_present`, `F6.layer_count` and `F6.single_object`;
   - F3 "outer edge only" (owner decision, 2026-11-13): the whole model's
     `F3.edge_coverage` and `F3.edge_overprint`, and each color's `F3.edge_overprint`;
+  - with drawn lines (`thin_lines: widen`), `F3.line_coverage`: each drawn line's centre
+    line, sampled every 0.05 mm, within the F3 allowance of its color's plastic on every
+    layer where the color it is drawn inside has a body;
   - `F6.portability` on `model.3mf` (PrusaSlicer; its volume is information only).
 
   **Warnings**, recorded and printed but never blocking: each color's

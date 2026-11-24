@@ -1,0 +1,27 @@
+**Found one Medium defect. No High defects found.**
+
+1. **Medium — Clipping samples to a section invalidates the sampling bound and permits false PASS.**  
+   [src/tdmg/color_gcode.py:1100](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/color_gcode.py:1100), [src/tdmg/printed.py:930](C:/Users/arikt/documents/github/three-d-model-generation-/src/tdmg/printed.py:930)
+
+   The graph is sampled before filtering points outside the body’s section. At a boundary crossing, the remaining endpoint can be almost one full sampling interval from the last retained sample. Nevertheless, `_line_coverage` applies the half-interval bound, `0.025 mm`.
+
+   **Reproduced through the synthetic G-code checks**, using `tests/test_color_gcode.py`’s bodies:
+   - T1’s section ends at `x=8`.
+   - Centre-line points run from `(3.001, 10)` to `(9.001, 10)`, spaced `0.5 mm` apart and joined consecutively.
+   - On layer 2, T1 prints `box(2, 6, 7.777, 14)`; all other printing follows `GOOD`.
+
+   The last retained sample is `(7.951, 10)`, with gap **0.174 mm**. Adding the bound gives **0.199 mm**, so `F3.line_coverage` passes. However, the centre line inside the section reaches `(8, 10)`, where the gap is **0.223 mm**, exceeding the **0.2 mm** allowance. **Every required check passes and the verdict is PRINTABLE**; only optional `F3.edge_coverage.T1` fails.
+
+   I also reproduced an entirely unmeasured reentry: a section interval between adjacent samples is silently omitted while another measured portion makes the line PASS.
+
+   **Suggested change:** intersect graph edges with each relevant section **before sampling**, retaining intersection endpoints and every resulting component. Otherwise return UNKNOWN where filtering leaves coverage unbounded. Add both boundary-tail and unsampled-reentry regressions.
+
+The `_Topology` fix passed the nested-open and both-closed cases. Disabling its guard makes the nested-hole regression fail, confirming that test is effective. I found no additional concrete defect in that fix.
+
+**Read-only validation:** 317 line/rule/G-code tests and five selected sampling/allowance tests passed, using `.venv/Scripts/python.exe -B -m pytest` with `--noconftest -s -p no:cacheprovider`. In-memory checks confirmed first-layer allowance behavior, old-widen-record refusal, changed-centre-line rebuild detection, and identical no-line check/record serialization against HEAD for three cases. Reanalysing the stored turkey G-code reproduced **4.241 mm FAILs on both faces**.
+
+No files were modified. I did not rerun slicers or `library verify roadie-drop`; full historical byte identity remains unverified in this review.
+
+For planned gap mode, `graph_samples` is reusable, but `sample_gaps` needs a groove measurement domain: filtering against the solid section would discard groove centres.
+
+**Most important remaining change: clip graph geometry before sampling so boundary crossings cannot produce false PASS.**

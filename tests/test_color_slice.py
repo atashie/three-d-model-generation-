@@ -18,13 +18,14 @@ from pathlib import Path
 
 import pytest
 import test_slice
-from test_colored_flat import write_plan, write_sel
+from selection_fixtures import lined_disc
+from test_colored_flat import LINED_WIDTH_MM, _config_plan, write_plan, write_sel
 from typer.testing import CliRunner
 
 import tdmg.color_slicing as cs
 from tdmg.checks import CheckResult
 from tdmg.cli import app
-from tdmg.color_gcode import required_check_ids
+from tdmg.color_gcode import LINE_COVERAGE, required_check_ids
 from tdmg.colored_flat import make_colored_flat
 from tdmg.orca_input import turn_over
 from tdmg.records import canonical_json
@@ -1106,3 +1107,109 @@ def test_two_glue_plates_for_one_color_are_refused(folder, tmp_path, orca):
         r["bodies"].append({**row, "name": row["name"] + "-again"})
     _edit(folder, duplicate)
     _refused(folder, tmp_path, orca(), "two glue plate rows for color")
+
+
+# --- widen lines, Task 5b: F3.line_coverage on each face ----------------------------------
+
+
+@pytest.fixture(scope="module")
+def lined_colored(tmp_path_factory):
+    """A tdmg flat --colors folder of a thin_lines widen plan with one drawn line."""
+    root = tmp_path_factory.mktemp("lined")
+    sel = write_sel(root / "sel", lined_disc())
+    _config_plan(sel, root / "colors", b"thin_lines: widen\n", width_mm=LINED_WIDTH_MM)
+    rec = make_colored_flat(sel, root / "colors", root / "out", thickness_mm=3.0)
+    assert rec["lines"]["drawn"] == 1
+    return root / "out"
+
+
+@pytest.fixture
+def lined_folder(lined_colored, tmp_path):
+    out = tmp_path / "lined"
+    shutil.copytree(lined_colored, out)
+    return out
+
+
+def test_a_lined_model_requires_line_coverage_on_each_face(lined_colored, orca, tmp_path):
+    rec = _run(lined_colored, tmp_path / "s", orca())
+    n = len(rec["filament_map"])
+    for face in ("up", "down"):
+        f = rec["faces"][face]
+        ids = [c["id"] for c in f["checks"]]
+        assert ids.count(LINE_COVERAGE) == 1
+        assert LINE_COVERAGE in f["required_checks"]
+        assert set(required_check_ids(n, lines=True)) <= set(f["required_checks"])
+        # The fake's G-code has no layers: not measured, so not PRINTABLE.
+        (c,) = [c for c in f["checks"] if c["id"] == LINE_COVERAGE]
+        assert c["status"] == "UNKNOWN" and f["verdict"] == "NOT CERTIFIED"
+
+
+def test_a_model_without_lines_has_no_line_coverage(colored, orca, tmp_path):
+    rec = _run(colored, tmp_path / "s", orca())
+    assert "lines" not in _record(colored)
+    for f in rec["faces"].values():
+        assert LINE_COVERAGE not in [c["id"] for c in f["checks"]]
+        assert LINE_COVERAGE not in f["required_checks"]
+
+
+def test_the_centre_lines_are_read_and_turned_for_face_down(lined_colored):
+    record, _, files = cs.read_colored(lined_colored)
+    shells = cs.ams_shells(record, files)
+    (up,) = cs.centre_lines_of(record, shells)
+    (row,) = record["lines"]["centre_lines"]
+    assert (up.item, up.index, up.host, up.mirror_x) == (row["item"], row["index"],
+                                                         row["host"], None)
+    assert up.points_mm.tolist() == row["points_mm"] and up.edges.tolist() == row["edges"]
+    (down,) = cs.turned_lines([up], shells)
+    x = [float(v) for s in shells for v in s.vertices[:, 0]]
+    mirror = min(x) + max(x)
+    assert down.mirror_x == mirror
+    assert down.points_mm[:, 0].tolist() == (mirror - up.points_mm[:, 0]).tolist()
+    assert down.points_mm[:, 1].tolist() == up.points_mm[:, 1].tolist()
+    # The same turn as the bodies': each turned point is where turn_over moves it.
+    turned = turn_over(shells)
+    tx = [float(v) for s in turned for v in s.vertices[:, 0]]
+    assert (min(tx), max(tx)) == (mirror - max(x), mirror - min(x))
+
+
+def _lines_edit(change):
+    def edit(r):
+        change(r["lines"])
+    return edit
+
+
+@pytest.mark.parametrize(("change", "message"), [
+    (lambda b: b.pop("centre_method"), "made before F3.line_coverage"),
+    (lambda b: b.update(centre_method="smoothed-ridge-graph/0"),
+     "made before F3.line_coverage"),
+    (lambda b: b.pop("centre_lines"), "made before F3.line_coverage"),
+    (lambda b: b.update(drawn=2), "lines.drawn"),
+    (lambda b: b["centre_lines"][0].update(index=99), "no AMS body"),
+    (lambda b: b["centre_lines"][0].update(index=float(b["centre_lines"][0]["index"])),
+     "no AMS body"),
+    (lambda b: b["centre_lines"][0].update(index=b["centre_lines"][0]["index"] == 0),
+     "no AMS body"),
+    (lambda b: b["centre_lines"][0].update(points_mm=[]), "points_mm"),
+    (lambda b: b["centre_lines"][0].update(points_mm=[[1.0, "x"]]), "points_mm"),
+    (lambda b: b["centre_lines"][0].update(edges=[[0, 10 ** 6]]), "edges"),
+    (lambda b: b["centre_lines"][0].update(item=True), "item"),
+    (lambda b: b["centre_lines"][0].update(host=b["centre_lines"][0]["index"]), "host"),
+    (lambda b: b["centre_lines"][0].pop("host"), "must hold exactly"),
+    (lambda b: b["centre_lines"].append(dict(b["centre_lines"][0])), "lines.drawn"),
+    (lambda b: (b["centre_lines"].append(dict(b["centre_lines"][0])), b.update(drawn=2)),
+     "distinct item"),
+])
+def test_a_malformed_lines_block_is_refused(lined_folder, tmp_path, orca, change, message):
+    _edit(lined_folder, _lines_edit(change))
+    _refused(lined_folder, tmp_path, orca(), message)
+
+
+def test_a_changed_centre_line_is_a_rebuild_difference(lined_colored):
+    """A well-formed but changed centre line cannot be told from colored.json alone; the
+    rebuild (tdmg library verify, tdmg finish) compares the whole record."""
+    from tdmg.library import compare_file
+    raw = (lined_colored / "colored.json").read_bytes()
+    rec = json.loads(raw)
+    rec["lines"]["centre_lines"][0]["points_mm"][0][0] += 0.5
+    why = compare_file("colored_flat", "colored.json", raw, json.dumps(rec).encode())
+    assert why is not None and "lines.centre_lines" in why, why

@@ -31,7 +31,9 @@ from tdmg.color_gcode import (
     FILAMENTS_USED,
     GATED_CHECK_IDS,
     INFO_CHECK_IDS,
+    LINE_COVERAGE,
     TOOL_PLACEMENT,
+    CentreLine,
     color_slice_checks,
     f3_required_ids,
     f3_warning_ids,
@@ -43,7 +45,13 @@ from tdmg.color_gcode import (
 )
 from tdmg.flat import extrude
 from tdmg.orca_input import turn_over
-from tdmg.printed import COVERAGE_BOUND_MM, F3_SLICE_CHECK_IDS, Setup, UnsupportedGcode
+from tdmg.printed import (
+    COVERAGE_BOUND_MM,
+    EDGE_SAMPLE_MM,
+    F3_SLICE_CHECK_IDS,
+    Setup,
+    UnsupportedGcode,
+)
 from tdmg.threemf import Shell
 
 HEXES = ["#f60606", "#f5f5f5", "#f0f10a", "#451812"]
@@ -755,3 +763,205 @@ def test_the_real_slicer_passes_all_three_checks(face, owner_colored_plan, tmp_p
     assert by["F3.printed_connectivity"].status == "FAIL", (kind, by[
         "F3.printed_connectivity"].note)
     json.dumps([c.as_dict() for c in checks], allow_nan=False)
+
+
+# --- widen lines, Task 5b: F3.line_coverage ----------------------------------------------
+
+# A centre line in inlay 1 (A, x 2 to 8, y 6 to 14), drawn in the base's color 0, recorded
+# as the plan's items[3]: 0.5 mm apart along y = 10 from x = 3 to 7, joined in a chain.
+LINE_POINTS = np.array([(3 + 0.5 * k, 10.0) for k in range(9)])
+LINE_EDGES = np.array([(k, k + 1) for k in range(8)])
+
+
+def line(points=LINE_POINTS, item=3, index=1, host=0, mirror_x=None):
+    return CentreLine(item, index, host, np.asarray(points, float), LINE_EDGES, mirror_x)
+
+
+def run_lines(text, lines, shells=None):
+    checks, record = color_slice_checks(text.encode(), shells or bodies(), setup(),
+                                        lines=lines)
+    json.dumps([c.as_dict() for c in checks], allow_nan=False)
+    json.dumps(record, allow_nan=False)
+    return {c.id: c for c in checks}, [c.id for c in checks]
+
+
+def printable_lines(checks, tools=3):
+    return verdict(list(checks.values()), set(required_check_ids(tools, lines=True))) == \
+        "PRINTABLE"
+
+
+def test_a_printed_line_passes_line_coverage_and_is_required():
+    checks, order = run_lines(text_of(**GOOD), [line()])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "PASS", c.note
+    # After the per-tool F3 checks, before the information.
+    assert order.index(LINE_COVERAGE) == 6 + 3 * 3
+    m = c.measured
+    assert m["sample_mm"] == EDGE_SAMPLE_MM and m["sampling_bound_mm"] == COVERAGE_BOUND_MM
+    (row,) = m["lines"]
+    assert (row["item"], row["index"], row["tool"], row["layers"]) == (3, 1, 1, [2])
+    assert row["max_gap_mm"] == 0.0
+    assert row["samples_measured"] == row["samples"] > 0
+    assert c.threshold == {"first_layer_mm": 0.275, "other_layers_mm": 0.2}
+    assert c.rule == "acceptance.dimension.tolerance"
+    assert "Required for PRINTABLE" in c.note
+    assert LINE_COVERAGE in required_check_ids(3, lines=True)
+    assert LINE_COVERAGE not in required_check_ids(3)
+    assert required_check_ids(3, lines=True) - required_check_ids(3) == {LINE_COVERAGE}
+    assert printable_lines(checks)
+
+
+def test_a_gap_in_the_line_fails_naming_the_worst_place():
+    # T1 prints only the left part of its inlay (x 2 to 5): the line from x 5 to 7 is
+    # unprinted, worst at its end (7, 10), 2 mm from T1's plastic on layer 2 (z 0.4).
+    checks, _ = run_lines(text_of([SQUARE], [RING, 1, shapely.box(2, 6, 5, 14), 2, B]),
+                          [line()])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL", c.note
+    w = c.measured["worst"]
+    assert (w["item"], w["tool"], w["layer"], w["z"]) == (3, 1, 2, 0.4)
+    assert w["gap_mm"] == pytest.approx(2.0, abs=1e-3)
+    assert w["at_model_mm"] == pytest.approx([7.0, 10.0])
+    assert w["allowance_mm"] == 0.2
+    assert "items[3]" in c.note and "2.000 mm" in c.note and "(7.00, 10.00)" in c.note
+    assert "z 0.4" in c.note
+    assert not printable_lines(checks)
+    # A FAIL also names a line it could not measure.
+    checks, _ = run_lines(text_of([SQUARE], [RING, 1, shapely.box(2, 6, 5, 14), 2, B]),
+                          [line(), line(item=5, host=3)])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL" and "items[5] is not measured" in c.note, c.note
+    # The required checks without lines do not see it.
+    assert all(checks[i].status == "PASS" for i in required_check_ids(3))
+
+
+def test_a_line_whose_tool_prints_nothing_on_a_layer_fails():
+    checks, _ = run_lines(text_of([SQUARE], [RING, A, 2, B]), [line()])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL", c.note
+    assert c.measured["worst"]["gap_mm"] is None
+    assert "T1 prints nothing on layer 2" in c.note
+
+
+def test_a_gap_just_within_the_sampling_bound_is_unknown():
+    # T1's plastic ends 0.19 mm short of the line's end: within 0.2 mm, but not by the
+    # sampling bound (0.025 mm).
+    checks, _ = run_lines(text_of([SQUARE], [RING, 1, shapely.box(2, 6, 6.81, 14), 2, B]),
+                          [line()])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "UNKNOWN", c.note
+    assert "within sampling uncertainty" in c.note
+    assert "no refinement, unlike F3.edge_coverage" in c.note
+
+
+def test_a_gap_at_the_end_of_a_line_inside_its_body_is_caught():
+    """Codex review of Task 5b (research/reviews/2026-11-19-widen-lines/
+    codex-review-line-coverage.txt): the line runs past inlay 1's edge (x = 8). Sampled
+    on the whole graph and then filtered, the last sample kept was (7.951, 10), 0.174 mm
+    from T1's plastic (ending at x 7.777), and 0.174 + 0.025 passed; the line at (8, 10)
+    is 0.223 mm from it. The edges are clipped to the section before sampling."""
+    points = np.array([(3.001 + 0.5 * k, 10.0) for k in range(13)])
+    edges = np.array([(k, k + 1) for k in range(12)])
+    ln = CentreLine(3, 1, 0, points, edges)
+    checks, _ = run_lines(text_of([SQUARE], [RING, 1, shapely.box(2, 6, 7.777, 14), 2, B]),
+                          [ln])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL", c.note
+    w = c.measured["worst"]
+    assert w["at_model_mm"] == pytest.approx([8.0, 10.0])
+    assert w["gap_mm"] == pytest.approx(0.223, abs=1e-3)
+
+
+def test_a_short_piece_of_a_line_inside_its_body_between_two_samples_is_measured():
+    """Codex review of Task 5b: an edge that cuts inlay 1's corner (x >= 2, y >= 6) for
+    only 0.005 mm in x, between samples 0.03 mm apart that all lie outside it, was not
+    measured at all, while the rest of the line (y = 10) passed. T1's plastic starts at
+    y = 6.5, so the corner is 0.5 mm from it."""
+    points = np.vstack([LINE_POINTS, [(1.95, 6.055), (2.07, 5.935)]])
+    edges = np.vstack([LINE_EDGES, [(9, 10)]])
+    ln = CentreLine(3, 1, 0, points, edges)
+    checks, _ = run_lines(text_of([SQUARE], [RING, 1, shapely.box(2, 6.5, 8, 14), 2, B]),
+                          [ln])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL", c.note
+    w = c.measured["worst"]
+    assert w["at_model_mm"][0] == pytest.approx(2.0, abs=0.006)
+    assert w["at_model_mm"][1] == pytest.approx(6.0, abs=0.006)
+    # About 0.5 mm: the beads round the plastic's corner a little.
+    assert w["gap_mm"] == pytest.approx(0.5, abs=0.05)
+
+
+def test_a_line_with_no_sample_in_its_body_is_unknown():
+    # The line's samples lie in inlay 2's area, where T1's body is not.
+    checks, _ = run_lines(text_of(**GOOD), [line(LINE_POINTS + (10, 0))])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "UNKNOWN", c.note
+    assert "items[3] has no sample inside the section of T1's body" in c.note
+
+
+def test_line_coverage_is_unknown_when_not_measured(monkeypatch):
+    for gcode, why in ((None, None), (text_of(**GOOD).encode(), "the slicer failed")):
+        checks, _ = color_slice_checks(gcode, bodies(), setup(), not_measured=why,
+                                       lines=[line()])
+        by = {c.id: c for c in checks}
+        assert by[LINE_COVERAGE].status == "UNKNOWN"
+        assert len(checks) == 3 + 3 + 3 * 3 + 1 + 3
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(color_gcode, "analyse_sections", boom)
+    checks, _ = run_lines(text_of(**GOOD), [line()])
+    assert checks[LINE_COVERAGE].status == "UNKNOWN"
+    assert "analysis error: RuntimeError: boom" in checks[LINE_COVERAGE].note
+
+
+def test_only_layers_where_the_host_is_are_measured():
+    """A line in the base's color inside inlay 1 (here along the base's ring, y = 3):
+    below the inlays the base body is the whole silhouette, and its infill is not the
+    line, so only the layers where the host's body has a section (layer 2) are measured.
+    Layer 1 prints only the upper half, which would leave the line 7 mm from plastic."""
+    base_line = line(LINE_POINTS - (0, 7), index=0, host=1)
+    checks, _ = run_lines(text_of([shapely.box(0, 10, 20, 20)], [RING, 1, A, 2, B]),
+                          [base_line])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "PASS", c.note
+    assert c.measured["lines"][0]["layers"] == [2]
+    # On layer 2 the ring is printed only above y = 5: the line is 2 mm from it there.
+    upper = RING.intersection(shapely.box(0, 5, 20, 20))
+    checks, _ = run_lines(text_of([SQUARE], [upper, 1, A, 2, B]), [base_line])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL", c.note
+    assert c.measured["worst"]["layer"] == 2
+    assert c.measured["worst"]["gap_mm"] == pytest.approx(2.0, abs=1e-3)
+
+
+def test_a_line_whose_host_has_no_body_is_unknown():
+    checks, _ = run_lines(text_of(**GOOD), [line(host=3)])
+    c = checks[LINE_COVERAGE]
+    assert c.status == "UNKNOWN", c.note
+    assert "items[3] is not measured: its host, color 3, is no body's" in c.note
+    assert c.measured["lines"][0]["samples_measured"] == 0
+
+
+def test_no_lines_no_line_coverage():
+    _, order = run_lines(text_of(**GOOD), [])
+    assert LINE_COVERAGE not in order and len(order) == 3 + 3 + 3 * 3 + 3
+
+
+def test_a_line_face_down_is_measured_where_the_turned_model_puts_it():
+    down = turn_over(bodies())
+    a, b, ring = (placed_turned(g) for g in (A, B, RING))
+    turned = line(np.column_stack([20 - LINE_POINTS[:, 0], LINE_POINTS[:, 1]]),
+                  mirror_x=20.0)
+    checks, _ = run_lines(text_of([b, 1, a, 0, ring], [SQUARE], loads=(2,)), [turned], down)
+    assert checks[LINE_COVERAGE].status == "PASS", checks[LINE_COVERAGE].note
+    half = placed_turned(shapely.box(2, 6, 5, 14))
+    checks, _ = run_lines(text_of([b, 1, half, 0, ring], [SQUARE], loads=(2,)), [turned],
+                          down)
+    c = checks[LINE_COVERAGE]
+    assert c.status == "FAIL", c.note
+    w = c.measured["worst"]
+    # The first layer's allowance; the position also in the face-up (colored.json) frame.
+    assert (w["layer"], w["z"], w["allowance_mm"]) == (1, 0.2, 0.275)
+    assert w["at_model_mm"] == pytest.approx([13.0, 10.0])
+    assert w["at_colored_mm"] == pytest.approx([7.0, 10.0])

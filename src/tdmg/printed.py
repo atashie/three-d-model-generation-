@@ -891,6 +891,48 @@ def gaps(points: np.ndarray, printed) -> np.ndarray:
     return out
 
 
+def graph_samples(points, edges, domain=None, spacing: float = EDGE_SAMPLE_MM
+                  ) -> np.ndarray:
+    """Samples of a graph drawn with straight edges (such as a drawn line's centre line,
+    tdmg.color_lines.centre_line), or of its part inside domain.
+
+    Without domain: every point, and each edge from points[i] to points[j] (of length
+    above 0) split by shapely.segmentize into pieces no longer than spacing, their ends
+    included. With domain (a polygon in the points' mm; its boundary counts): each edge is
+    clipped to domain before it is sampled (shapely.intersection), and every piece left
+    is split the same way, the clipping's end points included; a piece that is one point,
+    and every graph point inside domain, is a sample too. tdmg.color_gcode's
+    F3.line_coverage passes a body's section; a check of an empty groove would pass the
+    groove.
+
+    Either way every point of the graph (inside domain) is within spacing / 2 of a sample
+    along the piece it lies on, so a distance measured on the samples (such as gaps, to a
+    footprint) is within spacing / 2 of the largest there (the distance is 1-Lipschitz).
+    Clipping first matters: sampling the whole graph and then dropping the samples
+    outside domain leaves up to a whole spacing between the last sample kept and the
+    boundary, and can miss a piece of the graph inside domain shorter than spacing (Codex
+    review of Task 5b, research/reviews/2026-11-19-widen-lines/
+    codex-review-line-coverage.txt). Returns (n, 2) float64, sorted and distinct; (0, 2)
+    when nothing is inside."""
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    e = np.asarray(edges, dtype=np.int64).reshape(-1, 2)
+    # An edge of zero length (two points smoothed to one place) is its point, a sample
+    # already; GEOS cannot segmentize it.
+    e = e[(pts[e[:, 0]] != pts[e[:, 1]]).any(axis=1)]
+    if domain is not None:
+        if domain.is_empty:
+            return np.zeros((0, 2))
+        shapely.prepare(domain)
+    out = [pts if domain is None else pts[shapely.intersects_xy(domain, pts[:, 0],
+                                                                 pts[:, 1])]]
+    if len(e):
+        pieces = shapely.linestrings(np.stack([pts[e[:, 0]], pts[e[:, 1]]], axis=1))
+        if domain is not None:
+            pieces = shapely.intersection(pieces, domain)
+        out.append(shapely.get_coordinates(shapely.segmentize(pieces, spacing)))
+    return np.unique(np.concatenate(out).reshape(-1, 2), axis=0)
+
+
 def _polygons(geometry) -> list:
     return [g for g in getattr(geometry, "geoms", [geometry])
             if isinstance(g, shapely.Polygon) and g.area > 0]

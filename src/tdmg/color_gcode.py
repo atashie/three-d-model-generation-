@@ -93,6 +93,18 @@ inside its z range, Task 2's rule (measure_slicing.expected_sets).
   F3.printed_connectivity), because the other colors' plastic is not checked against
   the missing inlay's edge by a required check. The owner accepted this trade-off; no
   check was added. required_check_ids gives the required set.
+- F3.line_coverage (widen lines, docs/plans/2026-11-19-widen-lines.md, Task 5b), only when
+  the model has drawn lines (colored.json lines.centre_lines; CentreLine) and then
+  required: each line's centre line, sampled every EDGE_SAMPLE_MM
+  (tdmg.printed.graph_samples), within the allowance of its color's tool's plastic on
+  every layer where the body of the color it is drawn inside (its host) has a section,
+  for each sample of its part inside its own body's section there (the edges clipped to
+  the section before sampling: tdmg.printed.graph_samples with that domain), judged
+  with COVERAGE_BOUND_MM as F3.edge_coverage is (_line_coverage), except that a sample
+  within COVERAGE_BOUND_MM of the allowance stays UNKNOWN (no refinement, unlike
+  F3.edge_coverage). A narrow line the
+  slicer leaves out otherwise shows only as that tool's F3.edge_coverage warning (the
+  owner's roadie-thanksgiving print, 2026-11-22: the 0.41 mm red lines did not print).
 - Information only, status UNKNOWN (as R1 keeps F3.thin_regions): F6.color_waste (flush
   from the FLUSH blocks and prime tower from its extrusion, in mm3 with the pinned
   profile's filament diameter, per tool and per change, with the M620.10 L words),
@@ -119,7 +131,9 @@ from tdmg.checks import CheckResult
 from tdmg.orca_input import filament_map
 from tdmg.printed import (
     COVERAGE,
+    COVERAGE_BOUND_MM,
     CUSTOM,
+    EDGE_SAMPLE_MM,
     F3_SLICE_CHECK_IDS,
     OVERPRINT,
     OVERPRINT_BOUND_MM,
@@ -136,6 +150,7 @@ from tdmg.printed import (
     analyse_sections,
     footprint,
     gaps,
+    graph_samples,
     judge_f3,
     model_section,
     overprint_points,
@@ -175,6 +190,45 @@ M620_OPEN = re.compile(r"S(0|[1-9][0-9]*)A")
 TIME = re.compile(r"(?:(\d+)d\s*)?(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?")
 # Display only: how many problems a FAIL lists in its note.
 LISTED = 5
+# widen lines, Task 5b (docs/plans/2026-11-19-widen-lines.md): the drawn lines' coverage,
+# present and required only for a plan whose colored.json records drawn lines.
+LINE_COVERAGE = "F3.line_coverage"
+LINE_NOTE = ("Required for PRINTABLE when the model has drawn lines (the owner, "
+             "2026-11-19, asked whether gaps in widened lines should make the verdict NOT "
+             "CERTIFIED: \"to your question: yes\"; docs/plans/2026-11-19-widen-lines.md, "
+             "Task 5b).")
+LINE_HOW = ("Each drawn line's centre line (colored.json lines.centre_lines, the points "
+            "the line was drawn around, joined by their edges), sampled every "
+            "{sample:g} mm: on each layer where the body of the color it is drawn inside "
+            "(its host) has a section, every sample inside the section of the line color's "
+            "body at the layer's mid-height, the model placed as for F6.tool_placement, "
+            "must be within the allowance (the tolerance, plus elefant_foot_compensation "
+            "on the first layer) of that body's tool's plastic (beads of their stated "
+            "widths). PASS when every such sample plus the sampling bound ({bound:g} mm) is "
+            "within it, FAIL when a sample is over it, UNKNOWN in between or when a line "
+            "has no sample in its body on any such layer. A sample within the sampling "
+            "bound of the allowance stays UNKNOWN (no refinement, unlike "
+            "F3.edge_coverage). Below the inlays the base body "
+            "is the whole silhouette, and its infill is not the line: only the layers that "
+            "hold the host are the line's. ")
+
+
+@dataclass(frozen=True, eq=False)
+class CentreLine:
+    """A drawn line's centre line as F3.line_coverage measures it, in the face's model mm.
+
+    item: its index in the plan's lines.items; index: the palette index of its color (the
+    Shell.index of the body it is drawn into); host: that of the color it is drawn inside
+    (the plan item's host_final); points_mm (n, 2) and edges (m, 2): the
+    centre line (tdmg.color_lines.centre_line, mapped to model mm by tdmg.colored_flat);
+    mirror_x: None face up, else the face-down turn's x0 + x1, so that mirror_x - x is the
+    x of colored.json's face-up frame (tdmg.orca_input.turn_over)."""
+    item: int
+    index: int
+    host: int
+    points_mm: np.ndarray
+    edges: np.ndarray
+    mirror_x: float | None = None
 
 
 def per_tool_id(check_id: str, tool: int) -> str:
@@ -212,10 +266,12 @@ def f3_note(check_id: str) -> str:
     return F3_REQUIRED_NOTE if required else F3_WARNING_NOTE
 
 
-def required_check_ids(tools: int) -> frozenset[str]:
+def required_check_ids(tools: int, lines: bool = False) -> frozenset[str]:
     """Every check of color_slice_checks that PRINTABLE requires, for a plan of this many
-    tools: GATED_CHECK_IDS and f3_required_ids. The INFO_CHECK_IDS are not required."""
-    return frozenset((*GATED_CHECK_IDS, *f3_required_ids(tools)))
+    tools: GATED_CHECK_IDS and f3_required_ids, and LINE_COVERAGE when the model has drawn
+    lines (lines). The INFO_CHECK_IDS are not required."""
+    return frozenset((*GATED_CHECK_IDS, *f3_required_ids(tools),
+                      *((LINE_COVERAGE,) if lines else ())))
 
 
 @dataclass(frozen=True)
@@ -627,7 +683,8 @@ def _unknown(check_id: str, reason: str, threshold=None, rule=None) -> CheckResu
     return CheckResult(check_id, "UNKNOWN", None, threshold, rule, f"not measured: {reason}")
 
 
-def _all_unknown(reason: str, n: int, setup: Setup) -> list[CheckResult]:
+def _all_unknown(reason: str, n: int, setup: Setup, lines: bool = False
+                 ) -> list[CheckResult]:
     threshold, _ = _f3_base(setup)
     f3_rule = {cid: (None, None) if cid == F3_SLICE_CHECK_IDS[0] else (threshold,
                                                                        TOLERANCE_RULE)
@@ -641,20 +698,30 @@ def _all_unknown(reason: str, n: int, setup: Setup) -> list[CheckResult]:
     out += [CheckResult(per_tool_id(cid, t), "UNKNOWN", None, *f3_rule[cid],
                         f"not measured: {reason}; {f3_note(per_tool_id(cid, t))}")
             for t in range(n) for cid in F3_SLICE_CHECK_IDS]
+    if lines:
+        out.append(_line_unknown(reason, threshold))
     out += [CheckResult(cid, "UNKNOWN", None, None, None, f"not measured: {reason}; "
                         + INFO_NOTE) for cid in INFO_CHECK_IDS]
     return out
 
 
+def _line_unknown(reason: str, threshold: dict) -> CheckResult:
+    return CheckResult(LINE_COVERAGE, "UNKNOWN", None, threshold, TOLERANCE_RULE,
+                       f"not measured: {reason}; {LINE_NOTE}")
+
+
 def color_slice_checks(gcode: bytes | None, shells: Sequence[Shell], setup: Setup,
                        statistics: dict | None = None,
-                       not_measured: str | None = None) -> tuple[list[CheckResult], dict]:
+                       not_measured: str | None = None, *,
+                       lines: Sequence[CentreLine] = ()) -> tuple[list[CheckResult], dict]:
     """The multicolor checks for one face's G-code against its bodies, and their record.
 
     Returns, in order: F6.color_changes, F6.tool_placement, F6.filaments_used; the three
-    silhouette F3 checks (R1's ids); the per-tool F3 checks (per tool, R1's order); and
-    F6.color_waste, F6.color_time, F6.color_filament (information). The required ones are
-    required_check_ids(len(shells)). statistics is the
+    silhouette F3 checks (R1's ids); the per-tool F3 checks (per tool, R1's order);
+    F3.line_coverage, only when lines (the model's drawn lines, in this face's model mm;
+    _line_coverage) is not empty; and F6.color_waste, F6.color_time, F6.color_filament
+    (information). The required ones are required_check_ids(len(shells), bool(lines)).
+    A line whose index is no shell's is refused (ValueError). statistics is the
     parsed plate_1.statistics.json, for information only (None if absent).
 
     Everything is UNKNOWN, with the reason, when not_measured is given, when there is no
@@ -666,6 +733,12 @@ def color_slice_checks(gcode: bytes | None, shells: Sequence[Shell], setup: Setu
     shells = list(shells)
     fmap = filament_map(shells)            # check_shells refuses a malformed plan
     n = len(shells)
+    lines = list(lines)
+    indices = [s.index for s in shells]
+    for ln in lines:
+        if ln.index not in indices:
+            raise ValueError(f"line items[{ln.item}] is drawn in color {ln.index}, which "
+                             f"is no body's (the bodies' colors are {indices})")
     record = {"measured": False, "reason": None, "filaments": fmap,
               "layers": [], "start_loads": [], "changes": [], "end_tools": [],
               "toolchanges": [], "silhouette": None, "tools": {}}
@@ -682,7 +755,7 @@ def color_slice_checks(gcode: bytes | None, shells: Sequence[Shell], setup: Setu
             reason = f"analysis error: {type(err).__name__}: {err}"
     if reason is not None:
         record["reason"] = reason
-        return _all_unknown(reason, n, setup), record
+        return _all_unknown(reason, n, setup, bool(lines)), record
     sets = layer_sets(mc.layers, shells)
     area = math.pi * setup.flow.filament_diameter_mm ** 2 / 4
     record.update(
@@ -697,20 +770,22 @@ def color_slice_checks(gcode: bytes | None, shells: Sequence[Shell], setup: Setu
         toolchanges=[c.as_dict(area) for c in mc.toolchanges])
     checks = [_color_changes(mc, sets, statistics), None, _filaments_used(mc, shells)]
     try:
-        placement, f3, tool_f3, geometry = _geometry(mc, shells, sets, setup)
+        placement, f3, tool_f3, line_f3, geometry = _geometry(mc, shells, sets, setup,
+                                                              lines)
     except Exception as err:     # noqa: BLE001 - any failure is UNKNOWN, never a PASS
         why = (f"the G-code cannot be measured: {err}" if isinstance(err, UnsupportedGcode)
                else f"analysis error: {type(err).__name__}: {err}")
-        unknown = _all_unknown(why, n, setup)
+        unknown = _all_unknown(why, n, setup, bool(lines))
         placement = unknown[1]
         f3 = unknown[3:6]
         tool_f3 = unknown[6:6 + 3 * n]
+        line_f3 = unknown[6 + 3 * n:6 + 3 * n + 1] if lines else []
         geometry = {"reason": why}
     checks[1] = placement
     record["silhouette"] = geometry.get("silhouette")
     record["tools"] = geometry.get("tools", {})
     record["geometry_reason"] = geometry.get("reason")
-    return checks + f3 + tool_f3 + _information(mc, statistics, area), record
+    return checks + f3 + tool_f3 + line_f3 + _information(mc, statistics, area), record
 
 
 def _stat_summary(statistics: dict | None) -> dict:
@@ -842,8 +917,11 @@ def _mesh(shell: Shell) -> trimesh.Trimesh:
 
 
 def _geometry(mc: Multicolor, shells: list[Shell], sets: list[list[int]],
-              setup: Setup) -> tuple[CheckResult, list[CheckResult], list[CheckResult], dict]:
-    """F6.tool_placement, the silhouette F3, the per-tool F3, and their record."""
+              setup: Setup, lines: Sequence[CentreLine] = ()
+              ) -> tuple[CheckResult, list[CheckResult], list[CheckResult],
+                         list[CheckResult], dict]:
+    """F6.tool_placement, the silhouette F3, the per-tool F3, F3.line_coverage (a list of
+    one, or empty without lines), and their record."""
     n = len(shells)
     threshold, _ = _f3_base(setup)
     first_mm, tol_mm = threshold["first_layer_mm"], threshold["other_layers_mm"]
@@ -869,13 +947,19 @@ def _geometry(mc: Multicolor, shells: list[Shell], sets: list[list[int]],
                       f"{c.note} {f3_note(c.id)}") for c in f3]
     stray = sorted({t for by in mc.model for t in by if t is None or not 0 <= t < n},
                    key=lambda t: (t is None, t))
+    printed = [[footprint(by.get(t, [])) for by in mc.model] for t in range(n)]
     placement, tool_f3, tool_records = _placed(mc, sections, silhouette, sets, zs, last_h,
-                                               centre, top, setup, threshold, stray)
-    return placement, f3, tool_f3, {"silhouette": sil_record, "tools": tool_records}
+                                               centre, top, setup, threshold, stray,
+                                               printed)
+    alignment = Alignment(PLACEMENT_ANGLE, centre, setup.plate.centre)
+    line_f3 = [_line_coverage(list(lines), shells, sections, printed, zs, alignment,
+                              threshold)] if lines else []
+    return placement, f3, tool_f3, line_f3, {"silhouette": sil_record,
+                                             "tools": tool_records}
 
 
 def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, threshold,
-            stray):
+            stray, printed_by_tool):
     """F6.tool_placement and the per-tool F3 checks and records, at the fixed placement
     (PLACEMENT_ANGLE). The prime tower is not a body: its beads may not reach into the
     silhouette by more than a tool may print outside its body (_tower_depth)."""
@@ -884,7 +968,7 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
     first_mm, tol_mm = threshold["first_layer_mm"], threshold["other_layers_mm"]
     tool_f3, problems, near, per_tool, records = [], [], [], {}, {}
     for t in range(n):
-        printed = [footprint(by.get(t, [])) for by in mc.model]
+        printed = printed_by_tool[t]
         body = [row[t] for row in sections]
         an = analyse_sections(zs, body, printed, last_h, centre, top, setup.plate, first_mm,
                               tol_mm, angles=(angle,))
@@ -983,6 +1067,106 @@ def _placed(mc, sections, silhouette, sets, zs, last_h, centre, top, setup, thre
         status, note = "PASS", how + "Every tool prints only its own body, on its layers."
     placement = CheckResult(TOOL_PLACEMENT, status, measured, threshold, TOLERANCE_RULE, note)
     return placement, tool_f3, records
+
+
+def _line_coverage(lines: list[CentreLine], shells: list[Shell], sections: list,
+                   printed: list, zs: list[float], alignment: Alignment,
+                   threshold: dict) -> CheckResult:
+    """F3.line_coverage (LINE_HOW): on every layer where its host's body has a section,
+    each line's samples inside its own body's section (tdmg.printed.graph_samples with
+    the section as domain: the edges clipped to it, then sampled every EDGE_SAMPLE_MM)
+    against that body's tool's footprint (tdmg.printed.gaps), judged as F3.edge_coverage
+    is (COVERAGE_BOUND_MM), except that a sample within COVERAGE_BOUND_MM of the
+    allowance stays UNKNOWN (no refinement, unlike F3.edge_coverage: no refine_edge or
+    pair_bound). The worst is the sample furthest over
+    its layer's allowance. A host that is no body's leaves the line unmeasured (UNKNOWN).
+    Because the edges are clipped to the section before sampling, the clipping's end
+    points are samples, so the sampling bound holds up to the section's boundary and a
+    piece inside it shorter than the spacing is measured too (Codex review of Task 5b).
+
+    Why the host's layers (found on the real roadie-thanksgiving rebuild, 2026-11-23): a
+    line in the base's color lies in the base body on every layer, and below the inlays
+    the base's sparse infill left samples 1.7 mm from plastic on layers where the line
+    is not a feature (at 0.6 mm the line itself printed on the top layers)."""
+    first_mm, tol_mm = threshold["first_layer_mm"], threshold["other_layers_mm"]
+    tool_of = {s.index: t for t, s in enumerate(shells)}
+    rows, worst, over, near, unmeasured = [], None, 0, 0, []
+    for ln in lines:
+        t, host = tool_of[ln.index], tool_of.get(ln.host)
+        total = len(graph_samples(ln.points_mm, ln.edges))
+        layers, line_max, measured_n = [], None, 0
+        for k in range(len(zs)):
+            if host is None or sections[k][host].is_empty:
+                continue
+            samples = graph_samples(ln.points_mm, ln.edges, sections[k][t])
+            if not len(samples):
+                continue
+            d = gaps(alignment.to_bed(samples), printed[t][k])
+            allowance = first_mm if k == 0 else tol_mm
+            layers.append(k + 1)
+            measured_n += len(d)
+            over += int((d > allowance).sum())
+            near += int(((d <= allowance) & (d + COVERAGE_BOUND_MM > allowance)).sum())
+            j = int(np.argmax(d))
+            line_max = d[j] if line_max is None else max(line_max, d[j])
+            if worst is None or d[j] - allowance > worst[0]:
+                worst = (d[j] - allowance, ln, t, k, d[j], allowance, samples[j])
+        if host is None:
+            unmeasured.append(f"items[{ln.item}] is not measured: its host, color "
+                              f"{ln.host}, is no body's")
+        elif not layers:
+            unmeasured.append(f"items[{ln.item}] has no sample inside the section of "
+                              f"T{t}'s body on any layer where its host's body (color "
+                              f"{ln.host}) has a section")
+        rows.append({"item": ln.item, "index": ln.index, "host": ln.host, "tool": t,
+                     "samples": total, "samples_measured": measured_n,
+                     "layers": layers,
+                     "max_gap_mm": None if line_max is None or math.isinf(line_max)
+                     else float(line_max)})
+    measured = {"sample_mm": EDGE_SAMPLE_MM, "sampling_bound_mm": COVERAGE_BOUND_MM,
+                "alignment": alignment.as_dict(), "lines": rows,
+                "samples_over_allowance": over, "samples_within_sampling_bound": near,
+                "worst": None}
+    how = LINE_HOW.format(sample=EDGE_SAMPLE_MM, bound=COVERAGE_BOUND_MM)
+    where = ""
+    if worst is not None:
+        _, ln, t, k, gap, allowance, at = worst
+        finite = not math.isinf(gap)
+        at_model = [float(at[0]), float(at[1])]
+        measured["worst"] = w = {
+            "item": ln.item, "index": ln.index, "tool": t, "layer": k + 1, "z": zs[k],
+            "gap_mm": float(gap) if finite else None, "allowance_mm": allowance,
+            "at_model_mm": at_model,
+            "at_colored_mm": (at_model if ln.mirror_x is None
+                              else [ln.mirror_x - at_model[0], at_model[1]]),
+            "at_bed_mm": [float(v) for v in alignment.to_bed(at[None, :])[0]],
+            "printed_on_layer": finite}
+        dist = (f"{gap:.3f} mm from T{t}'s plastic" if finite else
+                f"not printed (T{t} prints nothing on layer {k + 1})")
+        where = (f"the worst sample of items[{ln.item}] (T{t}) is {dist} on layer {k + 1} "
+                 f"(z {zs[k]:g} mm), against {allowance:g} mm, at model "
+                 f"{_xy(w['at_model_mm'])} mm (colored.json {_xy(w['at_colored_mm'])} mm, "
+                 f"bed {_xy(w['at_bed_mm'])} mm)")
+    if over:
+        status = "FAIL"
+        note = how + f"{over} sample(s) over the allowance; " + where + "".join(
+            f"; {u}" for u in unmeasured) + ". "
+    elif near or unmeasured:
+        status = "UNKNOWN"
+        parts = [*unmeasured]
+        if near:
+            parts.append(f"within sampling uncertainty: {near} sample(s) within "
+                         f"{COVERAGE_BOUND_MM:g} mm of the allowance; {where}")
+        note = how + "; ".join(parts) + ". "
+    else:
+        status = "PASS"
+        note = how + "Every sample is covered" + (f"; {where}" if where else "") + ". "
+    return CheckResult(LINE_COVERAGE, status, measured, threshold, TOLERANCE_RULE,
+                       note + LINE_NOTE)
+
+
+def _xy(point) -> str:
+    return "(" + ", ".join(f"{v:.2f}" for v in point) + ")"
 
 
 def _tower_depth(segments: list[Segment], silhouette_bed) -> float | None:

@@ -660,6 +660,23 @@ slicer's own report.
     kept outline line, shows as a coverage warning.
   - **The trade-off:** a color left partly unprinted inside the model (half an inlay)
     only warns. Half of the base's first layer is still caught. The owner accepted this.
+- **`F3.line_coverage`** (only when the model has drawn lines, `thin_lines: widen`;
+  widen-lines plan, Task 5b): **required**. `colored.json` records each drawn line's
+  centre line in model mm (`lines.centre_lines`: the points the line was drawn around, the
+  edges that join them, its color and the color it is drawn inside, its host). The edges
+  are sampled every 0.05 mm, as model edges are for `F3.edge_coverage`. On each layer
+  where the host's body is, every sample inside the section of the line color's body must
+  lie within the F3 allowance (0.2 mm; 0.275 mm on layer 1) of that color's printed
+  plastic. Only the host's layers count: a line in the base's color lies in the base body
+  on every layer, and below the inlays the base's sparse infill is not the line. It FAILs
+  naming the worst sample (its distance, the line's plan item, the layer and z, and its
+  position in model mm and in `colored.json`'s face-up frame). It is UNKNOWN within the
+  sampling bound (0.025 mm) of the allowance, or when a line has no sample in its body on
+  any such layer. A sample within the sampling bound stays UNKNOWN: there is no
+  refinement, unlike `F3.edge_coverage`. Before this check, unprinted lines showed only as the line color's
+  `F3.edge_coverage` warning (the owner's `roadie-thanksgiving` print: the 0.41 mm red
+  lines did not print). A plan without drawn lines gets no such check, and a widen
+  `colored.json` made before the check is refused by `tdmg slice`.
 - **`F6.portability`:** PrusaSlicer reads and slices `model.3mf`. Its volume is recorded
   but is not a condition: no derivation of PrusaSlicer's 3MF volume exists.
 - **Information only (UNKNOWN):** `F6.color_waste` (flush and prime tower, in mm³),

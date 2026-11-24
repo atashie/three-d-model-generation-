@@ -35,6 +35,7 @@ from tdmg.printed import (
     f3_checks,
     footprint,
     gaps,
+    graph_samples,
     judge_f3,
     model_section,
     pair_bound,
@@ -1323,3 +1324,48 @@ def test_the_pair_bound_is_never_below_the_true_distance(ax, ay, bx, by, cx, cy,
     p = a + t * (b - a)
     da, db, dp = gaps(np.array([a, b, p]), printed)
     assert dp <= pair_bound(da, db, float(np.hypot(*(b - a)))) + 1e-9
+
+
+# --- widen lines, Task 5b: the centre-line samples (tdmg.printed.graph_samples) ----------
+
+
+def test_graph_samples_split_each_edge_to_the_sample_spacing():
+    points = [(0.0, 0.0), (1.0, 0.0), (1.0, 0.3), (5.0, 5.0)]     # the last one alone
+    samples = graph_samples(points, [(0, 1), (1, 2)])
+    assert samples.shape[1] == 2 and len(samples) == len(np.unique(samples, axis=0))
+    assert [5.0, 5.0] in samples.tolist()
+    on_edges = samples[samples[:, 0] <= 1.0]
+    # Every point of the two edges is within EDGE_SAMPLE_MM / 2 of a sample.
+    path = shapely.LineString([(0, 0), (1, 0), (1, 0.3)])
+    probe = shapely.get_coordinates(shapely.segmentize(path, 0.001))
+    nearest = np.min(np.hypot(*(probe[:, None, :] - on_edges[None]).transpose(2, 0, 1)),
+                     axis=1)
+    assert nearest.max() <= EDGE_SAMPLE_MM / 2 + 1e-12
+
+
+def test_graph_samples_in_a_domain_clip_the_edges_before_sampling():
+    # A chain from x = 0 to 3 at y = 1, points 1 mm apart, and a lone point at (9, 9).
+    points = [(0.0, 1.0), (1.0, 1.0), (2.0, 1.0), (3.0, 1.0), (9.0, 9.0)]
+    edges = [(0, 1), (1, 2), (2, 3)]
+    domain = shapely.box(0.52, 0, 2.47, 2)
+    samples = graph_samples(points, edges, domain)
+    # Only the part inside, from the clipping's end points, every 0.05 mm at most.
+    assert samples[:, 0].min() == pytest.approx(0.52)
+    assert samples[:, 0].max() == pytest.approx(2.47)
+    assert (samples[:, 1] == 1.0).all()
+    assert np.diff(samples[:, 0]).max() <= EDGE_SAMPLE_MM + 1e-12
+    # A piece shorter than the spacing between whole-graph samples is still sampled.
+    thin = shapely.box(1.51, 0, 1.52, 2)
+    assert not shapely.intersects_xy(thin, *graph_samples(points, edges).T).any()
+    assert len(graph_samples(points, edges, thin)) >= 2
+    # A lone point inside the domain is a sample; an empty domain has none.
+    assert graph_samples(points, edges, shapely.box(8, 8, 10, 10)).tolist() == [[9.0, 9.0]]
+    assert graph_samples(points, edges, shapely.Polygon()).shape == (0, 2)
+
+
+def test_graph_samples_keep_an_edge_of_zero_length_as_its_point():
+    # Two ridge points can smooth to one position (the real turkey's centre lines).
+    samples = graph_samples([(1.0, 1.0), (1.0, 1.0), (1.2, 1.0)], [(0, 1), (1, 2)])
+    assert len(samples) == 5 and (samples[:, 1] == 1.0).all()
+    assert samples[0, 0] == 1.0 and samples[-1, 0] == 1.2
+    assert np.diff(samples[:, 0]).max() <= EDGE_SAMPLE_MM + 1e-12

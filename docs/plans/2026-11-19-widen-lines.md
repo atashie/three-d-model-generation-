@@ -307,6 +307,29 @@ first-layer allowance, as `F3.edge_coverage` does):
   with the right position; a remove plan's check set is unchanged; the real turkey at
   0.41 mm FAILs and at 0.6 mm PASSes (scratch check, not committed).
 
+**Built (2026-11-23, not yet committed).** `colored.json`'s lines block adds
+`centre_method` (`smoothed-ridge-graph/1`) and `centre_lines` (per drawn line in the
+model: its plan item, color index and hex, host index, points in model mm and edges;
+`tdmg.color_lines.centre_line`, `tdmg.colored_flat`). `tdmg slice` refuses a widen
+`colored.json` without them and turns them over for face down
+(`tdmg.color_slicing.centre_lines_of`, `turned_lines`). `tdmg.color_gcode` adds
+`F3.line_coverage`, required only with lines (`required_check_ids(tools, lines=True)`),
+using the reusable helper `tdmg.printed.graph_samples` (each edge, clipped to a domain
+first, here the body's section on that layer, split every `EDGE_SAMPLE_MM` as
+`F3.edge_coverage` samples edges; Codex review of Task 5b, which found that filtering
+whole-graph samples could pass a gap at a boundary) and `tdmg.printed.gaps`. Judged as
+`F3.edge_coverage` is, with `COVERAGE_BOUND_MM`, but without its refinement. One change from the spec above: a sample counts only on layers where
+the line's host body has a section. On the real turkey the lines are in the base color,
+and below the inlays the base body is the whole silhouette, so its sparse infill gave
+1.7 mm "gaps" on layers 4 to 7 at 0.6 mm, where the line is not a feature. No new
+number. Remove plans are unchanged (`tdmg library verify roadie-drop`: identical). The
+turkey rebuilt and sliced with the pinned slicers
+(research/verification/2026-11-22-thin-line-print/README.md, "Addendum, 2026-11-23", and
+its `measure_line_coverage.py`, which runs while the git-ignored job exists): at 0.41 mm FAIL on both faces (worst 4.24 mm, face up
+layer 11, face down layer 2); at 0.6 mm PASS face up and FAIL face down (0.63 mm against
+0.275 mm on layer 1), so the expected 0.6 mm PASS holds face up only. At 0.6 mm the plan
+found one line, not two, so that run covers one line only.
+
 ### Task 6: docs, skill, and the real job
 
 **Files:** `docs/guide/pipeline-and-gate.md` (the colors section: step 6 after

@@ -1,0 +1,21 @@
+**One High defect found in the evidence script. No High or Medium defects found in the corrected coverage implementation.**
+
+1. **High — Output-path validation permits deleting the repository and sibling repositories.**  
+   [measure_line_coverage.py:39](C:/Users/arikt/documents/github/three-d-model-generation-/research/verification/2026-11-22-thin-line-print/measure_line_coverage.py:39)
+
+   The guard rejects the repository and its descendants, but accepts its ancestors. Supplying the repository’s parent as `OUT_DIR` reaches `shutil.rmtree(out)` at line 44, recursively deleting the directory containing the checkout and sibling repositories.
+
+   **Reproduced safely:** called `main("job", REPO.parent)` with `shutil.rmtree` mocked to stop execution. It attempted deletion of `C:/Users/arikt/Documents/GitHub`.
+
+   **Suggested change:** require a new output directory instead of recursively replacing an existing one. At minimum, also reject ancestors of the resolved repository path.
+
+The previous Medium finding is resolved. Probes covered holes, MultiPolygons, boundary-aligned edges, GeometryCollections, point contacts, and adjacent floating-point boundary coordinates. Every intersecting component was sampled; the 0.025 mm bound held within floating-point rounding. FAIL correctly takes precedence over unmeasured lines.
+
+Validation performed:
+
+- **542 tests passed:** `.venv/Scripts/python.exe -B -m pytest --noconftest -s -p no:cacheprovider tests/test_color_gcode.py tests/test_color_lines.py tests/test_rules.py -m 'not slicer' tests/test_printed.py -k 'not the_real_slicer'`.
+- All three clipping regressions failed when the old behavior was restored **in memory**.
+- Stored turkey G-code reproduced the README’s **4.241 mm** worst excess-relative-to-allowance sample on both faces, with **770 / 1158** samples over allowance. Sampling took **1.43–1.54 seconds**, within **21.8–23.2 seconds** total analysis per face.
+- No-line check/record serialization matched HEAD on both stored faces. Old-widen refusal and changed-centre-line rebuild detection worked; the stored Roadie library entry checked clean.
+
+I did not rerun slicers, the 0.6 mm experiment, or `library verify roadie-drop`, which writes a scratch rebuild. Full historical byte identity therefore remains independently unverified. The README explicitly acknowledges its unretained logs; I found no additional concrete defect in the addendum. No repository files were edited.

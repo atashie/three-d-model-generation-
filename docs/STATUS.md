@@ -1,6 +1,6 @@
 # Project status
 
-**Last updated:** 2026-11-19 (widen-lines Codex review handled in three rounds; trial print of `roadie-thanksgiving` next, then Task 5b and Task 6; `roadie-mural` paused).
+**Last updated:** 2026-11-23 (the `roadie-thanksgiving` print: 0.41 mm lines left a gap; Task 5b `F3.line_coverage` built and reviewed; `thin_lines: gap` designed, plan next; `roadie-mural` paused).
 
 Keep this page current. A new session reads it right after `CLAUDE.md`, and it is the
 only memory that travels between machines. It holds the current state only. Why things
@@ -234,52 +234,36 @@ has been measured with calipers, and strength is not judged.
    - Small bug: `job set select.remove_at=null` is refused for list keys. Use `[]` to
      clear them before setting `select.mask`.
 
-10. **`colors.thin_lines: widen`: Tasks 1–5 built and Task 7 (Codex review, three
-    rounds) handled; next the owner's trial print of `roadie-thanksgiving`, then Task 5b,
-    then Task 6.** Owner, 2026-11-19: "sure, let's move to the simplest option to get a
-    printable version ready asap" (run the job before Task 5b and the docs) and "proceed
-    with your recommendations through the build, check and slice face up / down".
+10. **Thin drawn lines: `widen` printed, Task 5b built; `gap` mode next, then Task 6.**
     Plan `docs/plans/2026-11-19-widen-lines.md`; design
     `docs/plans/2026-11-19-widen-lines-design.md`; evidence
-    `research/verification/2026-11-19-widen-lines/` (with two addenda: find_lines on the
-    turkey, and slicing at line widths 0.41–0.6 mm).
-    - What exists: rules `color.lines.width` (0.41), `.host_share` (0.9),
-      `.min_elongation` (3, length / width); settings `thin_lines` (remove | widen) and
-      `line_width_mm`, kept out of colors.json under remove (`recorded_settings`), old
-      job.yaml files load (`jobs.ADDED_FIELDS`); `tdmg.color_lines.find_lines` and
-      `draw_lines` (MST bridging, closed loops, bounds); colors.json schema
-      `tdmg.colors/5` with a `lines` block under widen; verify strict both ways;
-      colored_flat draws the recorded lines, no glue then. Under remove everything is
-      byte-identical; `tdmg library verify roadie-drop` identical (exit 0).
-    - **Codex review done (Task 7):** `research/reviews/2026-11-19-widen-lines/README.md`
-      records every finding of the three rounds and its handling. Changes: ridge pieces
-      joined in `find_lines` with loop-closing bridges (in-mask run, never splitting the
-      mask's outside or a hole); lines drawn on the model's scale; a line is drawn only
-      if it paints a pixel, and colored_flat warns (`LINES_NOT_PAINTED`) and builds glue
-      when a line is not in the final cells; method `inside-one-color-lines/2`; new
-      hypothesis rules `color.lines.loop_path_factor`, `.run_tolerance`, `.close_reach`,
-      `.ridge_smooth`; `color.lines.width` no longer in the lines block's rules. The
-      round 3 fix (nested holes) has tests but no Codex pass yet; review it with Task 5b.
-      The slicing sweep above was made before these changes.
-    - **Task 5b (owner: "to your question: yes"):** a required `F3.line_coverage` so that
-      unprinted stretches of widened lines make the verdict NOT CERTIFIED; spec in the
-      plan.
-    - **Slicing finding:** with the pinned OrcaSlicer, 0.41 mm turkey lines leave gaps up
-      to 3.9 mm (face up) / 4.5 mm (face down); full from about 0.6 mm. The owner keeps
-      0.41 mm and will test-print it ("1) 0.41 mm and test-print it").
-    - **Task 6:** docs (pipeline-and-gate colors section, color-multi attribute page,
-      skill step 6 no longer "planned", design marked built), then run
-      `roadie-thanksgiving`: `tdmg job set roadie-thanksgiving colors.thin_lines=widen`,
-      `job run`, show regions.png and crops, ask for the color confirmation and the
-      thickness (original 3 mm), build, slice, explain the verdict (expect NOT CERTIFIED
-      from Task 5b at 0.41 mm), and the owner test-prints with `--accept-not-certified`
-      only in their own words.
-    - The job `roadie-thanksgiving` (git-ignored): R2, 60 mm; origin `generated` only;
-      selection `remove_at [[5, 5]]`, `keep_at [[560, 540]]`, tolerance 80, confirmed
-      ("perfect!"); colors "4 colors, ready", not confirmed; thickness not set; the pupils
-      still join (out of scope).
-    - CI: green at fa9215c on all three platforms; at 60929f7 macOS was cancelled by
-      GitHub (no runner), Windows and Ubuntu green; 4415fdb not yet checked.
+    `research/verification/2026-11-19-widen-lines/` (prototypes, slicing sweep) and
+    `research/verification/2026-11-22-thin-line-print/` (the print).
+    - **The print (2026-11-22):** the owner printed `roadie-thanksgiving` (widen, 0.41
+      mm, 2.5 mm thick) face up from Bambu Studio: "I printed it; it looked quite good
+      and I'm happy with the product. However teh fine lines of red that helped define
+      the turkey did not print, but instead a gap was left where the lines should have
+      been." Recorded as the job's confirmation 3 (`--route ams --face up
+      --accept-not-certified`; face up was NOT CERTIFIED by the OrcaSlicer layer-10
+      fault, but the owner saw a complete top). So a 0.41 mm line does not print as a
+      line; the gap read as a border, which the owner liked.
+    - **Task 5b built (2026-11-23):** the required `F3.line_coverage` (centre lines in
+      colored.json, measured on host layers, cut to the body's section before
+      sampling). On the turkey at 0.41 mm it FAILs on both faces (4.241 mm), so face down
+      is no longer PRINTABLE; at 0.6 mm it PASSes face up and FAILs face down (0.626
+      mm, first layer). Claude spec and quality reviews, Codex rounds 4 and 5
+      (`research/reviews/2026-11-19-widen-lines/README.md`, rows 4.1 and 5.1; round 4
+      also passed the round 3 nested-hole fix).
+    - **Next, `thin_lines: gap`** (owner, 2026-11-22/23: "Add gap, keep widen
+      (Recommended)", "Set width, default 0.41 (Recommended)", design "yes, proceed"):
+      design `docs/plans/2026-11-22-gap-lines-design.md`; the plan is to be written.
+      Each thin line becomes an empty, skin-deep groove of `gap_width_mm`; first test
+      whether `F3.edge_overprint` already catches plastic in a groove.
+    - **Then Task 6:** docs for widen and gap (pipeline-and-gate colors section,
+      color-multi page, skill step 6, designs marked built), STATUS, gen_docs.
+    - The job `roadie-thanksgiving` (git-ignored) stays until the owner finishes it; it
+      can be rerun with `thin_lines: gap` once that is built.
+    - CI: green at fa9215c; ceed878, 79dcd14 and 4415fdb not yet checked.
 
 **Ideas, not started:** owner-generated "print-friendly" input art (flat colors, plain
 background), recorded with its prompt and model, run through the unchanged pipeline.

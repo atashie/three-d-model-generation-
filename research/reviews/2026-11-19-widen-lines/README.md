@@ -12,6 +12,8 @@ There were three rounds, each on the fixes of the round before:
 | 1 | `prompt.md` | `codex-review.txt` | `b23af64..4415fdb` |
 | 2 | `prompt-fixes.md` | `codex-review-fixes.txt` | the round 1 fixes (uncommitted, on 79dcd14) |
 | 3 | `prompt-fixes2.md` | `codex-review-fixes2.txt` | the round 2 fixes (uncommitted, on 79dcd14) |
+| 4 | `prompt-line-coverage.md` | `codex-review-line-coverage.txt` | plan Task 5b, `F3.line_coverage` (uncommitted, on ceed878), and the round 3 fix in ceed878 |
+| 5 | `prompt-line-coverage-fixes.md` | `codex-review-line-coverage-fixes.txt` | the round 4 fix (uncommitted, on ceed878) |
 
 A first attempt at round 1 waited on standard input and did nothing; it was stopped and
 run again with `< /dev/null`. Codex ran read-only tests and in-memory reproductions in
@@ -46,8 +48,12 @@ and `tdmg library verify roadie-drop` (identical to the historical run, exit 0).
 | 2.6 | Low | The design doc promised byte identity for every remove plan | `test_no_thin_lines_key_runs_no_line_code_and_gives_the_same_bytes` | Fixed: the design doc says byte-identical with no `thin_lines` key; an explicit `remove` keeps `colors_id` and settings but records its config's hash |
 | 3.1 | High | Nested loops: a bridge could split an existing hole, closing an inner opening | `test_a_bridge_never_splits_a_hole` (Codex's nested rectangles, and a both-closed case) | Fixed: the mask's complement is split into its parts (the outside and each hole); a bridge is refused if it splits any part, so it may only separate two parts (restore a hole). Pixels within the run tolerance of the line are not counted, so a tolerated corner cut does not count as a split (the `color.lines.run_tolerance` note says so) |
 | 3.2 | Low | = 1.7 | | Deferred to the owner |
+| 4.1 | Medium | `F3.line_coverage` sampled the whole centre line and then dropped samples outside the body's section, so at a boundary the last kept sample could be almost a full interval from it and a 0.223 mm gap passed under the 0.025 mm bound; a short re-entry between two samples went unmeasured | `test_a_gap_at_the_end_of_a_line_inside_its_body_is_caught` (Codex's fixture), `test_a_short_piece_of_a_line_inside_its_body_between_two_samples_is_measured`, both seen to PASS wrongly first | Fixed: `tdmg.printed.graph_samples` takes a domain and cuts each edge to it before sampling, keeping the cut ends; `sample_gaps` removed. The turkey numbers are unchanged (4.241 mm FAIL on both faces). Codex confirmed in round 5 (holes, MultiPolygons, boundary edges, point contacts) |
+| 5.1 | High | The evidence script `research/verification/2026-11-22-thin-line-print/measure_line_coverage.py` refused an output folder inside the repository but not an ancestor of it, and then deleted the folder recursively | Codex, with `shutil.rmtree` mocked; then by hand: the parent of the repository, a folder inside it and an existing folder are all refused | Fixed: the output folder must be outside the repository, not one of its ancestors, and must not exist yet; the script deletes nothing |
+
+Round 4 also reviewed the round 3 fix (3.1): Codex found it correct (with its guard disabled, the nested-hole test fails). Before round 4, Task 5b had a Claude spec review (two doc gaps, fixed) and quality review (approved; the no-refinement wording, the kept evidence script and eight small points, fixed).
 
 Codex checked in round 3 and found correct: the clipping check, the `/1` refusal, the six
 rule values in the widen identity only, unit conversion, and the remove-mode bytes against
 HEAD. Its last review ran before the 3.1 fix; that fix was checked by its tests, the full
-suite and `library verify roadie-drop`, and is to be reviewed with plan Task 5b.
+suite and `library verify roadie-drop`, and was reviewed in round 4.

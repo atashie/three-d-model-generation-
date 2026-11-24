@@ -15,8 +15,9 @@ tdmg.colorslice/1) last. It prints nothing.
    tdmg.colored_flat gives for its glue section, a body row or a check that is not valid;
    any output it lists missing (FileNotFoundError: "missing"), or with a SHA-256 that is not
    the record's (the STLs, model.3mf, palette.json, top.png and parts.png); a palette.json
-   that does not describe the record's AMS shells; shells rebuilt from the AMS STLs that do
-   not PASS export_3mf_check against model.3mf; and everything tdmg.slicing refuses
+   that does not describe the record's AMS shells; a lines block (thin_lines widen) made
+   before F3.line_coverage or malformed (centre_lines_of); shells rebuilt from the AMS STLs
+   that do not PASS export_3mf_check against model.3mf; and everything tdmg.slicing refuses
    (output folder, slicers, profiles, timeout).
 2. The colored record's own checks are not a refusal: as tdmg.slicing.make_slice does
    with flat.json's checks, they are carried into each verdict (minus the F6.slicer
@@ -49,9 +50,11 @@ tdmg.colorslice/1) last. It prints nothing.
    and the difference are recorded in measured, and do not decide the status.
 7. Verdicts: per face, PRINTABLE only if every required check passes: the inherited ones
    (the record's required_checks minus the glue-only ones, F6.slicer and
-   F3.thin_regions), F2.orca_input_matches_bodies, color_gcode.required_check_ids, R1's
-   four slicer F6 checks and F6.portability. Per glue plate, GLUE_REQUIRED_CHECKS and
-   the record's required glue-only checks (F4.glue_fit, F4.glue_partition). The glue route
+   F3.thin_regions), F2.orca_input_matches_bodies, color_gcode.required_check_ids (with
+   F3.line_coverage when colored.json records drawn lines: centre_lines_of, turned for
+   face down by turned_lines), R1's four slicer F6 checks and F6.portability. Per glue
+   plate, GLUE_REQUIRED_CHECKS and the record's required glue-only checks (F4.glue_fit,
+   F4.glue_partition). The glue route
    is printable only when every glue plate is PRINTABLE (glue_route). A FAIL
    quarantines that face's or plate's G-code (.failed); PrusaSlicer's G-code is quarantined when
    F6.portability or an inherited AMS check FAILs.
@@ -89,6 +92,7 @@ from tdmg.color_gcode import (
     COLOR_CHANGES,
     COLOR_TIME,
     COLOR_WASTE,
+    CentreLine,
     color_slice_checks,
     f3_warning_ids,
     per_tool_id,
@@ -98,6 +102,7 @@ from tdmg.colored_flat import (
     ALGORITHM as COLORFLAT_ALGORITHM,
 )
 from tdmg.colored_flat import (
+    CENTRE_LINES_METHOD,
     COLORED_REQUIRED_CHECKS,
     GLUE_ONLY_CHECKS,
     MODEL_3MF,
@@ -175,6 +180,9 @@ COLOR_RECORD_SCHEMA = "tdmg.colorslice/1"
 # (Codex review 2026-11-16, research/reviews/2026-11-16-face-down, finding 3): the record
 # keeps the print instructions ("print", the CLI's own text), and its review and
 # model_3mf note say to turn model.3mf over for face down.
+# Not bumped for F3.line_coverage (widen lines, Task 5b): a plan without drawn lines gets
+# the same checks and the same record bytes (tdmg library verify roadie-drop: identical),
+# and a plan with them is told apart by its colored.json, whose hash is in the identity.
 COLORSLICE_ALGORITHM = "colorslice-2"
 FACES = ("up", "down")
 FACE_FOLDER = {"up": "face-up", "down": "face-down"}
@@ -602,6 +610,78 @@ def ams_shells(record: dict, files: dict[str, bytes]) -> list[Shell]:
     return shells
 
 
+def _number_pair(v) -> bool:
+    return (isinstance(v, list) and len(v) == 2
+            and all(isinstance(x, (int, float)) and not isinstance(x, bool)
+                    and math.isfinite(x) for x in v))
+
+
+def centre_lines_of(record: dict, shells: list[Shell]) -> list[CentreLine]:
+    """The drawn lines' centre lines of colored.json (lines.centre_lines; widen lines,
+    Task 5b), face up, for F3.line_coverage: [] when the record has no lines block (a
+    thin_lines remove plan, whose faces get no line check). SlicerError when the block
+    is not this version's (no centre_method CENTRE_LINES_METHOD or no centre_lines: made
+    before Task 5b) or is malformed: lines.drawn must be the number of rows; each row an
+    item index (int, distinct), the palette index of an AMS body, its hex, points_mm a
+    non-empty list of finite [x, y], and edges a list of index pairs into it; host the
+    palette index (int) of the color it is drawn inside, not its own. A changed
+    but well-formed row is not caught here; the rebuild compares the record (tdmg
+    library verify, tdmg finish)."""
+    block = record.get("lines")
+    if block is None:
+        return []
+    where = f"{COLORED_RECORD} lines"
+    if (not isinstance(block, dict) or block.get("centre_method") != CENTRE_LINES_METHOD
+            or "centre_lines" not in block):
+        raise SlicerError(f"{where}: made before F3.line_coverage (no centre lines of "
+                          f"method {CENTRE_LINES_METHOD}); run tdmg flat --colors again")
+    rows = block["centre_lines"]
+    if not isinstance(rows, list) or block.get("drawn") != len(rows):
+        raise SlicerError(f"{where}.drawn must be the number of centre_lines")
+    hexes = {s.index: s.hex for s in shells}
+    out, items = [], set()
+    for k, row in enumerate(rows):
+        at = f"{where}.centre_lines[{k}]"
+        if not isinstance(row, dict) or sorted(row) != ["edges", "hex", "host", "index",
+                                                        "item", "points_mm"]:
+            raise SlicerError(f"{at} must hold exactly edges, hex, host, index, item, "
+                              "points_mm")
+        item = row["item"]
+        if isinstance(item, bool) or not isinstance(item, int) or item < 0 or item in items:
+            raise SlicerError(f"{at}.item must be a distinct item index")
+        items.add(item)
+        index = row["index"]
+        if (isinstance(index, bool) or not isinstance(index, int) or index not in hexes
+                or row["hex"] != hexes[index]):
+            raise SlicerError(f"{at}: index and hex name no AMS body")
+        host = row["host"]
+        if isinstance(host, bool) or not isinstance(host, int) or host < 0 or host == index:
+            raise SlicerError(f"{at}.host must be a palette index other than index")
+        points = row["points_mm"]
+        if not (isinstance(points, list) and points and all(map(_number_pair, points))):
+            raise SlicerError(f"{at}.points_mm must be a non-empty list of finite [x, y]")
+        edges = row["edges"]
+        if not (isinstance(edges, list) and all(
+                isinstance(e, list) and len(e) == 2
+                and all(isinstance(i, int) and not isinstance(i, bool)
+                        and 0 <= i < len(points) for i in e) for e in edges)):
+            raise SlicerError(f"{at}.edges must be pairs of indices into points_mm")
+        out.append(CentreLine(item, index, host, np.asarray(points, dtype=np.float64),
+                              np.asarray(edges, dtype=np.int64).reshape(-1, 2)))
+    return out
+
+
+def turned_lines(lines: list[CentreLine], shells: list[Shell]) -> list[CentreLine]:
+    """The centre lines face down: turned as tdmg.orca_input.turn_over turns the face-up
+    shells (x -> x0 + x1 - x, x0 and x1 the shells' x bounds; y unchanged), with mirror_x
+    = x0 + x1 so that F3.line_coverage can also name a place in colored.json's frame."""
+    x = np.concatenate([np.asarray(s.vertices)[:, 0] for s in shells])
+    mirror = float(np.float64(x.min())) + float(np.float64(x.max()))
+    return [CentreLine(ln.item, ln.index, ln.host,
+                       np.column_stack([mirror - ln.points_mm[:, 0], ln.points_mm[:, 1]]),
+                       ln.edges, mirror) for ln in lines]
+
+
 def filament_profiles(pinned: bytes, fmap: list[dict]) -> list[dict]:
     """The derived filament profiles, in filament_map order: {"filament", "file", "bytes",
     "sha256", "filament_colour", "differs_from_pinned_in"}. Each is the pinned profile's
@@ -717,9 +797,12 @@ def _face_summary(checks: list[CheckResult]) -> dict:
 def slice_face(ctx: Context, face: str, shells: list[Shell], filaments: list[dict],
                inherited: list[CheckResult], inherited_required: frozenset[str],
                portability: CheckResult, allowed, *,
-               portability_required: bool = True) -> dict:
+               portability_required: bool = True,
+               lines: list[CentreLine] = ()) -> dict:
     """One face: orca-input.3mf, its gate check, the OrcaSlicer run and the checks.
     Returns {"record", "files" (by path in the output folder), "identity"}.
+    lines: the model's drawn lines in this face's frame (centre_lines_of, turned_lines
+    face down); with any, F3.line_coverage is among the checks and required.
     portability_required False leaves F6.portability out of the required set (it stays
     in the checks): tdmg.calibration_strip's strips, whose plan does not require it."""
     folder = FACE_FOLDER[face]
@@ -764,14 +847,19 @@ def slice_face(ctx: Context, face: str, shells: list[Shell], filaments: list[dic
         exited = next(c for c in f6 if c.id == "F6.slicer_exit").status == "PASS"
         color, color_record = color_slice_checks(
             gcode, shells, setup, raw_stats,
-            None if exited else "the slicer failed (F6.slicer_exit)")
+            None if exited else "the slicer failed (F6.slicer_exit)",
+            # lines only when there are any: a plan without lines makes the same call as
+            # before Task 5b, which the tests' stand-ins for color_slice_checks (tests/
+            # test_color_slice.py _all_pass, tests/test_calibration_strip.py) accept.
+            **({"lines": lines} if lines else {}))
         counted = len(color_record["layers"]) if color_record["measured"] else None
         f6 = _cross_check_layers(f6, stats, {"layer_count": counted})
         stats_bytes = ((out_dir / STATS_NAME).read_bytes()
                        if (out_dir / STATS_NAME).is_file() else None)
         log_bytes = log.read_bytes() if log.is_file() else None
     checks = [*inherited, f2, *color, *f6, portability]
-    required = (inherited_required | {ORCA_CHECK} | required_check_ids(len(shells))
+    required = (inherited_required | {ORCA_CHECK}
+                | required_check_ids(len(shells), bool(lines))
                 | SLICER_F6_IDS | ({"F6.portability"} if portability_required else set()))
     quarantined = any(c.status == "FAIL" for c in checks if c.id in required)
     files = {f"{folder}/{ORCA_INPUT_NAME}": orca}
@@ -935,6 +1023,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     sliced = FACE_CHOICES[face]
     record_in, raw, files_in = read_colored(colored_dir)
     shells = ams_shells(record_in, files_in)
+    lines_up = centre_lines_of(record_in, shells)
     model_3mf = files_in[MODEL_3MF]
     model_check = export_3mf_check(model_3mf, shells)
     if model_check.status != "PASS":
@@ -967,6 +1056,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     filaments = filament_profiles(ctx.profile_data["filament"], fmap)
     colored_sha = _sha(raw)
     faces = {"up": shells, "down": turn_over(shells) if "down" in sliced else None}
+    face_lines = {"up": lines_up, "down": turned_lines(lines_up, shells)}
     allowed = allowed_counts(shells, ctx.process)
     if "down" in sliced and allowed_counts(faces["down"], ctx.process) != allowed:
         raise SlicerError("the turned bodies allow other layer counts than face up")
@@ -991,7 +1081,7 @@ def make_color_slice(colored_dir, out_dir, slicer_dir=None, timeout_s=None,
     face_records, face_ids = {}, {}
     for side in sliced:
         done = slice_face(ctx, side, faces[side], filaments, inherited, inherited_required,
-                          portability, allowed)
+                          portability, allowed, lines=face_lines[side])
         face_records[side] = done["record"]
         face_ids[side] = done["identity"]
         files.update(done["files"])

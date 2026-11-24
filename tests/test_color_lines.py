@@ -1151,3 +1151,37 @@ def test_find_then_draw_after_cleanup_end_to_end():
     ang = np.mod(np.arctan2((ii + 0.5) / S - centre[0], (jj + 0.5) / S - centre[1]),
                  2 * math.pi)
     assert ang.min() <= ARC_FROM + 1.0 / ARC_R and ang.max() >= ARC_TO - 1.0 / ARC_R
+
+
+# --- widen lines, Task 5b: the centre line F3.line_coverage measures ---------------------
+
+
+def test_centre_line_is_the_smoothed_points_paint_lines_draws_around():
+    """centre_line gives the points paint_lines paints its discs around (cell
+    coordinates, (row, col)), joined by the edges of the joined ridge: painting discs of
+    width / 2 around them reproduces the drawn line exactly, and the edges connect them."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    ridge = ring_ridge((10.0, 10.0), 30.0, 0.0, math.pi / 2, 50)
+    points, edges = color_lines.centre_line(ridge, RIDGE_SMOOTH_PX)
+    assert points.dtype == np.float64 and points.shape[1] == 2
+    assert edges.dtype == np.int64 and edges.shape[1] == 2 and len(edges)
+    assert (edges[:, 0] < edges[:, 1]).all() and edges.max() < len(points)
+    graph = coo_matrix((np.ones(len(edges)), (edges[:, 0], edges[:, 1])),
+                       shape=(len(points),) * 2)
+    assert connected_components(graph, directed=False)[0] == 1
+    fine = np.full((50 * S, 50 * S), HOST, np.uint8)
+    out = draw_lines(fine, S, [(INK, HOST, ridge)], DRAW_W)
+    rows, cols = np.mgrid[0:fine.shape[0], 0:fine.shape[1]]
+    centres = np.column_stack([((rows + 0.5) / S).ravel(), ((cols + 0.5) / S).ravel()])
+    near = cKDTree(points).query(centres)[0].reshape(fine.shape)
+    painted = out == INK
+    # Exact on every pixel not within float rounding of the disc's edge.
+    sure = np.abs(near - DRAW_W / 2) > 1e-9
+    assert np.array_equal(painted[sure], (near <= DRAW_W / 2)[sure])
+    # A ridge in pieces is joined first, as paint_lines joins it.
+    gap = [p for p in straight_ridge() if not 200 <= p[1] < 206]
+    points, edges = color_lines.centre_line(gap, RIDGE_SMOOTH_PX)
+    graph = coo_matrix((np.ones(len(edges)), (edges[:, 0], edges[:, 1])),
+                       shape=(len(points),) * 2)
+    assert connected_components(graph, directed=False)[0] == 1

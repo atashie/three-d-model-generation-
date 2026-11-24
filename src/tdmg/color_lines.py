@@ -761,6 +761,26 @@ def _disc_pixels(num_y: np.ndarray, num_x: np.ndarray, den: np.ndarray, s: int,
     return np.unique(np.concatenate(found))
 
 
+def centre_line(ridge, smooth_px: float) -> tuple[np.ndarray, np.ndarray]:
+    """The centre line paint_lines draws one line around: (points, edges).
+
+    points: (n, 2) float64 (row, col) in cell coordinates (image px), the smoothed points
+    of paint_lines' steps 0 and 1 (_smoothed(_bridged(ridge)), num / den), around each of
+    which it paints a disc. edges: (m, 2) int64 index pairs (i < j) of the joined ridge's
+    8-adjacent half pixels (_adjacent), which join every point: the joined ridge is
+    8-connected (its pieces are, and each bridge adds the 8-connected run _segment
+    between two of its points). tdmg.colored_flat records them in model mm, and
+    tdmg.color_gcode's F3.line_coverage samples the edges as straight segments.
+    ridge: a non-empty sequence of non-negative half-pixel (row, col) integers;
+    smooth_px: as paint_lines' (color.lines.ridge_smooth). ColorError otherwise."""
+    top = np.iinfo(np.int64).max
+    pts = _bridged(_check_ridge(ridge, top, top))
+    num_y, num_x, den = _smoothed(pts, finite_positive("smooth_px", smooth_px))
+    i, j = _adjacent(pts)
+    return (np.column_stack([num_y / den, num_x / den]),
+            np.column_stack([i, j]).astype(np.int64))
+
+
 def draw_lines(fine: np.ndarray, supersample: int, lines, width_px: float, *,
                smooth_px: float) -> np.ndarray:
     """The fine map with the lines drawn at width_px: paint_lines' map."""
